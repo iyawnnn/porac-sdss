@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, Marker, Popup } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
+import type { FeatureCollection } from "geojson";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
@@ -35,6 +36,7 @@ export default function MapClient({
   myOffice?: "CEO" | "ACDRRMO";
 }) {
   const [tickets, setTickets] = useState<AdminTicketGeoRow[]>([]);
+  const [barangays, setBarangays] = useState<FeatureCollection | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,6 +49,13 @@ export default function MapClient({
         setLoading(false);
       });
   }, [office]);
+
+  // Static reference data — fetched once, not tied to the office filter.
+  useEffect(() => {
+    fetch("/api/admin/barangays/geo")
+      .then((res) => res.json())
+      .then(setBarangays);
+  }, []);
 
   return (
     <div className="h-[calc(100vh-4rem)] w-full relative">
@@ -75,6 +84,18 @@ export default function MapClient({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="&copy; OpenStreetMap contributors"
         />
+        {barangays && (
+          // Subtle outline only — this is reference context, not the focal
+          // layer. Ticket pins (rendered after, in markerPane by default)
+          // stay the thing your eye goes to.
+          <GeoJSON
+            data={barangays}
+            style={{ color: "#64748b", weight: 1, fillColor: "#64748b", fillOpacity: 0.05 }}
+            onEachFeature={(feature, layer) => {
+              layer.bindTooltip(feature.properties?.name ?? "", { sticky: true });
+            }}
+          />
+        )}
         <MarkerClusterGroup chunkedLoading>
           {tickets.map((t) => (
             <Marker key={t.id} position={[t.lat, t.lng]} icon={bandIcon(t.urgency_band)}>

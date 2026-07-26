@@ -52,18 +52,60 @@ export default async function TicketDetailPage({
       </div>
 
       {/* Computed system urgency, kept visually separate from each citizen's
-          own severity rating below — PLAN.md §5. */}
+          own severity rating below — PLAN.md §5. Score breakdown per
+          PLAN.md §7: Urgency = (1/3 × Elevation) + (1/3 × Precipitation) +
+          (1/3 × Cluster), so the weight is shown per factor, not just the
+          final number, per PLAN.md §13 Phase 5. */}
       <div className="border p-4 rounded mb-6 bg-gray-50">
         <h2 className="font-bold mb-2">System Urgency (computed)</h2>
-        <p className="text-2xl font-mono mb-2">
+        <p className="text-2xl font-mono mb-3">
           {ticket.urgency_score?.toFixed(3) ?? "—"}{" "}
           <span className="text-base">({ticket.urgency_band ?? "—"})</span>
         </p>
-        <div className="grid grid-cols-3 gap-2 text-xs text-gray-700">
-          <div>Elevation factor: {ticket.elevation_factor?.toFixed(3) ?? "—"}</div>
-          <div>Precipitation factor: {ticket.precipitation_factor?.toFixed(3) ?? "—"}</div>
-          <div>Cluster factor: {ticket.cluster_factor?.toFixed(3) ?? "—"}</div>
-        </div>
+        <table className="w-full text-xs text-gray-700 border-collapse">
+          <thead>
+            <tr className="text-left text-gray-500">
+              <th className="font-normal pb-1">Factor</th>
+              <th className="font-normal pb-1 text-right">Value</th>
+              <th className="font-normal pb-1 text-right">Weight</th>
+              <th className="font-normal pb-1 text-right">Contribution</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono">
+            <tr>
+              <td className="py-0.5">Elevation Factor</td>
+              <td className="text-right">{ticket.elevation_factor?.toFixed(3) ?? "—"}</td>
+              <td className="text-right">× 1/3</td>
+              <td className="text-right">
+                {ticket.elevation_factor != null ? (ticket.elevation_factor / 3).toFixed(3) : "—"}
+              </td>
+            </tr>
+            <tr>
+              <td className="py-0.5">Precipitation Factor</td>
+              <td className="text-right">{ticket.precipitation_factor?.toFixed(3) ?? "—"}</td>
+              <td className="text-right">× 1/3</td>
+              <td className="text-right">
+                {ticket.precipitation_factor != null ? (ticket.precipitation_factor / 3).toFixed(3) : "—"}
+              </td>
+            </tr>
+            <tr>
+              <td className="py-0.5">Cluster Factor</td>
+              <td className="text-right">{ticket.cluster_factor?.toFixed(3) ?? "—"}</td>
+              <td className="text-right">× 1/3</td>
+              <td className="text-right">
+                {ticket.cluster_factor != null ? (ticket.cluster_factor / 3).toFixed(3) : "—"}
+              </td>
+            </tr>
+            <tr className="border-t">
+              <td className="py-1 font-sans font-medium text-gray-900" colSpan={3}>
+                Urgency Score
+              </td>
+              <td className="text-right py-1 font-medium text-gray-900">
+                {ticket.urgency_score?.toFixed(3) ?? "—"}
+              </td>
+            </tr>
+          </tbody>
+        </table>
         <p className="text-xs text-gray-500 mt-2">Elevation: {ticket.elevation_m ?? "—"} m</p>
       </div>
 
