@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes create-next-app@latest ac-core-nextjs --typescript --tailwind --app --eslint --src-dir=false --import-alias \"@/*\" --use-npm --no-turbopack)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
