@@ -6,7 +6,19 @@ Target: Municipal Infrastructure Maintenance and Topographical Hazard Mapping Sy
 ---
  
 ## 0. Security Actions (do first)
- 
+
+**Status: 🔲 DEFERRED** — deliberate decision at prototype stage (accepted
+risk, not an oversight); will rotate before any real deployment or public
+demo. None of the five credentials below were rotated —
+`ac-core-nextjs/.env.local` reuses the exact original values (same
+`MONGODB_URI`, `CLOUDINARY_URL`, `OPENWEATHERMAP_API_KEY`, and
+`JWT_SECRET` originally pasted in chat). Confirmed via grep that no
+hardcoded fallback values exist anywhere in the codebase for these
+(`process.env.X || "default"` pattern) and `.env.local` was never
+committed to either git repo's history. `JWT_SECRET` currently signs live
+admin *and* citizen JWT sessions in the Next.js build, so rotation before
+any real deployment is not optional — see §16.
+
 | Item | Action |
 |---|---|
 | MongoDB Atlas password (`ac-admin`) | Rotate. Also restrict Network Access to Render egress IPs instead of `0.0.0.0/0`. |
@@ -22,7 +34,11 @@ Separate issue in `server.ts`: `app.use(cors())` allows any origin. Restrict to 
 ---
  
 ## 1. What the Repository Actually Contains
- 
+
+**Status: ⚠️ SUPERSEDED.** This section describes the pre-migration
+Express/Angular repo. The actual build is a from-scratch Next.js app
+(`ac-core-nextjs/`), not a port of this code — see §16.
+
 **Backend** (`accore-backend`, ~1,700 LOC): Express 5, TypeScript, Mongoose, MongoDB Atlas, Cloudinary, Multer, Zod, `express-rate-limit`, `node-cron`, `node-cache`, Turf.
  
 **Frontend** (`accore-frontend`, ~5,300 LOC): Angular 21 zoneless, Spartan UI, Tailwind, Leaflet with MarkerCluster, Chart.js via ng2-charts, Google social login.
@@ -34,7 +50,11 @@ This is a solid CRUD and mapping foundation. The problem is not code quality. Th
 ---
  
 ## 2. Gap Matrix: Paper vs Repository
- 
+
+**Status: ✅ RESOLVED.** Nearly every row below is closed by the Next.js
+rebuild. Exception: the NestJS/Express row is moot, not resolved — the app
+uses Next.js API routes directly, neither framework. See updated §15 Q1.
+
 | Paper claim | Repository reality | Severity |
 |---|---|---|
 | PostgreSQL + PostGIS on Neon | MongoDB Atlas | Critical |
@@ -58,7 +78,12 @@ This is a solid CRUD and mapping foundation. The problem is not code quality. Th
 ---
  
 ## 3. Core Decision: Migrate the Database, Amend the Frontend
- 
+
+**Status: ⚠️ IMPLEMENTED DIFFERENTLY.** The team built fresh in Next.js
+instead of keeping Angular, superseding this section's "amend the paper,
+keep Angular" recommendation below. The Express-vs-NestJS question is also
+moot for the same reason — see §16 and updated §15 Q1.
+
 You have three divergences. They do not all deserve the same response.
  
 **Migrate: MongoDB to PostgreSQL + PostGIS on Neon.**
@@ -75,11 +100,106 @@ Net effect on the document: one database migration in code, three paragraphs of 
 ---
  
 ## 4. Data Pipeline: Using the GeoJSON and the GeoTIFF
- 
+
+**Status: ✅ IMPLEMENTED.** Both seed scripts done and verified: 33
+barangay polygons confirmed via the `NAME_3` property, the western
+Sapangbato extent bug confirmed real (120.4808°E, below the old hardcoded
+120.5°E floor), `elev_min`/`elev_max` computed barangay-constrained via
+`ST_Contains` and stored as fixed `config` table values (not recomputed
+live).
+
 Both files are currently sitting unused. This is the highest-value work in the plan.
  
 ### 4.1 Barangay polygons (GADM 4.1 level 3)
- 
+
+**Update — OSM cross-validation.** GADM's 33 polygons were checked against
+OpenStreetMap as an independent source. Overpass has no barangay-level
+(`admin_level=10`) boundaries for Angeles City at all (confirmed: querying
+that level within the city bbox returns 15 real, geometrically-complete
+relations, but every one belongs to a *neighboring* municipality — Mexico,
+San Fernando, Bacolor, Magalang — not Angeles; two names look like
+near-matches, "Pulung Bulu" vs. GADM's "Pulungbulu" and "San Jose" vs.
+GADM's "SanJose," but the tags confirm these are different towns'
+barangays, not the same place). So GADM's barangay subdivision has no OSM
+barangay-level replacement or supplement to compare against.
+
+What OSM *did* surface: a real ~283m edge gap at the Sto. Domingo/Cutcut
+boundary. The original trigger was a citizen-reported address (Mansfield
+Residences) whose exact coordinates were never independently obtained;
+the test instead used Sto. Domingo's approximate OSM/Overpass centroid as
+a same-neighborhood proxy — a sanity check, not proof of Mansfield
+Residences' specific location. That proxy point fell outside every one of
+GADM's 33 polygons and was being wrongly rejected as "outside the city."
+Fixed by
+importing OSM's city-level outer boundary (relation 9386775, admin_level=6,
+"City of Angeles") into a new `city_boundary_osm` table, and changing
+`findBarangayForPoint()` (`lib/geo/barangay.ts`) to a two-stage check:
+exact `ST_Contains` against a GADM barangay first (unchanged fast path);
+if that fails, check `ST_Contains` against the OSM outer boundary — if
+inside, snap to whichever GADM barangay is nearest via `ST_Distance`/`<->`
+rather than rejecting; if outside even that, reject as genuinely outside
+the city. OSM is used *only* for this outer accept/reject decision —
+barangay identity always comes from GADM.
+
+**Deliberate exception: Calibutbut.** OSM's Angeles City relation carries
+an unresolved tag on itself — `fixme: confirm boundaries, currently
+includes Barangay Calibutbut of Bacolor` — meaning OSM's own outer boundary
+may be wrong at that one spot. This is a non-issue for us: Calibutbut was
+never one of GADM's 33 Angeles barangays to begin with, so there is no
+code path where that OSM data-quality caveat could affect barangay
+assignment. GADM is trusted for Calibutbut without exception, by
+construction, not by a special case that had to be written.
+
+**New flag: `BOUNDARY_FALLBACK`.** Whenever a report resolves via the
+nearest-barangay fallback rather than a strict polygon match, the report
+row's `flags` array gets `BOUNDARY_FALLBACK:<barangayName>:<distanceM>`
+(e.g. `BOUNDARY_FALLBACK:Cutcut:283`) — same mechanism as
+`LOCATION_MISMATCH`/`DUPLICATE_IMAGE`/`STALE_PHOTO`/`NO_EXIF` (PLAN.md §8),
+surfaced in `/admin/flagged` with the barangay and distance shown as
+evidence. Not an auto-reject, same philosophy as the fraud flags: route to
+admin review, don't silently guess and don't silently block.
+
+**Final outcome — GADM replaced with PSGC/OCHA as the barangay source.**
+The `BOUNDARY_FALLBACK` mechanism above was built to patch a ~283m edge
+gap, but testing against real, independently-verified addresses (not OSM
+centroid proxies) found something more serious: GADM's own raw source
+data for Angeles City's 33 barangays — confirmed by filtering the
+unfiltered nationwide `gadm41_PHL_3.json`, not just the pre-filtered
+`angeles.geojson` — averages **7.6 vertices per polygon** (near-rectangles;
+Sto. Domingo itself has only 5). A real address (Mansfield Residences,
+Brgy. Sto. Domingo, coordinates obtained via Google Maps "What's here")
+fell **862m–1.8km** from every one of the 33 GADM polygons, including the
+one it's actually in — not an edge-precision issue, a genuine
+mis-registration.
+
+GADM was replaced with `PH_Adm4_BgySubMuns` from the
+`altcoder/philippines-psgc-shapefiles` GitHub repo (OCHA-derived, refined
+against PSA's official PSGC, updated through Dec 2023) — **130.5 avg
+vertices/barangay**, Sto. Domingo alone at 293. Verified against four real,
+independently-sourced landmarks across four different barangays (Mansfield
+Residences/Sto. Domingo, Fields Bistro on Walking St./Balibago, Jose P.
+Dizon Elementary School/Pandan, the Barangay Hall itself/Malabañas) — all
+four resolved correctly via strict `ST_Contains`, no fallback needed — and
+three deliberately-outside-city points, all correctly rejected.
+
+Migration handled as a real data change, not a silent swap: old table kept
+as `barangays_gadm_old` (not dropped), new data staged and verified in
+`barangays_v2` before promotion, every existing ticket's `barangay_id`
+recomputed from its actual stored geometry against the new polygons (not
+copied by matching old IDs), inside one transaction with the FK constraint
+dropped and rebuilt against the correct table. Caught one thing along the
+way: three demo tickets, seeded from `ST_PointOnSurface` samples of the
+*old* GADM shapes, turned out to sit up to 1.28km outside the real city
+entirely once checked against `city_boundary_osm` — deleted rather than
+force-assigned, since keeping them (even via fallback) would mean the demo
+dataset violated the same city-boundary validation real submissions are
+held to.
+
+`city_boundary_osm` + the nearest-snap fallback remains in place as a
+safety net for genuine remaining edge cases — with PSGC's real detail, it
+should be a rare correction, not the routine one GADM's crude shapes
+required.
+
 Build a one-time seed script:
  
 1. Load the 33-feature GeoJSON.
@@ -118,7 +238,23 @@ This removes the external Open-Meteo dependency entirely, which matters because 
 ---
  
 ## 5. Target Schema (PostgreSQL + PostGIS)
- 
+
+**Status: ⚠️ IMPLEMENTED DIFFERENTLY.** `citizens` table added (not in the
+original schema below — accounts became required, see §9/§15 Q2);
+`office_reassignments` as its own table, not layered into `status_history`
+(that column is a typed `ticket_status` enum and can't hold an
+office-change event without corrupting it); distinct JWT session
+types/cookies for admin vs citizen; `rate_limit_events` table added
+(Postgres-backed rate limiter store, not in the original schema).
+
+**Pizza Tracker (citizen status timeline) — ✅ IMPLEMENTED.** Named in §1's
+old-repo feature list but never its own numbered section here. Rebuilt at
+`/dashboard/reports/[id]`: reads `status_history`, synthesizes a
+"Reported" first step from the ticket's own `created_at` (ticket creation
+never logs a `status_history` row — only admin-driven advances do), and is
+ownership-scoped so a citizen can't view another citizen's report by
+guessing an ID (wrong-owner and nonexistent both return the same 404).
+
 The single most important structural change is splitting reports from tickets. The paper says reports are *merged*. You cannot merge without a container entity.
  
 ```
@@ -150,7 +286,15 @@ Notes on specific columns:
 ---
  
 ## 6. Deduplication Engine
- 
+
+**Status: ✅ IMPLEMENTED.** Tiered-radius merge transaction built exactly
+as specified below. Beyond spec: a `pg_advisory_xact_lock` concurrency fix
+was added — a plain `SELECT ... FOR UPDATE` was tried first per the
+literal query below, but combined with the `<->` KNN ordering used for
+nearest-ticket lookup it hit a Postgres planner limitation ("attempted to
+lock invisible tuple"). Replaced with an advisory lock keyed on
+`(category, barangay_id)` instead.
+
 Replace the boolean flag with an actual merge, executed inside a transaction on report submission.
  
 ```sql
@@ -182,7 +326,16 @@ Put this table in the paper. "Why 50 metres?" is the single most likely technica
 ---
  
 ## 7. Topographical Triage Engine
- 
+
+**Status: ✅ IMPLEMENTED.** Formula implemented exactly as written below —
+weights 1/3 each, all three factors, bands. Recomputation deviates from
+spec: the `node-cron` job described below was replaced by on-demand
+recompute triggered whenever an admin loads the ticket list or map,
+because Vercel Hobby plan only allows once-daily cron scheduling, which
+would gut the "live re-ranking" demo value this section itself calls out
+below. The cron route (`app/api/cron/recompute/route.ts`) is kept as a
+manual, secret-gated fallback trigger.
+
 Implement the formula from the paper exactly as written. Do not improvise, and delete the Paved Paradox rule that currently stands in for it.
  
 ```
@@ -225,7 +378,13 @@ Cap at 10 members. State the cap and the reason (diminishing informational value
 ---
  
 ## 8. EXIF Metadata and Fraud Controls
- 
+
+**Status: ✅ IMPLEMENTED.** Client reads EXIF before compression, server
+re-verifies from the uploaded buffer, all four flags (`LOCATION_MISMATCH`,
+`STALE_PHOTO`, `NO_EXIF`, `DUPLICATE_IMAGE`) implemented as specified,
+dHash perceptual hashing via `sharp`, flags route to `/admin/flagged`
+rather than blocking submission.
+
 **Order of operations is the critical detail here.** The current `onFileSelected` compresses immediately, and `browser-image-compression` strips EXIF by default. Any EXIF work must happen before or around compression.
  
 Client (`report.ts`):
@@ -245,7 +404,16 @@ Flags do not reject the report. They route it to an admin review queue. That dis
 ---
  
 ## 9. Rate Limiting Hardening
- 
+
+**Status: ⚠️ IMPLEMENTED DIFFERENTLY.** The guest reporting question below
+is RESOLVED, not open: citizen accounts are required, there is no
+guest/anonymous mode at all — stronger than either option this section
+originally offered. Rate limiting is account-keyed (`citizen_id`) as the
+primary control, matching this section's original per-account intent; the
+IP-based limit is a secondary backstop only, not primary. Store is
+Postgres-backed (new `rate_limit_events` table), not Upstash Redis —
+reuses the existing DB connection, no new service needed at this volume.
+
 The existing limits (5 reports per hour per IP, 5 login attempts per 15 minutes) are sensible but have two failure modes in the Philippine context.
  
 **Problem 1: carrier-grade NAT.** Globe and Smart mobile subscribers share public IPs at large scale. A 5 per hour IP limit can lock out an entire barangay during a flood, which is precisely when you need reports most. Fix with layered limits:
@@ -266,7 +434,13 @@ The spatial limit is the interesting one and it is nearly free to implement once
 ---
  
 ## 10. LGU Office Separation
- 
+
+**Status: ✅ IMPLEMENTED.** Office enum + auto-routing by category built
+as specified. Office-scoped default queue view with an explicit "view
+full city" toggle, and a manual reassign action with its own audit table
+(`office_reassignments`) — both flagged as not-yet-built in an earlier
+pass of this build, now done.
+
 The paper names two offices with distinct workflows. The repo has one flat admin role and an unused `department` string.
  
 Add `office` as an enum on `admins`, and auto-route tickets by category:
@@ -284,7 +458,17 @@ This is a small change with outsized value: it is direct, visible evidence that 
 ---
  
 ## 11. Features to Remove or Rework
- 
+
+**Status: ⚠️ IMPLEMENTED DIFFERENTLY.** Confirmed by direct grep across
+the Next.js build: Paved Paradox Sorter and the downstream flow mapping
+code below never existed in this build (fresh app, not a port of the
+Express code) — nothing to remove, both items moot rather than resolved.
+Citizen verifications: confirmed against Chapter 1 Scope — not named as a
+covered feature in the paper. The `verifications` table exists in schema
+(kept for a possible future Cluster Density signal per this section's own
+"keep and formalize" note below) but the upvote feature itself is
+deliberately not built, not an open gap.
+
 **Remove: Paved Paradox Sorter.** Delete `PRIORITY_COMMERCIAL_ZONES` and the boolean override in `createAndSaveReport` plus the `priorityWeight` stage in the `getReports` aggregation. It has no basis in your literature review, the seven-barangay list has no stated method, and the weighted formula supersedes it. Leaving it in invites the question "what method produced this list?" which has no good answer.
  
 **Rework or remove: downstream flow mapping.** `findDownstreamRisks` links each report to the nearest lower-elevation report within 500 m. That is proximity plus altitude, not flow. Water follows terrain gradient, not straight lines between complaint pins. Three options:
@@ -299,7 +483,16 @@ Option three is a strong differentiator but it is scope creep. Treat it as a str
 ---
  
 ## 12. Bugs Found During the Audit
- 
+
+**Status: ⚠️ MOSTLY MOOT.** Listed bugs are Express/Mongo-specific and
+don't exist in this from-scratch build; the underlying issues they point
+at are independently fixed by the new architecture (elevation always
+server-computed via DEM lookup — never trusts client input, EXIF read
+before compression, exact `ST_Contains` instead of hardcoded
+bounds/nearest-centroid). One exception carries forward unresolved: "no
+automated tests" is still true in the Next.js build too — confirmed zero
+`.test.ts`/`.spec.ts` files anywhere in the codebase.
+
 | Location | Issue |
 |---|---|
 | `hazard-report.controller.ts` | `ACTIVE_PUBLIC_STATUSES` includes `"Dispatched"`, which is not in the model's status enum. Public report queries silently miss nothing today only because the value can never be set. |
@@ -315,26 +508,53 @@ Option three is a strong differentiator but it is scope creep. Treat it as a str
 ---
  
 ## 13. Phased Roadmap
- 
-**Phase 1: Data foundation (week 1)**
+
+**Overall status**: Phases 1–4 ✅ COMPLETE. Phase 5 nearly complete — only
+the ISO/IEC 25010 instrument (a paper deliverable, not code) remains; see
+below. Build order did not strictly follow this list: the admin
+dashboard (Phase 5 scope — urgency-ranked queue, score breakdown panel)
+was actually built *before* Phase 4's EXIF/rate-limiting work, because it
+was needed to test and demo the Phase 3 engine first. Citizen accounts
+were not scoped to any phase originally and landed after Phase 4.
+
+**Phase 1: Data foundation (week 1)** — ✅ COMPLETE.
 Provision Neon with PostGIS. Write the barangay GeoJSON seed script. Write the SRTM sampling script and populate `dem_points`. Compute and record `elev_min`, `elev_max`, and the city bounding box. Verify the 33 polygons and the western extent.
  
-**Phase 2: Migration (weeks 2 to 3)**
+**Phase 2: Migration (weeks 2 to 3)** — ✅ COMPLETE. Note: "migration"
+undersells what happened — this was a from-scratch Next.js build, not a
+port of the Express/Mongoose code. See §16.
 Stand up the new schema. Swap Mongoose for a Postgres client (Prisma with PostGIS via raw queries, or Drizzle, or plain `pg`). Port each controller. Replace `$near` barangay lookup with `ST_Contains`. Replace the Open-Meteo call with the `dem_points` query. Keep the Angular frontend untouched except for the API response shape.
  
-**Phase 3: The research contribution (weeks 4 to 5)**
+**Phase 3: The research contribution (weeks 4 to 5)** — ✅ COMPLETE. Cron
+recomputation deviates from spec — see updated §7.
 Build the `tickets` table and the `ST_DWithin` merge transaction with tiered radii. Implement all three urgency factors. Wire the cron recomputation to the weather refresh. Add office routing. This phase is what the paper is actually about, so protect the time.
  
-**Phase 4: Integrity layer (week 6)**
+**Phase 4: Integrity layer (week 6)** — ✅ COMPLETE, expanded beyond
+original scope to include citizen accounts (signup/login required, no
+guest mode), which is what let rate limiting become account-keyed as §9
+originally intended.
 EXIF extraction on both client and server, mismatch detection, perceptual hashing, layered and spatial rate limits, persistent limiter store, admin flag review queue.
  
-**Phase 5: Presentation and evaluation (week 7)**
-Barangay choropleth on the admin map. Urgency-ranked queue as the default admin view. Score breakdown panel showing the three factors per ticket, since a visible breakdown is far more convincing than a single number. Seed demo data. Draft the ISO/IEC 25010 evaluation instrument.
+**Phase 5: Presentation and evaluation (week 7)** — NEARLY COMPLETE, only
+the non-code deliverable remains:
+- ✅ Urgency-ranked queue as the default admin view — done (`/admin/tickets`, sorted `urgency_score DESC`)
+- ✅ Score breakdown panel showing the three factors per ticket — done (`/admin/tickets/[id]`), and hardened to show the explicit 1/3 weight and per-factor contribution alongside each value, not just the final score, so it reads clearly at a glance for defense
+- ✅ Barangay choropleth on the admin map — done (`/admin/map`, `GET /api/admin/barangays/geo`); subtle fill/outline layer under the ticket pins so it doesn't compete visually with urgency color-coding
+- ✅ Seed demo data — done (`scripts/seed-demo.ts`, `npm run seed:demo`); idempotent (clears its own previously-seeded rows via a `@ac-core-demo.local` email marker before reseeding), 10 tickets across 8 barangays and 7 categories, spread across all three urgency bands (2 Low / 5 Medium / 3 Critical), 7 merged tickets with member_count 2–10, one report carrying a `LOCATION_MISMATCH` flag on a Critical ticket. Also seeds the same `config` table cache the live weather recompute reads from, so demo urgency scores survive the recompute that fires on every admin dashboard/map load instead of being silently overwritten by whatever the real weather is doing outside — this was found and fixed during Phase 5 testing, not anticipated in the original script design.
+- 🔲 Draft the ISO/IEC 25010 evaluation instrument — NOT built; documentation/survey deliverable outside this codebase, explicitly not attempted as code, still open
  
 ---
  
 ## 14. Paper Edits Required
- 
+
+**Status: 🔲 NOT DONE.** This is a writing task on the actual thesis
+document, outside this codebase — not something implementation work
+addresses. Flag explicitly: the first bullet below (change Next.js to
+Angular) is now backwards relative to what was actually built — the real
+app IS Next.js (see §3, §16), so the paper should keep Next.js language
+and drop the Angular-amendment plan entirely. This section needs a fresh
+look, not execution of the bullet list as originally written.
+
 Assuming you adopt the recommendations above:
  
 - **Section 1.3 Conceptual Framework, Input**: change the stack listing from Next.js to Angular. Resolve Express versus NestJS.
@@ -348,10 +568,70 @@ All in-text citations follow the APA 7 rules already in force for this document:
 ---
  
 ## 15. Open Questions for the Group
- 
-1. Express to NestJS: refactor, or amend the paper and spend those days on the triage engine?
-2. Guest reporting: keep it (and add it to Scope with a justification) or drop it?
-3. Downstream flow mapping: delete, rename and disclaim, or implement D8 properly as a stretch goal?
-4. Weights w1, w2, w3: hold at 1/3 each until the LGU consultation, or build an admin-configurable weight panel now? A configurable panel is a good answer to "how did you choose the weights" because it makes the provisional nature explicit rather than hiding it.
-5. Deduplication radii: confirm the 25 / 50 / 100 m tiers with the CEO during consultation. Their field crews will know whether two potholes 30 m apart are one job or two.
+
+**Status: ⚠️ 2 of 5 resolved.** Q1 and Q2 below no longer apply as
+originally framed — see notes. Q3–Q5 are still genuinely open.
+
+1. ~~Express to NestJS: refactor, or amend the paper and spend those days on the triage engine?~~ — **MOOT, not just answered.** The app is Next.js API routes directly, neither Express nor NestJS. Remove this framework choice from the paper entirely rather than picking a side.
+2. ~~Guest reporting: keep it (and add it to Scope with a justification) or drop it?~~ — **RESOLVED.** Citizen accounts are required; there is no guest/anonymous reporting mode at all. Stronger than either option originally listed here (Turnstile-gated keep, or drop) — it was dropped entirely.
+3. Downstream flow mapping: delete, rename and disclaim, or implement D8 properly as a stretch goal? — still open, unchanged.
+4. Weights w1, w2, w3: hold at 1/3 each until the LGU consultation, or build an admin-configurable weight panel now? A configurable panel is a good answer to "how did you choose the weights" because it makes the provisional nature explicit rather than hiding it. — still open, unchanged (weights are hardcoded 1/3 each in `lib/triage/urgency.ts`).
+5. Deduplication radii: confirm the 25 / 50 / 100 m tiers with the CEO during consultation. Their field crews will know whether two potholes 30 m apart are one job or two. — still open, unchanged.
+
+---
+
+## 16. Build Log / Deviations from Plan
+
+Every point where the actual Next.js implementation diverged from what
+this document originally specified, with the reason. Written after the
+fact from the real build, not planned in advance like the sections above.
+
+1. **Citizen accounts required, guest mode fully removed.** Not just
+   deprioritized — there is no anonymous/guest submission path at all.
+   Resolves §9 and §15 Q2.
+2. **Next.js chosen over Angular.** Supersedes §3's "amend the paper, keep
+   Angular" recommendation — the team built a fresh Next.js app instead of
+   keeping the existing Angular frontend.
+3. **Backend framework question is moot, not decided.** The app uses
+   Next.js API routes directly — neither Express nor NestJS exists in this
+   build. Resolves §15 Q1 by making it inapplicable rather than answered.
+4. **On-demand recompute replaces the cron job.** Vercel Hobby plan only
+   allows once-daily cron scheduling, which would gut the "live
+   re-ranking as a storm moves in" demo value §7 calls out. Urgency now
+   recomputes inline whenever an admin loads the ticket list or map; the
+   cron route (`app/api/cron/recompute/route.ts`) is kept as a manual,
+   secret-gated fallback trigger in case the team upgrades to Pro later.
+5. **Drizzle + raw SQL split, by column type not by table.** Drizzle's
+   PostGIS support is weak, so non-geometry columns are Drizzle-managed
+   while geometry columns (`barangays.geom`, `dem_points.geom`,
+   `tickets.geom`, `reports.geom`/`pin_geom`/`exif_geom`) and any query
+   touching them go through raw SQL via `postgres.js` tagged templates
+   instead (`lib/db/raw.ts`).
+6. **`pg_advisory_xact_lock` concurrency fix in the dedup merge.** §6's
+   literal query was tried with a plain `SELECT ... FOR UPDATE` first, but
+   combined with the `<->` KNN ordering used for nearest-ticket lookup it
+   hit a Postgres planner limitation ("attempted to lock invisible
+   tuple"). Replaced with an advisory lock keyed on
+   `(category, barangay_id)` — coarser than the actual dedup radius, but
+   adequate at citizen-reporting volumes.
+7. **`office_reassignments` as its own table.** Not layered into
+   `status_history` as one might assume from §5's schema — that table's
+   `status` column is a typed `ticket_status` enum, and an office
+   reassignment isn't a status value.
+8. **Rate limiting store is Postgres-backed, not Upstash Redis.** §9
+   suggested either; the Postgres option was taken because it reuses the
+   existing DB connection with no new service or account needed at this
+   app's volume.
+9. **§0's secrets were never rotated.** `.env.local` reuses the exact
+   `MONGODB_URI`, `CLOUDINARY_URL`, `OPENWEATHERMAP_API_KEY`, and
+   `JWT_SECRET` values originally pasted in chat. `JWT_SECRET` now signs
+   live admin and citizen sessions, so this is a live-app exposure now,
+   not just a legacy one from the old Mongo/Express repo.
+10. **Pizza Tracker rebuilt from scratch.** Not originally its own
+    numbered section — only named in §1's old-repo feature list. Now at
+    `/dashboard/reports/[id]`, documented under §5.
+11. **Score breakdown panel landed early.** §13 Phase 5 scope, but it was
+    already built as a side effect of earlier admin dashboard work
+    (`/admin/tickets/[id]`'s "System Urgency (computed)" section), not as
+    a late-phase task.
  

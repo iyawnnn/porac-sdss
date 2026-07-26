@@ -14,7 +14,13 @@
     "migrate:geometry": "tsx --env-file=.env.local scripts/migrate-geometry.ts",
     "seed:admin": "tsx --env-file=.env.local scripts/seed-admin.ts",
     "migrate:ratelimit": "tsx --env-file=.env.local scripts/migrate-ratelimit.ts",
-    "migrate:ratelimit-citizen": "tsx --env-file=.env.local scripts/migrate-ratelimit-citizen.ts"
+    "migrate:ratelimit-citizen": "tsx --env-file=.env.local scripts/migrate-ratelimit-citizen.ts",
+    "seed:demo": "tsx --env-file=.env.local scripts/seed-demo.ts",
+    "migrate:city-boundary": "tsx --env-file=.env.local scripts/migrate-city-boundary.ts",
+    "import:city-boundary": "tsx --env-file=.env.local scripts/import-city-boundary-osm.ts",
+    "import:barangays-v2": "tsx --env-file=.env.local scripts/import-barangays-v2-psgc.ts",
+    "compare:barangay-migration": "tsx --env-file=.env.local scripts/compare-barangay-migration-impact.ts",
+    "swap:barangays-psgc": "tsx --env-file=.env.local scripts/swap-barangays-to-psgc.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -38,6 +44,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
+    "@types/geojson": "^7946.0.16",
     "@types/leaflet": "^1.9.21",
     "@types/leaflet.markercluster": "^1.5.6",
     "@types/node": "^20",
