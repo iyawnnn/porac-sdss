@@ -9,6 +9,7 @@ import { uploadImage } from "@/lib/cloudinary";
 import { radiusForCategory } from "@/lib/triage/radius";
 import { computeUrgency } from "@/lib/triage/urgency";
 import { getElevationBounds } from "@/lib/config";
+import { getCurrentRain1hMm } from "@/lib/weather/openweather";
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
   const office = officeForCategory(category);
   const radius = radiusForCategory(category);
   const { elevMin, elevMax } = await getElevationBounds();
+  const rain1hMm = await getCurrentRain1hMm();
 
   const imageBuffer = Buffer.from(await image.arrayBuffer());
   const imageUrl = await uploadImage(imageBuffer);
@@ -113,7 +115,7 @@ export async function POST(req: NextRequest) {
         elevMin,
         elevMax,
         memberCount,
-        rain1hMm: 0,
+        rain1hMm,
       });
 
       await tx`
@@ -133,7 +135,7 @@ export async function POST(req: NextRequest) {
       return { ticketId: existing.id, reportId: report.id, merged: true, memberCount };
     }
 
-    const urgency = computeUrgency({ elevationM, elevMin, elevMax, memberCount: 1, rain1hMm: 0 });
+    const urgency = computeUrgency({ elevationM, elevMin, elevMax, memberCount: 1, rain1hMm });
 
     const [ticket] = await tx<{ id: number }[]>`
       INSERT INTO tickets (
