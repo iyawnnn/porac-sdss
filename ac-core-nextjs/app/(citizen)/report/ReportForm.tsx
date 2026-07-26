@@ -1,9 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { useEffect, useRef, useState } from "react";
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import exifr from "exifr";
+import imageCompression from "browser-image-compression";
 import { CATEGORIES, SEVERITIES } from "@/lib/validation/report";
 
 const icon = L.icon({
@@ -17,16 +19,24 @@ const icon = L.icon({
 // Center of the barangays bounding box from Phase 0 seeding.
 const CITY_CENTER: [number, number] = [15.14, 120.57];
 
+function FlyToPosition({ position }: { position: L.LatLng }) {
+  const map = useMap();
+  useEffect(() => {
+    map.flyTo(position, map.getZoom());
+  }, [position, map]);
+  return null;
+}
+
 function LocationMarker({
   position,
   setPosition,
 }: {
   position: L.LatLng;
-  setPosition: (p: L.LatLng) => void;
+  setPosition: (p: L.LatLng, source: "manual") => void;
 }) {
   useMapEvents({
     click(e) {
-      setPosition(e.latlng);
+      setPosition(e.latlng, "manual");
     },
   });
   return (
@@ -36,7 +46,7 @@ function LocationMarker({
       icon={icon}
       eventHandlers={{
         dragend(e) {
-          setPosition((e.target as L.Marker).getLatLng());
+          setPosition((e.target as L.Marker).getLatLng(), "manual");
         },
       }}
     />
@@ -44,13 +54,52 @@ function LocationMarker({
 }
 
 export default function ReportForm() {
-  const [position, setPosition] = useState<L.LatLng>(
+  const [position, setPositionRaw] = useState<L.LatLng>(
     L.latLng(CITY_CENTER[0], CITY_CENTER[1])
   );
+  const [locationSource, setLocationSource] = useState<"exif" | "manual" | "default">("default");
   const [file, setFile] = useState<File | null>(null);
+  const [processingPhoto, setProcessingPhoto] = useState(false);
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
+
+  function setPosition(p: L.LatLng, source: "exif" | "manual") {
+    setPositionRaw(p);
+    setLocationSource(source);
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0];
+    if (!selected) return;
+    setProcessingPhoto(true);
+
+    // PLAN.md §8: read EXIF from the ORIGINAL file, before compression
+    // strips it. GPS is the primary location source; manual pin drag is
+    // the visible fallback (see LocationMarker above).
+    try {
+      const gps = await exifr.gps(selected);
+      if (typeof gps?.latitude === "number" && typeof gps?.longitude === "number") {
+        setPosition(L.latLng(gps.latitude, gps.longitude), "exif");
+      }
+    } catch {
+      // No/unreadable EXIF — pin stays wherever it already was (default or
+      // previously set), citizen places it manually.
+    }
+
+    try {
+      const compressed = await imageCompression(selected, {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1920,
+        preserveExif: true,
+      });
+      setFile(new File([compressed], selected.name, { type: compressed.type }));
+    } catch {
+      setFile(selected);
+    }
+
+    setProcessingPhoto(false);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -71,11 +120,13 @@ export default function ReportForm() {
 
     if (res.ok) {
       setStatus("success");
+      const flagNote = data.flags?.length ? ` Flags: ${data.flags.join(", ")}.` : "";
       setMessage(
-        `Report submitted. Ticket #${data.ticketId}, barangay: ${data.barangay}, elevation: ${data.elevationM}m, office: ${data.assignedOffice}`
+        `Report submitted. Ticket #${data.ticketId}, barangay: ${data.barangay}, elevation: ${data.elevationM}m, office: ${data.assignedOffice}.${flagNote}`
       );
       formRef.current?.reset();
       setFile(null);
+      setLocationSource("default");
     } else {
       setStatus("error");
       setMessage(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
@@ -92,11 +143,17 @@ export default function ReportForm() {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution="&copy; OpenStreetMap contributors"
           />
+          <FlyToPosition position={position} />
           <LocationMarker position={position} setPosition={setPosition} />
         </MapContainer>
       </div>
       <p className="text-sm text-gray-600 mb-4">
-        Pin: {position.lat.toFixed(5)}, {position.lng.toFixed(5)} (click map or drag pin)
+        Pin: {position.lat.toFixed(5)}, {position.lng.toFixed(5)} (click map or drag pin) —{" "}
+        {locationSource === "exif"
+          ? "set from photo GPS"
+          : locationSource === "manual"
+            ? "set manually"
+            : "default city center, place your pin"}
       </p>
 
       <form ref={formRef} onSubmit={handleSubmit} className="space-y-3">
@@ -127,13 +184,14 @@ export default function ReportForm() {
           type="file"
           accept="image/*"
           required
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          onChange={handleFileChange}
           className="w-full"
         />
+        {processingPhoto && <p className="text-sm text-gray-500">Reading photo...</p>}
 
         <button
           type="submit"
-          disabled={status === "submitting"}
+          disabled={status === "submitting" || processingPhoto}
           className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
         >
           {status === "submitting" ? "Submitting..." : "Submit Report"}

@@ -4,14 +4,40 @@ import { sql } from "@/lib/db/raw";
 import { reportSchema } from "@/lib/validation/report";
 import { findBarangayForPoint } from "@/lib/geo/barangay";
 import { findNearestElevation } from "@/lib/geo/elevation";
+import { haversineMeters } from "@/lib/geo/distance";
 import { officeForCategory } from "@/lib/office";
 import { uploadImage } from "@/lib/cloudinary";
 import { radiusForCategory } from "@/lib/triage/radius";
 import { computeUrgency } from "@/lib/triage/urgency";
 import { getElevationBounds } from "@/lib/config";
 import { getCurrentRain1hMm } from "@/lib/weather/openweather";
+import { extractExif } from "@/lib/exif";
+import { computeDHash, hammingDistanceHex } from "@/lib/phash";
+import { checkRateLimit, recordRateLimitEvent } from "@/lib/ratelimit";
+import { verifyCitizenSession, CITIZEN_SESSION_COOKIE } from "@/lib/auth/citizenSession";
+
+// Citizen accounts are required — no anonymous/guest reporting (PLAN.md §9
+// decision). proxy.ts already gates /api/reports, but the route still
+// needs the actual citizenId, and checking again here is cheap defense in
+// depth rather than trusting proxy alone.
+const LOCATION_MISMATCH_THRESHOLD_M = 100;
+const STALE_PHOTO_HOURS = 24;
+const DUPLICATE_HAMMING_THRESHOLD = 10; // out of 64 bits; ponytail: tune if false-positive rate matters later
+
+function getClientIp(req: NextRequest): string {
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  if (forwardedFor) return forwardedFor.split(",")[0].trim();
+  return req.headers.get("x-real-ip") ?? "unknown";
+}
 
 export async function POST(req: NextRequest) {
+  const citizenToken = req.cookies.get(CITIZEN_SESSION_COOKIE)?.value;
+  const citizenSession = citizenToken ? await verifyCitizenSession(citizenToken) : null;
+  if (!citizenSession) {
+    return NextResponse.json({ error: "Log in to submit a report." }, { status: 401 });
+  }
+
+  const ip = getClientIp(req);
   const formData = await req.formData();
 
   const parsed = reportSchema.safeParse({
@@ -34,6 +60,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "image is required" }, { status: 400 });
   }
 
+  // PLAN.md §9: layered limits, checked before any expensive work.
+  const rateLimit = await checkRateLimit(citizenSession.citizenId, ip, lat, lng);
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ error: rateLimit.reason }, { status: 429 });
+  }
+
   // Exact polygon containment, not nearest-centroid — a point outside all
   // 33 barangays is rejected outright (PLAN.md §4.1/§12).
   const barangay = await findBarangayForPoint(lat, lng);
@@ -54,7 +86,53 @@ export async function POST(req: NextRequest) {
   const rain1hMm = await getCurrentRain1hMm();
 
   const imageBuffer = Buffer.from(await image.arrayBuffer());
+
+  // PLAN.md §8: re-extract EXIF from the buffer server-side — never trust
+  // client-supplied EXIF, it's spoofable.
+  const exif = await extractExif(imageBuffer);
+  const phash = await computeDHash(imageBuffer);
+
+  const flags: string[] = [];
+  let locationMismatchM: number | null = null;
+
+  if (exif.lat === null || exif.lng === null) {
+    flags.push("NO_EXIF");
+  } else {
+    locationMismatchM = haversineMeters(lat, lng, exif.lat, exif.lng);
+    if (locationMismatchM > LOCATION_MISMATCH_THRESHOLD_M) {
+      flags.push("LOCATION_MISMATCH");
+    }
+  }
+
+  const exifCapturedAtIso = exif.capturedAt ? exif.capturedAt.toISOString() : null;
+
+  if (exif.capturedAt) {
+    const ageHours = (Date.now() - exif.capturedAt.getTime()) / (1000 * 60 * 60);
+    if (ageHours > STALE_PHOTO_HOURS) {
+      flags.push("STALE_PHOTO");
+    }
+  }
+
+  // O(n) scan over the last 30 days of phashes — fine at prototype volume.
+  // Move to a bit-column + SQL bit_count, or an ANN index, if this becomes
+  // a real bottleneck.
+  const recentPhashes = await sql<{ id: number; image_phash: string }[]>`
+    SELECT id, image_phash FROM reports
+    WHERE image_phash IS NOT NULL AND created_at > now() - interval '30 days'
+  `;
+  const duplicateMatch = recentPhashes.find(
+    (r) => hammingDistanceHex(phash, r.image_phash) <= DUPLICATE_HAMMING_THRESHOLD
+  );
+  if (duplicateMatch) {
+    flags.push(`DUPLICATE_IMAGE:${duplicateMatch.id}`);
+  }
+
   const imageUrl = await uploadImage(imageBuffer);
+
+  const exifGeomFragment =
+    exif.lat !== null && exif.lng !== null
+      ? sql`ST_SetSRID(ST_MakePoint(${exif.lng}, ${exif.lat}), 4326)`
+      : sql`NULL`;
 
   // tickets.geom / reports.geom / reports.pin_geom are NOT NULL, so these
   // queries go through raw SQL (see lib/db/raw.ts) instead of Drizzle.
@@ -87,15 +165,20 @@ export async function POST(req: NextRequest) {
       LIMIT 1
     `;
 
+    await recordRateLimitEvent(tx, citizenSession.citizenId, ip, lat, lng);
+
     if (existing) {
       const [report] = await tx<{ id: number }[]>`
         INSERT INTO reports (
-          ticket_id, title, description, citizen_severity, elevation_m, image_url, geom, pin_geom
+          ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
+          geom, pin_geom, exif_geom, exif_captured_at, image_phash, location_mismatch_m, flags
         )
         VALUES (
-          ${existing.id}, ${title}, ${description ?? null}, ${citizenSeverity}, ${elevationM}, ${imageUrl},
+          ${existing.id}, ${citizenSession.citizenId}, ${title}, ${description ?? null}, ${citizenSeverity}, ${elevationM}, ${imageUrl},
           ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
-          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)
+          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
+          ${exifGeomFragment},
+          ${exifCapturedAtIso}, ${phash}, ${locationMismatchM}, ${flags}
         )
         RETURNING id
       `;
@@ -153,12 +236,15 @@ export async function POST(req: NextRequest) {
 
     const [report] = await tx<{ id: number }[]>`
       INSERT INTO reports (
-        ticket_id, title, description, citizen_severity, elevation_m, image_url, geom, pin_geom
+        ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
+        geom, pin_geom, exif_geom, exif_captured_at, image_phash, location_mismatch_m, flags
       )
       VALUES (
-        ${ticket.id}, ${title}, ${description ?? null}, ${citizenSeverity}, ${elevationM}, ${imageUrl},
+        ${ticket.id}, ${citizenSession.citizenId}, ${title}, ${description ?? null}, ${citizenSeverity}, ${elevationM}, ${imageUrl},
         ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
-        ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)
+        ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
+        ${exifGeomFragment},
+        ${exifCapturedAtIso}, ${phash}, ${locationMismatchM}, ${flags}
       )
       RETURNING id
     `;
@@ -175,6 +261,7 @@ export async function POST(req: NextRequest) {
       barangay: barangay.name,
       elevationM,
       assignedOffice: office,
+      flags,
     },
     { status: 201 }
   );

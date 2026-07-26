@@ -21,6 +21,15 @@ export const ticketStatusEnum = pgEnum("ticket_status", [
 export const officeEnum = pgEnum("office", ["CEO", "ACDRRMO"]);
 export const adminRoleEnum = pgEnum("admin_role", ["officer", "supervisor"]);
 
+export const citizens = pgTable("citizens", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const tickets = pgTable("tickets", {
   id: serial("id").primaryKey(),
   category: text("category").notNull(),
@@ -43,7 +52,9 @@ export const reports = pgTable("reports", {
   ticketId: integer("ticket_id")
     .notNull()
     .references(() => tickets.id),
-  citizenId: text("citizen_id"),
+  citizenId: integer("citizen_id")
+    .notNull()
+    .references(() => citizens.id),
   title: text("title").notNull(),
   description: text("description"),
   citizenSeverity: text("citizen_severity").notNull(),
@@ -65,6 +76,22 @@ export const statusHistory = pgTable("status_history", {
   adminId: integer("admin_id"),
   adminName: text("admin_name"),
   changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Separate from status_history because that table's `status` column is
+// typed as ticket_status — an office reassignment isn't a status value and
+// stuffing one in there would corrupt any query that reads status_history
+// as a status timeline.
+export const officeReassignments = pgTable("office_reassignments", {
+  id: serial("id").primaryKey(),
+  ticketId: integer("ticket_id")
+    .notNull()
+    .references(() => tickets.id),
+  fromOffice: officeEnum("from_office").notNull(),
+  toOffice: officeEnum("to_office").notNull(),
+  adminId: integer("admin_id"),
+  adminName: text("admin_name"),
+  reassignedAt: timestamp("reassigned_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const verifications = pgTable("verifications", {
