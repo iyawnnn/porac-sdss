@@ -28,7 +28,11 @@ export default async function DashboardPage() {
 
       <div className="space-y-4">
         {reports.map((r) => (
-          <div key={r.id} className="border p-4 rounded flex gap-4">
+          <Link
+            key={r.id}
+            href={`/dashboard/reports/${r.id}`}
+            className="border p-4 rounded flex gap-4 hover:bg-gray-50"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={r.image_url} alt={r.title} className="w-24 h-24 object-cover rounded" />
             <div>
@@ -48,7 +52,7 @@ export default async function DashboardPage() {
               </p>
               <p className="text-xs text-gray-500 mt-1">{new Date(r.created_at).toLocaleString()}</p>
             </div>
-          </div>
+          </Link>
         ))}
         {reports.length === 0 && (
           <p className="text-gray-500">No reports yet. File one from the map.</p>
