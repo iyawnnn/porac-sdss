@@ -95,6 +95,14 @@ export async function POST(req: NextRequest) {
   const flags: string[] = [];
   let locationMismatchM: number | null = null;
 
+  // GADM's barangay polygons have known small edge gaps (PLAN.md §4.1) —
+  // findBarangayForPoint() snaps these to the nearest real barangay via
+  // the OSM city-boundary fallback instead of rejecting them. Flag it so
+  // an admin can see the assignment wasn't a strict polygon match.
+  if (barangay.viaFallback) {
+    flags.push(`BOUNDARY_FALLBACK:${barangay.name}:${Math.round(barangay.fallbackDistanceM ?? 0)}`);
+  }
+
   if (exif.lat === null || exif.lng === null) {
     flags.push("NO_EXIF");
   } else {

@@ -22,11 +22,16 @@ function flagEvidence(
     const matchedId = flag.split(":")[1];
     return `phash near-match against report #${matchedId}`;
   }
+  if (flag.startsWith("BOUNDARY_FALLBACK:")) {
+    const [, barangayName, distanceM] = flag.split(":");
+    return `snapped to ${barangayName}, ${distanceM}m outside its GADM polygon`;
+  }
   return FLAG_LABELS[flag] ?? "";
 }
 
 function flagLabel(flag: string): string {
   if (flag.startsWith("DUPLICATE_IMAGE:")) return "Duplicate image";
+  if (flag.startsWith("BOUNDARY_FALLBACK:")) return "Barangay boundary fallback";
   return FLAG_LABELS[flag] ?? flag;
 }
 
