@@ -17,5 +17,5 @@ export default async function AdminMapPage({
         ? params.office
         : session?.office;
 
-  return <MapClientLoader office={office} myOffice={session?.office} />;
+  return <MapClientLoader office={office} />;
 }

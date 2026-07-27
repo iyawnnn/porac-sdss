@@ -11,15 +11,10 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import Link from "next/link";
 import type { AdminTicketGeoRow } from "@/app/api/admin/tickets/geo/route";
 import { MUNICIPALITY } from "@/lib/municipality-config";
-
-const BAND_COLOR: Record<string, string> = {
-  Low: "#16a34a",
-  Medium: "#f59e0b",
-  Critical: "#dc2626",
-};
+import { getUrgencyBandStyle } from "@/lib/ui/urgency";
 
 function bandIcon(band: string | null) {
-  const color = BAND_COLOR[band ?? ""] ?? "#6b7280";
+  const color = getUrgencyBandStyle(band).hex;
   return L.divIcon({
     className: "",
     html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>`,
@@ -29,13 +24,7 @@ function bandIcon(band: string | null) {
 
 const CITY_CENTER: [number, number] = [MUNICIPALITY.centerLat, MUNICIPALITY.centerLng];
 
-export default function MapClient({
-  office,
-  myOffice,
-}: {
-  office?: "CEO" | "ACDRRMO";
-  myOffice?: "CEO" | "ACDRRMO";
-}) {
+export default function MapClient({ office }: { office?: "CEO" | "ACDRRMO" }) {
   const [tickets, setTickets] = useState<AdminTicketGeoRow[]>([]);
   const [barangays, setBarangays] = useState<FeatureCollection | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,21 +49,6 @@ export default function MapClient({
 
   return (
     <div className="h-[calc(100vh-4rem)] w-full relative">
-      <div className="absolute top-2 left-2 z-[1000] bg-white px-3 py-1 rounded shadow text-sm flex items-center gap-3">
-        <span>
-          Showing: <strong>{office ?? "All offices (full city)"}</strong>
-        </span>
-        {office !== undefined && (
-          <Link href="/admin/map?office=all" className="text-blue-600 underline">
-            View full city
-          </Link>
-        )}
-        {office === undefined && myOffice && (
-          <Link href="/admin/map" className="text-blue-600 underline">
-            View my office ({myOffice})
-          </Link>
-        )}
-      </div>
       {loading && (
         <p className="absolute top-12 left-2 z-[1000] bg-white px-3 py-1 rounded shadow text-sm">
           Loading tickets...

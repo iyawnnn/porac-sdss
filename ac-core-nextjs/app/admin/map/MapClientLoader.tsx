@@ -6,12 +6,6 @@ import dynamic from "next/dynamic";
 // the identical pattern (and the reason) in app/(citizen)/report/page.tsx.
 const MapClient = dynamic(() => import("./MapClient"), { ssr: false });
 
-export default function MapClientLoader({
-  office,
-  myOffice,
-}: {
-  office?: "CEO" | "ACDRRMO";
-  myOffice?: "CEO" | "ACDRRMO";
-}) {
-  return <MapClient office={office} myOffice={myOffice} />;
+export default function MapClientLoader({ office }: { office?: "CEO" | "ACDRRMO" }) {
+  return <MapClient office={office} />;
 }

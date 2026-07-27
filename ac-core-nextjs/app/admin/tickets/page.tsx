@@ -3,14 +3,16 @@ import { sql } from "@/lib/db/raw";
 import { recomputeActiveTicketUrgency } from "@/lib/triage/recompute";
 import { getTicketsForAdmin } from "@/lib/admin/tickets";
 import { getAdminSession } from "@/lib/auth/getSession";
-
-const BAND_CLASSES: Record<string, string> = {
-  Low: "bg-green-100 text-green-800",
-  Medium: "bg-amber-100 text-amber-800",
-  Critical: "bg-red-100 text-red-800",
-};
+import { getUrgencyBandStyle } from "@/lib/ui/urgency";
 
 const STATUSES = ["Reported", "Under Review", "In Progress", "Resolved"];
+
+// Filter bar as chips (DESIGN.md §9 Phase 1) — same rounded-pill treatment
+// on every native <select>, so the three filters and the submit button
+// read as one control group instead of three bordered boxes.
+const FILTER_CHIP_CLASS = "rounded-full border border-line-200 bg-surface px-3 py-1.5 text-sm text-ink-700";
+
+const TH_CLASS = "h-10 px-3 text-xs font-medium uppercase tracking-wide text-ink-500";
 
 export default async function AdminTicketsPage({
   searchParams,
@@ -33,8 +35,6 @@ export default async function AdminTicketsPage({
       : params.office === "CEO" || params.office === "ACDRRMO"
         ? params.office
         : session?.office;
-  const isDefaultOfficeView = params.office === undefined;
-
   const status = params.status && STATUSES.includes(params.status) ? params.status : undefined;
   const barangayId = params.barangayId ? Number(params.barangayId) : undefined;
 
@@ -44,40 +44,27 @@ export default async function AdminTicketsPage({
   ]);
 
   return (
-    <main className="max-w-6xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-2">
-        <h1 className="text-2xl font-bold">Ticket Queue</h1>
-        <p className="text-xs text-gray-500">
+    <main className="max-w-7xl mx-auto p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-xl font-semibold text-ink-900">Ticket Queue</h1>
+        <p className="text-xs text-ink-400">
           Recomputed just now — rain: {recomputeResult.rain1hMm}mm/h, {recomputeResult.updated}{" "}
           active ticket(s)
         </p>
       </div>
 
-      <div className="flex items-center gap-3 mb-4 text-sm">
-        <span>
-          Showing: <strong>{office ?? "All offices (full city)"}</strong>
-          {isDefaultOfficeView && session?.office ? " (your office, default)" : ""}
-        </span>
-        {office !== undefined && (
-          <Link href="/admin/tickets?office=all" className="text-blue-600 underline">
-            View full city
-          </Link>
-        )}
-        {office === undefined && session?.office && (
-          <Link href="/admin/tickets" className="text-blue-600 underline">
-            View my office ({session.office})
-          </Link>
-        )}
-      </div>
-
-      <form className="flex gap-3 mb-4 flex-wrap" method="GET">
-        <select name="office" defaultValue={params.office ?? session?.office ?? "all"} className="border p-2">
+      <form className="flex gap-2 mb-4 flex-wrap items-center" method="GET">
+        <select
+          name="office"
+          defaultValue={params.office ?? session?.office ?? "all"}
+          className={FILTER_CHIP_CLASS}
+        >
           <option value="all">All offices</option>
           <option value="CEO">CEO</option>
           <option value="ACDRRMO">ACDRRMO</option>
         </select>
 
-        <select name="status" defaultValue={status ?? ""} className="border p-2">
+        <select name="status" defaultValue={status ?? ""} className={FILTER_CHIP_CLASS}>
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -86,7 +73,7 @@ export default async function AdminTicketsPage({
           ))}
         </select>
 
-        <select name="barangayId" defaultValue={barangayId ?? ""} className="border p-2">
+        <select name="barangayId" defaultValue={barangayId ?? ""} className={FILTER_CHIP_CLASS}>
           <option value="">All barangays</option>
           {barangays.map((b) => (
             <option key={b.id} value={b.id}>
@@ -95,58 +82,67 @@ export default async function AdminTicketsPage({
           ))}
         </select>
 
-        <button type="submit" className="bg-gray-800 text-white px-4 py-2 rounded">
+        <button
+          type="submit"
+          className="rounded-full bg-brand-500 hover:bg-brand-600 text-white px-4 py-1.5 text-sm font-medium"
+        >
           Filter
         </button>
       </form>
 
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="text-left border-b">
-            <th className="p-2">ID</th>
-            <th className="p-2">Category</th>
-            <th className="p-2">Barangay</th>
-            <th className="p-2">Members</th>
-            <th className="p-2">Urgency</th>
-            <th className="p-2">Office</th>
-            <th className="p-2">Status</th>
-            <th className="p-2">Created</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tickets.map((t) => (
-            <tr key={t.id} className="border-b hover:bg-gray-50">
-              <td className="p-2">
-                <Link href={`/admin/tickets/${t.id}`} className="text-blue-600 underline">
-                  #{t.id}
-                </Link>
-              </td>
-              <td className="p-2">{t.category}</td>
-              <td className="p-2">{t.barangay_name}</td>
-              <td className="p-2">{t.member_count}</td>
-              <td className="p-2">
-                <span
-                  className={`px-2 py-1 rounded text-xs font-medium ${
-                    BAND_CLASSES[t.urgency_band ?? ""] ?? "bg-gray-100 text-gray-800"
-                  }`}
-                >
-                  {t.urgency_band ?? "—"} ({t.urgency_score?.toFixed(3) ?? "—"})
-                </span>
-              </td>
-              <td className="p-2">{t.assigned_office}</td>
-              <td className="p-2">{t.status}</td>
-              <td className="p-2">{new Date(t.created_at).toLocaleString()}</td>
+      <div className="overflow-x-auto rounded-lg border border-line-200 bg-surface">
+        <table className="w-full text-sm border-collapse">
+          <thead className="sticky top-0 z-10 bg-surface">
+            <tr className="border-b border-line-200 text-left">
+              <th className={TH_CLASS}>ID</th>
+              <th className={TH_CLASS}>Category</th>
+              <th className={TH_CLASS}>Barangay</th>
+              <th className={`${TH_CLASS} text-right`}>Members</th>
+              <th className={TH_CLASS}>Urgency</th>
+              <th className={`${TH_CLASS} text-right`}>Score</th>
+              <th className={TH_CLASS}>Office</th>
+              <th className={TH_CLASS}>Status</th>
+              <th className={TH_CLASS}>Created</th>
             </tr>
-          ))}
-          {tickets.length === 0 && (
-            <tr>
-              <td colSpan={8} className="p-4 text-center text-gray-500">
-                No tickets match this filter.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {tickets.map((t) => (
+              <tr key={t.id} className="h-10 border-b border-line-100 hover:bg-canvas">
+                <td className="px-3 font-mono text-ink-700">
+                  <Link href={`/admin/tickets/${t.id}`} className="text-brand-600 hover:text-brand-700 hover:underline">
+                    #{t.id}
+                  </Link>
+                </td>
+                <td className="px-3">{t.category}</td>
+                <td className="px-3">{t.barangay_name}</td>
+                <td className="px-3 text-right font-mono tabular-nums text-ink-700">{t.member_count}</td>
+                <td className="px-3">
+                  <span
+                    className={`px-2 py-0.5 rounded text-xs font-medium ${getUrgencyBandStyle(t.urgency_band).className}`}
+                  >
+                    {t.urgency_band ?? "—"}
+                  </span>
+                </td>
+                <td className="px-3 text-right font-mono tabular-nums text-ink-700">
+                  {t.urgency_score?.toFixed(3) ?? "—"}
+                </td>
+                <td className="px-3">{t.assigned_office}</td>
+                <td className="px-3">{t.status}</td>
+                <td className="px-3 font-mono text-xs text-ink-500">
+                  {new Date(t.created_at).toLocaleString()}
+                </td>
+              </tr>
+            ))}
+            {tickets.length === 0 && (
+              <tr>
+                <td colSpan={9} className="p-4 text-center text-ink-400">
+                  No tickets match this filter.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </main>
   );
 }
