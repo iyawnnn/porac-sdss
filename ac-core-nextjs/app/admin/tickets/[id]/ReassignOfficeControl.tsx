@@ -37,12 +37,14 @@ export default function ReassignOfficeControl({
 
   return (
     <div className="flex items-center gap-2 text-sm">
-      <label htmlFor="reassign-office">Reassign to:</label>
+      <label htmlFor="reassign-office" className="text-ink-700">
+        Reassign to:
+      </label>
       <select
         id="reassign-office"
         value={target}
         onChange={(e) => setTarget(e.target.value)}
-        className="border p-1"
+        className="rounded-md border border-line-200 bg-surface px-2 py-1 text-sm text-ink-700"
       >
         <option value="CEO">CEO</option>
         <option value="ACDRRMO">ACDRRMO</option>
@@ -50,11 +52,11 @@ export default function ReassignOfficeControl({
       <button
         onClick={handleReassign}
         disabled={submitting || target === currentOffice}
-        className="bg-gray-800 text-white px-3 py-1 rounded disabled:opacity-50"
+        className="rounded-md border border-line-200 px-3 py-1 text-sm text-ink-700 hover:bg-canvas disabled:opacity-50"
       >
         {submitting ? "Reassigning..." : "Reassign"}
       </button>
-      {error && <span className="text-red-600">{error}</span>}
+      {error && <span className="text-urgency-critical-ink">{error}</span>}
     </div>
   );
 }
