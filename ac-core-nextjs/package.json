@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:barangays": "tsx --env-file=.env.local scripts/seed-barangays.ts",
     "seed:dem": "tsx --env-file=.env.local scripts/seed-dem.ts",
     "verify:config": "tsx --env-file=.env.local scripts/verify-config.ts",
     "migrate": "tsx --env-file=.env.local scripts/migrate.ts",
@@ -18,9 +17,7 @@
     "seed:demo": "tsx --env-file=.env.local scripts/seed-demo.ts",
     "migrate:city-boundary": "tsx --env-file=.env.local scripts/migrate-city-boundary.ts",
     "import:city-boundary": "tsx --env-file=.env.local scripts/import-city-boundary-osm.ts",
-    "import:barangays-v2": "tsx --env-file=.env.local scripts/import-barangays-v2-psgc.ts",
-    "compare:barangay-migration": "tsx --env-file=.env.local scripts/compare-barangay-migration-impact.ts",
-    "swap:barangays-psgc": "tsx --env-file=.env.local scripts/swap-barangays-to-psgc.ts"
+    "import:barangays-v2": "tsx --env-file=.env.local scripts/import-barangays-v2-psgc.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -1,10 +1,12 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import { sql } from "../lib/db/raw";
+import { MUNICIPALITY } from "../lib/municipality-config";
 
 // Source: PH_Adm4_BgySubMuns shapefile from altcoder/philippines-psgc-shapefiles
-// (OCHA-derived, refined against PSA's PSGC), filtered to Angeles City
-// (adm3_psgc=330100000) and saved as angeles_psgc.json at repo root.
+// (OCHA-derived, refined against PSA's PSGC), filtered to the target
+// municipality (see lib/municipality-config.ts) and saved as
+// MUNICIPALITY.psgcDataFile at repo root.
 // Raw coordinates are in EPSG:32651 (UTM Zone 51N) — reprojected to 4326
 // here, confirmed necessary after the shapefile's .prj revealed this.
 //
@@ -35,11 +37,11 @@ function geomToWkt(geom: { type: string; coordinates: unknown }): string {
 }
 
 async function main() {
-  const path = join(__dirname, "..", "..", "angeles_psgc.json");
+  const path = join(__dirname, "..", "..", MUNICIPALITY.psgcDataFile);
   const raw = JSON.parse(readFileSync(path, "utf8")) as { features: PsgcFeature[] };
 
-  if (raw.features.length !== 33) {
-    console.error(`Expected 33 features, got ${raw.features.length}.`);
+  if (raw.features.length !== MUNICIPALITY.barangayCount) {
+    console.error(`Expected ${MUNICIPALITY.barangayCount} features, got ${raw.features.length}.`);
     process.exit(1);
   }
 

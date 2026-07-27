@@ -1,11 +1,12 @@
 import { join } from "path";
 import { fromFile } from "geotiff";
 import { sql } from "../lib/db/raw";
+import { MUNICIPALITY } from "../lib/municipality-config";
 
 const BATCH_SIZE = 10000;
 
 async function main() {
-  const tiffPath = join(__dirname, "..", "..", "angeles_city_srtm30m.tif");
+  const tiffPath = join(__dirname, "..", "..", MUNICIPALITY.demTiffFile);
   const tiff = await fromFile(tiffPath);
   const image = await tiff.getImage();
 

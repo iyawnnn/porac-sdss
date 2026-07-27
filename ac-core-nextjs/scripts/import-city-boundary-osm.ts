@@ -1,10 +1,11 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import { sql } from "../lib/db/raw";
+import { MUNICIPALITY } from "../lib/municipality-config";
 
-// Source: Overpass relation 9386775 ("City of Angeles", admin_level=6),
-// fetched manually via the Overpass API (admin_level=6, name~Angeles) and
-// saved as overpass_angeles_city.json at repo root.
+// Source: Overpass relation MUNICIPALITY.osmRelationId (admin_level=6),
+// fetched manually via the Overpass API (admin_level=6, name~<city>) and
+// saved as MUNICIPALITY.overpassBoundaryFile at repo root.
 //
 // That relation's own fixme tag reads: "confirm boundaries, currently
 // includes Barangay Calibutbut of Bacolor". This import does NOT special-
@@ -30,7 +31,7 @@ interface OverpassElement {
 }
 
 async function main() {
-  const path = join(__dirname, "..", "overpass_angeles_city.json");
+  const path = join(__dirname, "..", MUNICIPALITY.overpassBoundaryFile);
   const raw = JSON.parse(readFileSync(path, "utf8")) as { elements: OverpassElement[] };
   const relation = raw.elements.find((e) => e.type === "relation");
   if (!relation) throw new Error("No relation found in overpass_angeles_city.json");
@@ -72,9 +73,10 @@ async function main() {
   console.log(`Polygonize produced ${result.num_polygons} polygon(s).`);
 
   await sql`TRUNCATE city_boundary_osm RESTART IDENTITY`;
+  const sourceLabel = `overpass relation ${MUNICIPALITY.osmRelationId} (admin_level=6, ${MUNICIPALITY.name})`;
   await sql`
     INSERT INTO city_boundary_osm (source, geom)
-    VALUES ('overpass relation 9386775 (admin_level=6, City of Angeles)', ST_GeomFromText(${result.geom}, 4326))
+    VALUES (${sourceLabel}, ST_GeomFromText(${result.geom}, 4326))
   `;
 
   const [check] = await sql<{ area_km2: number; valid: boolean }[]>`

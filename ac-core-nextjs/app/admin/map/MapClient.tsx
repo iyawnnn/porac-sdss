@@ -10,6 +10,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import Link from "next/link";
 import type { AdminTicketGeoRow } from "@/app/api/admin/tickets/geo/route";
+import { MUNICIPALITY } from "@/lib/municipality-config";
 
 const BAND_COLOR: Record<string, string> = {
   Low: "#16a34a",
@@ -26,7 +27,7 @@ function bandIcon(band: string | null) {
   });
 }
 
-const CITY_CENTER: [number, number] = [15.14, 120.57];
+const CITY_CENTER: [number, number] = [MUNICIPALITY.centerLat, MUNICIPALITY.centerLng];
 
 export default function MapClient({
   office,

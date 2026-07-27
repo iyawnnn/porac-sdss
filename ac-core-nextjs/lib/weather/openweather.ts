@@ -1,11 +1,8 @@
 import { sql } from "@/lib/db/raw";
+import { MUNICIPALITY } from "@/lib/municipality-config";
 
 const CACHE_KEY = "rain_1h_mm";
 const CACHE_TTL_MS = 10 * 60 * 1000; // matches the cron recompute interval
-
-// Angeles City, Pampanga — representative point for the current-weather lookup.
-const CITY_LAT = 15.14;
-const CITY_LNG = 120.57;
 
 // Cached in the config table (not in-memory) so the value survives across
 // serverless invocations and is shared between the cron route and report
@@ -24,7 +21,7 @@ export async function getCurrentRain1hMm(): Promise<number> {
     throw new Error("OPENWEATHERMAP_API_KEY is not set");
   }
 
-  const url = `https://api.openweathermap.org/data/2.5/weather?lat=${CITY_LAT}&lon=${CITY_LNG}&appid=${apiKey}`;
+  const url = `https://api.openweathermap.org/data/2.5/weather?lat=${MUNICIPALITY.centerLat}&lon=${MUNICIPALITY.centerLng}&appid=${apiKey}`;
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`OpenWeatherMap request failed: ${res.status}`);

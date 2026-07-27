@@ -7,6 +7,7 @@ import "leaflet/dist/leaflet.css";
 import exifr from "exifr";
 import imageCompression from "browser-image-compression";
 import { CATEGORIES, SEVERITIES } from "@/lib/validation/report";
+import { MUNICIPALITY } from "@/lib/municipality-config";
 
 const icon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -17,7 +18,7 @@ const icon = L.icon({
 });
 
 // Center of the barangays bounding box from Phase 0 seeding.
-const CITY_CENTER: [number, number] = [15.14, 120.57];
+const CITY_CENTER: [number, number] = [MUNICIPALITY.centerLat, MUNICIPALITY.centerLng];
 
 function FlyToPosition({ position }: { position: L.LatLng }) {
   const map = useMap();

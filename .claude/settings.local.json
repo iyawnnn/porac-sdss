@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(npx --yes create-next-app@latest ac-core-nextjs --typescript --tailwind --app --eslint --src-dir=false --import-alias \"@/*\" --use-npm --no-turbopack)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{redirect_url}\\\\n\" http://localhost:4173/)",
+      "Bash(curl -sL -o /dev/null -w \"final: %{http_code} %{url_effective}\\\\n\" http://localhost:4173/)",
+      "Bash(kill %1)"
     ]
   }
 }
