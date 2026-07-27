@@ -23,7 +23,7 @@ export default async function MyReportDetailPage({
 
   return (
     <main className="max-w-2xl mx-auto p-6">
-      <Link href="/dashboard" className="text-blue-600 underline text-sm">
+      <Link href="/dashboard" className="text-brand-500 underline text-sm">
         ← Back to my reports
       </Link>
 
@@ -41,11 +41,11 @@ export default async function MyReportDetailPage({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={report.image_url} alt={report.title} className="w-32 h-32 object-cover rounded" />
         <div>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-ink-500">
             {report.category} · reported as {report.citizen_severity}
           </p>
           {report.description && <p className="text-sm mt-1">{report.description}</p>}
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="text-xs text-ink-400 mt-2 font-mono tabular-nums">
             Submitted {new Date(report.created_at).toLocaleString()}
           </p>
         </div>

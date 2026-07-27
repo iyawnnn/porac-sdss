@@ -27,9 +27,10 @@ const URGENCY_BAND_STYLE: Record<UrgencyBand, UrgencyBandStyle> = {
   },
 };
 
+// Fallback for null/unknown band — neutral canvas + ink-500, stays in token system.
 const FALLBACK_STYLE: UrgencyBandStyle = {
-  hex: "#6b7280",
-  className: "bg-gray-100 text-gray-800",
+  hex: "#808c99",
+  className: "bg-canvas text-ink-500",
 };
 
 export function getUrgencyBandStyle(band: string | null | undefined): UrgencyBandStyle {

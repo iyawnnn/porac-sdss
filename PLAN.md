@@ -509,13 +509,31 @@ automated tests" is still true in the Next.js build too — confirmed zero
  
 ## 13. Phased Roadmap
 
-**Overall status**: Phases 1–4 ✅ COMPLETE. Phase 5 nearly complete — only
-the ISO/IEC 25010 instrument (a paper deliverable, not code) remains; see
-below. Build order did not strictly follow this list: the admin
-dashboard (Phase 5 scope — urgency-ranked queue, score breakdown panel)
-was actually built *before* Phase 4's EXIF/rate-limiting work, because it
-was needed to test and demo the Phase 3 engine first. Citizen accounts
-were not scoped to any phase originally and landed after Phase 4.
+**Overall status**: Phases 1–4 ✅ COMPLETE. Phase 5 **✅ FULLY COMPLETE** — all
+code deliverables done. The ISO/IEC 25010 instrument (a paper/survey
+deliverable, not code) remains the only open item; see below. Build
+order did not strictly follow this list: the admin dashboard (Phase 5
+scope — urgency-ranked queue, score breakdown panel) was actually built
+*before* Phase 4's EXIF/rate-limiting work, because it was needed to
+test and demo the Phase 3 engine first. Citizen accounts were not
+scoped to any phase originally and landed after Phase 4.
+
+**Design / frontend pass (DESIGN.md) — ✅ COMPLETE.** The design pass was
+deliberately sequenced last, after all functional correctness work
+(Phases 1–4: data pipeline, triage engine, deduplication, EXIF/fraud
+controls, office separation) was built and verified. This ordering
+minimised churn: token definitions in `globals.css` were locked in
+once and consumed by all five phases of component work in a single
+direction, rather than being retrofitted around an evolving backend.
+The five design phases (0–5 per DESIGN.md §9) were executed in order:
+  - Phase 0 — Token layer, focus ring, band→token map, admin shell
+  - Phase 1 — `/admin/tickets` sticky header, 40px rows, split band/score columns
+  - Phase 2 — `/admin/tickets/[id]` decomposition bar, retokenize
+  - Phase 3 — `/report` labels, 48px controls, segmented severity, EXIF states
+  - Phase 4 — `/admin/map` pin encoding, legend, choropleth opacity
+  - Phase 5 — `/admin/flagged` violet chips, `/dashboard` status pills,
+    StatusTimeline retokenize, final sweep. Verified via Playwright
+    (computed styles + bounding boxes, 8/8 tests passed).
 
 **Phase 1: Data foundation (week 1)** — ✅ COMPLETE.
 Provision Neon with PostGIS. Write the barangay GeoJSON seed script. Write the SRTM sampling script and populate `dem_points`. Compute and record `elev_min`, `elev_max`, and the city bounding box. Verify the 33 polygons and the western extent.
@@ -541,6 +559,7 @@ the non-code deliverable remains:
 - ✅ Score breakdown panel showing the three factors per ticket — done (`/admin/tickets/[id]`), and hardened to show the explicit 1/3 weight and per-factor contribution alongside each value, not just the final score, so it reads clearly at a glance for defense
 - ✅ Barangay choropleth on the admin map — done (`/admin/map`, `GET /api/admin/barangays/geo`); subtle fill/outline layer under the ticket pins so it doesn't compete visually with urgency color-coding
 - ✅ Seed demo data — done (`scripts/seed-demo.ts`, `npm run seed:demo`); idempotent (clears its own previously-seeded rows via a `@ac-core-demo.local` email marker before reseeding), 10 tickets across 8 barangays and 7 categories, spread across all three urgency bands (2 Low / 5 Medium / 3 Critical), 7 merged tickets with member_count 2–10, one report carrying a `LOCATION_MISMATCH` flag on a Critical ticket. Also seeds the same `config` table cache the live weather recompute reads from, so demo urgency scores survive the recompute that fires on every admin dashboard/map load instead of being silently overwritten by whatever the real weather is doing outside — this was found and fixed during Phase 5 testing, not anticipated in the original script design.
+- ✅ **Design/frontend pass (DESIGN.md Phases 0–5)** — complete. `/admin/flagged` violet flag chips (§2.4/§5.3), `/dashboard` status pills (§2.3/§5.2), StatusTimeline Pizza Tracker retokenized (§6.3), final token sweep (all raw Tailwind `bg-*`/`text-gray-*` utilities replaced except the deliberately out-of-scope login/signup screens per §7). Verified via Playwright computed-style tests (8/8 passed).
 - 🔲 Draft the ISO/IEC 25010 evaluation instrument — NOT built; documentation/survey deliverable outside this codebase, explicitly not attempted as code, still open
  
 ---

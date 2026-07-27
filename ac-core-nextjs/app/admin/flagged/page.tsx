@@ -41,34 +41,43 @@ export default async function AdminFlaggedPage() {
   return (
     <main className="max-w-4xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">Flagged Reports ({reports.length})</h1>
-      <p className="text-sm text-gray-600 mb-6">
+      <p className="text-sm text-ink-500 mb-6">
         Flags are a signal, not an auto-reject — every report below was still created. Use the
         evidence to decide whether it needs closer review.
       </p>
 
       <div className="space-y-4">
         {reports.map((r) => (
-          <div key={r.id} className="border p-4 rounded flex gap-4">
+          <div key={r.id} className="border border-line-200 p-4 rounded-lg flex gap-4 bg-surface">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={r.image_url} alt={r.title} className="w-32 h-32 object-cover rounded" />
             <div className="flex-1">
-              <h2 className="font-medium">
+              <h2 className="font-medium text-ink-900">
                 {r.title} —{" "}
-                <Link href={`/admin/tickets/${r.ticket_id}`} className="text-blue-600 underline">
+                <Link href={`/admin/tickets/${r.ticket_id}`} className="text-brand-500 underline">
                   Ticket #{r.ticket_id}
                 </Link>
               </h2>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-ink-500">
                 {r.category} · {r.barangay_name} · reported as {r.citizen_severity} ·{" "}
                 {new Date(r.created_at).toLocaleString()}
               </p>
+              {/* Flag chips — violet per DESIGN.md §2.4/§5.3 */}
               <ul className="mt-2 space-y-1 text-sm">
                 {r.flags.map((flag) => (
-                  <li key={flag}>
-                    <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 text-xs font-medium mr-2">
+                  <li key={flag} className="flex items-center gap-2">
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border"
+                      style={{
+                        background: "var(--color-flag-tint)",
+                        color: "var(--color-flag-ink)",
+                        borderColor: "var(--color-flag-edge)",
+                      }}
+                    >
+                      <span aria-hidden="true">⚑</span>
                       {flagLabel(flag)}
                     </span>
-                    <span className="text-gray-600">{flagEvidence(flag, r)}</span>
+                    <span className="text-ink-500">{flagEvidence(flag, r)}</span>
                   </li>
                 ))}
               </ul>
@@ -76,7 +85,7 @@ export default async function AdminFlaggedPage() {
           </div>
         ))}
         {reports.length === 0 && (
-          <p className="text-gray-500">No flagged reports.</p>
+          <p className="text-ink-500">No flagged reports.</p>
         )}
       </div>
     </main>
