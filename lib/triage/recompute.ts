@@ -4,8 +4,8 @@ import { getElevationBounds } from "@/lib/config";
 import { computePriorityIndex, severityFromRank } from "@/lib/scoring";
 import { computeUrgency } from "./urgency";
 
-export async function recomputeActiveTicketUrgency() {
-  const rain1hMm = await getCurrentRain1hMm();
+export async function recomputeActiveTicketUrgency(rainOverride?: number) {
+  const rain1hMm = rainOverride ?? await getCurrentRain1hMm();
   const { elevMin, elevMax } = await getElevationBounds();
 
   const tickets = await sql<{
