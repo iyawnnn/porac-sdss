@@ -37,6 +37,8 @@ test("MEO admin can open the Porac map without runtime failures", async ({ page 
   await page.getByPlaceholder("Email").fill("meo@porac.gov.ph");
   await page.getByPlaceholder("Password").fill("PoracDemo2026!");
   await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await page.getByRole("link", { name: "Map" }).click();
   await expect(page).toHaveURL(/\/admin\/map/);
   await expect(page.locator(".leaflet-container")).toBeVisible();
   const image = await page.request.get("/uploads/reports/01_poblacion.jpg");

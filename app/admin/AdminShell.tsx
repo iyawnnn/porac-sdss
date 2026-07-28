@@ -4,6 +4,7 @@ import OfficeScopeToggle from "./OfficeScopeToggle";
 import SignOutButton from "./SignOutButton";
 
 const NAV_LINKS = [
+  { href: "/admin", label: "Dashboard" },
   { href: "/admin/tickets", label: "Tickets" },
   { href: "/admin/map", label: "Map" },
   { href: "/admin/flagged", label: "Flagged" },
