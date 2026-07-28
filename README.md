@@ -19,7 +19,6 @@ Install or prepare the following before running the project locally:
 
 ```bash
 git clone <repository-url>
-cd porac-sdss-nextjs
 ```
 
 ### Step 2: Install dependencies

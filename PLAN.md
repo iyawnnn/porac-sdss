@@ -1,6 +1,6 @@
-# AC-CORE Prototype Realignment Plan
+# porac-sdss-nextjs Prototype Realignment Plan
  
-Repository: `MMPA-Works/AC-CORE` (commit `9a44a41`)
+Repository: `MMPA-Works/porac-sdss-nextjs` (commit `9a44a41`)
 Target: Municipal Infrastructure Maintenance and Topographical Hazard Mapping System for Angeles City (WD403 Group 9)
  
 ---
@@ -10,7 +10,7 @@ Target: Municipal Infrastructure Maintenance and Topographical Hazard Mapping Sy
 **Status: 🔲 DEFERRED** — deliberate decision at prototype stage (accepted
 risk, not an oversight); will rotate before any real deployment or public
 demo. None of the five credentials below were rotated —
-`ac-core-nextjs/.env.local` reuses the exact original values (same
+`porac-sdss-nextjs/.env.local` reuses the exact original values (same
 `MONGODB_URI`, `CLOUDINARY_URL`, `OPENWEATHERMAP_API_KEY`, and
 `JWT_SECRET` originally pasted in chat). Confirmed via grep that no
 hardcoded fallback values exist anywhere in the codebase for these
@@ -37,7 +37,7 @@ Separate issue in `server.ts`: `app.use(cors())` allows any origin. Restrict to 
 
 **Status: ⚠️ SUPERSEDED.** This section describes the pre-migration
 Express/Angular repo. The actual build is a from-scratch Next.js app
-(`ac-core-nextjs/`), not a port of this code — see §16.
+(`porac-sdss-nextjs/`), not a port of this code — see §16.
 
 **Backend** (`accore-backend`, ~1,700 LOC): Express 5, TypeScript, Mongoose, MongoDB Atlas, Cloudinary, Multer, Zod, `express-rate-limit`, `node-cron`, `node-cache`, Turf.
  
@@ -558,7 +558,7 @@ the non-code deliverable remains:
 - ✅ Urgency-ranked queue as the default admin view — done (`/admin/tickets`, sorted `urgency_score DESC`)
 - ✅ Score breakdown panel showing the three factors per ticket — done (`/admin/tickets/[id]`), and hardened to show the explicit 1/3 weight and per-factor contribution alongside each value, not just the final score, so it reads clearly at a glance for defense
 - ✅ Barangay choropleth on the admin map — done (`/admin/map`, `GET /api/admin/barangays/geo`); subtle fill/outline layer under the ticket pins so it doesn't compete visually with urgency color-coding
-- ✅ Seed demo data — done (`scripts/seed-demo.ts`, `npm run seed:demo`); idempotent (clears its own previously-seeded rows via a `@ac-core-demo.local` email marker before reseeding), 10 tickets across 8 barangays and 7 categories, spread across all three urgency bands (2 Low / 5 Medium / 3 Critical), 7 merged tickets with member_count 2–10, one report carrying a `LOCATION_MISMATCH` flag on a Critical ticket. Also seeds the same `config` table cache the live weather recompute reads from, so demo urgency scores survive the recompute that fires on every admin dashboard/map load instead of being silently overwritten by whatever the real weather is doing outside — this was found and fixed during Phase 5 testing, not anticipated in the original script design.
+- ✅ Seed demo data — done (`scripts/seed-demo.ts`, `npm run seed:demo`); idempotent (clears its own previously-seeded rows via a `@porac-sdss-nextjs-demo.local` email marker before reseeding), 10 tickets across 8 barangays and 7 categories, spread across all three urgency bands (2 Low / 5 Medium / 3 Critical), 7 merged tickets with member_count 2–10, one report carrying a `LOCATION_MISMATCH` flag on a Critical ticket. Also seeds the same `config` table cache the live weather recompute reads from, so demo urgency scores survive the recompute that fires on every admin dashboard/map load instead of being silently overwritten by whatever the real weather is doing outside — this was found and fixed during Phase 5 testing, not anticipated in the original script design.
 - ✅ **Design/frontend pass (DESIGN.md Phases 0–5)** — complete. `/admin/flagged` violet flag chips (§2.4/§5.3), `/dashboard` status pills (§2.3/§5.2), StatusTimeline Pizza Tracker retokenized (§6.3), final token sweep (all raw Tailwind `bg-*`/`text-gray-*` utilities replaced except the deliberately out-of-scope login/signup screens per §7). Verified via Playwright computed-style tests (8/8 passed).
 - 🔲 Draft the ISO/IEC 25010 evaluation instrument — NOT built; documentation/survey deliverable outside this codebase, explicitly not attempted as code, still open
  

@@ -1,6 +1,6 @@
 # Migration log: GADM → PSGC barangay boundaries
 
-Archived record of `ac-core-nextjs/scripts/swap-barangays-to-psgc.ts`, the
+Archived record of `porac-sdss-nextjs/scripts/swap-barangays-to-psgc.ts`, the
 one-time script that promoted the PSGC/OCHA-sourced `barangays_v2` table to
 be the live `barangays` table, deleted after cleanup since it was already
 executed against the production DB and is not meant to run again. See

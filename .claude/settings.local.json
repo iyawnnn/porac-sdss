@@ -1,7 +1,6 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx --yes create-next-app@latest ac-core-nextjs --typescript --tailwind --app --eslint --src-dir=false --import-alias \"@/*\" --use-npm --no-turbopack)",
       "Bash(node -e ' *)",
       "Bash(npm run *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code} %{redirect_url}\\\\n\" http://localhost:4173/)",

@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo layout
 
-This is a monorepo root, not the app itself. The actual app lives in `ac-core-nextjs/`; all commands below run from there. Other root-level items:
+This is a monorepo root, not the app itself. The actual app lives in `porac-sdss-nextjs/`; all commands below run from there. Other root-level items:
 
 - `PLAN.md` — the authoritative build log and decision record (gap analysis vs. the original thesis paper, phase-by-phase status, every architectural deviation and why). Read it before making non-trivial changes to the triage engine, dedup logic, or geo pipeline — it explains *why* things are built the way they are, not just what.
 - `docs/migration-log-gadm-to-psgc.md` — archived copy of a deleted one-time migration script, kept for history only.
-- `angeles_psgc.json`, `angeles_city_srtm30m.tif` — raw geo source data consumed by the seed scripts in `ac-core-nextjs/scripts/`. Not committed data-processing artifacts you should ever hand-edit; regenerate via the pipeline described below if the target municipality changes.
+- `angeles_psgc.json`, `angeles_city_srtm30m.tif` — raw geo source data consumed by the seed scripts in `porac-sdss-nextjs/scripts/`. Not committed data-processing artifacts you should ever hand-edit; regenerate via the pipeline described below if the target municipality changes.
 
-## Commands (run from `ac-core-nextjs/`)
+## Commands (run from `porac-sdss-nextjs/`)
 
 ```
 npm run dev              # dev server
@@ -39,7 +39,7 @@ All scripts run via `tsx --env-file=.env.local`, so env vars come from that file
 
 ## This is a modified Next.js — verify before assuming standard APIs
 
-`AGENTS.md` (included via `ac-core-nextjs/CLAUDE.md`) warns that this Next.js build has breaking conventions vs. what training data assumes. One concrete example already found: middleware lives in `proxy.ts` (exporting `proxy()`), not `middleware.ts`/`export function middleware()`. Check `node_modules/next/dist/docs/` before relying on a remembered Next.js API or file-convention name.
+`AGENTS.md` (included via `porac-sdss-nextjs/CLAUDE.md`) warns that this Next.js build has breaking conventions vs. what training data assumes. One concrete example already found: middleware lives in `proxy.ts` (exporting `proxy()`), not `middleware.ts`/`export function middleware()`. Check `node_modules/next/dist/docs/` before relying on a remembered Next.js API or file-convention name.
 
 ## Architecture
 
