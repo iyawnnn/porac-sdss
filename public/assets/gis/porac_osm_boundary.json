@@ -8,7 +8,7 @@
         "boundary": "dissolved_barangays",
         "source": "public/assets/gis/porac_barangays.json",
         "barangay_count": 29,
-        "generated_at": "2026-07-28T11:16:46.256Z"
+        "generated_at": "2026-07-28T14:26:12.007Z"
       },
       "geometry": {
         "type": "Polygon",
