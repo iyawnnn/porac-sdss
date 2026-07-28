@@ -42,6 +42,7 @@ export const tickets = pgTable("tickets", {
   clusterFactor: real("cluster_factor"),
   urgencyScore: real("urgency_score"),
   urgencyBand: text("urgency_band"),
+  priorityIndex: integer("priority_index"),
   assignedOffice: officeEnum("assigned_office").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
