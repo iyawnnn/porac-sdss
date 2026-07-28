@@ -36,8 +36,14 @@ export interface MyReportDetail {
   category: string;
   status: string;
   urgency_band: string | null;
+  barangay_name: string;
+  lat: number;
+  lng: number;
+  citizen_first_name: string;
+  citizen_last_name: string;
   created_at: string;
   ticket_created_at: string;
+  ticket_updated_at: string;
 }
 
 export interface StatusHistoryStep {
@@ -52,9 +58,14 @@ export async function getMyReportDetail(citizenId: number, reportId: number) {
   const [report] = await sql<MyReportDetail[]>`
     SELECT
       r.id, r.ticket_id, r.title, r.description, r.citizen_severity, r.image_url,
-      t.category, t.status, t.urgency_band, r.created_at, t.created_at AS ticket_created_at
+      t.category, t.status, t.urgency_band, b.name AS barangay_name,
+      ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng,
+      c.first_name AS citizen_first_name, c.last_name AS citizen_last_name,
+      r.created_at, t.created_at AS ticket_created_at, t.updated_at AS ticket_updated_at
     FROM reports r
     JOIN tickets t ON t.id = r.ticket_id
+    JOIN barangays b ON b.id = t.barangay_id
+    JOIN citizens c ON c.id = r.citizen_id
     WHERE r.id = ${reportId} AND r.citizen_id = ${citizenId}
   `;
 
