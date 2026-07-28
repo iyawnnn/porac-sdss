@@ -9,6 +9,7 @@ import { officeForCategory } from "@/lib/office";
 import { uploadImage } from "@/lib/cloudinary";
 import { radiusForCategory } from "@/lib/triage/radius";
 import { computeUrgency } from "@/lib/triage/urgency";
+import { recomputeActiveTicketUrgency } from "@/lib/triage/recompute";
 import { getElevationBounds } from "@/lib/config";
 import { getCurrentRain1hMm } from "@/lib/weather/openweather";
 import { extractExif } from "@/lib/exif";
@@ -259,6 +260,8 @@ export async function POST(req: NextRequest) {
 
     return { ticketId: ticket.id, reportId: report.id, merged: false, memberCount: 1 };
   });
+
+  await recomputeActiveTicketUrgency();
 
   return NextResponse.json(
     {
