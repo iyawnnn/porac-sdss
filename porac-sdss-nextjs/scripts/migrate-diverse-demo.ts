@@ -1,0 +1,1 @@
+import { sql } from "../lib/db/raw";async function main(){await sql`ALTER TYPE ticket_status ADD VALUE IF NOT EXISTS 'Rejected'`;await sql`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS flagged boolean NOT NULL DEFAULT false`;await sql.end()}main()

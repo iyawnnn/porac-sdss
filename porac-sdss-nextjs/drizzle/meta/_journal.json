@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785055217235,
+      "tag": "0000_soft_landau",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785057882096,
+      "tag": "0002_reflective_bromley",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785059489874,
+      "tag": "0004_chilly_tarot",
+      "breakpoints": true
+    }
+  ]
+}

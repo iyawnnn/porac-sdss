@@ -1,0 +1,5 @@
+import { existsSync, readFileSync } from "fs";
+import { resolve } from "path";
+import { sql } from "../lib/db/raw";
+import { extractExif } from "../lib/exif";
+async function main(){const rows=await sql<{id:number;image_url:string;lat:number;lng:number}[]>`SELECT r.id,r.image_url,ST_Y(r.exif_geom) AS lat,ST_X(r.exif_geom) AS lng FROM reports r WHERE image_url LIKE '/uploads/reports/%' ORDER BY r.id`;if(rows.length!==12)throw new Error(`Expected 12 seeded images, found ${rows.length}`);for(const row of rows){const file=resolve(__dirname,"..","public",row.image_url.slice(1));if(!existsSync(file))throw new Error(`Missing ${row.image_url}`);const exif=await extractExif(readFileSync(file));if(exif.lat===null||exif.lng===null||Math.abs(exif.lat-row.lat)>0.0001||Math.abs(exif.lng-row.lng)>0.0001)throw new Error(`Invalid GPS EXIF in ${row.image_url}`)}console.log(`Verified ${rows.length} physical JPEGs with GPS EXIF.`);await sql.end()}main().catch(async e=>{console.error(e);await sql.end();process.exit(1)});

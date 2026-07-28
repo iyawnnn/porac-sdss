@@ -1,0 +1,3 @@
+import bcrypt from "bcryptjs";import { sql } from "../lib/db/raw";
+const password=process.env.SEED_USER_PASSWORD??"PoracDemo2026!";
+async function main(){await sql`ALTER TABLE citizens ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT false`;const hash=await bcrypt.hash(password,12);for(let i=1;i<=5;i++){const email=`citizen${i}@porac.ph`;await sql`INSERT INTO citizens(first_name,last_name,email,password_hash,verified) VALUES(${`Citizen ${i}`},'Porac',${email},${hash},true) ON CONFLICT(email) DO UPDATE SET password_hash=EXCLUDED.password_hash,verified=true`;console.log(`Seeded ${email}`)}await sql.end()}main().catch(async e=>{console.error(e);await sql.end();process.exit(1)});

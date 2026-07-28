@@ -1,0 +1,2 @@
+import { sql } from "../lib/db/raw";
+async function main(){await sql`ALTER TABLE reports ADD COLUMN IF NOT EXISTS exif_data jsonb`;console.log("reports.exif_data applied");await sql.end()}main().catch(async e=>{console.error(e);await sql.end();process.exit(1)});

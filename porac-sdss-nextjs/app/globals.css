@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+/* Token layer — see DESIGN.md §2 for rationale and the meaning of each
+   group. Hex is canonical; do not add a dark-mode override block without
+   re-reading DESIGN.md §7 first (removed deliberately — see that section). */
+@theme {
+  /* Brand — chrome only, never data (DESIGN.md §2.1) */
+  --color-brand-50: #eff5fc;
+  --color-brand-100: #d8e6f7;
+  --color-brand-300: #8fb6de;
+  --color-brand-500: #2b6cb0;
+  --color-brand-600: #22578e;
+  --color-brand-700: #1a4570;
+  --color-brand-900: #102943;
+
+  /* Urgency — urgency_band only, never chrome (DESIGN.md §2.2) */
+  --color-urgency-low: #d99a00;
+  --color-urgency-low-tint: #fdf3d7;
+  --color-urgency-low-ink: #6b4a00;
+  --color-urgency-low-edge: #efd79a;
+
+  --color-urgency-medium: #e2680e;
+  --color-urgency-medium-tint: #fde7d3;
+  --color-urgency-medium-ink: #8a3a00;
+  --color-urgency-medium-edge: #f5c09a;
+
+  --color-urgency-critical: #c42b1c;
+  --color-urgency-critical-tint: #fadcd9;
+  --color-urgency-critical-ink: #8a1d12;
+  --color-urgency-critical-edge: #eda9a1;
+
+  /* Status — ticket_status. Under Review / In Progress reuse the brand
+     ramp exactly (DESIGN.md §2.3); only Reported and Resolved need their
+     own tokens since they sit outside that progression. */
+  --color-status-reported-tint: #f1f3f5;
+  --color-status-reported-ink: #434b54;
+  --color-status-reported-dot: #98a2ac;
+
+  --color-status-resolved-tint: #e3f5ee;
+  --color-status-resolved-ink: #0b5741;
+  --color-status-resolved-dot: #0f7a5a;
+
+  /* Integrity flags — violet, off both ramps (DESIGN.md §2.4) */
+  --color-flag: #7b2fa8;
+  --color-flag-tint: #f3e8fb;
+  --color-flag-ink: #5b2178;
+  --color-flag-edge: #ddbdf0;
+
+  /* Neutrals (DESIGN.md §2.5) */
+  --color-canvas: #f7f9fb;
+  --color-surface: #ffffff;
+  --color-line-100: #edf0f3;
+  --color-line-200: #e1e6eb;
+  --color-ink-400: #808c99;
+  --color-ink-500: #5a6672;
+  --color-ink-700: #2e3841;
+  --color-ink-900: #10151a;
+}
+
+/* Font variables come from next/font (see app/layout.tsx) as runtime CSS
+   custom properties on <html> — "inline" so Tailwind references them
+   instead of trying to resolve a static value at build time. */
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink-700);
+}
+
+/* Accessibility floor (DESIGN.md §4.3) — no focus styling existed before this. */
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
