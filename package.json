@@ -47,6 +47,7 @@
         "leaflet": "^1.9.4",
         "leaflet.heat": "^0.2.0",
         "leaflet.markercluster": "^1.5.3",
+        "lucide-react": "^1.27.0",
         "next": "16.2.12",
         "piexifjs": "^1.0.6",
         "postgres": "^3.4.9",
