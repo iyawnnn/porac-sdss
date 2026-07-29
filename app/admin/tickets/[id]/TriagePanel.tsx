@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const GLASS_CARD = "rounded-xl border border-slate-200/60 bg-white/90 shadow-sm backdrop-blur-md p-5";
+const GLASS_CARD = "bg-white/90 border border-slate-200/60 rounded-xl p-5 shadow-sm flex flex-col justify-between";
+const CARD_HEADER = "text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3";
 
 export function TriagePanel({
   ticketId,
@@ -60,7 +61,7 @@ export function TriagePanel({
   return (
     <div className={`${GLASS_CARD} space-y-5`}>
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Status</p>
+        <p className={CARD_HEADER}>Action controls — status</p>
         {nextStatus ? (
           <button
             onClick={handleAdvanceClick}
@@ -75,7 +76,7 @@ export function TriagePanel({
       </div>
 
       <div className="border-t border-line-100 pt-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Office</p>
+        <p className={CARD_HEADER}>Office</p>
         <div className="flex items-center gap-2">
           <select
             value={reassignTarget}

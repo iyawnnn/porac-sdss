@@ -14,6 +14,7 @@ import { StatusPill } from "@/app/admin/StatusPill";
 import { ImageLightbox } from "@/app/admin/flagged/ImageLightbox";
 import { TriagePanel } from "./TriagePanel";
 import TicketLocationMapLoader from "./TicketLocationMapLoader";
+import { HorizontalStatusTracker } from "./HorizontalStatusTracker";
 
 const NEXT_STATUS: Record<string, string> = {
   Reported: "Under Review",
@@ -22,7 +23,8 @@ const NEXT_STATUS: Record<string, string> = {
 };
 const ACTIVE_STATUSES = ["Reported", "Under Review", "In Progress"];
 
-const GLASS_CARD = "rounded-xl border border-slate-200/60 bg-white/90 shadow-sm backdrop-blur-md p-5";
+const GLASS_CARD = "bg-white/90 border border-slate-200/60 rounded-xl p-5 shadow-sm flex flex-col justify-between";
+const CARD_HEADER = "text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3";
 
 // Decomposition bar segments (DESIGN.md §5.5). Each segment occupies an
 // equal third of the track; the fill *within* that third is the factor's
@@ -54,7 +56,7 @@ export default async function TicketDetailPage({
   const data = await getTicketDetail(ticketId);
   if (!data) notFound();
 
-  const { ticket, reports, history, reassignments } = data;
+  const { ticket, reports, history } = data;
   const priorityContext = ACTIVE_STATUSES.includes(ticket.status)
     ? await getTicketPriorityContext(ticketId)
     : null;
@@ -66,16 +68,6 @@ export default async function TicketDetailPage({
   const bandStyle = getUrgencyBandStyle(ticket.urgency_band);
   const primaryReport = reports[0] as TicketReport | undefined;
   const barangayGeometry = ticket.barangay_geojson ? JSON.parse(ticket.barangay_geojson) : null;
-
-  const timelineEvents = [
-    ...history.map((h) => ({ at: h.changed_at, label: h.status, actor: h.admin_name, kind: "status" as const })),
-    ...reassignments.map((r) => ({
-      at: r.reassigned_at,
-      label: `Reassigned ${r.from_office} → ${r.to_office}`,
-      actor: r.admin_name,
-      kind: "reassign" as const,
-    })),
-  ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
   return (
     <main className="max-w-7xl mx-auto p-6 space-y-4">
@@ -95,10 +87,16 @@ export default async function TicketDetailPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_400px] lg:items-start">
-        <div className="space-y-4">
-          <IncidentOverviewCard ticket={ticket} primaryReport={primaryReport} reportCount={reports.length} />
-          <EvidenceGalleryCard reports={reports} />
+      <HorizontalStatusTracker currentStatus={ticket.status} createdAt={ticket.created_at} history={history} />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-stretch">
+        <div className="flex flex-col gap-6 lg:col-span-7">
+          <IncidentEvidenceCard
+            ticket={ticket}
+            primaryReport={primaryReport}
+            reportCount={reports.length}
+            reports={reports}
+          />
           {ticket.resolution_image_url && primaryReport && (
             <BeforeAfterCard
               beforeUrl={primaryReport.image_url}
@@ -107,19 +105,20 @@ export default async function TicketDetailPage({
               title={primaryReport.title}
             />
           )}
-          <TimelineCard events={timelineEvents} />
         </div>
 
-        <div className="space-y-4 lg:sticky lg:top-4">
+        <div className="flex flex-col gap-6 lg:col-span-5">
           <div className={GLASS_CARD}>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Location</p>
-            <div className="overflow-hidden rounded-lg border border-line-100">
-              <TicketLocationMapLoader
-                lat={ticket.lat}
-                lng={ticket.lng}
-                urgencyBand={ticket.urgency_band}
-                barangayGeoJson={barangayGeometry}
-              />
+            <div>
+              <p className={CARD_HEADER}>GIS mini-map</p>
+              <div className="overflow-hidden rounded-lg border border-line-100">
+                <TicketLocationMapLoader
+                  lat={ticket.lat}
+                  lng={ticket.lng}
+                  urgencyBand={ticket.urgency_band}
+                  barangayGeoJson={barangayGeometry}
+                />
+              </div>
             </div>
             <p className="mt-2 text-xs text-ink-500">
               {ticket.barangay_name} · {ticket.lat.toFixed(5)}, {ticket.lng.toFixed(5)}
@@ -139,64 +138,62 @@ export default async function TicketDetailPage({
   );
 }
 
-function IncidentOverviewCard({
+function IncidentEvidenceCard({
   ticket,
   primaryReport,
   reportCount,
+  reports,
 }: {
   ticket: TicketDetail;
   primaryReport: TicketReport | undefined;
   reportCount: number;
+  reports: TicketReport[];
 }) {
   return (
     <div className={GLASS_CARD}>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Incident overview</p>
-      {primaryReport?.description && <p className="mb-3 text-sm text-ink-700">{primaryReport.description}</p>}
-      <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-        <div>
-          <p className="text-xs uppercase tracking-wide font-medium text-ink-500">Barangay</p>
-          <p className="text-ink-900">{ticket.barangay_name}</p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-wide font-medium text-ink-500">Office</p>
-          <p className="text-ink-900">{ticket.assigned_office}</p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-wide font-medium text-ink-500">Reports merged</p>
-          <p className="font-mono tabular-nums text-ink-900">{reportCount}</p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-wide font-medium text-ink-500">First reported</p>
-          <p className="font-mono text-xs text-ink-900">
-            {primaryReport ? new Date(primaryReport.created_at).toLocaleString() : "—"}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EvidenceGalleryCard({ reports }: { reports: TicketReport[] }) {
-  return (
-    <div className={GLASS_CARD}>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">
-        Evidence photos ({reports.length})
-      </p>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {reports.map((report) => (
-          <div key={report.id} className="rounded-lg border border-line-100 p-3">
-            <ImageLightbox
-              src={report.image_url}
-              alt={`Hazard evidence photo submitted for "${report.title}", reported ${new Date(report.created_at).toLocaleDateString()}`}
-            />
-            <p className="mt-2 text-sm font-medium text-ink-900">{report.title}</p>
-            <p className="text-xs uppercase tracking-wide font-medium text-ink-500">
-              Reported as · {report.citizen_severity}
-            </p>
-            <ExifTags report={report} />
+      <div>
+        <p className={CARD_HEADER}>Incident evidence &amp; details</p>
+        {primaryReport?.description && <p className="mb-3 text-sm text-ink-700">{primaryReport.description}</p>}
+        <div className="mb-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+          <div>
+            <p className="text-xs uppercase tracking-wide font-medium text-ink-500">Barangay</p>
+            <p className="text-ink-900">{ticket.barangay_name}</p>
           </div>
-        ))}
-        {reports.length === 0 && <p className="text-sm text-ink-400">No member reports on this ticket.</p>}
+          <div>
+            <p className="text-xs uppercase tracking-wide font-medium text-ink-500">Office</p>
+            <p className="text-ink-900">{ticket.assigned_office}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide font-medium text-ink-500">Reports merged</p>
+            <p className="font-mono tabular-nums text-ink-900">{reportCount}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide font-medium text-ink-500">First reported</p>
+            <p className="font-mono text-xs text-ink-900">
+              {primaryReport ? new Date(primaryReport.created_at).toLocaleString() : "—"}
+            </p>
+          </div>
+        </div>
+
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Evidence photos ({reports.length})
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {reports.map((report) => (
+            <div key={report.id} className="rounded-lg border border-line-100 p-3">
+              <ImageLightbox
+                src={report.image_url}
+                alt={`Hazard evidence photo submitted for "${report.title}", category ${ticket.category}, reported ${new Date(report.created_at).toLocaleDateString()}`}
+              />
+              <p className="mt-2 text-sm font-medium text-ink-900">{report.title}</p>
+              <p className="text-xs uppercase tracking-wide font-medium text-ink-500">
+                Reported as · {report.citizen_severity}
+              </p>
+              <ExifTags report={report} />
+            </div>
+          ))}
+          {reports.length === 0 && <p className="text-sm text-ink-400">No member reports on this ticket.</p>}
+        </div>
       </div>
     </div>
   );
@@ -253,7 +250,7 @@ function BeforeAfterCard({
 }) {
   return (
     <div className={GLASS_CARD}>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Resolution — before &amp; after</p>
+      <p className={CARD_HEADER}>Before &amp; after resolution inspector</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <p className="mb-1.5 text-xs font-medium text-ink-500">Before</p>
@@ -269,42 +266,6 @@ function BeforeAfterCard({
   );
 }
 
-function TimelineCard({
-  events,
-}: {
-  events: { at: string; label: string; actor: string | null; kind: "status" | "reassign" }[];
-}) {
-  return (
-    <div className={GLASS_CARD}>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Status &amp; audit timeline</p>
-      {events.length === 0 ? (
-        <p className="text-sm text-ink-400">No lifecycle events yet.</p>
-      ) : (
-        <ol className="space-y-0">
-          {events.map((event, i) => (
-            <li key={i} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <span
-                  className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${
-                    event.kind === "status" ? "bg-brand-500" : "bg-slate-400"
-                  }`}
-                />
-                {i < events.length - 1 && <span className="w-px flex-1 bg-line-200" />}
-              </div>
-              <div className="pb-4">
-                <p className="text-sm font-medium text-ink-900">{event.label}</p>
-                <p className="text-xs text-ink-500">
-                  {new Date(event.at).toLocaleString()}
-                  {event.actor ? ` · ${event.actor}` : ""}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
-  );
-}
 
 function PriorityBreakdownCard({
   priorityIndex,
@@ -322,7 +283,7 @@ function PriorityBreakdownCard({
 
   return (
     <div className={GLASS_CARD}>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Priority breakdown</p>
+      <p className={CARD_HEADER}>Priority breakdown</p>
       <p className="mb-3 font-mono text-2xl font-medium tabular-nums text-ink-900">{priorityIndex ?? "—"}</p>
       <table className="w-full text-xs text-ink-700 border-collapse">
         <thead>
@@ -353,7 +314,7 @@ function PriorityBreakdownCard({
 function UrgencyDecompositionCard({ ticket, bandStyle }: { ticket: TicketDetail; bandStyle: { className: string } }) {
   return (
     <div className={GLASS_CARD}>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">System urgency (computed)</p>
+      <p className={CARD_HEADER}>System urgency (computed)</p>
       <div className="flex items-baseline gap-3 mb-4">
         <p className="font-mono text-3xl font-medium tabular-nums text-ink-900">
           {ticket.urgency_score?.toFixed(3) ?? "—"}
