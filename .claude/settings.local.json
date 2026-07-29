@@ -5,7 +5,8 @@
       "Bash(npm run *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code} %{redirect_url}\\\\n\" http://localhost:4173/)",
       "Bash(curl -sL -o /dev/null -w \"final: %{http_code} %{url_effective}\\\\n\" http://localhost:4173/)",
-      "Bash(kill %1)"
+      "Bash(kill %1)",
+      "Bash(npx tsc *)"
     ]
   }
 }
