@@ -9,9 +9,11 @@ const PublicMapClient = dynamic(() => import("./PublicMapClient"), { ssr: false 
 export default function PublicMapClientLoader({
   barangays,
   tickets,
+  heightClassName,
 }: {
   barangays: FeatureCollection;
   tickets: PublicTicketGeoRow[];
+  heightClassName?: string;
 }) {
-  return <PublicMapClient barangays={barangays} tickets={tickets} />;
+  return <PublicMapClient barangays={barangays} tickets={tickets} heightClassName={heightClassName} />;
 }
