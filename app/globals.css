@@ -85,3 +85,17 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Critical ticket marker ring pulse (app/admin/map/MapClient.tsx bandIcon()). */
+@keyframes ticket-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(196, 43, 28, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(196, 43, 28, 0);
+  }
+}
+.ticket-pulse {
+  animation: ticket-pulse 1.8s ease-in-out infinite;
+}

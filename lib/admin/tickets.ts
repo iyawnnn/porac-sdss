@@ -1,7 +1,11 @@
 import { sql } from "@/lib/db/raw";
+import { TICKET_STATUSES, PAGE_LIMITS, DEFAULT_PAGE_LIMIT, type TicketStatus, type TicketSort } from "./ticketConstants";
+import { getCurrentRain1hMm } from "@/lib/weather/openweather";
+import { computePriorityBreakdown, severityFromRank, type PriorityBreakdown } from "@/lib/scoring";
 
-export type TicketStatus = "Reported" | "Under Review" | "In Progress" | "Resolved" | "Rejected";
-export type TicketSort = "priority_desc" | "priority_asc" | "newest";
+export type { TicketStatus, TicketSort };
+export { TICKET_STATUSES, PAGE_LIMITS };
+const DEFAULT_LIMIT = DEFAULT_PAGE_LIMIT;
 
 export interface AdminTicketFilters {
   office?: "MEO" | "MDRRMO";
@@ -9,6 +13,9 @@ export interface AdminTicketFilters {
   urgency?: string;
   barangayId?: number;
   sort?: TicketSort;
+  search?: string;
+  page?: number;
+  limit?: number;
 }
 
 export interface AdminTicketRow {
@@ -25,7 +32,44 @@ export interface AdminTicketRow {
   created_at: string;
 }
 
-export async function getTicketsForAdmin(filters: AdminTicketFilters = {}) {
+export interface PaginatedTickets {
+  tickets: AdminTicketRow[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+// URL <-> filter mapping shared between the SSR first paint (page.tsx) and
+// the client refetch route (api/admin/tickets), so the two never drift.
+export function parseTicketQuery(
+  query: Record<string, string | undefined>,
+  sessionOffice?: "MEO" | "MDRRMO"
+): Required<Pick<AdminTicketFilters, "status" | "sort" | "page" | "limit">> &
+  Pick<AdminTicketFilters, "office" | "urgency" | "barangayId" | "search"> {
+  const office =
+    query.office === "all"
+      ? undefined
+      : query.office === "MEO" || query.office === "MDRRMO"
+        ? query.office
+        : sessionOffice;
+  const status =
+    query.status === "all" || query.status === "active" || TICKET_STATUSES.includes(query.status as TicketStatus)
+      ? (query.status as AdminTicketFilters["status"])
+      : "active";
+  const urgency = ["Low", "Medium", "Critical"].includes(query.urgency ?? "") ? query.urgency : undefined;
+  const barangayId = query.barangayId ? Number(query.barangayId) : undefined;
+  const sort: TicketSort = query.sort === "priority_asc" || query.sort === "newest" ? query.sort : "priority_desc";
+  const search = query.search?.trim() || undefined;
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = PAGE_LIMITS.includes(Number(query.limit) as (typeof PAGE_LIMITS)[number])
+    ? Number(query.limit)
+    : DEFAULT_LIMIT;
+
+  return { office, status: status ?? "active", urgency, barangayId, sort, search, page, limit };
+}
+
+export async function getTicketsForAdmin(filters: AdminTicketFilters = {}): Promise<PaginatedTickets> {
   const status = filters.status ?? "active";
   const statusClause = status === "active"
     ? sql`AND t.status IN ('Reported', 'Under Review', 'In Progress')`
@@ -38,26 +82,53 @@ export async function getTicketsForAdmin(filters: AdminTicketFilters = {}) {
       ? sql`t.created_at DESC`
       : sql`t.priority_index DESC NULLS LAST, t.created_at DESC`;
 
-  return sql<AdminTicketRow[]>`
+  const search = filters.search?.trim() || null;
+  const searchId = search && /^\d+$/.test(search) ? Number(search) : null;
+  const page = Math.max(1, filters.page ?? 1);
+  const limit = Math.max(1, Math.min(100, filters.limit ?? DEFAULT_LIMIT));
+  const offset = (page - 1) * limit;
+
+  // COUNT(*) OVER() rides along with the page query so the WHERE clause
+  // (filters + search) can't drift between a separate count query and the
+  // row query.
+  const rows = await sql<(AdminTicketRow & { total_count: number })[]>`
     SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, t.member_count,
-      t.urgency_score, t.urgency_band, t.priority_index, t.assigned_office, t.status, t.created_at
+      t.urgency_score, t.urgency_band, t.priority_index, t.assigned_office, t.status, t.created_at,
+      COUNT(*) OVER ()::int AS total_count
     FROM tickets t
     JOIN barangays b ON b.id = t.barangay_id
     WHERE (${filters.office ?? null}::text IS NULL OR t.assigned_office = ${filters.office ?? null}::office)
       ${statusClause}
       AND (${filters.urgency ?? null}::text IS NULL OR t.urgency_band = ${filters.urgency ?? null})
       AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
+      AND (
+        ${search}::text IS NULL
+        OR b.name ILIKE '%' || ${search} || '%'
+        OR (${searchId}::int IS NOT NULL AND t.id = ${searchId}::int)
+        OR EXISTS (
+          SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title ILIKE '%' || ${search} || '%'
+        )
+      )
     ORDER BY ${orderBy}
+    LIMIT ${limit} OFFSET ${offset}
   `;
+
+  const total = rows[0]?.total_count ?? 0;
+
+  return { tickets: rows, total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) };
 }
 
 export interface TicketDetail {
   id: number;
   category: string;
+  barangay_id: number;
   barangay_name: string;
+  barangay_geojson: string | null;
   status: string;
   assigned_office: string;
   member_count: number;
+  lat: number;
+  lng: number;
   elevation_m: number | null;
   elevation_factor: number | null;
   precipitation_factor: number | null;
@@ -65,6 +136,8 @@ export interface TicketDetail {
   urgency_score: number | null;
   urgency_band: string | null;
   priority_index: number | null;
+  resolution_image_url: string | null;
+  resolution_notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +148,10 @@ export interface TicketReport {
   description: string | null;
   citizen_severity: string;
   image_url: string;
+  elevation_m: number | null;
+  exif_captured_at: string | null;
+  exif_data: Record<string, unknown> | null;
+  location_mismatch_m: number | null;
   created_at: string;
 }
 
@@ -93,9 +170,11 @@ export interface TicketReassignmentRow {
 
 export async function getTicketDetail(id: number) {
   const [ticket] = await sql<TicketDetail[]>`
-    SELECT t.id, t.category, b.name AS barangay_name, t.status, t.assigned_office,
-      t.member_count, t.elevation_m, t.elevation_factor, t.precipitation_factor,
-      t.cluster_factor, t.urgency_score, t.urgency_band, t.priority_index, t.created_at, t.updated_at
+    SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, ST_AsGeoJSON(b.geom) AS barangay_geojson,
+      t.status, t.assigned_office, t.member_count, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
+      t.elevation_m, t.elevation_factor, t.precipitation_factor,
+      t.cluster_factor, t.urgency_score, t.urgency_band, t.priority_index,
+      t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at
     FROM tickets t
     JOIN barangays b ON b.id = t.barangay_id
     WHERE t.id = ${id}
@@ -104,7 +183,8 @@ export async function getTicketDetail(id: number) {
   if (!ticket) return null;
 
   const reports = await sql<TicketReport[]>`
-    SELECT id, title, description, citizen_severity, image_url, created_at
+    SELECT id, title, description, citizen_severity, image_url,
+      elevation_m, exif_captured_at, exif_data, location_mismatch_m, created_at
     FROM reports WHERE ticket_id = ${id} ORDER BY created_at
   `;
   const history = await sql<TicketStatusHistoryRow[]>`
@@ -119,28 +199,52 @@ export async function getTicketDetail(id: number) {
   return { ticket, reports, history, reassignments };
 }
 
-export interface FlaggedReportRow {
-  id: number;
-  ticket_id: number;
-  title: string;
-  citizen_severity: string;
-  image_url: string;
-  flags: string[];
-  location_mismatch_m: number | null;
-  exif_captured_at: string | null;
-  created_at: string;
-  category: string;
-  barangay_name: string;
+export interface TicketPriorityContext {
+  breakdown: PriorityBreakdown;
+  rain1hMm: number;
 }
 
-export async function getFlaggedReports() {
-  return sql<FlaggedReportRow[]>`
-    SELECT r.id, r.ticket_id, r.title, r.citizen_severity, r.image_url, r.flags,
-      r.location_mismatch_m, r.exif_captured_at, r.created_at, t.category, b.name AS barangay_name
-    FROM reports r
-    JOIN tickets t ON t.id = r.ticket_id
-    JOIN barangays b ON b.id = t.barangay_id
-    WHERE r.flags IS NOT NULL AND array_length(r.flags, 1) > 0
-    ORDER BY r.created_at DESC
+// Live re-derivation of the same inputs recomputeActiveTicketUrgency() uses
+// for this one ticket, scoped by WHERE ticket_id — only meaningful while the
+// ticket is still active, since barangay density is computed over active
+// tickets only and freezes once resolved/rejected.
+export async function getTicketPriorityContext(ticketId: number): Promise<TicketPriorityContext | null> {
+  const [row] = await sql<
+    {
+      barangay_id: number;
+      created_at: string;
+      severity_rank: number;
+      active_barangay_count: number;
+      max_active_barangay_count: number;
+    }[]
+  >`
+    WITH barangay_density AS (
+      SELECT barangay_id, COUNT(*)::int AS active_barangay_count
+      FROM tickets
+      WHERE status IN ('Reported', 'Under Review', 'In Progress')
+      GROUP BY barangay_id
+    )
+    SELECT t.barangay_id, t.created_at,
+      COALESCE((
+        SELECT MAX(CASE citizen_severity
+          WHEN 'Critical' THEN 4 WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 ELSE 1 END)
+        FROM reports WHERE ticket_id = t.id
+      ), 1)::int AS severity_rank,
+      COALESCE(d.active_barangay_count, 0) AS active_barangay_count,
+      COALESCE((SELECT MAX(active_barangay_count) FROM barangay_density), 0) AS max_active_barangay_count
+    FROM tickets t
+    LEFT JOIN barangay_density d ON d.barangay_id = t.barangay_id
+    WHERE t.id = ${ticketId}
   `;
+  if (!row) return null;
+
+  const rain1hMm = await getCurrentRain1hMm();
+  const breakdown = computePriorityBreakdown({
+    severity: severityFromRank(row.severity_rank),
+    createdAt: row.created_at,
+    activeBarangayCount: row.active_barangay_count,
+    maxActiveBarangayCount: row.max_active_barangay_count,
+  });
+
+  return { breakdown, rain1hMm };
 }

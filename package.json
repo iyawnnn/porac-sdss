@@ -28,6 +28,8 @@
         "migrate:exif-data": "tsx --env-file=.env.local scripts/migrate-exif-data.ts",
         "verify:dedup-exif": "tsx --env-file=.env.local scripts/verify-dedup-exif.ts",
         "migrate:diverse-demo": "tsx --env-file=.env.local scripts/migrate-diverse-demo.ts",
+        "migrate:moderation": "tsx --env-file=.env.local scripts/migrate-moderation.ts",
+        "migrate:resolution": "tsx --env-file=.env.local scripts/migrate-resolution.ts",
         "seed:diverse-reports": "tsx --env-file=.env.local scripts/seed-diverse-reports.ts",
         "verify:diverse-reports": "tsx --env-file=.env.local scripts/verify-diverse-reports.ts",
         "db:migrate": "npm run migrate",
