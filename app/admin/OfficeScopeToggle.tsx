@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { Globe } from "lucide-react";
 
 // Same toggle on every admin page (was duplicated inline on
 // admin/tickets/page.tsx and admin/map/MapClient.tsx — DESIGN.md §6.1).
@@ -16,9 +17,10 @@ export default function OfficeScopeToggle({ myOffice }: { myOffice: "MEO" | "MDR
   return (
     <Link
       href={isAll ? pathname : `${pathname}?office=all`}
-      className="text-sm text-brand-600 hover:text-brand-700 underline underline-offset-2"
+      className="group flex w-full items-center justify-between rounded-lg border border-slate-800/80 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-300 transition-all hover:border-slate-700 hover:bg-slate-800 hover:text-white"
     >
       {isAll ? `View my office (${myOffice})` : "View full city"}
+      <Globe size={14} strokeWidth={1.75} className="flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
     </Link>
   );
 }
