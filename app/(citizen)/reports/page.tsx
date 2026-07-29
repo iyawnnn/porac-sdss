@@ -1,16 +1,8 @@
 import Link from "next/link";
 import { getCitizenSession } from "@/lib/auth/getCitizenSession";
 import { getMyReports } from "@/lib/citizens/reports";
-
-const STATUS_STYLE: Record<string, { tint: string; ink: string; dot: string }> = {
-  Reported: { tint: "#F1F3F5", ink: "#434B54", dot: "#98A2AC" },
-  "Under Review": { tint: "#EFF5FC", ink: "#1A4570", dot: "#2B6CB0" },
-  "In Progress": { tint: "#D8E6F7", ink: "#102943", dot: "#22578E" },
-  Resolved: { tint: "#E3F5EE", ink: "#0B5741", dot: "#0F7A5A" },
-  Rejected: { tint: "#FDEAEA", ink: "#8A1D12", dot: "#B42318" },
-};
-
-const FALLBACK_STYLE = { tint: "#F1F3F5", ink: "#434B54", dot: "#98A2AC" };
+import { StatTile } from "../StatTile";
+import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "../reportStatusStyle";
 
 const PROGRESS_STEPS = [
   { status: "Reported", note: "Received" },
@@ -137,7 +129,7 @@ function ProgressSteps({ status }: { status: string }) {
           className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
           style={
             isRejected
-              ? { background: STATUS_STYLE.Rejected.dot, color: "white" }
+              ? { background: REPORT_STATUS_STYLE.Rejected.dot, color: "white" }
               : { background: "var(--color-line-100)", color: "var(--color-ink-400)" }
           }
         >
@@ -146,36 +138,6 @@ function ProgressSteps({ status }: { status: string }) {
         <p className="mt-2 text-[12px] font-semibold text-ink-900">Rejected</p>
         <p className="mt-0.5 text-[11px] text-ink-400">Not accepted</p>
       </div>
-    </div>
-  );
-}
-
-function StatTile({
-  label,
-  value,
-  caption,
-  note,
-  tint,
-  ink,
-}: {
-  label: string;
-  value: number;
-  caption: string;
-  note: string;
-  tint: string;
-  ink: string;
-}) {
-  return (
-    <div className="rounded-xl border border-line-200 bg-surface p-5">
-      <span
-        className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.04em]"
-        style={{ background: tint, color: ink }}
-      >
-        {label}
-      </span>
-      <p className="mt-3 font-mono text-[28px] font-medium leading-[32px] tabular-nums text-ink-900">{value}</p>
-      <p className="mt-1.5 text-[14px] font-medium text-ink-700">{caption}</p>
-      <p className="mt-1 text-[12px] leading-[16px] text-ink-500">{note}</p>
     </div>
   );
 }
@@ -251,7 +213,7 @@ export default async function MyReportsPage() {
 
       <div className="grid gap-6 sm:grid-cols-2">
         {reports.map((report, idx) => {
-          const pill = STATUS_STYLE[report.status] ?? FALLBACK_STYLE;
+          const pill = REPORT_STATUS_STYLE[report.status] ?? REPORT_STATUS_FALLBACK;
           return (
             <div
               key={report.id}
