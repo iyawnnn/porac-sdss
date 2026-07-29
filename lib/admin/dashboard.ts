@@ -1,69 +1,69 @@
 import { sql } from "@/lib/db/raw";
 
 const ACTIVE_STATUSES = sql`('Reported', 'Under Review', 'In Progress')`;
+const CRITICAL_PRIORITY_THRESHOLD = 70;
 
-export interface FrequentLocationMetric {
+export interface DashboardKpis {
+  active_count: number;
+  critical_count: number;
+  avg_resolution_hours_30d: number | null;
+  resolved_24h_count: number;
+}
+
+// One round trip, scalar subqueries — same CTE-and-FILTER shape as the
+// resolution-time query this replaces.
+export async function getDashboardKpis(): Promise<DashboardKpis> {
+  const [row] = await sql<DashboardKpis[]>`
+    WITH resolved_events AS (
+      SELECT t.id, t.created_at, MIN(sh.changed_at) AS resolved_at
+      FROM tickets t
+      JOIN status_history sh ON sh.ticket_id = t.id AND sh.status = 'Resolved'
+      GROUP BY t.id, t.created_at
+    )
+    SELECT
+      (SELECT COUNT(*) FROM tickets WHERE status IN ${ACTIVE_STATUSES})::int AS active_count,
+      (SELECT COUNT(*) FROM tickets WHERE status IN ${ACTIVE_STATUSES}
+        AND priority_index >= ${CRITICAL_PRIORITY_THRESHOLD})::int AS critical_count,
+      (SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600)
+        FROM resolved_events WHERE resolved_at > now() - interval '30 days') AS avg_resolution_hours_30d,
+      (SELECT COUNT(*) FROM resolved_events
+        WHERE resolved_at > now() - interval '24 hours')::int AS resolved_24h_count
+  `;
+  return row;
+}
+
+export interface BarangayRiskRow {
+  barangay_id: number;
   barangay_name: string;
-  active_incidents: number;
+  active_count: number;
+  avg_priority: number | null;
 }
 
-export interface ResponseTimeMetric {
-  barangay_name: string;
-  average_response_hours: number | null;
-  average_resolution_hours: number | null;
-  measured_tickets: number;
-}
-
-export interface DepartmentWorkloadMetric {
-  office: string;
-  active_tickets: number;
-  resolved_tickets: number;
-}
-
-/** Top mapped, unresolved incidents. `tickets.geom` is the canonical incident point. */
-export async function getHighFrequencyLocations() {
-  return sql<FrequentLocationMetric[]>`
-    SELECT b.name AS barangay_name, COUNT(*)::int AS active_incidents
+export async function getBarangayRiskRanking(limit = 5) {
+  return sql<BarangayRiskRow[]>`
+    SELECT b.id AS barangay_id, b.name AS barangay_name,
+      COUNT(*)::int AS active_count,
+      AVG(t.priority_index)::float8 AS avg_priority
     FROM tickets t
     JOIN barangays b ON b.id = t.barangay_id
     WHERE t.status IN ${ACTIVE_STATUSES}
-      AND t.geom IS NOT NULL
     GROUP BY b.id, b.name
-    ORDER BY active_incidents DESC, b.name
-    LIMIT 6
+    ORDER BY active_count DESC, avg_priority DESC NULLS LAST
+    LIMIT ${limit}
   `;
 }
 
-/** Response is report creation to first workflow update; resolution is to the first Resolved event. */
-export async function getResponseTimeMetrics() {
-  return sql<ResponseTimeMetric[]>`
-    WITH ticket_events AS (
-      SELECT t.id, t.barangay_id, t.created_at,
-        MIN(sh.changed_at) FILTER (WHERE sh.status IN ('Under Review', 'In Progress', 'Resolved')) AS first_response_at,
-        MIN(sh.changed_at) FILTER (WHERE sh.status = 'Resolved') AS resolved_at
-      FROM tickets t
-      LEFT JOIN status_history sh ON sh.ticket_id = t.id
-      GROUP BY t.id, t.barangay_id, t.created_at
-    )
-    SELECT b.name AS barangay_name,
-      AVG(EXTRACT(EPOCH FROM (first_response_at - created_at)) / 3600) FILTER (WHERE first_response_at IS NOT NULL) AS average_response_hours,
-      AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600) FILTER (WHERE resolved_at IS NOT NULL) AS average_resolution_hours,
-      COUNT(*) FILTER (WHERE first_response_at IS NOT NULL)::int AS measured_tickets
-    FROM ticket_events te
-    JOIN barangays b ON b.id = te.barangay_id
-    GROUP BY b.id, b.name
-    HAVING COUNT(*) FILTER (WHERE first_response_at IS NOT NULL) > 0
-    ORDER BY average_resolution_hours DESC NULLS LAST, average_response_hours DESC NULLS LAST, b.name
-  `;
+export interface CategoryDistributionRow {
+  category: string;
+  active_count: number;
 }
 
-export async function getDepartmentWorkload() {
-  return sql<DepartmentWorkloadMetric[]>`
-    SELECT t.assigned_office::text AS office,
-      COUNT(*) FILTER (WHERE t.status IN ${ACTIVE_STATUSES})::int AS active_tickets,
-      COUNT(*) FILTER (WHERE t.status = 'Resolved')::int AS resolved_tickets
-    FROM tickets t
-    GROUP BY t.assigned_office
-    ORDER BY active_tickets DESC, office
+export async function getCategoryDistribution() {
+  return sql<CategoryDistributionRow[]>`
+    SELECT category, COUNT(*)::int AS active_count
+    FROM tickets
+    WHERE status IN ${ACTIVE_STATUSES}
+    GROUP BY category
+    ORDER BY active_count DESC
   `;
 }

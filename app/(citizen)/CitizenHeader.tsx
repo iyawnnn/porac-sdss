@@ -3,7 +3,7 @@ import type { CitizenSession } from "@/lib/auth/citizenSession";
 import CitizenLogoutButton from "./CitizenLogoutButton";
 
 const NAV_LINKS = [
-  { href: "/map", label: "Public Map" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/reports", label: "My Reports" },
   { href: "/report", label: "Report Hazard" },
 ];
@@ -13,7 +13,7 @@ export default function CitizenHeader({ session }: { session: CitizenSession }) 
     <header className="border-b border-line-200 bg-surface">
       <div className="mx-auto flex min-h-14 max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:py-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
-          <Link href="/map" className="font-mono text-sm font-semibold tracking-tight text-ink-900">
+          <Link href="/dashboard" className="font-mono text-sm font-semibold tracking-tight text-ink-900">
             Porac SDSS
           </Link>
           <nav className="flex flex-wrap items-center gap-1">
