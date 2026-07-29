@@ -53,9 +53,11 @@ function MapLegend() {
 export default function PublicMapClient({
   barangays,
   tickets,
+  heightClassName = "h-[calc(100vh-3.5rem)]",
 }: {
   barangays: FeatureCollection;
   tickets: PublicTicketGeoRow[];
+  heightClassName?: string;
 }) {
   const [municipalBoundary, setMunicipalBoundary] = useState<FeatureCollection | null>(null);
 
@@ -66,7 +68,7 @@ export default function PublicMapClient({
   }, []);
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] w-full relative">
+    <div className={`${heightClassName} w-full relative`}>
       <div className={`absolute left-3 top-3 z-[1000] px-3 py-2 text-sm text-ink-700 ${GLASS_PANEL}`}>
         <p className="font-medium text-ink-900">Public Hazard Map</p>
         <p>{tickets.length} active public reports</p>

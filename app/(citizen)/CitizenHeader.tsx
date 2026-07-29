@@ -4,6 +4,7 @@ import CitizenLogoutButton from "./CitizenLogoutButton";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/map", label: "Map" },
   { href: "/reports", label: "My Reports" },
   { href: "/report", label: "Report Hazard" },
 ];

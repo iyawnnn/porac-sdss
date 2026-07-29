@@ -1,7 +1,13 @@
-import { redirect } from "next/navigation";
+import { getCitizenSession } from "@/lib/auth/getCitizenSession";
+import { getPublicHazardMapData } from "@/lib/citizens/publicMap";
+import PublicMapClientLoader from "./PublicMapClientLoader";
 
-// The public map now lives at /dashboard (the citizen landing route);
-// keep this path working for existing links/bookmarks.
-export default function CitizenPublicMapPage() {
-  redirect("/dashboard");
+export default async function CitizenPublicMapPage() {
+  const session = await getCitizenSession();
+  // proxy.ts already redirects unauthenticated requests before this
+  // renders; this null-check is just defense in depth.
+  if (!session) return null;
+
+  const { barangays, tickets } = await getPublicHazardMapData(session.citizenId);
+  return <PublicMapClientLoader barangays={barangays} tickets={tickets} />;
 }
