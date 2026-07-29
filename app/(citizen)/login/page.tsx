@@ -25,7 +25,7 @@ export default function CitizenLoginPage() {
     });
 
     if (res.ok) {
-      router.push("/reports");
+      router.push("/dashboard");
       router.refresh();
     } else {
       const data = await res.json();
