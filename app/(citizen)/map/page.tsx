@@ -1,7 +1,7 @@
-import { getPublicHazardMapData } from "@/lib/citizens/publicMap";
-import PublicMapClientLoader from "./PublicMapClientLoader";
+import { redirect } from "next/navigation";
 
-export default async function CitizenPublicMapPage() {
-  const { barangays, tickets } = await getPublicHazardMapData();
-  return <PublicMapClientLoader barangays={barangays} tickets={tickets} />;
+// The public map now lives at /dashboard (the citizen landing route);
+// keep this path working for existing links/bookmarks.
+export default function CitizenPublicMapPage() {
+  redirect("/dashboard");
 }
