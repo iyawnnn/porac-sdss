@@ -1,6 +1,10 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, UseGuards } from '@nestjs/common';
 import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
-import { ModerationService } from './moderation.service';
+import { CurrentAdmin } from '../auth/decorators/current-admin.decorator';
+import type { AdminSession } from '../auth/session.service';
+import { ModerationService, type ModerationAction } from './moderation.service';
+
+const ACTIONS: ModerationAction[] = ['dismiss', 'quarantine', 'duplicate'];
 
 @UseGuards(AdminSessionGuard)
 @Controller('admin')
@@ -15,5 +19,19 @@ export class ModerationController {
   @Get('moderation/stats')
   stats() {
     return this.moderation.getModerationStats();
+  }
+
+  @Post('reports/:id/moderate')
+  async moderate(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+    @Body('action') action: unknown,
+    @Body('canonicalReportId') canonicalReportId: number | undefined,
+  ) {
+    if (!ACTIONS.includes(action as ModerationAction)) {
+      throw new BadRequestException('action must be dismiss, quarantine, or duplicate');
+    }
+    const result = await this.moderation.moderateReport(id, action as ModerationAction, admin.adminName, canonicalReportId);
+    return { ok: true, status: result.status };
   }
 }
