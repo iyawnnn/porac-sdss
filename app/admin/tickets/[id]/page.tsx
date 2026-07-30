@@ -8,8 +8,8 @@ import {
   type TicketPriorityContext,
 } from "@/lib/admin/tickets";
 import { recomputeActiveTicketUrgency } from "@/lib/triage/recompute";
-import { getUrgencyBandStyle } from "@/lib/ui/urgency";
-import { priorityBandClass } from "@/lib/ui/priority";
+import { getUrgencyBadgeConfig, type UrgencyBadgeConfig } from "@/lib/ui/urgency";
+import { priorityScoreBandClass } from "@/lib/ui/priority";
 import { StatusPill } from "@/app/admin/StatusPill";
 import { ImageLightbox } from "@/app/admin/flagged/ImageLightbox";
 import { TriagePanel } from "./TriagePanel";
@@ -65,7 +65,7 @@ export default async function TicketDetailPage({
   // never redirect off /admin/tickets based on an arbitrary query param.
   const backHref = from && from.startsWith("/admin/tickets") ? from : "/admin/tickets";
   const nextStatus = NEXT_STATUS[ticket.status];
-  const bandStyle = getUrgencyBandStyle(ticket.urgency_band);
+  const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
   const primaryReport = reports[0] as TicketReport | undefined;
   const barangayGeometry = ticket.barangay_geojson ? JSON.parse(ticket.barangay_geojson) : null;
 
@@ -81,8 +81,11 @@ export default async function TicketDetailPage({
             {primaryReport ? ` — ${primaryReport.title}` : ""}
           </h1>
           <StatusPill status={ticket.status} size="lg" />
-          <span className={`rounded-full px-3 py-1 text-sm font-semibold ${priorityBandClass(ticket.priority_index)}`}>
-            Priority {ticket.priority_index ?? "—"}
+          <span className={`rounded-full px-3 py-1 text-sm font-semibold ${priorityScoreBandClass(ticket.priority_score)}`}>
+            Priority {ticket.priority_score ?? "—"}
+          </span>
+          <span className={`rounded-full px-3 py-1 text-sm font-semibold ${urgencyBadge.className}`}>
+            {urgencyBadge.label}
           </span>
         </div>
       </div>
@@ -126,10 +129,10 @@ export default async function TicketDetailPage({
           </div>
 
           {priorityContext && (
-            <PriorityBreakdownCard priorityIndex={ticket.priority_index} context={priorityContext} />
+            <PriorityBreakdownCard context={priorityContext} />
           )}
 
-          <UrgencyDecompositionCard ticket={ticket} bandStyle={bandStyle} />
+          <UrgencyDecompositionCard ticket={ticket} urgencyBadge={urgencyBadge} />
 
           <TriagePanel ticketId={ticket.id} nextStatus={nextStatus} currentOffice={ticket.assigned_office} />
         </div>
@@ -267,13 +270,7 @@ function BeforeAfterCard({
 }
 
 
-function PriorityBreakdownCard({
-  priorityIndex,
-  context,
-}: {
-  priorityIndex: number | null;
-  context: TicketPriorityContext;
-}) {
+function PriorityBreakdownCard({ context }: { context: TicketPriorityContext }) {
   const { breakdown, rain1hMm } = context;
   const rows = [
     { label: "Severity weight", factor: breakdown.severityFactor, contribution: breakdown.severityContribution, note: breakdown.severity },
@@ -283,8 +280,7 @@ function PriorityBreakdownCard({
 
   return (
     <div className={GLASS_CARD}>
-      <p className={CARD_HEADER}>Priority breakdown</p>
-      <p className="mb-3 font-mono text-2xl font-medium tabular-nums text-ink-900">{priorityIndex ?? "—"}</p>
+      <p className={CARD_HEADER}>Citizen severity breakdown</p>
       <table className="w-full text-xs text-ink-700 border-collapse">
         <thead>
           <tr className="text-left text-ink-500">
@@ -311,16 +307,22 @@ function PriorityBreakdownCard({
   );
 }
 
-function UrgencyDecompositionCard({ ticket, bandStyle }: { ticket: TicketDetail; bandStyle: { className: string } }) {
+function UrgencyDecompositionCard({
+  ticket,
+  urgencyBadge,
+}: {
+  ticket: TicketDetail;
+  urgencyBadge: UrgencyBadgeConfig;
+}) {
   return (
     <div className={GLASS_CARD}>
       <p className={CARD_HEADER}>System urgency (computed)</p>
       <div className="flex items-baseline gap-3 mb-4">
         <p className="font-mono text-3xl font-medium tabular-nums text-ink-900">
-          {ticket.urgency_score?.toFixed(3) ?? "—"}
+          {ticket.priority_score ?? "—"}
         </p>
-        <span className={`px-2 py-0.5 rounded text-xs font-medium ${bandStyle.className}`}>
-          {ticket.urgency_band ?? "—"}
+        <span className={`px-2 py-0.5 rounded text-xs font-medium ${urgencyBadge.className}`}>
+          {urgencyBadge.label}
         </span>
       </div>
 
