@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // api/ is a separate NestJS project with its own eslint.config.mjs.
+    "api/**",
   ]),
 ]);
 
