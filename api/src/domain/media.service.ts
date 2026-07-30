@@ -25,9 +25,15 @@ interface RawExif {
 @Injectable()
 export class MediaService {
   constructor() {
-    // Reads CLOUDINARY_URL from process.env. Called here (constructor,
-    // instantiated during Nest bootstrap) rather than at module import
-    // time, so it runs after ConfigModule has loaded api/.env.
+    // `import { v2 as cloudinary } from 'cloudinary'` runs at module-load
+    // time, before Nest's ConfigModule has populated process.env —
+    // cloudinary's own uploader.js calls its internal config() once at
+    // import too, caching an empty (API-key-less) config forever. Passing
+    // `true` here forces that cache to re-parse process.env.CLOUDINARY_URL
+    // now that it's actually set, instead of silently keeping the stale
+    // empty one (see cloudinary/lib/config.js's `cloudinary_config == null`
+    // guard — a plain `.config({...})` call only merges on top of it).
+    cloudinary.config(true);
     cloudinary.config({ secure: true });
   }
 

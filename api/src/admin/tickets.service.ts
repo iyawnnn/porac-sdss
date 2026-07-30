@@ -1,13 +1,16 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
 import { WeatherService } from '../domain/weather.service';
+import { MediaService } from '../domain/media.service';
 import { computePriorityBreakdown, severityFromRank, type PriorityBreakdown } from '../domain/scoring';
 import type { UrgencyLevel } from '../domain/urgency';
+import type { AdminSession } from '../auth/session.service';
 import {
   TICKET_STATUSES,
   PAGE_LIMITS,
   DEFAULT_PAGE_LIMIT,
+  NEXT_STATUS,
   type TicketStatus,
   type TicketSort,
 } from './ticket-constants';
@@ -124,6 +127,7 @@ export class TicketsService {
   constructor(
     @Inject(PG) private readonly pg: Sql,
     private readonly weather: WeatherService,
+    private readonly media: MediaService,
   ) {}
 
   // URL <-> filter mapping shared between SSR first paint (Phase 8) and the
@@ -304,5 +308,74 @@ export class TicketsService {
     });
 
     return { breakdown, rain1hMm };
+  }
+
+  // Resolving is the only transition that can carry a proof photo + notes;
+  // every other transition ignores notes/imageBuffer entirely.
+  async advanceStatus(
+    ticketId: number,
+    admin: AdminSession,
+    notes: string | undefined,
+    imageBuffer: Buffer | undefined,
+  ): Promise<{ status: TicketStatus }> {
+    const sql = this.pg;
+    const [ticket] = await sql<{ status: TicketStatus }[]>`
+      SELECT status FROM tickets WHERE id = ${ticketId}
+    `;
+    if (!ticket) throw new NotFoundException('Ticket not found');
+
+    const nextStatus = NEXT_STATUS[ticket.status];
+    if (!nextStatus) {
+      throw new BadRequestException(`No transition available from ${ticket.status}`);
+    }
+
+    let resolutionImageUrl: string | null = null;
+    let resolutionNotes: string | null = null;
+    if (nextStatus === 'Resolved') {
+      resolutionNotes = notes?.trim() || null;
+      if (imageBuffer) resolutionImageUrl = await this.media.uploadImage(imageBuffer);
+    }
+
+    await sql.begin(async (tx) => {
+      await tx`
+        UPDATE tickets SET
+          status = ${nextStatus},
+          resolution_image_url = COALESCE(${resolutionImageUrl}, resolution_image_url),
+          resolution_notes = COALESCE(${resolutionNotes}, resolution_notes),
+          updated_at = now()
+        WHERE id = ${ticketId}
+      `;
+      await tx`
+        INSERT INTO status_history (ticket_id, status, admin_id, admin_name, changed_at)
+        VALUES (${ticketId}, ${nextStatus}, ${admin.adminId}, ${admin.adminName}, now())
+      `;
+    });
+
+    return { status: nextStatus };
+  }
+
+  async reassignOffice(
+    ticketId: number,
+    admin: AdminSession,
+    toOffice: 'MEO' | 'MDRRMO',
+  ): Promise<{ assignedOffice: 'MEO' | 'MDRRMO' }> {
+    const sql = this.pg;
+    const [ticket] = await sql<{ assigned_office: 'MEO' | 'MDRRMO' }[]>`
+      SELECT assigned_office FROM tickets WHERE id = ${ticketId}
+    `;
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (ticket.assigned_office === toOffice) {
+      throw new BadRequestException(`Ticket is already assigned to ${toOffice}`);
+    }
+
+    await sql.begin(async (tx) => {
+      await tx`UPDATE tickets SET assigned_office = ${toOffice}, updated_at = now() WHERE id = ${ticketId}`;
+      await tx`
+        INSERT INTO office_reassignments (ticket_id, from_office, to_office, admin_id, admin_name)
+        VALUES (${ticketId}, ${ticket.assigned_office}, ${toOffice}, ${admin.adminId}, ${admin.adminName})
+      `;
+    });
+
+    return { assignedOffice: toOffice };
   }
 }
