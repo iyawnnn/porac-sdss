@@ -1,0 +1,126 @@
+import { Injectable } from '@nestjs/common';
+import { v2 as cloudinary } from 'cloudinary';
+import exifr from 'exifr';
+import sharp from 'sharp';
+
+export interface ExifResult {
+  lat: number | null;
+  lng: number | null;
+  capturedAt: Date | null;
+  make: string | null;
+  model: string | null;
+  data: Record<string, unknown> | null;
+}
+
+// exifr's parse() returns Promise<any> (its return shape depends on the
+// Options passed in) — narrow to just the fields this app reads.
+interface RawExif {
+  latitude?: unknown;
+  longitude?: unknown;
+  Make?: unknown;
+  Model?: unknown;
+  DateTimeOriginal?: unknown;
+}
+
+@Injectable()
+export class MediaService {
+  constructor() {
+    // Reads CLOUDINARY_URL from process.env. Called here (constructor,
+    // instantiated during Nest bootstrap) rather than at module import
+    // time, so it runs after ConfigModule has loaded api/.env.
+    cloudinary.config({ secure: true });
+  }
+
+  uploadImage(buffer: Buffer): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: 'porac-sdss-nextjs/reports' },
+        (err, result) => {
+          if (err || !result)
+            return reject(
+              new Error(err?.message ?? 'Cloudinary upload failed'),
+            );
+          resolve(result.secure_url);
+        },
+      );
+      stream.end(buffer);
+    });
+  }
+
+  async extractExif(buffer: Buffer): Promise<ExifResult> {
+    try {
+      const d = (await exifr.parse(buffer, {
+        gps: true,
+        translateValues: false,
+      })) as RawExif | undefined;
+      const lat = typeof d?.latitude === 'number' ? d.latitude : null;
+      const lng = typeof d?.longitude === 'number' ? d.longitude : null;
+      const make = typeof d?.Make === 'string' ? d.Make : null;
+      const model = typeof d?.Model === 'string' ? d.Model : null;
+      const capturedAt =
+        d?.DateTimeOriginal instanceof Date ? d.DateTimeOriginal : null;
+      return {
+        lat,
+        lng,
+        capturedAt,
+        make,
+        model,
+        data:
+          lat === null || lng === null
+            ? null
+            : {
+                GPSLatitude: lat,
+                GPSLongitude: lng,
+                GPSLatitudeRef: lat >= 0 ? 'N' : 'S',
+                GPSLongitudeRef: lng >= 0 ? 'E' : 'W',
+                DateTimeOriginal: capturedAt ? capturedAt.toISOString() : null,
+                Make: make,
+                Model: model,
+              },
+      };
+    } catch {
+      return {
+        lat: null,
+        lng: null,
+        capturedAt: null,
+        make: null,
+        model: null,
+        data: null,
+      };
+    }
+  }
+
+  // dHash: resize to 9x8 grayscale, compare each pixel to its right neighbor.
+  // 8x8 comparisons = 64 bits, stored as a 16-char hex string.
+  async computeDHash(buffer: Buffer): Promise<string> {
+    const { data } = await sharp(buffer)
+      .resize(9, 8, { fit: 'fill' })
+      .grayscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    let bits = '';
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const left = data[row * 9 + col];
+        const right = data[row * 9 + col + 1];
+        bits += left < right ? '1' : '0';
+      }
+    }
+    return BigInt('0b' + bits)
+      .toString(16)
+      .padStart(16, '0');
+  }
+
+  hammingDistanceHex(hexA: string, hexB: string): number {
+    const zero = BigInt(0);
+    const one = BigInt(1);
+    let xor = BigInt('0x' + hexA) ^ BigInt('0x' + hexB);
+    let count = 0;
+    while (xor > zero) {
+      count += Number(xor & one);
+      xor >>= one;
+    }
+    return count;
+  }
+}
