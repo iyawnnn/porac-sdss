@@ -5,8 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { AdminTicketRow, PaginatedTickets } from "@/lib/admin/tickets";
 import { TICKET_STATUSES, PAGE_LIMITS, type TicketSort } from "@/lib/admin/ticketConstants";
-import { getUrgencyBandStyle } from "@/lib/ui/urgency";
-import { priorityBandClass } from "@/lib/ui/priority";
+import { getUrgencyBadgeConfig } from "@/lib/ui/urgency";
+import { priorityScoreBandClass } from "@/lib/ui/priority";
 import { relativeAge } from "@/lib/ui/time";
 import { StatusPill } from "../StatusPill";
 
@@ -339,6 +339,7 @@ export function TicketsWorkspace({
 
 function TicketRow({ ticket, returnQuery }: { ticket: AdminTicketRow; returnQuery: string }) {
   const detailHref = `/admin/tickets/${ticket.id}?from=${encodeURIComponent(`/admin/tickets?${returnQuery}`)}`;
+  const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
   return (
     <tr className="h-11 border-b border-line-100 hover:bg-slate-50/80">
       <td className="px-3 font-mono text-ink-700">
@@ -350,14 +351,12 @@ function TicketRow({ ticket, returnQuery }: { ticket: AdminTicketRow; returnQuer
       <td className="px-3">{ticket.barangay_name}</td>
       <td className="px-3 text-right font-mono tabular-nums text-ink-700">{ticket.member_count}</td>
       <td className="px-3 text-right">
-        <span className={`inline-block rounded-full px-2 py-0.5 font-mono text-xs font-semibold tabular-nums ${priorityBandClass(ticket.priority_index)}`}>
-          {ticket.priority_index ?? "—"}
+        <span className={`inline-block rounded-full px-2 py-0.5 font-mono text-xs font-semibold tabular-nums ${priorityScoreBandClass(ticket.priority_score)}`}>
+          {ticket.priority_score ?? "—"}
         </span>
       </td>
       <td className="px-3">
-        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getUrgencyBandStyle(ticket.urgency_band).className}`}>
-          {ticket.urgency_band ?? "—"}
-        </span>
+        <span className={`px-2 py-0.5 rounded text-xs font-medium ${urgencyBadge.className}`}>{urgencyBadge.label}</span>
       </td>
       <td className="px-3 text-ink-700">{ticket.assigned_office}</td>
       <td className="px-3">
