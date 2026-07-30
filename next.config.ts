@@ -18,6 +18,17 @@ const nextConfig: NextConfig = {
         { source: "/api/citizens/signup", destination: `${API_ORIGIN}/citizens/signup` },
         { source: "/api/citizens/logout", destination: `${API_ORIGIN}/citizens/logout` },
         { source: "/api/auth/me", destination: `${API_ORIGIN}/auth/me` },
+        { source: "/api/admin/tickets/geo", destination: `${API_ORIGIN}/admin/tickets/geo` },
+        { source: "/api/admin/tickets", destination: `${API_ORIGIN}/admin/tickets` },
+        { source: "/api/admin/tickets/:id", destination: `${API_ORIGIN}/admin/tickets/:id` },
+        {
+          source: "/api/admin/tickets/:id/priority-context",
+          destination: `${API_ORIGIN}/admin/tickets/:id/priority-context`,
+        },
+        { source: "/api/admin/moderation", destination: `${API_ORIGIN}/admin/moderation` },
+        { source: "/api/admin/moderation/stats", destination: `${API_ORIGIN}/admin/moderation/stats` },
+        { source: "/api/admin/dashboard", destination: `${API_ORIGIN}/admin/dashboard` },
+        { source: "/api/admin/barangays/geo", destination: `${API_ORIGIN}/admin/barangays/geo` },
       ],
     };
   },
