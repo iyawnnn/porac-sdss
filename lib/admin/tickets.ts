@@ -2,6 +2,7 @@ import { sql } from "@/lib/db/raw";
 import { TICKET_STATUSES, PAGE_LIMITS, DEFAULT_PAGE_LIMIT, type TicketStatus, type TicketSort } from "./ticketConstants";
 import { getCurrentRain1hMm } from "@/lib/weather/openweather";
 import { computePriorityBreakdown, severityFromRank, type PriorityBreakdown } from "@/lib/scoring";
+import type { UrgencyLevel } from "@/lib/triage/urgency";
 
 export type { TicketStatus, TicketSort };
 export { TICKET_STATUSES, PAGE_LIMITS };
@@ -27,6 +28,8 @@ export interface AdminTicketRow {
   urgency_score: number | null;
   urgency_band: string | null;
   priority_index: number | null;
+  priority_score: number | null;
+  urgency_level: UrgencyLevel | null;
   assigned_office: string;
   status: string;
   created_at: string;
@@ -77,10 +80,10 @@ export async function getTicketsForAdmin(filters: AdminTicketFilters = {}): Prom
       ? sql``
       : sql`AND t.status = ${status}::ticket_status`;
   const orderBy = filters.sort === "priority_asc"
-    ? sql`t.priority_index ASC NULLS LAST, t.created_at DESC`
+    ? sql`t.priority_score ASC NULLS LAST, t.created_at DESC`
     : filters.sort === "newest"
       ? sql`t.created_at DESC`
-      : sql`t.priority_index DESC NULLS LAST, t.created_at DESC`;
+      : sql`t.priority_score DESC NULLS LAST, t.created_at DESC`;
 
   const search = filters.search?.trim() || null;
   const searchId = search && /^\d+$/.test(search) ? Number(search) : null;
@@ -93,7 +96,8 @@ export async function getTicketsForAdmin(filters: AdminTicketFilters = {}): Prom
   // row query.
   const rows = await sql<(AdminTicketRow & { total_count: number })[]>`
     SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, t.member_count,
-      t.urgency_score, t.urgency_band, t.priority_index, t.assigned_office, t.status, t.created_at,
+      t.urgency_score, t.urgency_band, t.priority_index, t.priority_score, t.urgency_level,
+      t.assigned_office, t.status, t.created_at,
       COUNT(*) OVER ()::int AS total_count
     FROM tickets t
     JOIN barangays b ON b.id = t.barangay_id
@@ -136,6 +140,8 @@ export interface TicketDetail {
   urgency_score: number | null;
   urgency_band: string | null;
   priority_index: number | null;
+  priority_score: number | null;
+  urgency_level: UrgencyLevel | null;
   resolution_image_url: string | null;
   resolution_notes: string | null;
   created_at: string;
@@ -174,6 +180,7 @@ export async function getTicketDetail(id: number) {
       t.status, t.assigned_office, t.member_count, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
       t.elevation_m, t.elevation_factor, t.precipitation_factor,
       t.cluster_factor, t.urgency_score, t.urgency_band, t.priority_index,
+      t.priority_score, t.urgency_level,
       t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at
     FROM tickets t
     JOIN barangays b ON b.id = t.barangay_id

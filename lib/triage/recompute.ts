@@ -51,6 +51,8 @@ export async function recomputeActiveTicketUrgency(rainOverride?: number) {
   const urgencyScores: number[] = [];
   const urgencyBands: string[] = [];
   const priorityIndices: number[] = [];
+  const priorityScores: number[] = [];
+  const urgencyLevels: string[] = [];
 
   for (const ticket of tickets) {
     const urgency = computeUrgency({
@@ -66,6 +68,8 @@ export async function recomputeActiveTicketUrgency(rainOverride?: number) {
     clusterFactors.push(urgency.clusterFactor);
     urgencyScores.push(urgency.urgencyScore);
     urgencyBands.push(urgency.urgencyBand);
+    priorityScores.push(urgency.priorityScore);
+    urgencyLevels.push(urgency.urgencyLevel);
     priorityIndices.push(computePriorityIndex({
       severity: severityFromRank(ticket.severity_rank),
       createdAt: ticket.created_at,
@@ -82,6 +86,8 @@ export async function recomputeActiveTicketUrgency(rainOverride?: number) {
       urgency_score = u.urgency_score,
       urgency_band = u.urgency_band,
       priority_index = u.priority_index,
+      priority_score = u.priority_score,
+      urgency_level = u.urgency_level,
       updated_at = now()
     FROM (
       SELECT * FROM unnest(
@@ -91,8 +97,10 @@ export async function recomputeActiveTicketUrgency(rainOverride?: number) {
         ${clusterFactors}::real[],
         ${urgencyScores}::real[],
         ${urgencyBands}::text[],
-        ${priorityIndices}::int[]
-      ) AS u(id, elevation_factor, precipitation_factor, cluster_factor, urgency_score, urgency_band, priority_index)
+        ${priorityIndices}::int[],
+        ${priorityScores}::int[],
+        ${urgencyLevels}::text[]
+      ) AS u(id, elevation_factor, precipitation_factor, cluster_factor, urgency_score, urgency_band, priority_index, priority_score, urgency_level)
     ) AS u
     WHERE t.id = u.id
   `;

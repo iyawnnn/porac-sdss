@@ -43,6 +43,12 @@ export const tickets = pgTable("tickets", {
   urgencyScore: real("urgency_score"),
   urgencyBand: text("urgency_band"),
   priorityIndex: integer("priority_index"),
+  // priorityScore/urgencyLevel (lib/triage/urgency.ts) are the single 0-100
+  // score + derived band shown on the admin Ticket Queue — kept separate
+  // from urgency_band/priority_index above, which still drive the map pins
+  // and dashboard (lib/scoring.ts's severity/age/density model).
+  priorityScore: integer("priority_score"),
+  urgencyLevel: text("urgency_level"),
   assignedOffice: officeEnum("assigned_office").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
