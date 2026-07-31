@@ -18,6 +18,11 @@ import { BarangaysGeoService } from './barangays-geo.service';
 @Module({
   imports: [AuthModule, DomainModule],
   controllers: [TicketsController, ModerationController, DashboardController],
-  providers: [TicketsService, ModerationService, DashboardService, BarangaysGeoService],
+  providers: [
+    TicketsService,
+    ModerationService,
+    DashboardService,
+    BarangaysGeoService,
+  ],
 })
 export class AdminModule {}

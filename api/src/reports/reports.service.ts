@@ -1,4 +1,10 @@
-import { BadRequestException, HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
 import { BarangayService } from '../domain/barangay.service';
@@ -8,9 +14,9 @@ import { WeatherService } from '../domain/weather.service';
 import { MediaService } from '../domain/media.service';
 import { RateLimitService } from '../domain/ratelimit.service';
 import { RecomputeService } from '../domain/recompute.service';
-import { officeForCategory } from '../domain/office';
-import { radiusForCategory } from '../domain/radius';
-import { haversineMeters } from '../domain/distance';
+import { officeForCategory } from '../common/utils/office';
+import { radiusForCategory } from '../common/utils/radius';
+import { haversineMeters } from '../common/utils/distance';
 import { computeUrgency } from '../domain/urgency';
 import type { ReportInput } from '../contracts/schemas';
 import type { CitizenSession } from '../auth/session.service';
@@ -108,9 +114,17 @@ export class ReportsService {
     const { title, description, category, citizenSeverity, lat, lng } = input;
 
     // Step 1: rate limit, before any expensive work.
-    const rateLimitResult = await this.rateLimit.checkRateLimit(citizen.citizenId, ip, lat, lng);
+    const rateLimitResult = await this.rateLimit.checkRateLimit(
+      citizen.citizenId,
+      ip,
+      lat,
+      lng,
+    );
     if (!rateLimitResult.allowed) {
-      throw new HttpException(rateLimitResult.reason ?? 'Rate limit exceeded', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        rateLimitResult.reason ?? 'Rate limit exceeded',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     // Step 2: exact polygon containment — reject outright if outside all
@@ -139,7 +153,9 @@ export class ReportsService {
     let locationMismatchM: number | null = null;
 
     if (barangay.viaFallback) {
-      flags.push(`BOUNDARY_FALLBACK:${barangay.name}:${Math.round(barangay.fallbackDistanceM ?? 0)}`);
+      flags.push(
+        `BOUNDARY_FALLBACK:${barangay.name}:${Math.round(barangay.fallbackDistanceM ?? 0)}`,
+      );
     }
 
     if (exif.lat === null || exif.lng === null) {
@@ -151,10 +167,13 @@ export class ReportsService {
       }
     }
 
-    const exifCapturedAtIso = exif.capturedAt ? exif.capturedAt.toISOString() : null;
+    const exifCapturedAtIso = exif.capturedAt
+      ? exif.capturedAt.toISOString()
+      : null;
 
     if (exif.capturedAt) {
-      const ageHours = (Date.now() - exif.capturedAt.getTime()) / (1000 * 60 * 60);
+      const ageHours =
+        (Date.now() - exif.capturedAt.getTime()) / (1000 * 60 * 60);
       if (ageHours > STALE_PHOTO_HOURS) {
         flags.push('STALE_PHOTO');
       }
@@ -168,7 +187,9 @@ export class ReportsService {
       WHERE image_phash IS NOT NULL AND created_at > now() - interval '30 days'
     `;
     const duplicateMatch = recentPhashes.find(
-      (r) => this.media.hammingDistanceHex(phash, r.image_phash) <= DUPLICATE_HAMMING_THRESHOLD,
+      (r) =>
+        this.media.hammingDistanceHex(phash, r.image_phash) <=
+        DUPLICATE_HAMMING_THRESHOLD,
     );
     if (duplicateMatch) {
       flags.push(`DUPLICATE_IMAGE:${duplicateMatch.id}`);
@@ -213,7 +234,13 @@ export class ReportsService {
         LIMIT 1
       `;
 
-      await this.rateLimit.recordRateLimitEvent(tx, citizen.citizenId, ip, lat, lng);
+      await this.rateLimit.recordRateLimitEvent(
+        tx,
+        citizen.citizenId,
+        ip,
+        lat,
+        lng,
+      );
 
       if (existing) {
         const [report] = await tx<{ id: number }[]>`
@@ -240,7 +267,10 @@ export class ReportsService {
           ) t
         `;
 
-        const ticketElevationM = await this.elevation.findNearestElevation(centroid.lat, centroid.lng);
+        const ticketElevationM = await this.elevation.findNearestElevation(
+          centroid.lat,
+          centroid.lng,
+        );
         const urgency = computeUrgency({
           elevationM: ticketElevationM,
           elevMin,
@@ -263,10 +293,21 @@ export class ReportsService {
           WHERE id = ${existing.id}
         `;
 
-        return { ticketId: existing.id, reportId: report.id, merged: true, memberCount };
+        return {
+          ticketId: existing.id,
+          reportId: report.id,
+          merged: true,
+          memberCount,
+        };
       }
 
-      const urgency = computeUrgency({ elevationM, elevMin, elevMax, memberCount: 1, rain1hMm });
+      const urgency = computeUrgency({
+        elevationM,
+        elevMin,
+        elevMax,
+        memberCount: 1,
+        rain1hMm,
+      });
 
       const [ticket] = await tx<{ id: number }[]>`
         INSERT INTO tickets (
@@ -297,7 +338,12 @@ export class ReportsService {
         RETURNING id
       `;
 
-      return { ticketId: ticket.id, reportId: report.id, merged: false, memberCount: 1 };
+      return {
+        ticketId: ticket.id,
+        reportId: report.id,
+        merged: false,
+        memberCount: 1,
+      };
     });
 
     // Step 8: post-commit, not part of the transaction — a slow recompute

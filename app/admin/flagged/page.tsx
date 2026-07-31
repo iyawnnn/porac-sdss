@@ -1,6 +1,6 @@
 import { apiGet } from "@/lib/api-client";
-import type { ModerationQueueRow, ModerationStats } from "@/lib/admin/moderation";
-import { FlaggedWorkspace } from "./FlaggedWorkspace";
+import type { ModerationQueueRow, ModerationStats } from "@/lib/types/admin-moderation";
+import { FlaggedWorkspace } from "@/components/features/admin/flagged/FlaggedWorkspace";
 
 export default async function AdminFlaggedPage() {
   const [queue, stats] = await Promise.all([

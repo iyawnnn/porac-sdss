@@ -1,7 +1,7 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { RecomputeService } from '../domain/recompute.service';
 import { WeatherService } from '../domain/weather.service';
-import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
+import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { DashboardService } from './dashboard.service';
 import { TicketsService } from './tickets.service';
 import { BarangaysGeoService } from './barangays-geo.service';
@@ -23,13 +23,19 @@ export class DashboardController {
   async getDashboard() {
     await this.recompute.recomputeActiveTicketUrgency();
 
-    const [kpis, leaderboard, categories, criticalQueueData, rain1hMm] = await Promise.all([
-      this.dashboard.getDashboardKpis(),
-      this.dashboard.getBarangayRiskRanking(5),
-      this.dashboard.getCategoryDistribution(),
-      this.tickets.getTicketsForAdmin({ status: 'active', sort: 'priority_desc', limit: 5, page: 1 }),
-      this.weather.getCurrentRain1hMm(),
-    ]);
+    const [kpis, leaderboard, categories, criticalQueueData, rain1hMm] =
+      await Promise.all([
+        this.dashboard.getDashboardKpis(),
+        this.dashboard.getBarangayRiskRanking(5),
+        this.dashboard.getCategoryDistribution(),
+        this.tickets.getTicketsForAdmin({
+          status: 'active',
+          sort: 'priority_desc',
+          limit: 5,
+          page: 1,
+        }),
+        this.weather.getCurrentRain1hMm(),
+      ]);
 
     return {
       kpis,

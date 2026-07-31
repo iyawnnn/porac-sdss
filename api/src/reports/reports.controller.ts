@@ -18,8 +18,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { z } from 'zod';
-import { CitizenSessionGuard } from '../auth/guards/citizen-session.guard';
-import { CurrentCitizen } from '../auth/decorators/current-citizen.decorator';
+import { CitizenSessionGuard } from '../common/guards/citizen-session.guard';
+import { CurrentCitizen } from '../common/decorators/current-citizen.decorator';
 import type { CitizenSession } from '../auth/session.service';
 import { reportSchema } from '../contracts/schemas';
 import { ReportsService } from './reports.service';
@@ -76,7 +76,12 @@ export class ReportsController {
     }
 
     const ip = getClientIp(req);
-    const result = await this.reports.submit(citizen, ip, parsed.data, image.buffer);
+    const result = await this.reports.submit(
+      citizen,
+      ip,
+      parsed.data,
+      image.buffer,
+    );
     return result;
   }
 
@@ -86,7 +91,10 @@ export class ReportsController {
   }
 
   @Get('reports/mine/:id')
-  async mineDetail(@CurrentCitizen() citizen: CitizenSession, @Param('id', ParseIntPipe) id: number) {
+  async mineDetail(
+    @CurrentCitizen() citizen: CitizenSession,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     const detail = await this.reports.getMyReportDetail(citizen.citizenId, id);
     if (!detail) throw new NotFoundException();
     return detail;

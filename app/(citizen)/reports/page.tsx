@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { apiGet, getCitizenSessionFromApi } from "@/lib/api-client";
-import type { MyReportRow } from "@/lib/citizens/reports";
-import { StatTile } from "../StatTile";
-import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "../reportStatusStyle";
+import type { MyReportRow } from "@/lib/types/citizens-reports";
+import { StatTile } from "@/components/features/citizen/dashboard/StatTile";
+import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "@/components/features/citizen/dashboard/reportStatusStyle";
 
 const PROGRESS_STEPS = [
   { status: "Reported", note: "Received" },

@@ -6,14 +6,14 @@ import type {
   TicketReport,
   TicketStatusHistoryRow,
   TicketPriorityContext,
-} from "@/lib/admin/tickets";
-import { getUrgencyBadgeConfig, type UrgencyBadgeConfig } from "@/lib/ui/urgency";
-import { priorityScoreBandClass } from "@/lib/ui/priority";
-import { StatusPill } from "@/app/admin/StatusPill";
-import { ImageLightbox } from "@/app/admin/flagged/ImageLightbox";
-import { TriagePanel } from "./TriagePanel";
-import TicketLocationMapLoader from "./TicketLocationMapLoader";
-import { HorizontalStatusTracker } from "./HorizontalStatusTracker";
+} from "@/lib/types/admin-tickets";
+import { getUrgencyBadgeConfig, type UrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
+import { priorityScoreBandClass } from "@/lib/utils/ui/priority";
+import { StatusPill } from "@/components/features/admin/shared/StatusPill";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import { TriagePanel } from "@/components/features/admin/tickets/TriagePanel";
+import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
+import { HorizontalStatusTracker } from "@/components/features/admin/tickets/HorizontalStatusTracker";
 
 const NEXT_STATUS: Record<string, string> = {
   Reported: "Under Review",

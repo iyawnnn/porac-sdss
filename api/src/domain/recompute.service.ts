@@ -4,7 +4,10 @@ import { PG } from '../db/db.module';
 import { WeatherService } from './weather.service';
 import { AppConfigService } from './app-config.service';
 import { computeUrgency } from './urgency';
-import { computePriorityIndex, severityFromRank } from './scoring';
+import {
+  computePriorityIndex,
+  severityFromRank,
+} from '../common/utils/scoring';
 
 @Injectable()
 export class RecomputeService {
