@@ -5,3 +5,4 @@ node_modules/
 test-results/
 api/node_modules/
 api/dist/
+api/*.tsbuildinfo
