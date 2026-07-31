@@ -1,13 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import {
-  getTicketDetail,
-  getTicketPriorityContext,
-  type TicketDetail,
-  type TicketReport,
-  type TicketPriorityContext,
+import { apiGetOptional } from "@/lib/api-client";
+import type {
+  TicketDetail,
+  TicketReport,
+  TicketStatusHistoryRow,
+  TicketPriorityContext,
 } from "@/lib/admin/tickets";
-import { recomputeActiveTicketUrgency } from "@/lib/triage/recompute";
 import { getUrgencyBadgeConfig, type UrgencyBadgeConfig } from "@/lib/ui/urgency";
 import { priorityScoreBandClass } from "@/lib/ui/priority";
 import { StatusPill } from "@/app/admin/StatusPill";
@@ -52,13 +51,18 @@ export default async function TicketDetailPage({
   const { from } = await searchParams;
   const ticketId = Number(id);
 
-  await recomputeActiveTicketUrgency();
-  const data = await getTicketDetail(ticketId);
+  // NestJS's GET /admin/tickets/:id recomputes before reading, matching
+  // this page's original SSR behavior.
+  const data = await apiGetOptional<{
+    ticket: TicketDetail;
+    reports: TicketReport[];
+    history: TicketStatusHistoryRow[];
+  }>(`/admin/tickets/${ticketId}`, [401, 404]);
   if (!data) notFound();
 
   const { ticket, reports, history } = data;
   const priorityContext = ACTIVE_STATUSES.includes(ticket.status)
-    ? await getTicketPriorityContext(ticketId)
+    ? await apiGetOptional<TicketPriorityContext>(`/admin/tickets/${ticketId}/priority-context`, [401, 404])
     : null;
 
   // Only trust a same-origin queue URL forwarded from the ticket list —

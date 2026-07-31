@@ -1,26 +1,25 @@
-import { getDashboardKpis, getBarangayRiskRanking, getCategoryDistribution } from "@/lib/admin/dashboard";
-import { getTicketsForAdmin } from "@/lib/admin/tickets";
-import { recomputeActiveTicketUrgency } from "@/lib/triage/recompute";
-import { getCurrentRain1hMm } from "@/lib/weather/openweather";
+import { apiGet } from "@/lib/api-client";
+import type { AdminTicketRow } from "@/lib/admin/tickets";
+import type { DashboardKpis, BarangayRiskRow, CategoryDistributionRow } from "@/lib/admin/dashboard";
 import { DashboardClient } from "./DashboardClient";
 
-export default async function AdminDashboardPage() {
-  await recomputeActiveTicketUrgency();
+interface DashboardResponse {
+  kpis: DashboardKpis;
+  leaderboard: BarangayRiskRow[];
+  categories: CategoryDistributionRow[];
+  criticalQueue: AdminTicketRow[];
+  rain1hMm: number;
+}
 
-  const [kpis, leaderboard, categories, criticalQueueData, rain1hMm] = await Promise.all([
-    getDashboardKpis(),
-    getBarangayRiskRanking(5),
-    getCategoryDistribution(),
-    getTicketsForAdmin({ status: "active", sort: "priority_desc", limit: 5, page: 1 }),
-    getCurrentRain1hMm(),
-  ]);
+export default async function AdminDashboardPage() {
+  const { kpis, leaderboard, categories, criticalQueue, rain1hMm } = await apiGet<DashboardResponse>("/admin/dashboard");
 
   return (
     <DashboardClient
       kpis={kpis}
       leaderboard={leaderboard}
       categories={categories}
-      criticalQueue={criticalQueueData.tickets}
+      criticalQueue={criticalQueue}
       rain1hMm={rain1hMm}
     />
   );

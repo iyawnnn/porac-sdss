@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { getCitizenSession } from "@/lib/auth/getCitizenSession";
-import { getMyReports } from "@/lib/citizens/reports";
+import { apiGet, getCitizenSessionFromApi } from "@/lib/api-client";
+import type { MyReportRow } from "@/lib/citizens/reports";
 import { StatTile } from "../StatTile";
 import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "../reportStatusStyle";
 
@@ -143,10 +143,10 @@ function ProgressSteps({ status }: { status: string }) {
 }
 
 export default async function MyReportsPage() {
-  const session = await getCitizenSession();
+  const session = await getCitizenSessionFromApi();
   if (!session) return null;
 
-  const reports = await getMyReports(session.citizenId);
+  const reports = await apiGet<MyReportRow[]>("/reports/mine");
 
   const resolvedCount = reports.filter((r) => r.status === "Resolved").length;
   const activeCount = reports.filter((r) => r.status !== "Resolved" && r.status !== "Rejected").length;
