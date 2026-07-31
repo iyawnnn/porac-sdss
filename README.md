@@ -24,7 +24,7 @@ git clone <repository-url>
 ### Step 2: Install dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### Step 3: Configure Environment Variables
@@ -43,10 +43,10 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 Apply PostGIS schema migrations and seed municipal boundaries, demo users, and realistic hazard tickets:
 
 ```bash
-npm run db:migrate
-npx tsx scripts/seed-users.ts
-npx tsx scripts/gis/generate-porac-boundary.ts
-npx tsx scripts/seed-diverse-reports.ts
+pnpm --prefix api migrate
+pnpm --prefix api seed:users
+pnpm gis:generate-boundary
+pnpm --prefix api seed:diverse-reports
 ```
 
 ## E. RUNNING THE APPLICATION
@@ -54,7 +54,7 @@ npx tsx scripts/seed-diverse-reports.ts
 Start the local development server:
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 Open http://localhost:3000 in your browser.

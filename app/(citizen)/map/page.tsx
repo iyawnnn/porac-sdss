@@ -1,6 +1,6 @@
 import { apiGet, getCitizenSessionFromApi } from "@/lib/api-client";
-import type { PublicTicketGeoRow, BarangayGeoFeatureCollection } from "@/lib/citizens/publicMap";
-import PublicMapClientLoader from "./PublicMapClientLoader";
+import type { PublicTicketGeoRow, BarangayGeoFeatureCollection } from "@/lib/types/citizens-public-map";
+import PublicMapClientLoader from "@/components/features/citizen/map/PublicMapClientLoader";
 
 export default async function CitizenPublicMapPage() {
   const session = await getCitizenSessionFromApi();

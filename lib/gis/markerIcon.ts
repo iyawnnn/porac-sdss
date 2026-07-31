@@ -1,5 +1,5 @@
 import L from "leaflet";
-import { getUrgencyBandStyle } from "@/lib/ui/urgency";
+import { getUrgencyBandStyle } from "@/lib/utils/ui/urgency";
 
 // Shared by the admin and citizen maps so pin sizing/colors never drift
 // between the two (see lib/ui/urgency.ts header for the drift this avoids).

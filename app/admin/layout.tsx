@@ -1,5 +1,5 @@
 import { getAdminSessionFromApi } from "@/lib/api-client";
-import AdminSidebar from "./AdminSidebar";
+import AdminSidebar from "@/components/layouts/AdminSidebar";
 
 // proxy.ts already gates every /admin/* route except /admin/login, so a
 // missing session here only happens on that login page — render it bare,

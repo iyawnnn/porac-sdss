@@ -1,5 +1,5 @@
 import L from "leaflet";
-import { getUrgencyBandStyle } from "@/lib/ui/urgency";
+import { getUrgencyBandStyle } from "@/lib/utils/ui/urgency";
 
 // Reverse-lookup a child marker's urgency weight from its divIcon HTML
 // (bandMarkerIcon() already bakes the band's hex into the marker) instead of

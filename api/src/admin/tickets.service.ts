@@ -1,9 +1,18 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
 import { WeatherService } from '../domain/weather.service';
 import { MediaService } from '../domain/media.service';
-import { computePriorityBreakdown, severityFromRank, type PriorityBreakdown } from '../domain/scoring';
+import {
+  computePriorityBreakdown,
+  severityFromRank,
+  type PriorityBreakdown,
+} from '../common/utils/scoring';
 import type { UrgencyLevel } from '../domain/urgency';
 import type { AdminSession } from '../auth/session.service';
 import {
@@ -144,22 +153,42 @@ export class TicketsService {
           ? query.office
           : sessionOffice;
     const status =
-      query.status === 'all' || query.status === 'active' || TICKET_STATUSES.includes(query.status as TicketStatus)
+      query.status === 'all' ||
+      query.status === 'active' ||
+      TICKET_STATUSES.includes(query.status as TicketStatus)
         ? (query.status as AdminTicketFilters['status'])
         : 'active';
-    const urgency = ['Low', 'Medium', 'Critical'].includes(query.urgency ?? '') ? query.urgency : undefined;
+    const urgency = ['Low', 'Medium', 'Critical'].includes(query.urgency ?? '')
+      ? query.urgency
+      : undefined;
     const barangayId = query.barangayId ? Number(query.barangayId) : undefined;
-    const sort: TicketSort = query.sort === 'priority_asc' || query.sort === 'newest' ? query.sort : 'priority_desc';
+    const sort: TicketSort =
+      query.sort === 'priority_asc' || query.sort === 'newest'
+        ? query.sort
+        : 'priority_desc';
     const search = query.search?.trim() || undefined;
     const page = Math.max(1, Number(query.page) || 1);
-    const limit = PAGE_LIMITS.includes(Number(query.limit) as (typeof PAGE_LIMITS)[number])
+    const limit = PAGE_LIMITS.includes(
+      Number(query.limit) as (typeof PAGE_LIMITS)[number],
+    )
       ? Number(query.limit)
       : DEFAULT_PAGE_LIMIT;
 
-    return { office, status: status ?? 'active', urgency, barangayId, sort, search, page, limit };
+    return {
+      office,
+      status: status ?? 'active',
+      urgency,
+      barangayId,
+      sort,
+      search,
+      page,
+      limit,
+    };
   }
 
-  async getTicketsForAdmin(filters: AdminTicketFilters = {}): Promise<PaginatedTickets> {
+  async getTicketsForAdmin(
+    filters: AdminTicketFilters = {},
+  ): Promise<PaginatedTickets> {
     const sql = this.pg;
     const status = filters.status ?? 'active';
     const statusClause =
@@ -178,7 +207,10 @@ export class TicketsService {
     const search = filters.search?.trim() || null;
     const searchId = search && /^\d+$/.test(search) ? Number(search) : null;
     const page = Math.max(1, filters.page ?? 1);
-    const limit = Math.max(1, Math.min(100, filters.limit ?? DEFAULT_PAGE_LIMIT));
+    const limit = Math.max(
+      1,
+      Math.min(100, filters.limit ?? DEFAULT_PAGE_LIMIT),
+    );
     const offset = (page - 1) * limit;
 
     // COUNT(*) OVER() rides along with the page query so the WHERE clause
@@ -209,10 +241,18 @@ export class TicketsService {
 
     const total = rows[0]?.total_count ?? 0;
 
-    return { tickets: rows, total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) };
+    return {
+      tickets: rows,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
   }
 
-  async getTicketsGeo(office: 'MEO' | 'MDRRMO' | null): Promise<AdminTicketGeoRow[]> {
+  async getTicketsGeo(
+    office: 'MEO' | 'MDRRMO' | null,
+  ): Promise<AdminTicketGeoRow[]> {
     const sql = this.pg;
     return sql<AdminTicketGeoRow[]>`
       SELECT t.id, t.category, t.status, t.assigned_office, b.name AS barangay_name,
@@ -268,7 +308,9 @@ export class TicketsService {
   // ticket, scoped by WHERE ticket_id — only meaningful while the ticket is
   // still active, since barangay density is computed over active tickets
   // only and freezes once resolved/rejected.
-  async getTicketPriorityContext(ticketId: number): Promise<TicketPriorityContext | null> {
+  async getTicketPriorityContext(
+    ticketId: number,
+  ): Promise<TicketPriorityContext | null> {
     const sql = this.pg;
     const [row] = await sql<
       {
@@ -326,14 +368,17 @@ export class TicketsService {
 
     const nextStatus = NEXT_STATUS[ticket.status];
     if (!nextStatus) {
-      throw new BadRequestException(`No transition available from ${ticket.status}`);
+      throw new BadRequestException(
+        `No transition available from ${ticket.status}`,
+      );
     }
 
     let resolutionImageUrl: string | null = null;
     let resolutionNotes: string | null = null;
     if (nextStatus === 'Resolved') {
       resolutionNotes = notes?.trim() || null;
-      if (imageBuffer) resolutionImageUrl = await this.media.uploadImage(imageBuffer);
+      if (imageBuffer)
+        resolutionImageUrl = await this.media.uploadImage(imageBuffer);
     }
 
     await sql.begin(async (tx) => {
@@ -365,7 +410,9 @@ export class TicketsService {
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
     if (ticket.assigned_office === toOffice) {
-      throw new BadRequestException(`Ticket is already assigned to ${toOffice}`);
+      throw new BadRequestException(
+        `Ticket is already assigned to ${toOffice}`,
+      );
     }
 
     await sql.begin(async (tx) => {

@@ -1,5 +1,5 @@
 import { getAdminSessionFromApi } from "@/lib/api-client";
-import MapClientLoader from "./MapClientLoader";
+import MapClientLoader from "@/components/features/admin/map/MapClientLoader";
 
 export default async function AdminMapPage({
   searchParams,
