@@ -1,4 +1,4 @@
-import { getAdminSession } from "@/lib/auth/getSession";
+import { getAdminSessionFromApi } from "@/lib/api-client";
 import MapClientLoader from "./MapClientLoader";
 
 export default async function AdminMapPage({
@@ -7,7 +7,7 @@ export default async function AdminMapPage({
   searchParams: Promise<{ office?: string }>;
 }) {
   const params = await searchParams;
-  const session = await getAdminSession();
+  const session = await getAdminSessionFromApi();
 
   // Same default-to-own-office rule as the ticket list — see that page.
   const office =

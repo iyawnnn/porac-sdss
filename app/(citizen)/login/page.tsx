@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { getCitizenSession } from "@/lib/auth/getCitizenSession";
+import { getCitizenSessionFromApi } from "@/lib/api-client";
 import LoginForm from "./LoginForm";
 
 export default async function CitizenLoginPage() {
-  const session = await getCitizenSession();
+  const session = await getCitizenSessionFromApi();
   if (session) redirect("/dashboard");
 
   return <LoginForm />;

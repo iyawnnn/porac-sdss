@@ -9,7 +9,7 @@ import "leaflet.heat";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import type { AdminTicketGeoRow } from "@/app/api/admin/tickets/geo/route";
+import type { AdminTicketGeoRow } from "@/lib/admin/tickets";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { configureLeafletMarkerIcons } from "@/lib/gis/leaflet-icons";
 import { bindBarangayHoverTooltip, styleBarangayFeature, styleMunicipalBoundary } from "@/lib/gis/map-styles";

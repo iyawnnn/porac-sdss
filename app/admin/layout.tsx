@@ -1,11 +1,11 @@
-import { getAdminSession } from "@/lib/auth/getSession";
+import { getAdminSessionFromApi } from "@/lib/api-client";
 import AdminSidebar from "./AdminSidebar";
 
 // proxy.ts already gates every /admin/* route except /admin/login, so a
 // missing session here only happens on that login page — render it bare,
 // with no sidebar/office badge/sign-out to show yet.
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await getAdminSession();
+  const session = await getAdminSessionFromApi();
   if (!session) return <>{children}</>;
 
   return (
