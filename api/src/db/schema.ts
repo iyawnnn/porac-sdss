@@ -66,11 +66,15 @@ export const tickets = pgTable('tickets', {
   clusterFactor: real('cluster_factor'),
   urgencyScore: real('urgency_score'),
   urgencyBand: text('urgency_band'),
+  // priorityIndex (common/utils/scoring.ts's severity/age/density model)
+  // powers the separate "Priority Breakdown" card on the ticket detail page
+  // (GET /admin/tickets/:id/priority-context) — not shown as the headline
+  // "Priority" number anywhere.
   priorityIndex: integer('priority_index'),
-  // priorityScore/urgencyLevel (domain/urgency.ts) are the single 0-100
-  // score + derived band shown on the admin Ticket Queue — kept separate
-  // from urgency_band/priority_index above, which still drive the map pins
-  // and dashboard (common/utils/scoring.ts's severity/age/density model).
+  // priorityScore/urgencyLevel (domain/urgency.ts's elevation/rain/cluster
+  // model) is the canonical "Priority" value rendered on the admin
+  // Dashboard, Ticket Queue, and Ticket Detail header — the same number the
+  // "System urgency" card on ticket detail derives its band from.
   priorityScore: integer('priority_score'),
   urgencyLevel: text('urgency_level'),
   assignedOffice: officeEnum('assigned_office').notNull(),

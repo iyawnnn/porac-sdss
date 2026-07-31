@@ -16,6 +16,9 @@ async function bootstrap() {
   app.set('trust proxy', 1);
   app.enableShutdownHooks();
 
-  await app.listen(config.get('PORT', { infer: true }));
+  // Explicit IPv4 bind — Node 18+ prefers IPv6 when resolving 'localhost',
+  // so an implicit/dual-stack bind can still leave a caller connecting via
+  // ::1 racing an interface that isn't actually listening on it.
+  await app.listen(config.get('PORT', { infer: true }), '0.0.0.0');
 }
 void bootstrap();
