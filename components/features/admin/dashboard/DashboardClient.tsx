@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { AdminTicketRow } from "@/lib/types/admin-tickets";
 import type { DashboardKpis, BarangayRiskRow, CategoryDistributionRow } from "@/lib/types/admin-dashboard";
-import { priorityBandClass } from "@/lib/utils/ui/priority";
+import { priorityBandClass, priorityScoreBandClass } from "@/lib/utils/ui/priority";
 import { relativeAge } from "@/lib/utils/ui/time";
 import DashboardMiniMapLoader from "./DashboardMiniMapLoader";
 
@@ -76,7 +76,7 @@ export function DashboardClient({
       ...categories.map((c) => toCsvRow([c.category, c.active_count])),
       "",
       "Ticket ID,Category,Barangay,Priority,Status",
-      ...criticalQueue.map((t) => toCsvRow([t.id, t.category, t.barangay_name, t.priority_index ?? "", t.status])),
+      ...criticalQueue.map((t) => toCsvRow([t.id, t.category, t.barangay_name, t.priority_score ?? "", t.status])),
     ];
     downloadCsv(`executive-summary-${new Date().toISOString().slice(0, 10)}.csv`, rows);
   }
@@ -212,9 +212,9 @@ export function DashboardClient({
                     </p>
                   </div>
                   <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-xs font-semibold tabular-nums ${priorityBandClass(ticket.priority_index)}`}
+                    className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-xs font-semibold tabular-nums ${priorityScoreBandClass(ticket.priority_score)}`}
                   >
-                    {ticket.priority_index ?? "—"}
+                    {ticket.priority_score ?? "—"}
                   </span>
                 </Link>
               ))}

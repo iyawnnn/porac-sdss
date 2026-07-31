@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
-const API_ORIGIN = process.env.API_ORIGIN ?? "http://localhost:3001";
+// 127.0.0.1, not 'localhost' — avoids Node's IPv6-first DNS resolution
+// racing against the NestJS API's IPv4 bind (see api/src/main.ts).
+const API_ORIGIN = process.env.API_ORIGIN ?? "http://127.0.0.1:3001";
 
 const nextConfig: NextConfig = {
   rewrites() {

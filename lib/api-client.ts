@@ -7,19 +7,39 @@ import type { CitizenSession } from "./auth/citizenSession";
 // so every call here forwards the incoming request's Cookie header
 // manually — that's what lets AdminSessionGuard/CitizenSessionGuard see the
 // session on SSR requests.
-const BASE = process.env.INTERNAL_API_URL ?? "http://localhost:3001";
+// 127.0.0.1, not 'localhost' — avoids Node's IPv6-first DNS resolution
+// racing against the NestJS API's IPv4 bind (see api/src/main.ts).
+const BASE = process.env.INTERNAL_API_URL ?? "http://127.0.0.1:3001";
 
 async function cookieHeader(): Promise<HeadersInit> {
   return { cookie: (await headers()).get("cookie") ?? "" };
 }
 
+// fetch() rejects (ECONNREFUSED, DNS failure, etc.) rather than resolving
+// with a bad status, so that failure mode needs its own catch — a bare
+// `await fetch(...)` on a down API surfaces to the page as an opaque
+// Next.js "fetch failed" digest with no indication of which call or host
+// was responsible. cookieHeader() is resolved outside the try: headers()
+// throws Next's internal DYNAMIC_SERVER_USAGE control-flow signal during
+// static generation, and that error's `digest` must reach Next unwrapped
+// or the route fails the build instead of just bailing to dynamic render.
+async function fetchApi(path: string): Promise<Response> {
+  const requestHeaders = await cookieHeader();
+  try {
+    return await fetch(`${BASE}${path}`, {
+      headers: requestHeaders,
+      cache: "no-store",
+    });
+  } catch (cause) {
+    console.error(`[api-client] request to ${BASE}${path} failed:`, cause);
+    throw new Error(`${path} -> network error reaching ${BASE}`, { cause });
+  }
+}
+
 // cache: "no-store" is required on every call — urgency scores, weather,
 // and ticket/report state are recomputed live per request, not static.
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: await cookieHeader(),
-    cache: "no-store",
-  });
+  const res = await fetchApi(path);
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -29,10 +49,7 @@ export async function apiGet<T>(path: string): Promise<T> {
 // only thing standing between an unauthenticated request and this call, or
 // 404 for a page that wants to call notFound() itself. Defaults to just 401.
 export async function apiGetOptional<T>(path: string, treatAsNull: number[] = [401]): Promise<T | null> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: await cookieHeader(),
-    cache: "no-store",
-  });
+  const res = await fetchApi(path);
   if (treatAsNull.includes(res.status)) return null;
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);
   return res.json() as Promise<T>;
