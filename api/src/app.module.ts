@@ -7,6 +7,7 @@ import { DomainModule } from './domain/domain.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { ReportsModule } from './reports/reports.module';
+import { CronModule } from './cron/cron.module';
 import { validate } from './config/env';
 
 @Module({
@@ -17,6 +18,7 @@ import { validate } from './config/env';
     AuthModule,
     AdminModule,
     ReportsModule,
+    CronModule,
   ],
   controllers: [AppController],
   providers: [AppService],
