@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { getCitizenSession } from "@/lib/auth/getCitizenSession";
-import { getMyReports } from "@/lib/citizens/reports";
-import { getPublicHazardMapData } from "@/lib/citizens/publicMap";
+import { apiGet, getCitizenSessionFromApi } from "@/lib/api-client";
+import type { MyReportRow } from "@/lib/citizens/reports";
+import type { PublicTicketGeoRow, BarangayGeoFeatureCollection } from "@/lib/citizens/publicMap";
 import PublicMapClientLoader from "../map/PublicMapClientLoader";
 import { StatTile } from "../StatTile";
 import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "../reportStatusStyle";
@@ -23,15 +23,16 @@ function timeAgo(isoDate: string) {
 }
 
 export default async function DashboardPage() {
-  const session = await getCitizenSession();
+  const session = await getCitizenSessionFromApi();
   // proxy.ts already redirects unauthenticated requests before this
   // renders; this null-check is just defense in depth.
   if (!session) return null;
 
-  const [reports, { barangays, tickets }] = await Promise.all([
-    getMyReports(session.citizenId),
-    getPublicHazardMapData(session.citizenId),
+  const [reports, publicMap] = await Promise.all([
+    apiGet<MyReportRow[]>("/reports/mine"),
+    apiGet<{ barangays: BarangayGeoFeatureCollection; tickets: PublicTicketGeoRow[] }>("/public-map"),
   ]);
+  const { barangays, tickets } = publicMap;
 
   const activeCount = reports.filter((r) => r.status !== "Resolved" && r.status !== "Rejected").length;
   const citywideCriticalCount = tickets.filter((t) => t.urgency_band === "Critical").length;
