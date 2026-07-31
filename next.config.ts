@@ -36,6 +36,8 @@ const nextConfig: NextConfig = {
         { source: "/api/reports/mine", destination: `${API_ORIGIN}/reports/mine` },
         { source: "/api/reports/mine/:id", destination: `${API_ORIGIN}/reports/mine/:id` },
         { source: "/api/public-map", destination: `${API_ORIGIN}/public-map` },
+        { source: "/api/cron/recompute-urgency", destination: `${API_ORIGIN}/cron/recompute-urgency` },
+        { source: "/api/cron/recompute-weather", destination: `${API_ORIGIN}/cron/recompute-weather` },
       ],
     };
   },
