@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { AdminTicketGeoRow } from "@/app/api/admin/tickets/geo/route";
+import type { AdminTicketGeoRow } from "@/lib/admin/tickets";
 import { getUrgencyBandStyle } from "@/lib/ui/urgency";
 
 function ImagePlaceholderIcon() {

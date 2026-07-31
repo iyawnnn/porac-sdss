@@ -7,7 +7,7 @@ import "leaflet.heat";
 import "leaflet/dist/leaflet.css";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { configureLeafletMarkerIcons } from "@/lib/gis/leaflet-icons";
-import type { AdminTicketGeoRow } from "@/app/api/admin/tickets/geo/route";
+import type { AdminTicketGeoRow } from "@/lib/admin/tickets";
 
 configureLeafletMarkerIcons();
 
