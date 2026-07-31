@@ -17,8 +17,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RecomputeService } from '../domain/recompute.service';
-import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
-import { CurrentAdmin } from '../auth/decorators/current-admin.decorator';
+import { AdminSessionGuard } from '../common/guards/admin-session.guard';
+import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { TicketsService } from './tickets.service';
 
@@ -34,7 +34,10 @@ export class TicketsController {
   ) {}
 
   @Get()
-  async list(@Query() query: Record<string, string | undefined>, @CurrentAdmin() admin: AdminSession) {
+  async list(
+    @Query() query: Record<string, string | undefined>,
+    @CurrentAdmin() admin: AdminSession,
+  ) {
     const recomputeResult = await this.recompute.recomputeActiveTicketUrgency();
     const filters = this.tickets.parseTicketQuery(query, admin.office);
     const result = await this.tickets.getTicketsForAdmin(filters);
@@ -44,7 +47,8 @@ export class TicketsController {
   @Get('geo')
   async geo(@Query('office') officeParam?: string) {
     await this.recompute.recomputeActiveTicketUrgency();
-    const office = officeParam === 'MEO' || officeParam === 'MDRRMO' ? officeParam : null;
+    const office =
+      officeParam === 'MEO' || officeParam === 'MDRRMO' ? officeParam : null;
     return this.tickets.getTicketsGeo(office);
   }
 
@@ -88,7 +92,12 @@ export class TicketsController {
     )
     image: Express.Multer.File | undefined,
   ) {
-    const result = await this.tickets.advanceStatus(id, admin, notes, image?.buffer);
+    const result = await this.tickets.advanceStatus(
+      id,
+      admin,
+      notes,
+      image?.buffer,
+    );
     return { ok: true, ...result };
   }
 

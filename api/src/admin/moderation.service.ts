@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
 
@@ -57,7 +62,12 @@ export class ModerationService {
   async getModerationStats(): Promise<ModerationStats> {
     const sql = this.pg;
     const [row] = await sql<
-      { pending: string; quarantined: string; dismissed: string; avg_hours: number | null }[]
+      {
+        pending: string;
+        quarantined: string;
+        dismissed: string;
+        avg_hours: number | null;
+      }[]
     >`
       SELECT
         COUNT(*) FILTER (WHERE moderation_status IS NULL) AS pending,
@@ -92,12 +102,21 @@ export class ModerationService {
     const sql = this.pg;
 
     if (action === 'duplicate') {
-      if (!canonicalReportId) throw new BadRequestException('canonicalReportId is required');
-      const [canonical] = await sql<{ id: number }[]>`SELECT id FROM reports WHERE id = ${canonicalReportId}`;
-      if (!canonical) throw new BadRequestException('Canonical report not found');
+      if (!canonicalReportId)
+        throw new BadRequestException('canonicalReportId is required');
+      const [canonical] = await sql<
+        { id: number }[]
+      >`SELECT id FROM reports WHERE id = ${canonicalReportId}`;
+      if (!canonical)
+        throw new BadRequestException('Canonical report not found');
     }
 
-    const status = action === 'dismiss' ? 'dismissed' : action === 'quarantine' ? 'quarantined' : 'duplicate';
+    const status =
+      action === 'dismiss'
+        ? 'dismissed'
+        : action === 'quarantine'
+          ? 'quarantined'
+          : 'duplicate';
     const note = action === 'duplicate' ? String(canonicalReportId) : null;
 
     return sql.begin(async (tx) => {
@@ -114,7 +133,9 @@ export class ModerationService {
           SELECT moderation_status FROM reports WHERE id = ${reportId}
         `;
         if (!existing) throw new NotFoundException('Report not found');
-        throw new BadRequestException(`Report was already ${existing.moderation_status}`);
+        throw new BadRequestException(
+          `Report was already ${existing.moderation_status}`,
+        );
       }
 
       if (action === 'quarantine') {

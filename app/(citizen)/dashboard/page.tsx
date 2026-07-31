@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { apiGet, getCitizenSessionFromApi } from "@/lib/api-client";
-import type { MyReportRow } from "@/lib/citizens/reports";
-import type { PublicTicketGeoRow, BarangayGeoFeatureCollection } from "@/lib/citizens/publicMap";
-import PublicMapClientLoader from "../map/PublicMapClientLoader";
-import { StatTile } from "../StatTile";
-import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "../reportStatusStyle";
+import type { MyReportRow } from "@/lib/types/citizens-reports";
+import type { PublicTicketGeoRow, BarangayGeoFeatureCollection } from "@/lib/types/citizens-public-map";
+import PublicMapClientLoader from "@/components/features/citizen/map/PublicMapClientLoader";
+import { StatTile } from "@/components/features/citizen/dashboard/StatTile";
+import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "@/components/features/citizen/dashboard/reportStatusStyle";
 
 function timeAgo(isoDate: string) {
   const seconds = Math.floor((Date.now() - new Date(isoDate).getTime()) / 1000);

@@ -70,7 +70,7 @@ export const tickets = pgTable('tickets', {
   // priorityScore/urgencyLevel (domain/urgency.ts) are the single 0-100
   // score + derived band shown on the admin Ticket Queue — kept separate
   // from urgency_band/priority_index above, which still drive the map pins
-  // and dashboard (domain/scoring.ts's severity/age/density model).
+  // and dashboard (common/utils/scoring.ts's severity/age/density model).
   priorityScore: integer('priority_score'),
   urgencyLevel: text('urgency_level'),
   assignedOffice: officeEnum('assigned_office').notNull(),

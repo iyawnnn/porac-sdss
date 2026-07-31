@@ -1,5 +1,5 @@
 import { getCitizenSessionFromApi } from "@/lib/api-client";
-import CitizenHeader from "./CitizenHeader";
+import CitizenHeader from "@/components/layouts/CitizenHeader";
 
 export default async function CitizenLayout({ children }: { children: React.ReactNode }) {
   const session = await getCitizenSessionFromApi();

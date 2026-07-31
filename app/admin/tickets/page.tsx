@@ -1,6 +1,6 @@
 import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
-import type { PaginatedTickets } from "@/lib/admin/tickets";
-import { TicketsWorkspace } from "./TicketsWorkspace";
+import type { PaginatedTickets } from "@/lib/types/admin-tickets";
+import { TicketsWorkspace } from "@/components/features/admin/tickets/TicketsWorkspace";
 
 interface Barangay {
   id: number;

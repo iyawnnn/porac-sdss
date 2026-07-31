@@ -1,7 +1,7 @@
 import { apiGet } from "@/lib/api-client";
-import type { AdminTicketRow } from "@/lib/admin/tickets";
-import type { DashboardKpis, BarangayRiskRow, CategoryDistributionRow } from "@/lib/admin/dashboard";
-import { DashboardClient } from "./DashboardClient";
+import type { AdminTicketRow } from "@/lib/types/admin-tickets";
+import type { DashboardKpis, BarangayRiskRow, CategoryDistributionRow } from "@/lib/types/admin-dashboard";
+import { DashboardClient } from "@/components/features/admin/dashboard/DashboardClient";
 
 interface DashboardResponse {
   kpis: DashboardKpis;

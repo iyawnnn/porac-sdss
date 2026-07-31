@@ -6,47 +6,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a two-app monorepo (see the NestJS extraction blueprint decision record for the full phase-by-phase history):
 
-- **root** — Next.js, UI only. Server Components fetch from the NestJS API via `lib/api-client.ts`; the browser talks to it through `next.config.ts`'s `/api/*` rewrite proxy. `app/api/**` no longer exists — every route lives in `api/`.
-- **`api/`** — NestJS, owns the database, auth, PostGIS spatial work, and the triage engine. Own `package.json`/`tsconfig.json`/`nest-cli.json`. Run `npm --prefix api run start:dev` (or `cd api && npm run start:dev`) for local dev, `:3001` by default.
+- **root** — Next.js, UI only. Server Components fetch from the NestJS API via `lib/api-client.ts`; the browser talks to it through `next.config.ts`'s `/api/*` rewrite proxy. `app/api/**` no longer exists — every route lives in `api/`. Non-page components live in top-level `components/{ui,layouts,features}/`, not colocated in `app/**` — only `page.tsx`/`layout.tsx`/`loading.tsx`/`error.tsx`/`route.ts`/`not-found.tsx` remain under `app/`.
+- **`api/`** — NestJS, owns the database, auth, PostGIS spatial work, and the triage engine. Own `package.json`/`tsconfig.json`/`nest-cli.json`. Run `pnpm --prefix api start:dev` (or `cd api && pnpm start:dev`) for local dev, `:3001` by default. `api/src/common/` holds cross-cutting guards, decorators, and pure utils (`office`/`radius`/`distance`/`scoring`) shared across the `admin`/`auth`/`cron`/`reports` feature modules. `api/scripts/` holds the one-time DB migration/seed/verify scripts (moved from root `scripts/`) plus `api/drizzle/` for the Drizzle migration SQL — see Commands below.
 - `PLAN.md` — the authoritative build log and decision record (gap analysis vs. the original thesis paper, phase-by-phase status, every architectural deviation and why). Read it before making non-trivial changes to the triage engine, dedup logic, or geo pipeline — it explains *why* things are built the way they are, not just what.
 - `docs/migration-log-gadm-to-psgc.md` — archived copy of a deleted one-time migration script, kept for history only.
-- `angeles_psgc.json`, `angeles_city_srtm30m.tif` — raw geo source data consumed by the seed scripts in `scripts/`. Not committed data-processing artifacts you should ever hand-edit; regenerate via the pipeline described below if the target municipality changes.
+- `angeles_psgc.json`, `angeles_city_srtm30m.tif` — raw geo source data consumed by the seed scripts in `api/scripts/seed/`. Not committed data-processing artifacts you should ever hand-edit; regenerate via the pipeline described below if the target municipality changes.
+- `scripts/gis/` — a frontend-asset generator (`generate-porac-boundary.ts`, run via `pnpm gis:generate-boundary`) that reads/writes root `public/assets/gis/*`. Deliberately stays at root, not `api/scripts/`, since it has nothing to do with the database — it's Next.js public-asset tooling.
 
-`lib/` still holds a handful of DB-touching modules (`lib/db/*`, `lib/geo/*`, `lib/triage/recompute.ts`/`radius.ts`, `lib/config.ts`, `lib/cloudinary.ts`, `lib/exif.ts`, `lib/phash.ts`, `lib/ratelimit.ts`, `lib/office.ts`, `lib/scoring.ts`, `lib/weather/*`) — these are **not** used by the running Next app anymore, only by the one-time setup scripts in `scripts/` (below), which haven't been relocated into `api/` yet. Everything else under `lib/admin/*` and `lib/citizens/*` was stripped down to pure `export interface`/`export type` declarations once their query functions were ported to `api/src/`; the frontend only ever `import type`s from them now, never their (now-deleted) functions.
+`lib/` is pure frontend code now — `api-client.ts`, `auth/` (session helpers), `gis/` (Leaflet styling), `municipality-config.ts` (env-driven, deliberately duplicated with `api/src/domain/municipality-config.ts`), `types/` (interface-only API response shapes, ported from the old `lib/admin/*`/`lib/citizens/*`), `utils/` (pure display/validation logic, including `utils/urgency.ts` and `utils/scoring.ts` — client-side duplicates of the triage math in `api/src/domain/urgency.ts`/`api/src/common/utils/scoring.ts`, used for badge/band display only, never for the authoritative score). Zero DB imports, zero `postgres`/`drizzle-orm` packages anywhere in `lib/`. A few of these frontend-owned files (`lib/municipality-config.ts`, `lib/utils/urgency.ts`, `lib/utils/scoring.ts`, `lib/utils/generate-exif-image.ts`) are also reached into by `api/scripts/` via relative path (`../../../lib/...`) since the one-time seed/migration scripts need the same pure logic and it isn't worth a second copy.
 
 ## Commands (root, Next.js UI)
 
 ```
-npm run dev              # dev server (:3000)
-npm run build             # production build
-npm run lint               # eslint
+pnpm dev              # dev server (:3000)
+pnpm build             # production build
+pnpm lint               # eslint
 ```
 
 ## Commands (`api/`, NestJS backend)
 
 ```
-npm --prefix api run start:dev    # dev server (:3001), or cd api && npm run start:dev
-npm --prefix api run build        # nest build
-npm --prefix api test              # jest unit tests
-npm --prefix api run test:e2e      # jest e2e tests
+pnpm --prefix api start:dev    # dev server (:3001), or cd api && pnpm start:dev
+pnpm --prefix api build        # nest build
+pnpm --prefix api test              # jest unit tests
+pnpm --prefix api test:e2e      # jest e2e tests
 ```
 
-Database setup order (one-time, run from **root**, against `DATABASE_URL` in `.env.local`):
+Database setup order (one-time, run from **`api/`**, against `DATABASE_URL` in `api/.env`):
 ```
-npm run migrate                    # non-spatial Drizzle tables
-npm run migrate:geometry           # geometry columns + GiST indexes
-npm run migrate:ratelimit
-npm run migrate:ratelimit-citizen
-npm run migrate:city-boundary
-npm run import:barangays-v2        # PSGC barangay polygons -> barangays_v2
-npm run import:city-boundary       # OSM outer boundary -> city_boundary_osm
-npm run seed:dem                   # SRTM GeoTIFF -> dem_points
-npm run verify:config               # print computed elev_min/elev_max etc.
-npm run seed:admin -- <email> <password> <CEO|ACDRRMO> <officer|supervisor>
-npm run seed:demo                   # idempotent demo tickets/citizens
+pnpm --prefix api migrate                    # non-spatial Drizzle tables
+pnpm --prefix api migrate:geometry           # geometry columns + GiST indexes
+pnpm --prefix api migrate:ratelimit
+pnpm --prefix api migrate:ratelimit-citizen
+pnpm --prefix api migrate:city-boundary
+pnpm --prefix api import:barangays           # PSGC barangay polygons -> barangays
+pnpm --prefix api seed:dem                   # SRTM GeoTIFF -> dem_points
+pnpm --prefix api verify:config               # print computed elev_min/elev_max etc.
+pnpm --prefix api seed:admin -- <email> <password> <MEO|MDRRMO> <officer|supervisor>
+pnpm --prefix api seed:diverse-reports        # idempotent demo tickets/citizens
 ```
 
-These still live in root `scripts/` (not yet moved into `api/`) and run via `tsx --env-file=.env.local`, so env vars come from that file, not the shell. `api/.env` needs the **same** `DATABASE_URL`/`JWT_SECRET`/`CLOUDINARY_URL`/`OPENWEATHERMAP_API_KEY` values (see `api/.env.example`) — two separate env files, one shared set of secrets.
+These live in `api/scripts/{migrations,seed,verify}/` and run via `tsx --env-file=.env`, so env vars come from `api/.env` (direct, non-pooled Neon URL) — not the root `.env.local` (pooled URL) these scripts used before the move. `api/.env` needs the **same** `DATABASE_URL`/`JWT_SECRET`/`CLOUDINARY_URL`/`OPENWEATHERMAP_API_KEY` values as root `.env.local` (see `api/.env.example`) — two separate env files, one shared set of secrets.
 
 ## This is a modified Next.js — verify before assuming standard APIs
 
@@ -56,7 +56,7 @@ These still live in root `scripts/` (not yet moved into `api/`) and run via `tsx
 
 **Two apps, one Postgres.** Root Next.js renders UI only — no `app/api/**` handlers, no direct DB queries from Server Components. `api/` (NestJS) owns every route, the database, auth, PostGIS, and the triage engine; Server Components call it via `lib/api-client.ts` (forwards the session cookie manually, `cache: "no-store"` since urgency/weather are live-recomputed per request), and the browser calls it through the `/api/*` rewrite in `next.config.ts` so cookies stay first-party. `proxy.ts` still runs on the Next side purely for the page-redirect UX (`/admin/*` → `/admin/login`, citizen pages → `/login`) — it duplicates nothing API-auth-related anymore, since NestJS's `AdminSessionGuard`/`CitizenSessionGuard` are the real gate.
 
-**Two ORMs by column type, not by table** (inside `api/src/`). Drizzle (`api/src/db/schema.ts`) manages every non-geometry column. Any table or query touching a `geometry` column (`barangays.geom`, `dem_points.geom`, `tickets.geom`, `reports.geom`/`pin_geom`/`exif_geom`) goes through raw tagged-template SQL via the `PG` postgres.js client (`api/src/db/db.module.ts`) instead, because Drizzle's PostGIS support is too weak for `ST_*` functions. When adding a column, decide which client it belongs to based on whether it's geometry — don't add geometry handling to Drizzle. (Root `lib/db/*` is the same split, kept only for the setup scripts in `scripts/` — see Repo layout above.)
+**Two ORMs by column type, not by table** (inside `api/src/`). Drizzle (`api/src/db/schema.ts`) manages every non-geometry column. Any table or query touching a `geometry` column (`barangays.geom`, `dem_points.geom`, `tickets.geom`, `reports.geom`/`pin_geom`/`exif_geom`) goes through raw tagged-template SQL via the `PG` postgres.js client (`api/src/db/db.module.ts`) instead, because Drizzle's PostGIS support is too weak for `ST_*` functions. When adding a column, decide which client it belongs to based on whether it's geometry — don't add geometry handling to Drizzle. `api/scripts/db.ts` is the same split for the one-time migration/seed/verify scripts (a standalone `postgres`/drizzle client outside Nest's DI, since those scripts run via `tsx`, not the Nest process) — see Repo layout above.
 
 **Report → Ticket separation.** `reports` (one per citizen submission) merge into `tickets` (the deduplicated unit admins act on) via `ST_DWithin` within a category-specific radius (`api/src/domain/radius.ts`) and a 7-day active window. Merging increments `tickets.member_count` and recomputes the ticket centroid — this is why urgency scoring reads from `tickets`, not `reports`. The merge transaction uses a `pg_advisory_xact_lock` keyed on `(category, barangay_id)` rather than `SELECT ... FOR UPDATE`, because the latter hits a Postgres planner limitation when combined with `<->` KNN ordering (see `PLAN.md` §6).
 
