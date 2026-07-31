@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getCitizenSession } from "@/lib/auth/getCitizenSession";
-import { getMyReportDetail } from "@/lib/citizens/reports";
+import { apiGetOptional } from "@/lib/api-client";
+import type { MyReportDetail, StatusHistoryStep } from "@/lib/citizens/reports";
 import { getUrgencyBandStyle } from "@/lib/ui/urgency";
 import LocationPreviewMapLoader from "./LocationPreviewMapLoader";
 
@@ -244,13 +244,15 @@ export default async function MyReportDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await getCitizenSession();
-  // proxy.ts already redirects unauthenticated requests before this
-  // renders; this null-check is just defense in depth.
-  if (!session) return null;
-
   const { id } = await params;
-  const data = await getMyReportDetail(session.citizenId, Number(id));
+  // A 401 here (not logged in) and a 404 (report not found / not owned by
+  // this citizen) are both "nothing to show" — proxy.ts already redirects
+  // unauthenticated requests before this renders, so 401 is defense in
+  // depth only, and 404 is the API's own ownership check.
+  const data = await apiGetOptional<{ report: MyReportDetail; history: StatusHistoryStep[] }>(
+    `/reports/mine/${id}`,
+    [401, 404],
+  );
 
   if (!data) notFound();
 
