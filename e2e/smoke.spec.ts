@@ -14,9 +14,11 @@ const poblacionFixture = path.join(process.cwd(), "public", "uploads", "reports"
 async function loginCitizen(page: import("@playwright/test").Page) {
   await page.goto("/login");
   await page.waitForTimeout(500);
-  await page.getByPlaceholder("Email").fill("citizen1@porac.ph");
+  await page.getByLabel("Email").fill("citizen1@porac.ph");
   await page.getByPlaceholder("Password").fill("PoracDemo2026!");
-  await page.getByRole("button", { name: "Log in" }).click();
+  await page.getByRole("button", { name: "Sign In with Email" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+  await page.getByRole("link", { name: "My Reports" }).click();
   await expect(page).toHaveURL(/\/reports/);
 }
 
@@ -34,11 +36,11 @@ test("MEO admin can open the Porac map without runtime failures", async ({ page 
   page.on("response", response => { if (response.status() >= 500) failures.push(`${response.status()} ${response.url()}`); });
   await page.goto("/admin/login");
   await page.waitForTimeout(1_000);
-  await page.getByPlaceholder("Email").fill("meo@porac.gov.ph");
+  await page.getByLabel("Email").fill("meo@porac.gov.ph");
   await page.getByPlaceholder("Password").fill("PoracDemo2026!");
-  await page.getByRole("button", { name: "Log in" }).click();
+  await page.getByRole("button", { name: "Sign In" }).click();
   await expect(page).toHaveURL(/\/admin$/);
-  await page.getByRole("link", { name: "Map" }).click();
+  await page.getByRole("link", { name: "Interactive Map" }).click();
   await expect(page).toHaveURL(/\/admin\/map/);
   await expect(page.locator(".leaflet-container")).toBeVisible();
   const image = await page.request.get("/uploads/reports/01_poblacion.jpg");
@@ -67,7 +69,7 @@ test("citizen header navigates public map, my reports, report form, and logs out
   await expect(image).toHaveJSProperty("complete", true);
   await expect(image).toHaveJSProperty("naturalWidth", 600);
 
-  await page.getByRole("link", { name: "Public Map" }).click();
+  await page.locator("header").getByRole("link", { name: "Map" }).click();
   await expect(page).toHaveURL(/\/map/);
   await expect(page.locator(".leaflet-container")).toBeVisible();
   await expect(page.getByText("Public Hazard Map")).toBeVisible();
@@ -98,7 +100,7 @@ test("citizen report form validates EXIF GPS, dynamic barangay search, and Porac
   await expect(page.locator(".leaflet-container")).toBeVisible();
   await expect(page.getByText("Please upload a photo first to enable map location pinning.")).toBeVisible();
   await expect(page.getByLabel("Barangay Search")).toBeDisabled();
-  await expect(page.getByText("Pin: No pin selected")).toBeVisible();
+  await expect(page.getByText("No pin selected")).toBeVisible();
 
   await page.locator('input[type="file"]').setInputFiles(poblacionFixture);
   await expect(page.getByText("GPS Metadata Verified (EXIF Found)")).toBeVisible();
@@ -106,7 +108,7 @@ test("citizen report form validates EXIF GPS, dynamic barangay search, and Porac
   await expect.poll(async () => page.getByLabel("Barangay Search").locator("option").count()).toBeGreaterThanOrEqual(29);
   await expect(page.getByLabel("Barangay Search").locator("option").filter({ hasText: "Landmark" })).toHaveCount(0);
   await expect(page.getByText(/Detected Barangay:/)).toBeVisible();
-  await expect(page.getByText(/Pin: 15\./)).toBeVisible();
+  await expect(page.getByText(/15\./)).toBeVisible();
 
   await page.getByLabel("Barangay Search").selectOption({ label: "Villa Maria" });
   await page.waitForTimeout(1_000);
