@@ -8,7 +8,16 @@
       "Bash(kill %1)",
       "Bash(npx tsc *)",
       "Bash(npx tsx --env-file=.env.local -e ' *)",
-      "Bash(npx tsx *)"
+      "Bash(npx tsx *)",
+      "Bash(rm -rf dist)",
+      "Bash(pnpm build *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npx nest *)",
+      "Bash(node -e \"console.log\\(require\\('@nestjs/cli/package.json'\\).version\\)\")",
+      "Bash(nohup pnpm start:dev)",
+      "Bash(disown)",
+      "Bash(curl -s -w \"\\\\nstatus: %{http_code}\\\\n\" http://localhost:3001/health)",
+      "Bash(git check-ignore *)"
     ]
   }
 }
