@@ -37,5 +37,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*", "/dashboard/:path*", "/report", "/map", "/reports/:path*", "/api/reports"],
+  // /api/reports intentionally excluded: NestJS's CitizenSessionGuard owns
+  // auth for it now (defense in depth, same as before), and proxy.ts
+  // buffers the whole request body in memory when active — a multipart
+  // image upload would silently truncate past the 10MB default cap. See
+  // PLAN blueprint §3.
+  matcher: ["/admin/:path*", "/api/admin/:path*", "/dashboard/:path*", "/report", "/map", "/reports/:path*"],
 };

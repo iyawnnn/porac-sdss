@@ -6,6 +6,7 @@ import { DbModule } from './db/db.module';
 import { DomainModule } from './domain/domain.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
+import { ReportsModule } from './reports/reports.module';
 import { validate } from './config/env';
 
 @Module({
@@ -15,6 +16,7 @@ import { validate } from './config/env';
     DomainModule,
     AuthModule,
     AdminModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

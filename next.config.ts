@@ -32,6 +32,10 @@ const nextConfig: NextConfig = {
         { source: "/api/admin/tickets/:id/status", destination: `${API_ORIGIN}/admin/tickets/:id/status` },
         { source: "/api/admin/tickets/:id/reassign", destination: `${API_ORIGIN}/admin/tickets/:id/reassign` },
         { source: "/api/admin/reports/:id/moderate", destination: `${API_ORIGIN}/admin/reports/:id/moderate` },
+        { source: "/api/reports", destination: `${API_ORIGIN}/reports` },
+        { source: "/api/reports/mine", destination: `${API_ORIGIN}/reports/mine` },
+        { source: "/api/reports/mine/:id", destination: `${API_ORIGIN}/reports/mine/:id` },
+        { source: "/api/public-map", destination: `${API_ORIGIN}/public-map` },
       ],
     };
   },
