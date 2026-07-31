@@ -1,7 +1,7 @@
 import { Controller, Post, UseGuards } from '@nestjs/common';
 import { RecomputeService } from '../domain/recompute.service';
 import { WeatherService } from '../domain/weather.service';
-import { CronSecretGuard } from './cron-secret.guard';
+import { CronSecretGuard } from '../common/guards/cron-secret.guard';
 
 // Manual/testing trigger, not a Vercel cron schedule — Hobby plan only
 // allows once-daily cron, which would defeat the "live re-ranking as a

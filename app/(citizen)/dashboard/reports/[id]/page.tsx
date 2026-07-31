@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { apiGetOptional } from "@/lib/api-client";
-import type { MyReportDetail, StatusHistoryStep } from "@/lib/citizens/reports";
-import { getUrgencyBandStyle } from "@/lib/ui/urgency";
-import LocationPreviewMapLoader from "./LocationPreviewMapLoader";
+import type { MyReportDetail, StatusHistoryStep } from "@/lib/types/citizens-reports";
+import { getUrgencyBandStyle } from "@/lib/utils/ui/urgency";
+import LocationPreviewMapLoader from "@/components/features/citizen/dashboard/LocationPreviewMapLoader";
 
 const STATUS_STYLE: Record<string, { tint: string; ink: string; dot: string }> = {
   Reported: { tint: "#F1F3F5", ink: "#434B54", dot: "#98A2AC" },
