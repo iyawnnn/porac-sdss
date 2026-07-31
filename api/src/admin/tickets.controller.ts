@@ -50,6 +50,11 @@ export class TicketsController {
 
   @Get(':id')
   async detail(@Param('id', ParseIntPipe) id: number) {
+    // Matches the original SSR page (app/admin/tickets/[id]/page.tsx),
+    // which always recomputed right before reading — otherwise the
+    // priority/urgency shown could lag behind the queue by up to the
+    // caller's own recompute cadence.
+    await this.recompute.recomputeActiveTicketUrgency();
     const detail = await this.tickets.getTicketDetail(id);
     if (!detail) throw new NotFoundException();
     return detail;
