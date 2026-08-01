@@ -1,7 +1,7 @@
 import { sql } from "../db";
 
 // elev_min/elev_max are fixed constants seeded in Phase 0 (config table),
-// computed via ST_Contains against the 33 barangay polygons. Never
+// computed via ST_Contains against the barangay polygons. Never
 // recomputed live — see scripts/verify-config.ts.
 export async function getElevationBounds() {
   const rows = await sql<{ key: string; value: string }[]>`

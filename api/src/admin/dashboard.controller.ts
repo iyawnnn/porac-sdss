@@ -23,7 +23,7 @@ export class DashboardController {
   async getDashboard() {
     await this.recompute.recomputeActiveTicketUrgency();
 
-    const [kpis, leaderboard, categories, criticalQueueData, rain1hMm] =
+    const [kpis, leaderboard, categories, topUrgencyQueueData, rain1hMm] =
       await Promise.all([
         this.dashboard.getDashboardKpis(),
         this.dashboard.getBarangayRiskRanking(5),
@@ -41,7 +41,10 @@ export class DashboardController {
       kpis,
       leaderboard,
       categories,
-      criticalQueue: criticalQueueData.tickets,
+      // Top 5 active tickets by urgency-derived priority_score, not a
+      // threshold-filtered "critical" set — name reflects sort order, not
+      // any urgency_band/urgency_level filter.
+      topUrgencyQueue: topUrgencyQueueData.tickets,
       rain1hMm,
     };
   }

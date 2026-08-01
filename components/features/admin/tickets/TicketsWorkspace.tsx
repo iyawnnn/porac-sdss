@@ -229,8 +229,8 @@ export function TicketsWorkspace({
           className={TOOLBAR_SELECT}
           aria-label="Sort tickets"
         >
-          <option value="priority_desc">Priority: highest first</option>
-          <option value="priority_asc">Priority: lowest first</option>
+          <option value="priority_desc">Urgency: highest first</option>
+          <option value="priority_asc">Urgency: lowest first</option>
           <option value="newest">Newest first</option>
         </select>
         {hasActiveFilters && (
@@ -252,7 +252,7 @@ export function TicketsWorkspace({
               <th className={TH_CLASS}>Category</th>
               <th className={TH_CLASS}>Barangay</th>
               <th className={`${TH_CLASS} text-right`}>Members</th>
-              <th className={`${TH_CLASS} text-right`}>Priority</th>
+              <th className={`${TH_CLASS} text-right`}>Urgency Score</th>
               <th className={TH_CLASS}>Urgency</th>
               <th className={TH_CLASS}>Office</th>
               <th className={TH_CLASS}>Status</th>

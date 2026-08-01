@@ -86,7 +86,7 @@ export default async function TicketDetailPage({
           </h1>
           <StatusPill status={ticket.status} size="lg" />
           <span className={`rounded-full px-3 py-1 text-sm font-semibold ${priorityScoreBandClass(ticket.priority_score)}`}>
-            Priority {ticket.priority_score ?? "—"}
+            Urgency {ticket.priority_score ?? "—"}
           </span>
           <span className={`rounded-full px-3 py-1 text-sm font-semibold ${urgencyBadge.className}`}>
             {urgencyBadge.label}
@@ -284,7 +284,7 @@ function PriorityBreakdownCard({ context }: { context: TicketPriorityContext }) 
 
   return (
     <div className={GLASS_CARD}>
-      <p className={CARD_HEADER}>Citizen severity breakdown</p>
+      <p className={CARD_HEADER}>Priority breakdown</p>
       <table className="w-full text-xs text-ink-700 border-collapse">
         <thead>
           <tr className="text-left text-ink-500">

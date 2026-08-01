@@ -47,13 +47,13 @@ export function DashboardClient({
   kpis,
   leaderboard,
   categories,
-  criticalQueue,
+  topUrgencyQueue,
   rain1hMm,
 }: {
   kpis: DashboardKpis;
   leaderboard: BarangayRiskRow[];
   categories: CategoryDistributionRow[];
-  criticalQueue: AdminTicketRow[];
+  topUrgencyQueue: AdminTicketRow[];
   rain1hMm: number;
 }) {
   const topBarangay = leaderboard[0] ?? null;
@@ -75,8 +75,8 @@ export function DashboardClient({
       "Category,Active tickets",
       ...categories.map((c) => toCsvRow([c.category, c.active_count])),
       "",
-      "Ticket ID,Category,Barangay,Priority,Status",
-      ...criticalQueue.map((t) => toCsvRow([t.id, t.category, t.barangay_name, t.priority_score ?? "", t.status])),
+      "Ticket ID,Category,Barangay,Urgency,Status",
+      ...topUrgencyQueue.map((t) => toCsvRow([t.id, t.category, t.barangay_name, t.priority_score ?? "", t.status])),
     ];
     downloadCsv(`executive-summary-${new Date().toISOString().slice(0, 10)}.csv`, rows);
   }
@@ -93,7 +93,7 @@ export function DashboardClient({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className={GLASS_CARD}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Active high urgency queue</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Active high priority queue</p>
           <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-rose-600">{kpis.critical_count}</p>
           <p className="mt-1 text-xs text-ink-500">of {kpis.active_count} active tickets citywide</p>
         </div>
@@ -194,10 +194,10 @@ export function DashboardClient({
 
         <div className="space-y-4 lg:sticky lg:top-4">
           <div className={FLAT_CARD}>
-            <h2 className="font-semibold text-ink-900">Critical attention queue</h2>
-            <p className="mt-1 text-sm text-ink-500">Top 5 active tickets by priority</p>
+            <h2 className="font-semibold text-ink-900">Top urgency queue</h2>
+            <p className="mt-1 text-sm text-ink-500">Top 5 active tickets by urgency</p>
             <div className="mt-4 space-y-2">
-              {criticalQueue.map((ticket) => (
+              {topUrgencyQueue.map((ticket) => (
                 <Link
                   key={ticket.id}
                   href={`/admin/tickets/${ticket.id}`}
@@ -218,7 +218,7 @@ export function DashboardClient({
                   </span>
                 </Link>
               ))}
-              {criticalQueue.length === 0 && <p className="text-sm text-ink-500">No active tickets right now.</p>}
+              {topUrgencyQueue.length === 0 && <p className="text-sm text-ink-500">No active tickets right now.</p>}
             </div>
           </div>
 
