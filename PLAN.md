@@ -303,7 +303,7 @@ SELECT t.id,
 FROM tickets t
 WHERE t.category = $category
   AND t.status IN ('Reported','Under Review','In Progress')
-  AND t.created_at > now() - interval '7 days'
+  AND t.created_at > now() - make_interval(days => $window_days)
   AND ST_DWithin(t.geom::geography, $point::geography, $radius)
 ORDER BY dist
 LIMIT 1;
@@ -322,6 +322,8 @@ If a row is returned: attach the report to that ticket, increment `member_count`
 Put this table in the paper. "Why 50 metres?" is the single most likely technical question at defense and a tiered, justified answer is much stronger than a magic number.
  
 **Time window**: 7 days for active tickets. A pothole reported today and again next month are the same defect, but a resolved-then-recurring flood is a new event. Tie the window to ticket status, not just age.
+
+The window length lives in exactly one place, `DUPLICATE_MERGE_WINDOW_DAYS` (`api/src/common/utils/duplicate-detection.ts`) — a plain code constant, not an env var, since nothing about this rule needs to vary by deployment. It's a rolling 7×24-hour period, not a calendar-aligned one, and it's anchored to the *candidate ticket's original* `created_at` — merging an additional report bumps `updated_at` and `member_count` but never resets or extends the window itself, so a ticket stays eligible for exactly 7 days from when it was first created, regardless of how many reports merge into it in the meantime. The comparison (`created_at > now() - make_interval(days => 7)`) is a strict `>`, so a ticket created *exactly* 7 days ago is excluded, not included. `now()` is PostgreSQL database time, evaluated once at the start of the enclosing transaction — never application/Node.js time or client-submitted time — and both sides of the comparison are `timestamptz`, so the result is unaffected by session or client timezone.
  
 ---
  
@@ -369,7 +371,7 @@ The 30 mm/h cap is defensible because it is the PAGASA rainfall intensity ceilin
 C = min( ln(1 + member_count) / ln(1 + 10), 1.0 )
 ```
  
-Cap at 10 members. State the cap and the reason (diminishing informational value per additional duplicate) in the paper.
+Cap at 10 members. State the cap and the reason (diminishing informational value per additional duplicate) in the paper. `member_count` is defensively clamped to >= 0 before the log (negative counts have no valid meaning and would otherwise yield a negative value, `-Infinity`, or `NaN`), though it is never negative in current practice. The log base is irrelevant to the result — `ln(1+n)/ln(11)` is base-invariant by the change-of-base identity, so any consistent base would produce the same ratio.
  
 **Bands**: score under 0.40 is Low, 0.40 to 0.70 is Medium, above 0.70 is Critical. Tune after seeding test data.
  
@@ -594,7 +596,7 @@ originally framed — see notes. Q3–Q5 are still genuinely open.
 1. ~~Express to NestJS: refactor, or amend the paper and spend those days on the triage engine?~~ — **MOOT, not just answered.** The app is Next.js API routes directly, neither Express nor NestJS. Remove this framework choice from the paper entirely rather than picking a side.
 2. ~~Guest reporting: keep it (and add it to Scope with a justification) or drop it?~~ — **RESOLVED.** Citizen accounts are required; there is no guest/anonymous reporting mode at all. Stronger than either option originally listed here (Turnstile-gated keep, or drop) — it was dropped entirely.
 3. Downstream flow mapping: delete, rename and disclaim, or implement D8 properly as a stretch goal? — still open, unchanged.
-4. Weights w1, w2, w3: hold at 1/3 each until the LGU consultation, or build an admin-configurable weight panel now? A configurable panel is a good answer to "how did you choose the weights" because it makes the provisional nature explicit rather than hiding it. — still open, unchanged (weights are hardcoded 1/3 each in `lib/triage/urgency.ts`).
+4. Weights w1, w2, w3: hold at 1/3 each until the LGU consultation, or build an admin-configurable weight panel now? A configurable panel is a good answer to "how did you choose the weights" because it makes the provisional nature explicit rather than hiding it. — still open, unchanged (weights are hardcoded 1/3 each in `api/src/domain/urgency.ts`).
 5. Deduplication radii: confirm the 25 / 50 / 100 m tiers with the CEO during consultation. Their field crews will know whether two potholes 30 m apart are one job or two. — still open, unchanged.
 
 ---

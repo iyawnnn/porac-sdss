@@ -204,7 +204,7 @@ export default async function MyReportsPage() {
         <StatTile
           label="Critical"
           value={criticalCount}
-          caption="High-severity"
+          caption="High-urgency"
           note="Live totals based on your submitted hazard reports."
           tint="var(--color-urgency-critical-tint)"
           ink="var(--color-urgency-critical-ink)"

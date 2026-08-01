@@ -23,7 +23,7 @@ export const reportSchema = z.object({
   category: z.enum(CATEGORIES),
   citizenSeverity: z.enum(SEVERITIES),
   // Sanity range only — the real location gate is ST_Contains against the
-  // 33 barangay polygons, not a hardcoded bounding box (see PLAN.md §4.1/§12).
+  // barangay polygons, not a hardcoded bounding box (see PLAN.md §4.1/§12).
   lat: z.coerce.number().min(MUNICIPALITY.minLat).max(MUNICIPALITY.maxLat),
   lng: z.coerce.number().min(MUNICIPALITY.minLng).max(MUNICIPALITY.maxLng),
 });

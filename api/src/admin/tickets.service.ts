@@ -68,6 +68,7 @@ export interface AdminTicketGeoRow {
   urgency_score: number | null;
   urgency_band: string | null;
   priority_index: number | null;
+  priority_score: number | null;
   lat: number;
   lng: number;
   title: string | null;
@@ -256,7 +257,7 @@ export class TicketsService {
     const sql = this.pg;
     return sql<AdminTicketGeoRow[]>`
       SELECT t.id, t.category, t.status, t.assigned_office, b.name AS barangay_name,
-        t.urgency_score, t.urgency_band, t.priority_index, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
+        t.urgency_score, t.urgency_band, t.priority_index, t.priority_score, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
         r.title, r.image_url
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id

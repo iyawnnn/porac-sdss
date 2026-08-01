@@ -17,6 +17,7 @@ import { RecomputeService } from '../domain/recompute.service';
 import { officeForCategory } from '../common/utils/office';
 import { radiusForCategory } from '../common/utils/radius';
 import { haversineMeters } from '../common/utils/distance';
+import { DUPLICATE_MERGE_WINDOW_DAYS } from '../common/utils/duplicate-detection';
 import { computeUrgency } from '../domain/urgency';
 import type { ReportInput } from '../contracts/schemas';
 import type { CitizenSession } from '../auth/session.service';
@@ -26,6 +27,13 @@ import type { CitizenSession } from '../auth/session.service';
 const LOCATION_MISMATCH_THRESHOLD_M = 100;
 const STALE_PHOTO_HOURS = 24;
 const DUPLICATE_HAMMING_THRESHOLD = 10; // out of 64 bits; ponytail: tune if false-positive rate matters later
+
+// Deliberately count-agnostic — the actual barangay count is config-driven
+// (MUNICIPALITY.barangayCount) and has changed before (GADM's 33 -> PSGC's
+// 29); a hardcoded number here just drifts again next time the boundary
+// dataset changes.
+export const OUTSIDE_MUNICIPALITY_MESSAGE =
+  "This location falls outside the Municipality of Porac. Reports can only be filed within the municipality's supported barangay boundaries.";
 
 export interface SubmitReportResult {
   reportId: number;
@@ -127,13 +135,11 @@ export class ReportsService {
       );
     }
 
-    // Step 2: exact polygon containment — reject outright if outside all
-    // 33 barangays (PLAN.md §4.1/§12).
+    // Step 2: exact polygon containment — reject outright if outside every
+    // configured barangay (PLAN.md §4.1/§12).
     const barangay = await this.barangay.findBarangayForPoint(lat, lng);
     if (!barangay) {
-      throw new BadRequestException(
-        "This location falls outside Municipality of Porac's 33 barangays. Reports can only be filed within city limits.",
-      );
+      throw new BadRequestException(OUTSIDE_MUNICIPALITY_MESSAGE);
     }
 
     // Step 3: elevation, office, radius, elevation bounds, rain.
@@ -217,14 +223,16 @@ export class ReportsService {
       // limitation — "attempted to lock invisible tuple".)
       await tx`SELECT pg_advisory_xact_lock(hashtext(${category}), ${barangay.id})`;
 
-      // PLAN.md §6: same category, active ticket, created in the last 7
-      // days, within the category's tiered radius.
+      // PLAN.md §6: same category, active ticket, created within the last
+      // DUPLICATE_MERGE_WINDOW_DAYS days (anchored to the ticket's original
+      // created_at — merging additional reports never slides this window),
+      // within the category's tiered radius.
       const [existing] = await tx<{ id: number; member_count: number }[]>`
         SELECT id, member_count
         FROM tickets
         WHERE category = ${category}
           AND status IN ('Reported', 'Under Review', 'In Progress')
-          AND created_at > now() - interval '7 days'
+          AND created_at > now() - make_interval(days => ${DUPLICATE_MERGE_WINDOW_DAYS})
           AND ST_DWithin(
             geom::geography,
             ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography,
