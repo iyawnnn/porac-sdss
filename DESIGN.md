@@ -4,7 +4,7 @@ Civic infrastructure reporting for Municipality of Porac. Two audiences, one sys
 
 The system optimizes for **reading speed and low cognitive load**, not visual interest. Every color that carries meaning carries exactly one meaning.
 
-> **Status:** design specification only. Nothing in this document is implemented yet. See §9 for the ordered implementation plan and §8 for the defects it fixes.
+> **Status:** implemented. The five phases in §9 have been executed and verified (see PLAN.md's "Design / frontend pass" entry for the phase-by-phase completion record and Playwright computed-style test results). This document remains the reference for the token/component rules those phases followed — §8 records the defects it fixed.
 
 ---
 
@@ -43,7 +43,7 @@ Deep institutional blue was chosen over teal for maximum hue distance from the w
 
 **Applies to `urgency_band` only.** Ticket list badge, ticket detail score, map pin. Never a button, never a border, never a nav element, and never `citizen_severity` (see §5.4).
 
-Three bands, matching `lib/triage/urgency.ts` exactly: `< 0.40` Low · `0.40–0.70` Medium · `> 0.70` Critical. There is no fourth band.
+Three bands, matching `api/src/domain/urgency.ts` (and its frontend display-only duplicate, `lib/utils/urgency.ts`) exactly: `< 0.40` Low · `0.40–0.70` Medium · `> 0.70` Critical. There is no fourth band.
 
 | Band | Solid | Tint bg | Ink | Edge |
 |---|---|---|---|---|

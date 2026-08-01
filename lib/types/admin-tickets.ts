@@ -93,6 +93,7 @@ export interface AdminTicketGeoRow {
   urgency_score: number | null;
   urgency_band: string | null;
   priority_index: number | null;
+  priority_score: number | null;
   lat: number;
   lng: number;
   title: string | null;

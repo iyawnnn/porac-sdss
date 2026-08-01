@@ -10,7 +10,7 @@ export class AppConfigService {
   constructor(@Inject(PG) private readonly pg: Sql) {}
 
   // elev_min/elev_max are fixed constants seeded in Phase 0 (config table),
-  // computed via ST_Contains against the 33 barangay polygons. Never
+  // computed via ST_Contains against the barangay polygons. Never
   // recomputed live — see scripts/verify-config.ts.
   async getElevationBounds(): Promise<{ elevMin: number; elevMax: number }> {
     const rows = await this.pg<{ key: string; value: string }[]>`

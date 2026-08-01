@@ -17,7 +17,10 @@
       "Bash(nohup pnpm start:dev)",
       "Bash(disown)",
       "Bash(curl -s -w \"\\\\nstatus: %{http_code}\\\\n\" http://localhost:3001/health)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(node_modules/.bin/tsc -p tsconfig.build.json)",
+      "Bash(node_modules/.bin/tsc -p tsconfig.build.json --listFiles)"
     ]
   }
 }
