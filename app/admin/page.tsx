@@ -7,19 +7,19 @@ interface DashboardResponse {
   kpis: DashboardKpis;
   leaderboard: BarangayRiskRow[];
   categories: CategoryDistributionRow[];
-  criticalQueue: AdminTicketRow[];
+  topUrgencyQueue: AdminTicketRow[];
   rain1hMm: number;
 }
 
 export default async function AdminDashboardPage() {
-  const { kpis, leaderboard, categories, criticalQueue, rain1hMm } = await apiGet<DashboardResponse>("/admin/dashboard");
+  const { kpis, leaderboard, categories, topUrgencyQueue, rain1hMm } = await apiGet<DashboardResponse>("/admin/dashboard");
 
   return (
     <DashboardClient
       kpis={kpis}
       leaderboard={leaderboard}
       categories={categories}
-      criticalQueue={criticalQueue}
+      topUrgencyQueue={topUrgencyQueue}
       rain1hMm={rain1hMm}
     />
   );

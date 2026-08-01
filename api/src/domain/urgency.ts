@@ -20,6 +20,13 @@ export interface UrgencyFactors {
 const PRIORITY_HIGH_THRESHOLD = 80;
 const PRIORITY_MEDIUM_THRESHOLD = 50;
 
+// PLAN.md §7: 10 members is the cluster-density saturation/reference
+// point. Logarithmic scaling means each additional duplicate report
+// contributes less than the last (diminishing informational value), so by
+// the 10th member the cluster factor has already reached its ceiling —
+// memberCount >= CLUSTER_SATURATION_MEMBERS always yields clusterFactor 1.
+const CLUSTER_SATURATION_MEMBERS = 10;
+
 // Single source of truth for the priorityScore -> badge mapping, shared by
 // the triage engine (writes urgency_level to the DB) and the frontend badge
 // helper (re-derives it for display) so thresholds never drift apart.
@@ -46,8 +53,15 @@ export function computeUrgency({
 }): UrgencyFactors {
   const elevationFactor = (elevMax - elevationM) / (elevMax - elevMin);
   const precipitationFactor = Math.min(rain1hMm / 30, 1.0);
+  // memberCount is clamped to >= 0 before the log — a negative count has
+  // no valid meaning here, and without the clamp log(1 + negative) can
+  // produce a negative value, -Infinity, or NaN that would corrupt
+  // urgencyScore below. memberCount is never negative in practice (DB
+  // default 1, only ever incremented), but the calculation shouldn't rely
+  // on that being true forever.
   const clusterFactor = Math.min(
-    Math.log(1 + memberCount) / Math.log(1 + 10),
+    Math.log(1 + Math.max(memberCount, 0)) /
+      Math.log(1 + CLUSTER_SATURATION_MEMBERS),
     1.0,
   );
 

@@ -25,7 +25,7 @@ export function TicketPopup({ ticket }: { ticket: AdminTicketGeoRow }) {
     <div className="w-56 space-y-2 text-sm">
       <div className="flex items-center justify-between gap-2">
         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${urgency.className}`}>
-          {ticket.priority_index ?? "—"}
+          {ticket.priority_score ?? "—"}
         </span>
         <span className="rounded-full bg-line-100 px-2 py-0.5 text-xs text-ink-500">{ticket.status}</span>
       </div>

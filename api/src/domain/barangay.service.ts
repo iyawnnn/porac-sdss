@@ -30,17 +30,17 @@ export class BarangayService {
     `;
     if (exact) return { ...exact, viaFallback: false };
 
-    // GADM's barangay polygons have known small edge gaps (e.g. the
-    // Sto. Domingo/Cutcut boundary — confirmed ~283m outside every GADM
+    // The barangay polygons have known small edge gaps (e.g. the
+    // Sto. Domingo/Cutcut boundary — confirmed ~283m outside every
     // polygon despite being a real in-city location). Fall back to OSM's
     // outer city boundary (city_boundary_osm) to decide "in Municipality of Porac at
-    // all", then snap to whichever GADM barangay is geometrically nearest.
+    // all", then snap to whichever barangay is geometrically nearest.
     // OSM is used only for this outer accept/reject check — barangay
-    // identity always comes from GADM's `barangays` table. This is
+    // identity always comes from the PSGC-sourced `barangays` table. This is
     // deliberate for Calibutbut specifically: OSM's Municipality of Porac relation
     // carries an unresolved tag ("confirm boundaries, currently includes
     // Barangay Calibutbut of Bacolor"), but since Calibutbut was never one
-    // of GADM's 33 Porac barangays to begin with, that data-quality
+    // of Porac's configured barangays to begin with, that data-quality
     // caveat has no path into barangay assignment regardless.
     const [inCity] = await sql<{ in_city: boolean }[]>`
       SELECT ST_Contains(geom, ${point}) AS in_city FROM city_boundary_osm LIMIT 1
