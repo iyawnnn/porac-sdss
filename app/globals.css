@@ -2,31 +2,28 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Token layer v2 — see DESIGN.md §2-§4 for full rationale. DESIGN.md is the
+/* Token layer v2  see DESIGN.md 2-4 for full rationale. DESIGN.md is the
    authoritative spec; the old v1 rationale comments this file used to carry
    are superseded. Hex is canonical.
 
-   Architecture: every semantic token below is declared once, at its
-   citizen/light (default) value. The admin shell does not get a second set
-   of token names — it overrides these same custom properties under the
-   `[data-shell="admin"]` selector (applied once, at app/admin/layout.tsx's
-   authenticated wrapper). Every component keeps using the same
-   `bg-canvas`/`text-ink-700`/`bg-brand-500`/etc. utility classes regardless
-   of which shell it renders in — the shell decides the values, not the
-   component. This is the same override mechanism Tailwind v4 uses for
-   `.dark {}`, aimed at a shell attribute instead of a color-scheme class. */
+   Architecture: semantic PORAC data colors remain global. The authenticated
+   admin shell consumes the neutral shadcn surface and sidebar tokens from
+   the approved Efferd composition; it does not mutate root or body theme
+   attributes. */
 @theme {
-  /* Brand — chrome only, never data (DESIGN.md §4.3) */
+  --breakpoint-dashboard: 75rem;
+  --breakpoint-wide: 85rem;
+  /* Brand  chrome only, never data (DESIGN.md 4.3) */
   --color-brand-50: #eff5fc;
   --color-brand-100: #d8e6f7;
   --color-brand-300: #8fb6de;
-  --color-brand-400: #5b9be0; /* admin dark-surface accent — same hue, lighter tint */
+  --color-brand-400: #5b9be0; /* admin dark-surface accent  same hue, lighter tint */
   --color-brand-500: #2b6cb0;
   --color-brand-600: #22578e;
   --color-brand-700: #1a4570;
   --color-brand-900: #102943;
 
-  /* Urgency — urgency_band only, never chrome (DESIGN.md §4.4) */
+  /* Urgency  urgency_band only, never chrome (DESIGN.md 4.4) */
   --color-urgency-low: #d99a00;
   --color-urgency-low-tint: #fdf3d7;
   --color-urgency-low-ink: #6b4a00;
@@ -42,8 +39,8 @@
   --color-urgency-critical-ink: #8a1d12;
   --color-urgency-critical-edge: #eda9a1;
 
-  /* Status — ticket_status. Under Review / In Progress reuse the brand
-     ramp exactly (DESIGN.md §4.5); only Reported and Resolved need their
+  /* Status  ticket_status. Under Review / In Progress reuse the brand
+     ramp exactly (DESIGN.md 4.5); only Reported and Resolved need their
      own tokens since they sit outside that progression. */
   --color-status-reported-tint: #f1f3f5;
   --color-status-reported-ink: #434b54;
@@ -52,23 +49,34 @@
   --color-status-resolved-tint: #e3f5ee;
   --color-status-resolved-ink: #0b5741;
   --color-status-resolved-dot: #0f7a5a;
+  --color-lifecycle-reported: #4f86c6;
+  --color-lifecycle-under-review: #c27a2c;
+  --color-lifecycle-in-progress: #7966ad;
+  --color-lifecycle-resolved: #0f7a5a;
+  --color-lifecycle-rejected: #bd4246;
+  --color-severity-critical: oklch(0.577 0.245 27.325);
+  --color-severity-high: oklch(0.66 0.16 55);
+  --color-severity-medium: oklch(0.66 0.13 82);
+  --color-severity-low: oklch(0.55 0.08 150);
+  --color-office-meo: oklch(0.58 0.13 190);
+  --color-office-mdrrmo: oklch(0.58 0.14 305);
 
-  /* Integrity / moderation flags — violet, off every other ramp (DESIGN.md §4.6) */
+  /* Integrity / moderation flags  violet, off every other ramp (DESIGN.md 4.6) */
   --color-flag: #7b2fa8;
   --color-flag-tint: #f3e8fb;
   --color-flag-ink: #5b2178;
   --color-flag-edge: #ddbdf0;
 
-  /* Map accents — terrain/waterway/lahar/infra-safety (DESIGN.md §4.7).
+  /* Map accents  terrain/waterway/lahar/infra-safety (DESIGN.md 4.7).
      Map-only, never UI chrome, identical in both shells since they describe
      map data, not chrome. Not verified/claimed as official Porac LGU colors. */
-  --color-terrain: #6b8f5a;
-  --color-terrain-tint: rgb(107 143 90 / 15%);
-  --color-waterway: #2e8da8;
-  --color-lahar: #8a6a4a;
-  --color-infra-safety: #c9a227;
+  --color-terrain: #5f7f63;
+  --color-terrain-tint: rgb(95 127 99 / 15%);
+  --color-waterway: #3b82a0;
+  --color-lahar: #9a6a3a;
+  --color-infra-safety: #d99a22;
 
-  /* Neutrals (DESIGN.md §4.1) — citizen/light default */
+  /* Neutrals (DESIGN.md 4.1)  citizen/light default */
   --color-canvas: #f7f9fb;
   --color-surface: #ffffff;
   --color-surface-elevated: #fbfcfd;
@@ -81,14 +89,19 @@
 }
 
 /* Font variables come from next/font (see app/layout.tsx) as runtime CSS
-   custom properties on <html> — "inline" so Tailwind references them
+   custom properties on <html>  "inline" so Tailwind references them
    instead of trying to resolve a static value at build time. --font-sans
-   now resolves to Inter (Inter Display isn't a real Google Font — verified
-   against next/font/google's catalog; see app/layout.tsx). */
+   now resolves to Inter (Inter Display isn't a real Google Font  verified
+   against next/font/google's catalog; see app/layout.tsx), with an explicit
+   system-ui fallback chain appended so Apple devices may render native San
+   Francisco if Inter somehow fails to load  no SF Pro font file is bundled
+   or committed; system-ui/-apple-system are OS-provided, not downloaded. */
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -131,8 +144,8 @@
 
 html {
   /* Lets the browser interpolate Inter's opsz axis from rendered font-size
-     instead of pinning one optical size everywhere — the verified
-     "Display" substitute (DESIGN.md §3.1/§3.2). No-op, not a regression, in
+     instead of pinning one optical size everywhere  the verified
+     "Display" substitute (DESIGN.md 3.1/3.2). No-op, not a regression, in
      browsers that don't support it. */
   font-optical-sizing: auto;
 }
@@ -146,7 +159,7 @@ body {
    --border, --ring, the --sidebar family, set in :root below) is what the
    Sidebar, Breadcrumb, Avatar, Collapsible, DropdownMenu, and Tooltip
    primitives actually render with. citizen/light values are shadcn's own
-   neutral defaults (unchanged from init) — reasonable as-is, since no citizen
+   neutral defaults (unchanged from init)  reasonable as-is, since no citizen
    surface currently uses those primitives. */
 :root {
   --background: oklch(1 0 0);
@@ -183,90 +196,7 @@ body {
   --sidebar-ring: oklch(0.708 0 0);
 }
 
-/* Admin shell — fixed dark theme, not a toggle (DESIGN.md §0/§2/§5). Applied
-   once, on the authenticated wrapper in app/admin/layout.tsx. Never applied
-   to /admin/login (renders outside this wrapper) or to any citizen route,
-   so dark tokens cannot leak into either. */
-[data-shell="admin"] {
-  /* PORAC semantic tokens */
-  --color-canvas: #0e1116;
-  --color-surface: #14171d;
-  --color-surface-elevated: #1b1f27;
-  --color-line-100: #1e222a;
-  --color-line-200: #262b33;
-  --color-ink-400: #6b7280;
-  --color-ink-500: #9aa3af;
-  --color-ink-700: #e6e9ee;
-  --color-ink-900: #f5f7fa;
-  --color-brand-500: #5b9be0;
-  --color-brand-600: #3e6e9e;
-
-  /* Urgency — dark-surface-safe variants, same hue anchors (DESIGN.md §4.4) */
-  --color-urgency-low: #e3a825;
-  --color-urgency-low-tint: #2b2412;
-  --color-urgency-low-ink: #f2d98a;
-  --color-urgency-low-edge: #4a3d1a;
-
-  --color-urgency-medium: #e8763a;
-  --color-urgency-medium-tint: #2e1f14;
-  --color-urgency-medium-ink: #f5b98a;
-  --color-urgency-medium-edge: #4d3120;
-
-  --color-urgency-critical: #e5453a;
-  --color-urgency-critical-tint: #2e1614;
-  --color-urgency-critical-ink: #f5b8b3;
-  --color-urgency-critical-edge: #5a2b26;
-
-  /* Status — dark-surface-safe variants (DESIGN.md §4.5) */
-  --color-status-reported-tint: #1c1f24;
-  --color-status-reported-ink: #9aa3af;
-  --color-status-reported-dot: #5b6472;
-
-  --color-status-resolved-tint: #12291f;
-  --color-status-resolved-ink: #5fcba0;
-  --color-status-resolved-dot: #2fa579;
-
-  /* Integrity flags — dark-surface-safe variant (DESIGN.md §4.6) */
-  --color-flag: #b285d6;
-  --color-flag-tint: #241a2e;
-  --color-flag-ink: #d9bcee;
-  --color-flag-edge: #3d2a4a;
-
-  /* Restrained admin radius scale (DESIGN.md §7: sm 3 / md 4 / lg 6) */
-  --radius: 0.375rem;
-
-  /* shadcn's generic palette, retargeted to the same dark tokens above so
-     Sidebar/Breadcrumb/Avatar/Collapsible/DropdownMenu/Tooltip render dark
-     without per-component overrides. */
-  --background: #0e1116;
-  --foreground: #e6e9ee;
-  --card: #14171d;
-  --card-foreground: #e6e9ee;
-  --popover: #1b1f27;
-  --popover-foreground: #e6e9ee;
-  --primary: #5b9be0;
-  --primary-foreground: #0e1116;
-  --secondary: #1b1f27;
-  --secondary-foreground: #e6e9ee;
-  --muted: #1b1f27;
-  --muted-foreground: #9aa3af;
-  --accent: #1b1f27;
-  --accent-foreground: #f5f7fa;
-  --destructive: #e5453a;
-  --border: #262b33;
-  --input: #262b33;
-  --ring: #5b9be0;
-  --sidebar: #14171d;
-  --sidebar-foreground: #e6e9ee;
-  --sidebar-primary: #5b9be0;
-  --sidebar-primary-foreground: #0e1116;
-  --sidebar-accent: #1b1f27;
-  --sidebar-accent-foreground: #f5f7fa;
-  --sidebar-border: #262b33;
-  --sidebar-ring: #5b9be0;
-}
-
-/* Accessibility floor (DESIGN.md §11) — no focus styling existed before this. */
+/* Accessibility floor (DESIGN.md 11)  no focus styling existed before this. */
 :focus-visible {
   outline: 2px solid var(--color-brand-500);
   outline-offset: 2px;

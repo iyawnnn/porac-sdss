@@ -10,12 +10,14 @@ import "./globals.css";
 const interSans = Inter({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-  axes: ["opsz"],
+  axes: ["opsz"], // optical sizing — the variable font's real opsz axis (14-32)
+  display: "swap", // explicit, not relied on as next/font's implicit default
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {

@@ -1,12 +1,21 @@
-// Query functions (getDashboardKpis, getBarangayRiskRanking,
-// getCategoryDistribution) were ported to api/src/admin/dashboard.service.ts
-// (NestJS) — see PLAN blueprint Phase 4/8. This file now only carries the
-// row shapes that client components still `import type`.
+export const DASHBOARD_RANGES = [7, 30, 90] as const;
+export type DashboardRange = (typeof DASHBOARD_RANGES)[number];
+
 export interface DashboardKpis {
   active_count: number;
-  critical_count: number;
+  high_urgency_count: number;
+  reports_this_month_count: number;
   avg_resolution_hours_30d: number | null;
-  resolved_24h_count: number;
+}
+
+export interface IncidentTrendRow {
+  date: string;
+  report_count: number;
+}
+
+export interface DistributionRow {
+  label: string;
+  count: number;
 }
 
 export interface BarangayRiskRow {
@@ -19,4 +28,5 @@ export interface BarangayRiskRow {
 export interface CategoryDistributionRow {
   category: string;
   active_count: number;
+  active_total: number;
 }

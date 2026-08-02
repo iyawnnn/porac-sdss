@@ -70,13 +70,22 @@ export default function MapClient({ office }: { office?: "MEO" | "MDRRMO" }) {
   const [showBoundaries, setShowBoundaries] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
-    const qs = office ? `?office=${office}` : "";
-    fetch(`/api/admin/tickets/geo${qs}`)
-      .then((res) => res.ok ? res.json() : Promise.reject(new Error("Unable to load tickets")))
-      .then((data: AdminTicketGeoRow[]) => setTickets(data))
-      .catch(() => setTickets([]))
-      .finally(() => setLoading(false));
+    const controller = new AbortController();
+    const loadTickets = async () => {
+      setLoading(true);
+      const qs = office ? `?office=${office}` : "";
+      try {
+        const response = await fetch(`/api/admin/tickets/geo${qs}`, { signal: controller.signal });
+        if (!response.ok) throw new Error("Unable to load tickets");
+        setTickets(await response.json() as AdminTicketGeoRow[]);
+      } catch {
+        if (!controller.signal.aborted) setTickets([]);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+    void loadTickets();
+    return () => controller.abort();
   }, [office]);
 
   useEffect(() => {

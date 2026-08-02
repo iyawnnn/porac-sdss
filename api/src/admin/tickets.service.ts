@@ -38,6 +38,7 @@ export interface AdminTicketFilters {
 export interface AdminTicketRow {
   id: number;
   category: string;
+  title: string | null;
   barangay_id: number;
   barangay_name: string;
   member_count: number;
@@ -218,7 +219,9 @@ export class TicketsService {
     // (filters + search) can't drift between a separate count query and the
     // row query.
     const rows = await sql<(AdminTicketRow & { total_count: number })[]>`
-      SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, t.member_count,
+      SELECT t.id, t.category,
+        (SELECT r.title FROM reports r WHERE r.ticket_id = t.id ORDER BY r.created_at ASC, r.id ASC LIMIT 1) AS title,
+        t.barangay_id, b.name AS barangay_name, t.member_count,
         t.urgency_score, t.urgency_band, t.priority_index, t.priority_score, t.urgency_level,
         t.assigned_office, t.status, t.created_at,
         COUNT(*) OVER ()::int AS total_count
