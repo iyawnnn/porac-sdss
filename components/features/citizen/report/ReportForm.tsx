@@ -75,7 +75,6 @@ const CARD_CLASS = "bg-white rounded-2xl shadow-sm border border-line-200 p-6 sm
 
 type ExifStatus = "idle" | "processing" | "verified" | "missing" | "outside";
 type BarangayFeature = Feature<Polygon | MultiPolygon, { name?: string; NAME_4?: string; ADM4_EN?: string }>;
-type SearchOption = { label: string; lat: number; lng: number };
 
 function MapController({ target, position }: { target: L.LatLng | null; position: L.LatLng | null }) {
   const map = useMap();
@@ -247,7 +246,7 @@ export default function ReportForm() {
   const [exifStatus, setExifStatus] = useState<ExifStatus>("idle");
   const [barangayFeatures, setBarangayFeatures] = useState<BarangayFeature[]>([]);
   const [municipalBoundary, setMunicipalBoundary] = useState<FeatureCollection | null>(null);
-  const [detectedBarangay, setDetectedBarangay] = useState<string | null>(null);
+  const detectedBarangay = useMemo(() => findBarangay(barangayFeatures, position), [barangayFeatures, position]);
   const [locationError, setLocationError] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -268,9 +267,6 @@ export default function ReportForm() {
       .then(setMunicipalBoundary);
   }, []);
 
-  useEffect(() => {
-    setDetectedBarangay(findBarangay(barangayFeatures, position));
-  }, [barangayFeatures, position]);
 
   const barangayGeoJson = useMemo<FeatureCollection | null>(() => {
     if (barangayFeatures.length === 0) return null;
@@ -402,7 +398,6 @@ export default function ReportForm() {
       setPositionRaw(null);
       setExifPosition(null);
       setSearchTarget(null);
-      setDetectedBarangay(null);
       setLocationSource("default");
       setExifStatus("idle");
     } else {

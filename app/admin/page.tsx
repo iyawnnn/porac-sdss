@@ -1,26 +1,37 @@
+import { Suspense } from "react";
 import { apiGet } from "@/lib/api-client";
-import type { AdminTicketRow } from "@/lib/types/admin-tickets";
-import type { DashboardKpis, BarangayRiskRow, CategoryDistributionRow } from "@/lib/types/admin-dashboard";
+import type {
+  BarangayRiskRow,
+  CategoryDistributionRow,
+  DashboardKpis,
+  DistributionRow,
+  IncidentTrendRow,
+  DashboardRange,
+} from "@/lib/types/admin-dashboard";
 import { DashboardClient } from "@/components/features/admin/dashboard/DashboardClient";
+import { DashboardError, DashboardSkeleton } from "@/components/features/admin/dashboard/DashboardStates";
 
 interface DashboardResponse {
   kpis: DashboardKpis;
   leaderboard: BarangayRiskRow[];
   categories: CategoryDistributionRow[];
-  topUrgencyQueue: AdminTicketRow[];
-  rain1hMm: number;
+  incidentTrend: IncidentTrendRow[];
+  statusDistribution: DistributionRow[];
+  departmentWorkload: DistributionRow[];
+  citizenSeverityDistribution: DistributionRow[];
+  range: DashboardRange;
 }
 
-export default async function AdminDashboardPage() {
-  const { kpis, leaderboard, categories, topUrgencyQueue, rain1hMm } = await apiGet<DashboardResponse>("/admin/dashboard");
+async function DashboardData() {
+  let data: DashboardResponse;
+  try {
+    data = await apiGet<DashboardResponse>("/admin/dashboard");
+  } catch (err) {
+    return <DashboardError detail={err instanceof Error ? err.message : undefined} />;
+  }
+  return <DashboardClient initialData={data} />;
+}
 
-  return (
-    <DashboardClient
-      kpis={kpis}
-      leaderboard={leaderboard}
-      categories={categories}
-      topUrgencyQueue={topUrgencyQueue}
-      rain1hMm={rain1hMm}
-    />
-  );
+export default function AdminDashboardPage() {
+  return <Suspense fallback={<DashboardSkeleton />}><DashboardData /></Suspense>;
 }
