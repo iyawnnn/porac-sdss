@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
+// "Inter Display" is not a real Google Font (verified against next/font/google's
+// catalog — only "Inter" and "Inter Tight" exist). Inter's variable font ships a
+// real opsz axis (14-32) instead, requested here and paired with
+// `font-optical-sizing: auto` in globals.css — the verified substitute for a
+// separate display cut, with no unverified font file downloaded or committed.
+const interSans = Inter({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  axes: ["opsz"],
 });
 
 const geistMono = Geist_Mono({
@@ -25,7 +31,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${interSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
