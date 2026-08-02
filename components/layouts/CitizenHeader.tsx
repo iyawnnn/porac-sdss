@@ -7,6 +7,7 @@ const NAV_LINKS = [
   { href: "/map", label: "Map" },
   { href: "/reports", label: "My Reports" },
   { href: "/report", label: "Report Hazard" },
+  { href: "/account", label: "Account" },
 ];
 
 export default function CitizenHeader({ session }: { session: CitizenSession }) {

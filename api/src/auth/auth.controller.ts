@@ -17,6 +17,10 @@ import {
   SESSION_COOKIE,
   SessionService,
 } from './session.service';
+import {
+  citizenCookieOptions,
+  CITIZEN_SESSION_MAX_AGE_MS,
+} from './citizen-cookie.util';
 import type { Env } from '../config/env';
 
 interface LoginBody {
@@ -81,7 +85,7 @@ export class AuthController {
     res.cookie(
       CITIZEN_SESSION_COOKIE,
       token,
-      this.cookieOptions(30 * 24 * 60 * 60),
+      citizenCookieOptions(this.config, CITIZEN_SESSION_MAX_AGE_MS),
     );
     return { ok: true };
   }
@@ -101,7 +105,7 @@ export class AuthController {
     res.cookie(
       CITIZEN_SESSION_COOKIE,
       token,
-      this.cookieOptions(30 * 24 * 60 * 60),
+      citizenCookieOptions(this.config, CITIZEN_SESSION_MAX_AGE_MS),
     );
     return { ok: true };
   }
