@@ -14,7 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminSidebar session={session} />
         <SidebarInset className="bg-muted">
           <AdminHeader session={session} />
-          <main className="mx-auto flex w-full max-w-(--app-wrapper-max-width) min-w-0 flex-1 flex-col p-4 md:p-6">{children}</main>
+          <main className="mx-auto flex w-full min-h-0 max-w-(--app-wrapper-max-width) min-w-0 flex-1 flex-col p-4 md:p-6">{children}</main>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

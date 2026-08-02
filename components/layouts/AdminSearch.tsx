@@ -57,7 +57,7 @@ export function AdminSearch({ sections }: { sections: AdminSearchSection[] }) {
         <InputGroupAddon align="inline-start" className="pl-1.75"><Search /></InputGroupAddon>
         <InputGroupInput aria-label="Open command palette" placeholder="Search..." readOnly tabIndex={-1} value="" />
         <InputGroupAddon align="inline-end">
-          <KbdGroup><Kbd suppressHydrationWarning>{isMac ? "⌘" : "Ctrl"}</Kbd><Kbd>K</Kbd></KbdGroup>
+          <KbdGroup className="gap-1"><Kbd className="h-4 border border-border bg-muted/70 px-1 text-[10px]" suppressHydrationWarning>{isMac ? "⌘" : "Ctrl"}</Kbd><Kbd className="h-4 min-w-4 border border-border bg-muted/70 px-1 text-[10px]">K</Kbd></KbdGroup>
         </InputGroupAddon>
       </InputGroup>
       <CommandDialog onOpenChange={setOpen} open={open} title="Admin navigation" description="Search for a page to navigate to">

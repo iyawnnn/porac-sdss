@@ -226,6 +226,26 @@ body {
   animation: ticket-pulse 1.8s ease-in-out infinite;
 }
 
+/* Admin map category markers (lib/gis/categoryMarker.tsx) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â subtle hover
+   scale on the inner pin div, not the Leaflet-positioned wrapper itself
+   (which carries an inline transform for placement that a CSS hover rule
+   must not fight). */
+.map-marker-pin {
+  transition: transform 120ms ease;
+  transform-origin: center;
+}
+.leaflet-marker-icon:hover .map-marker-pin,
+.leaflet-marker-icon:focus-visible .map-marker-pin {
+  transform: scale(1.15);
+}
+
+/* Compact popup chrome for the admin map's TicketPopup ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â replaces Leaflet's
+   default asymmetric content margin/shadow with the app's own Card-like
+   surface (the popup content supplies its own padding). */
+.leaflet-popup.admin-ticket-popup .leaflet-popup-content-wrapper { background: transparent; border-radius: 0; box-shadow: none; padding: 0; }
+.leaflet-popup.admin-ticket-popup .leaflet-popup-content { margin: 0; width: auto !important; }
+.leaflet-popup.admin-ticket-popup .leaflet-popup-tip-container { display: none; }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -237,3 +257,14 @@ body {
     @apply font-sans;
   }
 }
+
+/* The map route is an operations workspace, not a constrained document page. */
+main:has(> .admin-map-workspace) {
+  max-width: none;
+  margin-inline: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.leaflet-marker-icon, .leaflet-interactive { cursor: pointer; }
+.leaflet-interactive:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
