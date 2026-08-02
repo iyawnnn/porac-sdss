@@ -8,7 +8,7 @@ import type { AdminSession } from "@/lib/auth/session";
 import { Button } from "@/components/ui/button";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail, useSidebar } from "@/components/ui/sidebar";
 import OfficeScopeToggle from "@/components/features/admin/shared/OfficeScopeToggle";
-import { AdminSearch, type AdminSearchItem } from "@/components/layouts/AdminSearch";
+import { AdminSearch } from "@/components/layouts/AdminSearch";
 import { AdminSidebarTrigger } from "@/components/layouts/AdminSidebarTrigger";
 
 interface NavItem { href: string; label: string; icon: LucideIcon; }
@@ -20,7 +20,6 @@ const NAV_SECTIONS: { heading: string; items: NavItem[] }[] = [
   ] },
   { heading: "Management", items: [{ href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert }] },
 ];
-const SEARCH_ITEMS: AdminSearchItem[] = NAV_SECTIONS.flatMap((section) => section.items.map(({ href, label }) => ({ href, label })));
 
 function isActivePath(pathname: string, href: string): boolean {
   return href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -47,7 +46,7 @@ export default function AdminSidebar({ session }: { session: AdminSession }) {
         <AdminSidebarTrigger place="sidebar" />
       </SidebarHeader>
       <SidebarContent role="navigation" aria-label="Admin">
-        <SidebarGroup><AdminSearch items={SEARCH_ITEMS} /></SidebarGroup>
+        <SidebarGroup><AdminSearch sections={NAV_SECTIONS} /></SidebarGroup>
         {NAV_SECTIONS.map((section) => (
           <SidebarGroup key={section.heading}>
             <SidebarGroupLabel className="group-data-[collapsible=icon]:pointer-events-none">{section.heading}</SidebarGroupLabel>
