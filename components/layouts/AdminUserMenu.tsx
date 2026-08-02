@@ -22,7 +22,7 @@ export function AdminUserMenu({ session }: { session: AdminSession }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger aria-label="Open administrator menu" asChild>
-        <button type="button"><Avatar className="size-8"><AvatarFallback>{initials(session.adminName)}</AvatarFallback></Avatar></button>
+        <button className="cursor-pointer rounded-full focus-visible:outline-none" type="button"><Avatar className="size-8"><AvatarFallback>{initials(session.adminName)}</AvatarFallback></Avatar></button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="flex items-center gap-3">
