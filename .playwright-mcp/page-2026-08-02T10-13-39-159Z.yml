@@ -1,0 +1,16 @@
+- generic [active] [ref=f22e1]:
+  - main [ref=f22e3]:
+    - generic [ref=f22e4]:
+      - generic [ref=f22e5]:
+        - button "Toggle Sidebar"
+      - navigation "breadcrumb" [ref=f22e6]:
+        - list [ref=f22e7]:
+          - listitem [ref=f22e8]:
+            - link "Interactive Map" [disabled] [ref=f22e9]
+      - generic [ref=f22e10]:
+        - button "Help is not yet available" [disabled]
+        - button "Notifications are not yet available" [disabled]
+        - button "Open administrator menu" [ref=f22e11]:
+          - generic [ref=f22e12]: MA
+    - main [ref=f22e14]
+  - button "Open Next.js Dev Tools" [ref=f22e20] [cursor=pointer]

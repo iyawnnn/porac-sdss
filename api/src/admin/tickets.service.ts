@@ -15,6 +15,7 @@ import {
 } from '../common/utils/scoring';
 import type { UrgencyLevel } from '../domain/urgency';
 import type { AdminSession } from '../auth/session.service';
+import { CATEGORIES } from '../contracts/schemas';
 import {
   TICKET_STATUSES,
   PAGE_LIMITS,
@@ -28,6 +29,7 @@ export interface AdminTicketFilters {
   office?: 'MEO' | 'MDRRMO';
   status?: 'active' | 'all' | TicketStatus;
   urgency?: string;
+  category?: string;
   barangayId?: number;
   sort?: TicketSort;
   search?: string;
@@ -38,6 +40,7 @@ export interface AdminTicketFilters {
 export interface AdminTicketRow {
   id: number;
   category: string;
+  title: string | null;
   barangay_id: number;
   barangay_name: string;
   member_count: number;
@@ -146,7 +149,10 @@ export class TicketsService {
     query: Record<string, string | undefined>,
     sessionOffice?: 'MEO' | 'MDRRMO',
   ): Required<Pick<AdminTicketFilters, 'status' | 'sort' | 'page' | 'limit'>> &
-    Pick<AdminTicketFilters, 'office' | 'urgency' | 'barangayId' | 'search'> {
+    Pick<
+      AdminTicketFilters,
+      'office' | 'urgency' | 'category' | 'barangayId' | 'search'
+    > {
     const office =
       query.office === 'all'
         ? undefined
@@ -161,6 +167,11 @@ export class TicketsService {
         : 'active';
     const urgency = ['Low', 'Medium', 'Critical'].includes(query.urgency ?? '')
       ? query.urgency
+      : undefined;
+    const category = (CATEGORIES as readonly string[]).includes(
+      query.category ?? '',
+    )
+      ? query.category
       : undefined;
     const barangayId = query.barangayId ? Number(query.barangayId) : undefined;
     const sort: TicketSort =
@@ -179,6 +190,7 @@ export class TicketsService {
       office,
       status: status ?? 'active',
       urgency,
+      category,
       barangayId,
       sort,
       search,
@@ -218,7 +230,9 @@ export class TicketsService {
     // (filters + search) can't drift between a separate count query and the
     // row query.
     const rows = await sql<(AdminTicketRow & { total_count: number })[]>`
-      SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, t.member_count,
+      SELECT t.id, t.category,
+        (SELECT r.title FROM reports r WHERE r.ticket_id = t.id ORDER BY r.created_at ASC, r.id ASC LIMIT 1) AS title,
+        t.barangay_id, b.name AS barangay_name, t.member_count,
         t.urgency_score, t.urgency_band, t.priority_index, t.priority_score, t.urgency_level,
         t.assigned_office, t.status, t.created_at,
         COUNT(*) OVER ()::int AS total_count
@@ -227,6 +241,7 @@ export class TicketsService {
       WHERE (${filters.office ?? null}::text IS NULL OR t.assigned_office = ${filters.office ?? null}::office)
         ${statusClause}
         AND (${filters.urgency ?? null}::text IS NULL OR t.urgency_band = ${filters.urgency ?? null})
+        AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
         AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
         AND (
           ${search}::text IS NULL

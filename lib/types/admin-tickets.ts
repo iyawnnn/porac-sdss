@@ -10,6 +10,7 @@ import type { UrgencyLevel } from "@/lib/utils/urgency";
 export interface AdminTicketRow {
   id: number;
   category: string;
+  title: string | null;
   barangay_id: number;
   barangay_name: string;
   member_count: number;

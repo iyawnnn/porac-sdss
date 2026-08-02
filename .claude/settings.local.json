@@ -20,7 +20,14 @@
       "Bash(git check-ignore *)",
       "Bash(echo \"EXIT: $?\")",
       "Bash(node_modules/.bin/tsc -p tsconfig.build.json)",
-      "Bash(node_modules/.bin/tsc -p tsconfig.build.json --listFiles)"
+      "Bash(node_modules/.bin/tsc -p tsconfig.build.json --listFiles)",
+      "Bash(pnpm exec *)",
+      "Bash(pnpm lint *)",
+      "Bash(git stash *)",
+      "mcp__plugin_playwright_playwright__browser_navigate",
+      "mcp__plugin_playwright_playwright__browser_fill_form",
+      "mcp__plugin_playwright_playwright__browser_click",
+      "mcp__plugin_playwright_playwright__browser_type"
     ]
   }
 }
