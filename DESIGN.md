@@ -1,14 +1,29 @@
-# PORAC-SDSS Design System v2
+# PORAC-SDSS Design System v3
 
 Civic infrastructure reporting for the Municipality of Porac. Two audiences, one system: LGU staff (MEO / MDRRMO) working dense ticket queues for hours at a desk, and citizens filing hazard reports outdoors on a phone, often under stress.
 
-> **Status: authoritative, supersedes the prior version.** The document previously at this path (dated to the original Phase 0–5 design pass) is now **historical only** — see §0 for what survived the audit and what didn't, and `git log -- DESIGN.md` for its full prior text. Nothing in the old document should be treated as a constraint just because it was written there; every rule below was re-derived against the current codebase, not copied forward.
+> **Status: authoritative, supersedes v2.** v2 (Linear-inspired, all-dark admin shell) shipped as Phase 0/1 and was reviewed against actual usage feedback: it read as too small, too muted, and without a distinct PORAC identity. v3 keeps v2's architecture (token names, the `[data-shell="admin"]` override mechanism, the anti-glassmorphism/anti-side-stripe rules) but changes the admin shell from all-dark to a **light operational workspace with a navy sidebar**, larger type, and a restrained yellow brand accent. See §0-A for the exact delta. Citizen tokens are untouched by both v2 and v3 — this has only ever been an admin-shell question.
 
-Design direction: **Linear-inspired precision, not Linear's branding.** Clean, quiet, information-dense, operational — the visual register of a serious internal tool, not a marketing surface. PORAC keeps its own hue family, its own type pairing, and its own accent system; nothing here is a reskin of Linear's product.
+Design direction: **Structural clarity in the register of shadcn's own dashboard patterns, not a reskin of any product's brand.** Deep municipal navy (chrome, not data), warm white and white content surfaces, and Porac Yellow as a restrained accent — not a dominant retail-yellow surface. PORAC keeps its own hue family and its own accent system.
 
 ---
 
-## 0. Audit findings — what changed and why
+## 0-A. v3 delta — why the dark shell was replaced
+
+| v2 (dark, Linear-inspired) | v3 (light workspace, navy sidebar) | Why |
+|---|---|---|
+| Whole admin shell (canvas, surface, panels) rendered dark (`#0e1116`/`#14171d`). | Only the **sidebar** is dark (Deep Municipal Navy `#172554`); canvas/surface/panels are light (Warm White `#fafaf7`/white). | Feedback: the all-dark shell read as too small/muted for daily desk use, and didn't carry a distinct PORAC identity — a colored sidebar over a light workspace is a stronger, more legible identity move than a uniformly dark shell. |
+| Admin type scale was restrained/dense (18px page title, 20px KPI number, 11px uppercase micro-labels). | Type scale is larger throughout (26px page title, 30–36px KPI number, 12–13px labels, no uppercase transform). | Same feedback — density was overcorrected; legibility at a glance matters more than fitting more on screen for a queue this size. |
+| Admin brand accent was a lightened blue tint (`--color-brand-400 #5b9be0`) needed only because the canvas was dark. | Brand blue is unchanged from citizen's value (`#2b6cb0`) — no lightened variant needed once the canvas is light again. Porac Yellow (`#F5C518`) is the one new accent, used narrowly (sidebar focus ring, identity avatar) so it never reads as a yellow-dominant retail surface. | Restraint principle unchanged — one new accent, placed with intent, not sprinkled everywhere. |
+| Navigation/heading copy was sentence case with tiny uppercase micro-labels (`ACTIVE HIGH PRIORITY`, `Main workspace`). | Title Case throughout, no uppercase-tracking micro-labels. | Explicit direction: uppercase micro-copy read as SaaS-dashboard cliché at this scale; Title Case reads as more institutional/considered. |
+| Urgency/status/flag tokens needed dark-surface-safe variants under `[data-shell="admin"]`. | **Removed** — the admin canvas is light again, so these render identically to citizen's existing tokens. One less set of variants to keep in sync. | Direct consequence of going light — not a separate decision. |
+| Dashboard: map + leaderboard + category in a left column, queue in a sticky right column — four panels of roughly equal visual weight. | Map promoted to one full-width **primary** panel; leaderboard/category/queue form a **secondary** row of three panels below it. | Explicit direction: "one primary workspace section," structurally inspired by shadcn's own dashboard composition (KPI row → one primary panel → supporting panels), without copying its content or branding. |
+
+**A conflict this delta deliberately did not resolve by adopting a proposed swatch:** an earlier evaluation pass proposed a green-Low/amber-Medium/red-Critical urgency ramp. §4.4's existing amber→orange→red ramp is kept instead — green-for-Low was already rejected once (§0 below, and the original v1 audit) specifically because green reads as "fine/good," which is wrong for a queue where every row is an active hazard. Map accent hex values *were* refined in this pass (same hue families, better tuned against the new light canvas) since no such semantic conflict exists there.
+
+---
+
+## 0. Audit findings — what changed and why (v2, retained for history)
 
 The old document's own status line claimed "implemented... verified via Playwright." That was true structurally (the citizen surfaces genuinely follow it), but a direct read of the current admin code shows the admin half of that claim doesn't hold:
 
@@ -102,19 +117,24 @@ html {
 }
 ```
 
-### 3.3 Type scale — Admin (dense, restrained; no oversized headings)
+**v3 fallback stack.** `@theme inline`'s `--font-sans` appends an explicit system-ui fallback chain after the Inter variable: `var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`. This is **not** a way of shipping SF Pro — no SF Pro (or any Apple system font) file is downloaded, bundled, or committed anywhere in this project. `-apple-system`/`system-ui` are OS-resolved keywords: on an Apple device with Inter somehow unavailable, the browser substitutes whatever system font it already has installed (typically San Francisco) entirely outside this app's control or distribution. The practical effect for everyone else is a graceful fallback to `ui-sans-serif`/`system-ui`, not a visual regression.
 
-Linear's own product headings are modest even on primary pages — this is deliberate, and directly answers the brief's anti-pattern ("oversized headings inside operational views"). The admin page-title shrinks from the old scale's 20/28 to 18/24; nothing in the admin type scale should ever need to compete with a table row for attention.
+### 3.3 Type scale — Admin (v3: larger, Title Case, no uppercase micro-labels)
+
+v2's dense/restrained admin scale (18px page-title, 11px uppercase labels) is superseded — it read as too small for daily desk use. v3 increases the scale across the board and drops the uppercase-tracking treatment entirely; labels are Title Case at a readable size instead.
 
 | Role | Size / line-height | Weight | Tracking | Family |
 |---|---|---|---|---|
-| `page-title` | 18 / 24 | 600 | −0.01em | Inter |
-| `section-heading` | 14 / 20 | 600 | −0.005em | Inter |
-| `body` (admin default) | 13 / 18 | 400 | 0 | Inter |
-| `body-emphasis` | 13 / 18 | 500 | 0 | Inter |
-| `label` (table headers, micro-labels) | 11 / 14 | 500 | +0.04em, uppercase | Inter |
+| `page-title` | 26 / 32 | 600 | −0.01em | Inter |
+| `section-heading` | 15–16 / 22–24 | 600 | −0.005em | Inter |
+| `body` (admin default) | 14 / 20 | 400 | 0 | Inter |
+| `body-emphasis` | 14 / 20 | 500 | 0 | Inter |
+| `label` (table headers, KPI labels) | 12–13 / 16–18 | 500 | 0, **Title Case, no uppercase transform** | Inter |
 | `data` (IDs, coords, timestamps, counts) | 12 / 16 | 400, `tabular-nums` | 0 | **Geist Mono** |
-| `score` (the one large urgency number, ticket detail only) | 24 / 28 | 600, `tabular-nums` | −0.01em | **Geist Mono** |
+| `kpi-number` (dashboard KPI strip) | 30–36 / 36–40 | 600, `tabular-nums` | −0.01em | Inter (not mono — a KPI headline number is presentation, not a raw system value; see §3.4's data/mono distinction) |
+| `score` (the one large urgency number, ticket detail only) | 28 / 32 | 600, `tabular-nums` | −0.01em | **Geist Mono** |
+
+Navigation labels, section headings, KPI labels, and button/action text are all **Title Case** ("Ticket Queue," "Barangay Risk Leaderboard," "Export Summary (CSV)") — never uppercase-tracked micro-copy, and never all-lowercase sentence fragments for anything that functions as a label rather than a sentence.
 
 ### 3.4 Type scale — Citizen (generous, unchanged accessibility floors)
 
@@ -157,43 +177,54 @@ Hex is canonical, as in v1; `oklch` is a reference for reasoning about hue separ
 
 *(Identical to v1's `--color-canvas/surface/line-100/line-200/ink-400/500/700/900` — only the names are normalized to a `border`/`ink-{primary,secondary,tertiary,heading}` convention so the admin override in §4.2 can reuse the same names. No citizen-visible value actually changes.)*
 
-### 4.2 Neutrals — Admin shell (dark, `[data-shell="admin"]` override)
+### 4.2 Neutrals — Admin shell (v3: light workspace, `[data-shell="admin"]` override)
 
-A blue-tinted near-black, not a pure `#000` — Linear's own dark surfaces avoid true black for the same reason (pure black next to white text creates more perceived glare, not less).
+**Superseded from v2's dark palette.** The admin canvas is light again — Warm White, not near-black. The only deliberately dark surface in the admin shell now is the sidebar itself (§4.3-Sidebar below), which has its own separate token family and isn't part of this table.
 
 | Token | Hex | Use |
 |---|---|---|
-| `--color-canvas` | `#0E1116` | Page background |
-| `--color-surface` | `#14171D` | Sidebar, table body, panel fill |
-| `--color-surface-elevated` | `#1B1F27` | Popovers, sheets, dropdowns, dialogs |
-| `--color-border` | `#262B33` | Panel borders, input borders |
-| `--color-border-subtle` | `#1E222A` | Row dividers — barely visible, Linear-like hairline weight |
-| `--color-ink-primary` | `#E6E9EE` | Body text (off-white, not pure white — reduces glare) |
-| `--color-ink-secondary` | `#9AA3AF` | Secondary text, table headers |
-| `--color-ink-tertiary` | `#6B7280` | Meta, placeholders, disabled |
-| `--color-ink-heading` | `#F5F7FA` | Headings |
+| `--color-canvas` | `#FAFAF7` | Page background (Warm White) |
+| `--color-surface` | `#FFFFFF` | Cards, table body, panel fill |
+| `--color-surface-elevated` | `#FFFFFF` | Popovers, sheets, dropdowns, dialogs — same as `surface`; elevation reads via shadow, not a tone shift |
+| `--color-border` | `#E5E7EB` | Panel borders, input borders |
+| `--color-border-subtle` | `#F3F4F6` | Row dividers (Soft Gray) |
+| `--color-ink-primary` | `#1F2937` | Body text (Charcoal) |
+| `--color-ink-secondary` | `#667085` | Secondary text, table headers (Muted Text) |
+| `--color-ink-tertiary` | `#98A2B3` | Meta, placeholders, disabled |
+| `--color-ink-heading` | `#111827` | Headings |
 
-### 4.3 Municipal accent (brand) — shared hue, shell-tuned lightness
+### 4.3 Municipal accent (brand) and the navy sidebar
 
-Deliberately kept in the same institutional-blue hue family as v1 (~220–250°) rather than drifting toward Linear's own indigo/violet (~255–265°) — this is the explicit "don't copy Linear's brand identity" decision made concrete. Same reasoning as v1: maximum hue distance from the warm urgency ramp.
+Brand blue is unchanged from citizen's value in both shells — the admin canvas is light again, so citizen's existing brand ramp already has correct contrast; **no lightened dark-surface variant is needed** (v2's `--color-brand-400`/`--color-brand-300-dark` are removed).
 
 | Token | Hex | Shell | Use |
 |---|---|---|---|
-| `--color-brand-50` | `#EFF5FC` | Citizen | Subtle fills, Under Review pill |
-| `--color-brand-100` | `#D8E6F7` | Citizen | Selected row, active chip |
-| `--color-brand-300` | `#8FB6DE` | Citizen | Decomposition bar segment |
-| `--color-brand-500` | `#2B6CB0` | Citizen | Primary button, link, focus ring |
-| `--color-brand-600` | `#22578E` | Citizen | Hover/active |
-| `--color-brand-700` | `#1A4570` | Citizen | Nav accents, heading emphasis |
-| `--color-brand-900` | `#102943` | Citizen | Deepest text on brand tints |
-| `--color-brand-400` | `#5B9BE0` | **Admin** | Primary accent on dark surfaces — lighter tint of the same hue, tuned for ≥4.5:1 against `#0E1116`/`#14171D` |
-| `--color-brand-300-dark` | `#3E6E9E` | **Admin** | Hover/pressed state on dark surfaces |
+| `--color-brand-50` | `#EFF5FC` | Both | Subtle fills, Under Review pill |
+| `--color-brand-100` | `#D8E6F7` | Both | Selected row, active chip |
+| `--color-brand-300` | `#8FB6DE` | Both | Decomposition bar segment |
+| `--color-brand-500` | `#2B6CB0` | Both | Primary button, link, focus ring |
+| `--color-brand-600` | `#22578E` | Both | Hover/active |
+| `--color-brand-700` | `#1A4570` | Both | Nav accents, heading emphasis |
+| `--color-brand-900` | `#102943` | Both | Deepest text on brand tints |
 
-### 4.4 Urgency ramp (`urgency_band`) — concept unchanged, dark-safe variant added
+**The sidebar — Deep Municipal Navy, the one deliberately dark surface.** Uses shadcn's own `--sidebar*` token family (separate from the tokens above, so the sidebar can be dark while the content area is light without a second override layer):
 
-Applies to `urgency_band` only, exactly as in v1: `< 0.40` Low · `0.40–0.70` Medium · `> 0.70` Critical. Same asymmetry rule as v1: **Low and Medium stay tinted, Critical stays solid** — in a 40-row queue, three equal pastels give every row the same visual weight; Critical needs to win the scan.
+| Token | Hex | Use |
+|---|---|---|
+| `--sidebar` | `#172554` | Sidebar background (Deep Municipal Navy) |
+| `--sidebar-foreground` | `#F8FAFC` | Nav labels, body text on navy |
+| `--sidebar-primary` | `#F5C518` | Porac Yellow — identity avatar fill only, restrained |
+| `--sidebar-primary-foreground` | `#172554` | Navy text on the yellow avatar fill |
+| `--sidebar-accent` | `#1E3A6E` | Active nav item fill — full-fill, never a side-stripe (§10) |
+| `--sidebar-accent-foreground` | `#FFFFFF` | Active nav item text — "clear white active state" |
+| `--sidebar-border` | `#24407A` | Hairline dividers within the sidebar |
+| `--sidebar-ring` | `#F5C518` | Porac Yellow — keyboard focus ring on nav items only |
 
-**Citizen / light (unchanged from v1):**
+**Why yellow appears in exactly two places (focus ring, avatar fill) and nowhere else:** the brief explicitly warns against "the retail/promotional feel of a yellow-dominant website." A functional focus ring only shows up when a keyboard user is actually tabbing through nav, and an avatar fill is a small, contained identity marker — both read as intentional accents rather than a yellow-branded surface. Buttons, links, and primary actions stay brand blue (`--primary` in §4.2's shadcn mapping) specifically so the workspace doesn't tip into "yellow website."
+
+### 4.4 Urgency ramp (`urgency_band`) — unchanged in v3, no shell variant needed
+
+Applies to `urgency_band` only: `< 0.40` Low · `0.40–0.70` Medium · `> 0.70` Critical. **Same asymmetry rule as always: Low and Medium stay tinted, Critical stays solid** — in a 40-row queue, three equal pastels give every row the same visual weight; Critical needs to win the scan.
 
 | Band | Solid | Tint | Ink | Edge |
 |---|---|---|---|---|
@@ -201,70 +232,54 @@ Applies to `urgency_band` only, exactly as in v1: `< 0.40` Low · `0.40–0.70` 
 | Medium | `#E2680E` | `#FDE7D3` | `#8A3A00` | `#F5C09A` |
 | Critical | `#C42B1C` (white text) | — | — | — |
 
-**Admin / dark (new — same hue anchors, re-lit for a dark canvas):**
+**A green-Low/amber-Medium/red-Critical alternative was evaluated for v3 and rejected** — green reads as "fine/good," which is the wrong signal for a queue where every row is an active hazard (this exact reasoning is why the original ramp was warm-only from the start). Since the admin canvas is light again, v2's dark-surface-safe urgency variant is also no longer needed — one ramp, both shells.
 
-| Band | Solid | Tint | Ink | Edge |
-|---|---|---|---|---|
-| Low | `#E3A825` | `#2B2412` | `#F2D98A` | `#4A3D1A` |
-| Medium | `#E8763A` | `#2E1F14` | `#F5B98A` | `#4D3120` |
-| Critical | `#E5453A` (white text) | — | — | — |
+Band names are always spelled out in text (never color-only), and map pins keep encoding band redundantly via size + ring weight.
 
-Band names are always spelled out in text (never color-only), and map pins keep encoding band redundantly via size + ring weight — both unchanged from v1, both still required for colorblind users under a warm-only ramp.
+### 4.5 Status progression (`ticket_status`) — unchanged in v3, no shell variant needed
 
-### 4.5 Status progression (`ticket_status`) — concept unchanged, dark-safe variant added
-
-Still a cool progression reusing the brand ramp exactly (Under Review / In Progress = brand tokens verbatim), still never a saturated brand fill (so a pill is never mistaken for a button), still switching to a cool green for Resolved so "done" never reads as "low urgency."
-
-**Citizen / light (unchanged):** Reported `#F1F3F5`/`#434B54`/`#98A2AC` · Under Review `brand-50`/`brand-700`/`brand-500` · In Progress `brand-100`/`brand-900`/`brand-600` · Resolved `#E3F5EE`/`#0B5741`/`#0F7A5A`.
-
-**Admin / dark (new):** Reported `#1C1F24`/`#9AA3AF`/`#5B6472` · Under Review `#17232E`/`#8FBEEA`/`brand-400` · In Progress `#1B2E42`/`#BFDCF5`/`#3E6E9E` · Resolved `#12291F`/`#5FCBA0`/`#2FA579`.
+Still a cool progression reusing the brand ramp exactly (Under Review / In Progress = brand tokens verbatim), still never a saturated brand fill (so a pill is never mistaken for a button), still switching to a cool green for Resolved so "done" never reads as "low urgency." One set of values, both shells: Reported `#F1F3F5`/`#434B54`/`#98A2AC` · Under Review `brand-50`/`brand-700`/`brand-500` · In Progress `brand-100`/`brand-900`/`brand-600` · Resolved `#E3F5EE`/`#0B5741`/`#0F7A5A`.
 
 ### 4.6 Integrity / moderation flags — retained exactly, no changes
 
-Covers `LOCATION_MISMATCH`, `STALE_PHOTO`, `NO_EXIF`, `DUPLICATE_IMAGE`, `BOUNDARY_FALLBACK`. Violet (~300°) stays isolated from brand, urgency, and status in both shells — this was already correct in v1 and needed no redesign.
+Covers `LOCATION_MISMATCH`, `STALE_PHOTO`, `NO_EXIF`, `DUPLICATE_IMAGE`, `BOUNDARY_FALLBACK`. Violet (~300°) stays isolated from brand, urgency, and status. One set of values, both shells (no shell variant needed now that admin's canvas is light): `--color-flag` `#7B2FA8` · `--color-flag-tint` `#F3E8FB` · `--color-flag-ink` `#5B2178` · `--color-flag-edge` `#DDBDF0`.
 
-| Token | Light (citizen) | Dark (admin) |
-|---|---|---|
-| `--color-flag` | `#7B2FA8` | `#B285D6` |
-| `--color-flag-tint` | `#F3E8FB` | `#241A2E` |
-| `--color-flag-ink` | `#5B2178` | `#D9BCEE` |
-| `--color-flag-edge` | `#DDBDF0` | `#3D2A4A` |
-
-### 4.7 Map accent colors — new, map-only, never UI chrome
+### 4.7 Map accent colors — refined hex, same hue families, map-only, never UI chrome
 
 Three original accents for Leaflet layers (admin `/admin/map`, citizen `/map`), each chosen for domain fit to Porac's actual hazard geography (near Mt. Pinatubo — lahar and terrain are not decorative color choices, they're the literal subject matter of two report categories). **These never appear as buttons, badges, or any interactive chrome** — same one-meaning-per-channel rule as urgency/status/flags, just extended to three new channels.
 
 | Token | Hex | Use |
 |---|---|---|
-| `--color-terrain` | `#6B8F5A` | Elevation/contour shading, terrain-type overlay |
-| `--color-terrain-tint` | `rgba(107,143,90,0.15)` | Low-opacity choropleth fill |
-| `--color-waterway` | `#2E8DA8` | Rivers, flood-prone-zone overlay (kept ~30° away from municipal blue's hue so the two are never confused on the same map) |
-| `--color-lahar` | `#8A6A4A` | Lahar/earth-material terrain layer — deliberately desaturated and shifted brown-warm relative to urgency-low's saturated amber, so the two never collide even though both sit in a similar hue neighborhood |
-| `--color-infra-safety` | `#C9A227` | Infrastructure-hazard iconography only (exposed wiring, damaged guardrail) in map legends — never a UI color |
+| `--color-terrain` | `#5F7F63` | Elevation/contour shading, terrain-type overlay |
+| `--color-terrain-tint` | `rgba(95,127,99,0.15)` | Low-opacity choropleth fill |
+| `--color-waterway` | `#3B82A0` | Rivers, flood-prone-zone overlay (kept ~30° away from municipal blue's hue so the two are never confused on the same map) |
+| `--color-lahar` | `#9A6A3A` | Lahar/earth-material terrain layer — deliberately desaturated and shifted brown-warm relative to urgency-low's saturated amber, so the two never collide even though both sit in a similar hue neighborhood |
+| `--color-infra-safety` | `#D99A22` | Infrastructure-hazard iconography only (exposed wiring, damaged guardrail) in map legends — never a UI color |
 
 ### 4.8 Focus and selection
 
-| State | Citizen | Admin |
-|---|---|---|
-| Focus ring | `2px solid var(--color-brand-500)`, `outline-offset: 2px` | `2px solid var(--color-brand-400)`, `outline-offset: 2px` |
-| Active nav item | n/a (no persistent nav rail on citizen) | Full-fill `--color-surface-elevated` background + `--color-ink-heading` text + medium weight. **No side-stripe border** — this is the direct fix for `AdminSidebar.tsx`'s current `border-l-2 border-indigo-500` pattern. |
-| Selected table row | `--color-brand-50` background | `--color-brand-400` at ~12% opacity background |
-| Hover row | `--color-canvas` (unchanged reasoning from v1: must never equal the Under-Review pill's tint) | `--color-surface-elevated` |
+| State | Citizen | Admin content area | Admin sidebar |
+|---|---|---|---|
+| Focus ring | `2px solid var(--color-brand-500)`, `outline-offset: 2px` | Same — `--color-brand-500` unchanged (§4.3) | `--sidebar-ring` (Porac Yellow `#F5C518`) — the one place yellow shows up as a functional accent (§4.3) |
+| Active nav item | n/a (no persistent nav rail on citizen) | n/a | Full-fill `--sidebar-accent` background + `--sidebar-accent-foreground` (white) text + medium weight. **No side-stripe border.** |
+| Selected table row | `--color-brand-50` background | `--color-brand-50` background (same as citizen — light canvas again) | n/a |
+| Hover row | `--color-canvas` (must never equal the Under-Review pill's tint) | `--color-canvas` (same reasoning) | `--sidebar-accent` at reduced opacity |
 
 ---
 
 ## 5. Admin shell specification
 
-- **Fixed dark theme**, via `[data-shell="admin"]` on the root layout wrapper (§2) — not a toggle, not `prefers-color-scheme`.
-- **Sidebar**: recommend migrating `AdminSidebar.tsx` onto shadcn's `Sidebar` primitive (§6) rather than continuing to hand-roll the mobile-drawer/collapse logic it currently reimplements. Compact — same icon+label density as today, same two-section grouping (Main Workspace / Moderation), but:
-  - Active item = full fill, not a side stripe (§4.8).
-  - Sidebar surface = `--color-surface` (`#14171D`), not `slate-950`.
-  - No `indigo-500` anywhere — office badge and active states use `brand-400`.
-- **Headers/toolbars**: flat `--color-surface` + `1px --color-border` bottom border. No `backdrop-blur`, no translucent background, anywhere.
-- **Tables**: dense, 36–40px row height (tightened from the 44px — `h-11` — currently in `TicketsWorkspace.tsx`), `13px`/`body` text, sticky header, `--color-border-subtle` row dividers, no zebra striping (unchanged reasoning from v1 — alternating fills compete with urgency badges).
-- **Cards/panels**: `--color-surface` fill, `1px --color-border`, radius `md` (§7), **no shadow** except where a layer is genuinely floating (dropdown, popover, dialog).
+- **Light operational workspace with a navy sidebar** (v3; supersedes v2's fixed-dark shell), via `[data-shell="admin"]` on the root layout wrapper (§2) — not a toggle, not `prefers-color-scheme`. The sidebar is the one deliberately dark/colored surface; canvas, panels, and tables are light.
+- **Sidebar**: shadcn's `Sidebar` primitive, Deep Municipal Navy background (§4.3), same two-section grouping (Main Workspace / Moderation), Title Case labels (§3.3, no uppercase transform).
+  - Active item = full fill on `--sidebar-accent`, white text, not a side stripe (§4.8).
+  - No `slate`/`indigo` anywhere — the sidebar's own token family (`--sidebar*`) drives every color.
+  - Porac Yellow appears exactly twice: the keyboard focus ring (`--sidebar-ring`) and the identity avatar fill (`--sidebar-primary`) — restrained by design (§4.3).
+- **Headers/toolbars**: flat `--color-surface` (white) + `1px --color-border` bottom border. No `backdrop-blur`, no translucent background, anywhere.
+- **Tables**: dense, 36–40px row height, `14px`/`body` text (v3 scale, §3.3), sticky header, `--color-border-subtle` row dividers, no zebra striping (alternating fills compete with urgency badges).
+- **Cards/panels**: `--color-surface` (white) fill, `1px --color-border`, radius `md` (§7), **no shadow** except where a layer is genuinely floating (dropdown, popover, dialog).
 - **Map-first surfaces** (`/admin/map`, dashboard's mini-map): the map is the primary content, not a card *inside* a card — no nested chrome around the Leaflet container beyond a single `1px` border.
-- **KPI tiles** (dashboard): flat `--color-surface` + `1px --color-border`, radius `md`, **no glass, no shadow** — this is the direct replacement for `GLASS_CARD`.
+- **KPI tiles** (dashboard): flat white `--color-surface` + `1px --color-border`, radius `md`, **larger numbers** (30–36px, §3.3) — no glass, no shadow.
+- **Dashboard composition** (v3): KPI row → **one** full-width primary panel (the map) → a secondary row of supporting panels (leaderboard, category, urgency queue), rather than several equal-weight panels beside the map. Structurally inspired by shadcn's own dashboard composition pattern — content, branding, and exact styling are PORAC's own, not copied.
 
 ## 6. Citizen shell specification
 
@@ -313,7 +328,7 @@ Applies to the primitives already installed (`Button`, `Badge`, `Separator`, `To
 | **Tooltip** | Nothing structural. | Everything — used sparingly (office-code abbreviations, truncated mono IDs). Needs a `TooltipProvider` wrap at the relevant layout root the first time it's actually used (not yet). |
 | **Sidebar** *(not yet installed)* | Heavy retokenization: dark-shell colors, full-fill active state instead of side-stripe, same two-section grouping `AdminSidebar.tsx` already has. Recommended as the replacement for the hand-rolled sidebar — it already solves collapsible/mobile-drawer/keyboard nav that `AdminSidebar.tsx` currently reimplements by hand. | Collapse/keyboard-nav mechanics. |
 | **Table** *(not yet installed)* | Row height, text size, divider color, sticky-header behavior tuned to §5's density spec. Recommended as the replacement for `TicketsWorkspace.tsx`'s raw `<table>`. | Structural markup (`<Table>`, `<TableHeader>`, `<TableRow>`, etc.) — no reason to hand-roll what shadcn already provides correctly. |
-| **Tabs** *(not yet installed)* | Active-indicator color → `brand-400`/`brand-500` per shell. Recommended for ticket detail (`Overview` / `Priority breakdown` / `Member reports`) instead of one long scroll. | Everything else. |
+| **Tabs** *(not yet installed)* | Active-indicator color → `brand-500` (one value, both shells — no shell-specific variant needed since v3). Recommended for ticket detail (`Overview` / `Priority breakdown` / `Member reports`) instead of one long scroll. | Everything else. |
 | **Dialog** *(not yet installed)* | Surface/overlay color per shell. Recommended for status-change and office-reassignment confirmations. | Everything else. |
 | **Command** *(not yet installed)* | Minimal — surface color only. Recommended for a future admin ⌘K ticket-search/jump palette; genuinely Linear-inspired, but **defer** — not urgent, no current entry point needs it yet. | Nearly everything — Command's UX conventions (fuzzy search, keyboard-first) are well-established; users expect them unmodified. |
 | **Breadcrumb** *(not yet installed)* | Mono styling for the ticket-ID segment (`Tickets / #1234`). | Everything else. |

@@ -2,76 +2,37 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Ticket, Map, ShieldAlert, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Map, ShieldAlert, Ticket, type LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarSeparator,
-  useSidebar,
-} from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail, useSidebar } from "@/components/ui/sidebar";
 import OfficeScopeToggle from "@/components/features/admin/shared/OfficeScopeToggle";
-import SignOutButton from "@/components/features/admin/auth/SignOutButton";
+import { AdminSearch, type AdminSearchItem } from "@/components/layouts/AdminSearch";
+import { AdminSidebarTrigger } from "@/components/layouts/AdminSidebarTrigger";
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-}
-
+interface NavItem { href: string; label: string; icon: LucideIcon; }
 const NAV_SECTIONS: { heading: string; items: NavItem[] }[] = [
-  {
-    heading: "Main workspace",
-    items: [
-      { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/admin/tickets", label: "Ticket Queue", icon: Ticket },
-      { href: "/admin/map", label: "Interactive Map", icon: Map },
-    ],
-  },
-  {
-    heading: "Moderation",
-    items: [{ href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert }],
-  },
+  { heading: "Main", items: [
+    { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/admin/tickets", label: "Ticket Queue", icon: Ticket },
+    { href: "/admin/map", label: "Interactive Map", icon: Map },
+  ] },
+  { heading: "Management", items: [{ href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert }] },
 ];
+const SEARCH_ITEMS: AdminSearchItem[] = NAV_SECTIONS.flatMap((section) => section.items.map(({ href, label }) => ({ href, label })));
 
-// "/admin" only matches its own exact path — every other link also matches
-// its nested routes (e.g. /admin/tickets/42) so the parent nav item stays
-// highlighted on detail pages.
 function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/admin") return pathname === "/admin";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? "";
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
-  return (first + last).toUpperCase() || "?";
+  return href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const { isMobile, setOpenMobile } = useSidebar();
   const Icon = item.icon;
   return (
-    <SidebarMenuButton asChild isActive={active}>
-      <Link
-        href={item.href}
-        aria-current={active ? "page" : undefined}
-        onClick={() => {
-          if (isMobile) setOpenMobile(false);
-        }}
-      >
-        <Icon size={18} strokeWidth={1.75} />
-        <span>{item.label}</span>
+    <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+      <Link aria-current={active ? "page" : undefined} href={item.href} onClick={() => { if (isMobile) setOpenMobile(false); }}>
+        <Icon /><span>{item.label}</span>
       </Link>
     </SidebarMenuButton>
   );
@@ -79,48 +40,29 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 
 export default function AdminSidebar({ session }: { session: AdminSession }) {
   const pathname = usePathname();
-
   return (
-    <Sidebar collapsible="offcanvas">
-      <SidebarHeader className="px-3 py-3">
-        <span className="px-1 text-sm font-semibold tracking-tight text-sidebar-foreground">
-          PORAC-SDSS
-        </span>
+    <Sidebar className={cn("*:data-[slot=sidebar-inner]:bg-background", "transition-[left,right,top,width]")} collapsible="offcanvas" variant="sidebar">
+      <SidebarHeader className="h-(--app-header-height,3rem) flex-row items-center justify-between">
+        <Button asChild variant="ghost"><Link href="/admin"><LayoutDashboard /><span className="font-medium">Porac SDSS</span></Link></Button>
+        <AdminSidebarTrigger place="sidebar" />
       </SidebarHeader>
-
       <SidebarContent role="navigation" aria-label="Admin">
+        <SidebarGroup><AdminSearch items={SEARCH_ITEMS} /></SidebarGroup>
         {NAV_SECTIONS.map((section) => (
           <SidebarGroup key={section.heading}>
-            <SidebarGroupLabel>{section.heading}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {section.items.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <NavLink item={item} active={isActivePath(pathname, item.href)} />
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
+            <SidebarGroupLabel className="group-data-[collapsible=icon]:pointer-events-none">{section.heading}</SidebarGroupLabel>
+            <SidebarMenu>{section.items.map((item) => <SidebarMenuItem key={item.href}><NavLink active={isActivePath(pathname, item.href)} item={item} /></SidebarMenuItem>)}</SidebarMenu>
           </SidebarGroup>
         ))}
       </SidebarContent>
-
-      <SidebarSeparator />
-
-      <SidebarFooter className="gap-2 px-2 pb-3">
-        <div className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2 py-1.5">
-          <Avatar size="sm">
-            <AvatarFallback>{initials(session.adminName)}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-sidebar-foreground">{session.adminName}</p>
-            <p className="truncate text-[11px] text-muted-foreground">{session.office} · {session.role}</p>
-          </div>
+      <SidebarFooter className="px-4">
+        <div className="rounded-lg border bg-background px-3 pt-4 pb-3">
+          <p className="font-medium text-xs">Current office scope</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">Signed in as {session.adminName} {"\u00b7"} {session.office}</p>
+          <div className="mt-3"><OfficeScopeToggle myOffice={session.office} /></div>
         </div>
-
-        <OfficeScopeToggle myOffice={session.office} />
-        <SignOutButton />
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }
