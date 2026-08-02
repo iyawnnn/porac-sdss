@@ -1,0 +1,137 @@
+- generic [active] [ref=f23e1]:
+  - generic [ref=f23e2]:
+    - generic [ref=f23e5]:
+      - generic [ref=f23e6]:
+        - link "Porac SDSS" [ref=f23e7] [cursor=pointer]:
+          - /url: /admin
+        - button "Toggle Sidebar" [ref=f23e9]
+      - navigation "Admin" [ref=f23e11]:
+        - generic [ref=f23e12]:
+          - button [ref=f23e13] [cursor=pointer]:
+            - group [ref=f23e14]
+            - textbox "Open command palette" [ref=f23e18]:
+              - /placeholder: Search...
+            - group [ref=f23e19]:
+              - generic [ref=f23e20]:
+                - generic: Ctrl
+                - generic: K
+          - generic [ref=f23e21]:
+            - heading "Admin navigation" [level=2] [ref=f23e22]
+            - paragraph [ref=f23e23]: Search for a page to navigate to
+        - generic [ref=f23e24]:
+          - generic [ref=f23e25]: Main
+          - list [ref=f23e26]:
+            - listitem [ref=f23e27]:
+              - link "Dashboard" [ref=f23e28] [cursor=pointer]:
+                - /url: /admin
+            - listitem [ref=f23e35]:
+              - link "Ticket Queue" [ref=f23e36] [cursor=pointer]:
+                - /url: /admin/tickets
+            - listitem [ref=f23e40]:
+              - link "Interactive Map" [ref=f23e41] [cursor=pointer]:
+                - /url: /admin/map
+        - generic [ref=f23e45]:
+          - generic [ref=f23e46]: Management
+          - list [ref=f23e47]:
+            - listitem [ref=f23e48]:
+              - link "Flagged Reports" [ref=f23e49] [cursor=pointer]:
+                - /url: /admin/flagged
+      - generic [ref=f23e54]:
+        - paragraph [ref=f23e55]: Current office scope
+        - paragraph [ref=f23e56]: Signed in as MEO Administrator · MEO
+        - link "View full city" [ref=f23e58] [cursor=pointer]:
+          - /url: /admin/map?office=all
+      - button "Toggle Sidebar" [ref=f23e62]
+    - main [ref=f23e63]:
+      - generic [ref=f23e64]:
+        - generic [ref=f23e65]:
+          - button "Toggle Sidebar"
+        - navigation "breadcrumb" [ref=f23e66]:
+          - list [ref=f23e67]:
+            - listitem [ref=f23e68]:
+              - link "Interactive Map" [disabled] [ref=f23e69]
+        - generic [ref=f23e70]:
+          - button "Help is not yet available" [disabled]
+          - button "Notifications are not yet available" [disabled]
+          - button "Open administrator menu" [ref=f23e71]:
+            - generic [ref=f23e72]: MA
+      - main [ref=f23e74]:
+        - generic [ref=f23e84]:
+          - generic [ref=f23e85]:
+            - generic [ref=f23e86]:
+              - heading "Interactive Incident Map" [level=1] [ref=f23e87]
+              - paragraph [ref=f23e88]: Monitor infrastructure reports, hazards, and ticket urgency across Porac.
+            - generic [ref=f23e89]:
+              - generic [ref=f23e90]: 8 visible
+              - generic [ref=f23e91]: 0 high urgency
+              - generic [ref=f23e92]: 5 barangays
+          - generic [ref=f23e93]:
+            - generic [ref=f23e94]:
+              - generic [ref=f23e95]:
+                - paragraph [ref=f23e96]: Layer
+                - radiogroup "Map display mode" [ref=f23e97]:
+                  - radio "Pins" [checked] [ref=f23e98]
+                  - radio "Heatmap" [ref=f23e99]
+              - generic [ref=f23e100]:
+                - paragraph [ref=f23e101]: Boundaries
+                - button "Toggle barangay and municipal boundaries" [pressed] [ref=f23e102]: Shown
+              - generic [ref=f23e103]:
+                - paragraph [ref=f23e104]: Office
+                - group [ref=f23e105]:
+                  - link "All" [ref=f23e106] [cursor=pointer]:
+                    - /url: /admin/map?office=all
+                  - link "MEO" [ref=f23e107] [cursor=pointer]:
+                    - /url: /admin/map?office=MEO
+                  - link "MDRRMO" [ref=f23e108] [cursor=pointer]:
+                    - /url: /admin/map?office=MDRRMO
+            - button "Filters" [ref=f23e111]
+            - button "Legend" [ref=f23e115]
+            - generic [ref=f23e118]:
+              - generic:
+                - generic:
+                  - button [ref=f23e149] [cursor=pointer]:
+                    - img "Uneven Sidewalk, Medium urgency" [ref=f23e150]
+                  - button [ref=f23e156] [cursor=pointer]:
+                    - img "Soil Erosion, Low urgency" [ref=f23e157]
+                  - button "4" [ref=f23e160] [cursor=pointer]
+                  - button [ref=f23e162] [cursor=pointer]:
+                    - img "Streetlight Out, Medium urgency" [ref=f23e163]
+                  - button [ref=f23e168] [cursor=pointer]:
+                    - img "Overgrown Vegetation, Medium urgency" [ref=f23e169]
+                - generic [ref=f23e173]:
+                  - generic [ref=f23e176]:
+                    - img "Photo submitted for Streetlight Out in Calzadang Bayu in Calzadang Bayu" [ref=f23e177]
+                    - generic [ref=f23e178]:
+                      - generic [ref=f23e179]: Streetlight Out
+                      - generic [ref=f23e187]:
+                        - paragraph [ref=f23e188]: Streetlight Out in Calzadang Bayu
+                        - paragraph [ref=f23e189]: "Ticket #6"
+                      - generic [ref=f23e190]:
+                        - generic [ref=f23e191]:
+                          - paragraph [ref=f23e192]: Barangay
+                          - paragraph [ref=f23e193]: Calzadang Bayu
+                        - generic [ref=f23e194]:
+                          - paragraph [ref=f23e195]: Office
+                          - paragraph [ref=f23e196]: MEO
+                        - generic [ref=f23e197]:
+                          - paragraph [ref=f23e198]: Status
+                          - generic [ref=f23e199]: Reported
+                        - generic [ref=f23e201]:
+                          - paragraph [ref=f23e202]: Urgency score
+                          - generic [ref=f23e203]: "44"
+                  - button "Close popup" [ref=f23e205] [cursor=pointer]: ×
+              - generic:
+                - generic [ref=f23e206]:
+                  - button "Zoom in" [ref=f23e207] [cursor=pointer]: +
+                  - button "Zoom out" [ref=f23e208] [cursor=pointer]: −
+                - generic [ref=f23e209]:
+                  - link "Leaflet" [ref=f23e210] [cursor=pointer]:
+                    - /url: https://leafletjs.com
+                  - text: "| ©"
+                  - link "OpenStreetMap" [ref=f23e215] [cursor=pointer]:
+                    - /url: https://www.openstreetmap.org/copyright
+                  - text: contributors ©
+                  - link "CARTO" [ref=f23e216] [cursor=pointer]:
+                    - /url: https://carto.com/attributions
+  - button "Open Next.js Dev Tools" [ref=f23e80] [cursor=pointer]
+  - alert [ref=f23e217]
