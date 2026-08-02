@@ -1,253 +1,70 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import type { AdminTicketRow } from "@/lib/types/admin-tickets";
-import type { DashboardKpis, BarangayRiskRow, CategoryDistributionRow } from "@/lib/types/admin-dashboard";
-import { priorityBandClass, priorityScoreBandClass } from "@/lib/utils/ui/priority";
-import { relativeAge } from "@/lib/utils/ui/time";
-import DashboardMiniMapLoader from "./DashboardMiniMapLoader";
+import { useId, useRef, useState, useTransition } from "react";
+import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
+import {
+  DASHBOARD_RANGES,
+  type BarangayRiskRow,
+  type CategoryDistributionRow,
+  type DashboardKpis,
+  type DashboardRange,
+  type DistributionRow,
+  type IncidentTrendRow,
+} from "@/lib/types/admin-dashboard";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import type { DistributionChartItem } from "./DistributionChartUtils";
+import { DistributionDonutChart } from "./DistributionDonutChart";
+import { SeverityRadialChart } from "./SeverityRadialChart";
+import { DepartmentWorkloadComparison } from "./DepartmentWorkloadComparison";
 
-const GLASS_CARD = "rounded-xl border border-slate-200/60 bg-white/90 backdrop-blur-md shadow-sm p-5";
-const FLAT_CARD = "rounded-xl border border-line-200 bg-surface p-5 shadow-sm";
+const SEP = "\u00b7";
+const ACTIVE_STATUS_ORDER = ["Reported", "Under Review", "In Progress"] as const;
+const STATUS_ORDER = ["Reported", "Under Review", "In Progress", "Resolved", "Rejected"] as const;
+const SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"] as const;
+const DEPARTMENT_ORDER = ["MEO", "MDRRMO"] as const;
+const trendChartConfig = { reports: { label: "Submitted reports", color: "var(--color-brand-500)" } } satisfies ChartConfig;
+const statusChartConfig = {
+  reported: { label: "Reported", color: "var(--color-lifecycle-reported)" },
+  "under-review": { label: "Under Review", color: "var(--color-lifecycle-under-review)" },
+  "in-progress": { label: "In Progress", color: "var(--color-lifecycle-in-progress)" },
+  resolved: { label: "Resolved", color: "var(--color-lifecycle-resolved)" },
+  rejected: { label: "Rejected", color: "var(--color-lifecycle-rejected)" },
+} satisfies ChartConfig;
+const severityChartConfig = {
+  critical: { label: "Critical", color: "var(--color-severity-critical)" }, high: { label: "High", color: "var(--color-severity-high)" }, medium: { label: "Medium", color: "var(--color-severity-medium)" }, low: { label: "Low", color: "var(--color-severity-low)" },
+} satisfies ChartConfig;
+const departmentChartConfig = { meo: { label: "MEO", color: "var(--color-office-meo)" }, mdrrmo: { label: "MDRRMO", color: "var(--color-office-mdrrmo)" } } satisfies ChartConfig;
 
-function formatHours(value: number | null): string {
-  if (value === null || !Number.isFinite(Number(value))) return "—";
-  const hours = Number(value);
-  if (hours < 1) return `${Math.round(hours * 60)} min`;
-  if (hours < 48) return `${hours.toFixed(1)} hr`;
-  return `${(hours / 24).toFixed(1)} days`;
-}
+type DashboardData = { kpis: DashboardKpis; leaderboard: BarangayRiskRow[]; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; statusDistribution: DistributionRow[]; departmentWorkload: DistributionRow[]; citizenSeverityDistribution: DistributionRow[]; range?: DashboardRange };
 
-// PAGASA rainfall-intensity bands — same 30mm/h torrential cap already
-// documented against lib/triage/urgency.ts's precipitationFactor.
-function rainLabel(rain1hMm: number): string {
-  if (rain1hMm <= 0) return "No rain";
-  if (rain1hMm < 2.5) return "Light";
-  if (rain1hMm < 7.5) return "Moderate";
-  if (rain1hMm < 15) return "Heavy";
-  if (rain1hMm < 30) return "Intense";
-  return "Torrential";
-}
+function numeric(value: number | string | null | undefined): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
+function formatHours(value: number | string | null | undefined): string { if (value === null || value === undefined || !Number.isFinite(Number(value))) return "\u2014"; const hours = numeric(value); if (hours < 1) return Math.round(hours * 60) + " min"; if (hours < 48) return hours.toFixed(1) + " hr"; return (hours / 24).toFixed(1) + " days"; }
+function formatShortDate(value: string): string { const date = new Date(value + "T00:00:00"); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+function formatLongDate(value: string): string { const date = new Date(value + "T00:00:00"); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }); }
+function chartKey(label: string) { return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""); }
+function distributionItems(rows: DistributionRow[], labels: readonly string[]): DistributionChartItem[] { const counts = new Map(rows.map((row) => [row.label, numeric(row.count)])); return labels.map((label) => ({ key: chartKey(label), label, count: counts.get(label) ?? 0 })); }
+function departmentItems(rows: DistributionRow[]): DistributionChartItem[] { return distributionItems(rows, DEPARTMENT_ORDER); }
 
-function toCsvRow(cells: (string | number)[]): string {
-  return cells.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",");
-}
+function IncidentTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: { date: string; reports: number } }> }) { const row = payload?.[0]?.payload; if (!active || !row) return null; return <div data-testid="incident-chart-tooltip" className="grid min-w-44 gap-1 rounded-lg border bg-background px-3 py-2 text-xs shadow-xl"><p className="font-medium">{formatLongDate(row.date)}</p><div className="flex items-center justify-between gap-4 text-muted-foreground"><span>Submitted reports</span><strong className="font-mono text-sm text-foreground">{numeric(row.reports).toLocaleString()}</strong></div></div>; }
+function RangeControl({ range, isUpdating, onChange }: { range: DashboardRange; isUpdating: boolean; onChange: (range: DashboardRange) => void }) { return <ToggleGroup aria-label="Incident report date range" disabled={isUpdating} onValueChange={(value) => { const nextRange = Number(value); if (DASHBOARD_RANGES.includes(nextRange as DashboardRange)) onChange(nextRange as DashboardRange); }} size="sm" spacing={0} type="single" value={String(range)} variant="outline">{DASHBOARD_RANGES.map((days) => <ToggleGroupItem aria-label={"Last " + days + " Days"} key={days} value={String(days)}>Last {days} Days</ToggleGroupItem>)}</ToggleGroup>; }
 
-function downloadCsv(filename: string, rows: string[]) {
-  const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
+function AnalyticsCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) { return <Card className="@container flex h-full flex-col"><CardHeader className="gap-1 border-b px-4 pt-3 pb-2"><CardTitle>{title}</CardTitle><CardDescription>{description}</CardDescription></CardHeader><CardContent className="flex min-h-0 flex-1 p-0">{children}</CardContent></Card>; }
+function RankedTableCard({ kind, rows }: { kind: "barangay" | "category"; rows: BarangayRiskRow[] | CategoryDistributionRow[] }) { const isBarangay = kind === "barangay"; const tableRows = rows.slice(0, 5); return <Card className="flex h-full flex-col dashboard:col-span-2"><CardHeader className="gap-1"><CardTitle>{isBarangay ? "Barangay Activity" : "Category Distribution"}</CardTitle><CardDescription>{isBarangay ? "Top five barangays by active tickets and workflow priority." : "Top five hazard categories; share uses all active tickets."}</CardDescription></CardHeader><CardContent className="flex-1 p-0"><Table className="border-t"><TableCaption className="sr-only">{isBarangay ? "Top five barangays by active ticket count and workflow priority." : "Top five hazard categories by active ticket count; share is calculated across all active tickets."}</TableCaption><TableHeader><TableRow><TableHead className="pl-6" scope="col">{isBarangay ? "Barangay" : "Category"}</TableHead><TableHead className="text-end" scope="col">Active</TableHead><TableHead className="pr-6 text-end" scope="col">{isBarangay ? "Priority" : "Share"}</TableHead></TableRow></TableHeader><TableBody>{tableRows.map((raw) => { if (isBarangay) { const row = raw as BarangayRiskRow; return <TableRow className="hover:bg-transparent" key={row.barangay_id}><TableCell className="max-w-56 pl-6 font-medium"><Link className="block truncate" href={"/admin/tickets?barangayId=" + row.barangay_id + "&status=active"} title={row.barangay_name}>{row.barangay_name}</Link></TableCell><TableCell className="text-end text-xs tabular-nums text-muted-foreground">{numeric(row.active_count).toLocaleString()}</TableCell><TableCell className="pr-6 text-end text-xs tabular-nums text-muted-foreground">{row.avg_priority === null ? "\u2014" : numeric(row.avg_priority).toFixed(0)}</TableCell></TableRow>; } const row = raw as CategoryDistributionRow; const total = numeric(row.active_total); const share = total > 0 ? numeric(row.active_count) / total * 100 : 0; return <TableRow className="hover:bg-transparent" key={row.category}><TableCell className="max-w-56 pl-6 font-medium"><span className="block truncate" title={row.category}>{row.category}</span></TableCell><TableCell className="text-end text-xs tabular-nums text-muted-foreground">{numeric(row.active_count).toLocaleString()}</TableCell><TableCell className="pr-6 text-end text-xs tabular-nums text-muted-foreground">{Number.isInteger(share) ? share.toFixed(0) : share.toFixed(1)}%</TableCell></TableRow>; })}</TableBody></Table></CardContent></Card>; }
 
-export function DashboardClient({
-  kpis,
-  leaderboard,
-  categories,
-  topUrgencyQueue,
-  rain1hMm,
-}: {
-  kpis: DashboardKpis;
-  leaderboard: BarangayRiskRow[];
-  categories: CategoryDistributionRow[];
-  topUrgencyQueue: AdminTicketRow[];
-  rain1hMm: number;
-}) {
-  const topBarangay = leaderboard[0] ?? null;
-  const maxBarangayCount = Math.max(1, ...leaderboard.map((b) => b.active_count));
-  const maxCategoryCount = Math.max(1, ...categories.map((c) => c.active_count));
-
-  function exportSummary() {
-    const rows = [
-      "Section,Metric,Value",
-      toCsvRow(["KPI", "Active tickets", kpis.active_count]),
-      toCsvRow(["KPI", "Critical priority (>=70)", kpis.critical_count]),
-      toCsvRow(["KPI", "Avg resolution time (30d, hours)", kpis.avg_resolution_hours_30d?.toFixed(2) ?? ""]),
-      toCsvRow(["KPI", "Resolved in last 24h", kpis.resolved_24h_count]),
-      toCsvRow(["KPI", "Current rain rate (mm/h)", rain1hMm]),
-      "",
-      "Barangay,Active tickets,Avg priority",
-      ...leaderboard.map((b) => toCsvRow([b.barangay_name, b.active_count, b.avg_priority?.toFixed(1) ?? ""])),
-      "",
-      "Category,Active tickets",
-      ...categories.map((c) => toCsvRow([c.category, c.active_count])),
-      "",
-      "Ticket ID,Category,Barangay,Urgency,Status",
-      ...topUrgencyQueue.map((t) => toCsvRow([t.id, t.category, t.barangay_name, t.priority_score ?? "", t.status])),
-    ];
-    downloadCsv(`executive-summary-${new Date().toISOString().slice(0, 10)}.csv`, rows);
-  }
-
-  return (
-    <div className="max-w-7xl mx-auto p-6 space-y-4">
-      <header>
-        <p className="text-sm font-medium text-brand-600">Incident command</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink-900">Operations dashboard</h1>
-        <p className="mt-2 text-sm text-ink-500">
-          Live spatial risk, triage load, and environmental telemetry across Porac.
-        </p>
-      </header>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className={GLASS_CARD}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Active high priority queue</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-rose-600">{kpis.critical_count}</p>
-          <p className="mt-1 text-xs text-ink-500">of {kpis.active_count} active tickets citywide</p>
-        </div>
-        <div className={GLASS_CARD}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Primary hotspot barangay</p>
-          <p className="mt-1.5 truncate text-xl font-semibold text-ink-900">{topBarangay?.barangay_name ?? "—"}</p>
-          <p className="mt-1 text-xs text-ink-500">{topBarangay?.active_count ?? 0} active ticket(s)</p>
-        </div>
-        <div className={GLASS_CARD}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">24h resolution velocity</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-emerald-600">
-            {kpis.resolved_24h_count}
-          </p>
-          <p className="mt-1 text-xs text-ink-500">closed today · {formatHours(kpis.avg_resolution_hours_30d)} avg (30d)</p>
-        </div>
-        <div className={GLASS_CARD}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Environmental risk telemetry</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-indigo-600">{rain1hMm}mm/h</p>
-          <p className="mt-1 text-xs text-ink-500">{rainLabel(rain1hMm)} rainfall right now</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
-        <div className="space-y-4">
-          <div className={FLAT_CARD}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="font-semibold text-ink-900">Spatial incident density</h2>
-                <p className="mt-1 text-sm text-ink-500">Priority-weighted heat map of active tickets</p>
-              </div>
-              <Link
-                href="/admin/map"
-                className="shrink-0 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
-              >
-                Open full screen map
-              </Link>
-            </div>
-            <div className="mt-4 overflow-hidden rounded-lg border border-line-100">
-              <DashboardMiniMapLoader />
-            </div>
-          </div>
-
-          <div className={FLAT_CARD}>
-            <h2 className="font-semibold text-ink-900">Barangay spatial risk leaderboard</h2>
-            <p className="mt-1 text-sm text-ink-500">Top 5 barangays by active ticket count and average priority</p>
-            <div className="mt-4 space-y-3">
-              {leaderboard.map((b, i) => (
-                <Link
-                  key={b.barangay_id}
-                  href={`/admin/tickets?barangayId=${b.barangay_id}&status=active`}
-                  className="block rounded-lg border border-line-100 p-3 hover:bg-canvas"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-ink-900">
-                      {i + 1}. {b.barangay_name}
-                    </span>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${priorityBandClass(b.avg_priority)}`}>
-                      avg {b.avg_priority?.toFixed(0) ?? "—"}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-line-100">
-                      <div
-                        className="h-full rounded-full bg-brand-500"
-                        style={{ width: `${(b.active_count / maxBarangayCount) * 100}%` }}
-                      />
-                    </div>
-                    <span className="font-mono text-xs tabular-nums text-ink-500">{b.active_count}</span>
-                  </div>
-                </Link>
-              ))}
-              {leaderboard.length === 0 && <p className="text-sm text-ink-500">No active tickets right now.</p>}
-            </div>
-          </div>
-
-          <div className={FLAT_CARD}>
-            <h2 className="font-semibold text-ink-900">Category workload distribution</h2>
-            <p className="mt-1 text-sm text-ink-500">Active tickets by hazard category</p>
-            <div className="mt-4 space-y-2.5">
-              {categories.map((c) => (
-                <div key={c.category}>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-ink-700">{c.category}</span>
-                    <span className="font-mono tabular-nums text-ink-500">{c.active_count}</span>
-                  </div>
-                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-line-100">
-                    <div
-                      className="h-full rounded-full bg-brand-500"
-                      style={{ width: `${(c.active_count / maxCategoryCount) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-              {categories.length === 0 && <p className="text-sm text-ink-500">No active tickets right now.</p>}
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4 lg:sticky lg:top-4">
-          <div className={FLAT_CARD}>
-            <h2 className="font-semibold text-ink-900">Top urgency queue</h2>
-            <p className="mt-1 text-sm text-ink-500">Top 5 active tickets by urgency</p>
-            <div className="mt-4 space-y-2">
-              {topUrgencyQueue.map((ticket) => (
-                <Link
-                  key={ticket.id}
-                  href={`/admin/tickets/${ticket.id}`}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-line-100 p-3 hover:bg-canvas"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink-900">
-                      #{ticket.id} · {ticket.category}
-                    </p>
-                    <p className="truncate text-xs text-ink-500">
-                      {ticket.barangay_name} · {relativeAge(ticket.created_at, ticket.status)}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-xs font-semibold tabular-nums ${priorityScoreBandClass(ticket.priority_score)}`}
-                  >
-                    {ticket.priority_score ?? "—"}
-                  </span>
-                </Link>
-              ))}
-              {topUrgencyQueue.length === 0 && <p className="text-sm text-ink-500">No active tickets right now.</p>}
-            </div>
-          </div>
-
-          <div className={FLAT_CARD}>
-            <h2 className="font-semibold text-ink-900">Quick actions</h2>
-            <div className="mt-3 space-y-2">
-              <Link
-                href="/admin/flagged"
-                className="block rounded-md border border-line-200 px-3 py-2 text-sm font-medium text-ink-700 hover:bg-canvas"
-              >
-                Review flagged reports
-              </Link>
-              <Link
-                href="/admin/tickets"
-                className="block rounded-md border border-line-200 px-3 py-2 text-sm font-medium text-ink-700 hover:bg-canvas"
-              >
-                View ticket queue
-              </Link>
-              <button
-                type="button"
-                onClick={exportSummary}
-                className="block w-full rounded-md bg-brand-500 px-3 py-2 text-left text-sm font-medium text-white hover:bg-brand-600"
-              >
-                Export executive summary (CSV)
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+export function DashboardClient({ initialData }: { initialData: DashboardData }) {
+  const [data, setData] = useState(initialData); const [range, setRange] = useState<DashboardRange>(initialData.range ?? 30); const [isPending, startTransition] = useTransition(); const [rangeError, setRangeError] = useState<string | null>(null); const requestId = useRef(0); const gradientId = "incident-area-" + useId().replace(/:/g, "");
+  const trend = data.incidentTrend.map((row) => ({ date: row.date, reports: numeric(row.report_count) })); const reportsInRange = trend.reduce((sum, row) => sum + row.reports, 0); const isMobile = useIsMobile(); const activeStatusItems = distributionItems(data.statusDistribution, ACTIVE_STATUS_ORDER); const allStatusItems = distributionItems(data.statusDistribution, STATUS_ORDER); const severityItems = distributionItems(data.citizenSeverityDistribution, SEVERITY_ORDER); const departments = departmentItems(data.departmentWorkload);
+  async function updateRange(nextRange: DashboardRange) { if (nextRange === range) return; const id = requestId.current + 1; requestId.current = id; setRange(nextRange); setRangeError(null); try { const response = await fetch("/api/admin/dashboard?range=" + nextRange, { cache: "no-store" }); if (!response.ok) throw new Error(); const nextData = await response.json() as DashboardData; if (requestId.current === id) startTransition(() => setData(nextData)); } catch { if (requestId.current === id) { setRange(initialData.range ?? 30); setRangeError("Unable to update the incident report range. Showing the previous range."); } } }
+  return <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 dashboard:grid-cols-4"><h1 className="sr-only">Operations Dashboard</h1>
+    <Card className="self-start lg:col-span-2 dashboard:col-span-3"><CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 flex-col gap-1.5"><CardTitle className="font-mono text-2xl tabular-nums">{reportsInRange.toLocaleString()}</CardTitle><CardDescription>Incident Reports Over Time {SEP} last {range} days</CardDescription></div><CardAction><RangeControl isUpdating={isPending} onChange={updateRange} range={range} /></CardAction></CardHeader><CardContent><p className="sr-only" id="incident-chart-description">Submitted citizen reports by calendar date for the last {range} days. Missing dates are shown as zero.</p><ChartContainer aria-describedby="incident-chart-description" aria-label={"Submitted citizen reports over the last " + range + " days"} className="h-60 min-h-60 w-full sm:h-64" config={trendChartConfig} role="img"><AreaChart accessibilityLayer data={trend} margin={{ left: 8, right: 8 }}><defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="var(--color-reports)" stopOpacity={0.22} /><stop offset="100%" stopColor="var(--color-reports)" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} /><XAxis axisLine={false} dataKey="date" minTickGap={range === 90 ? 42 : 28} tickCount={isMobile ? 4 : range === 90 ? 6 : 7} tickFormatter={formatShortDate} tickLine={false} tickMargin={8} /><ChartTooltip content={<IncidentTooltip />} cursor={{ stroke: "var(--color-reports)", strokeDasharray: "3 3", strokeLinecap: "round" }} wrapperStyle={{ outline: "none" }} /><Area dataKey="reports" dot={{ fill: "var(--color-reports)", r: 2.5, strokeWidth: 2 }} fill={"url(#" + gradientId + ")"} isAnimationActive={false} name="Submitted reports" stroke="var(--color-reports)" strokeWidth={2} type="monotone" /></AreaChart></ChartContainer><p className="mt-2 text-xs text-muted-foreground">Daily submitted reports {SEP} Missing dates shown as zero</p>{rangeError && <p aria-live="polite" className="mt-2 text-xs text-muted-foreground">{rangeError}</p>}</CardContent></Card>
+    <Card className="@container flex self-start flex-col gap-0 pb-0 lg:col-span-2 dashboard:col-span-1"><CardHeader className="flex flex-row items-start justify-between gap-3 border-b"><div className="flex min-w-0 flex-col gap-0"><CardTitle className="font-mono text-2xl tabular-nums">{numeric(data.kpis.active_count).toLocaleString()}</CardTitle><CardDescription>active tickets</CardDescription></div><Badge variant="secondary">{numeric(data.kpis.high_urgency_count)} high urgency</Badge></CardHeader><CardContent className="flex min-h-0 flex-1 p-0"><DistributionDonutChart ariaLabel="Active ticket lifecycle distribution" centerLabel="Active" config={statusChartConfig} description="Active tickets grouped by lifecycle status." items={activeStatusItems} size="compact" /></CardContent><div className="mt-auto grid grid-cols-2 border-t text-xs"><div className="min-w-0 px-4 py-3"><strong className="block font-mono text-base text-foreground">{numeric(data.kpis.reports_this_month_count)}</strong><span className="text-muted-foreground">Reports this month</span></div><div className="min-w-0 border-l px-4 py-3"><strong className="block font-mono text-base text-foreground">{formatHours(data.kpis.avg_resolution_hours_30d)}</strong><span className="text-muted-foreground">Avg resolution</span></div></div></Card>
+    <RankedTableCard kind="barangay" rows={data.leaderboard} /><RankedTableCard kind="category" rows={data.categories} />
+    <section aria-label="Dashboard analytics" className="grid min-w-0 grid-cols-1 items-stretch gap-3 lg:col-span-2 lg:grid-cols-2 dashboard:col-span-4 dashboard:grid-cols-3"><AnalyticsCard description="All tickets grouped by lifecycle status." title="Ticket Status Distribution"><DistributionDonutChart ariaLabel="Ticket status distribution" config={statusChartConfig} description="All tickets grouped by lifecycle status." items={allStatusItems} /></AnalyticsCard><AnalyticsCard description="Citizen-selected severity in the latest 30 days; not system urgency." title="Reports by Citizen Severity"><SeverityRadialChart ariaLabel="Reports by citizen severity" config={severityChartConfig} description="Citizen-selected severity in the latest 30 days; not system urgency." items={severityItems} /></AnalyticsCard><AnalyticsCard description="Active tickets by assigned office." title="Department Workload"><DepartmentWorkloadComparison ariaLabel="Department workload" config={departmentChartConfig} description="Active tickets assigned to MEO and MDRRMO." items={departments} /></AnalyticsCard></section>
+  </div>;
 }
