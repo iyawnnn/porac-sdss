@@ -58,7 +58,14 @@ export class AuthService {
       .select()
       .from(citizens)
       .where(eq(citizens.email, email));
-    if (!citizen || !(await bcrypt.compare(password, citizen.passwordHash))) {
+    // passwordHash is null for OAuth-only citizens (see citizen_identities) —
+    // bcrypt.compare() throws on a null hash instead of just failing, so
+    // this must be checked explicitly rather than falling through to it.
+    if (
+      !citizen ||
+      !citizen.passwordHash ||
+      !(await bcrypt.compare(password, citizen.passwordHash))
+    ) {
       throw new UnauthorizedException('Invalid email or password');
     }
 

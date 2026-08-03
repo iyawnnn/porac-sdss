@@ -1,6 +1,8 @@
 import { Controller, Post, UseGuards } from '@nestjs/common';
 import { RecomputeService } from '../domain/recompute.service';
 import { WeatherService } from '../domain/weather.service';
+import { PasswordResetService } from '../citizens/password-reset.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CronSecretGuard } from '../common/guards/cron-secret.guard';
 
 // Manual/testing trigger, not a Vercel cron schedule — Hobby plan only
@@ -13,6 +15,8 @@ export class CronController {
   constructor(
     private readonly recompute: RecomputeService,
     private readonly weather: WeatherService,
+    private readonly passwordReset: PasswordResetService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @Post('recompute-urgency')
@@ -28,5 +32,21 @@ export class CronController {
   async recomputeWeather() {
     const rain1hMm = await this.weather.getCurrentRain1hMm();
     return { rain1hMm };
+  }
+
+  // Prunes expired/long-used password_reset_tokens rows so the table stays
+  // small — nothing schedules this yet, same as the two triggers above.
+  @Post('cleanup-password-reset-tokens')
+  async cleanupPasswordResetTokens() {
+    await this.passwordReset.cleanupExpiredTokens();
+    return { ok: true };
+  }
+
+  // Prunes read notifications older than 30 days — unread ones are kept
+  // regardless of age until actually read, same shape as the job above.
+  @Post('cleanup-notifications')
+  async cleanupNotifications() {
+    await this.notifications.cleanupOldNotifications();
+    return { ok: true };
   }
 }
