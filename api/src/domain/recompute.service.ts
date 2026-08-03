@@ -8,6 +8,7 @@ import {
   computePriorityIndex,
   severityFromRank,
 } from '../common/utils/scoring';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class RecomputeService {
@@ -15,6 +16,7 @@ export class RecomputeService {
     @Inject(PG) private readonly pg: Sql,
     private readonly weather: WeatherService,
     private readonly appConfig: AppConfigService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async recomputeActiveTicketUrgency(rainOverride?: number) {
@@ -31,6 +33,8 @@ export class RecomputeService {
         severity_rank: number;
         active_barangay_count: number;
         max_active_barangay_count: number;
+        urgency_band: string | null;
+        assigned_office: 'MEO' | 'MDRRMO';
       }[]
     >`
       WITH barangay_density AS (
@@ -51,7 +55,8 @@ export class RecomputeService {
       SELECT t.id, t.elevation_m, t.member_count, t.created_at,
         COALESCE(s.severity_rank, 1) AS severity_rank,
         d.active_barangay_count,
-        MAX(d.active_barangay_count) OVER ()::int AS max_active_barangay_count
+        MAX(d.active_barangay_count) OVER ()::int AS max_active_barangay_count,
+        t.urgency_band, t.assigned_office
       FROM tickets t
       JOIN barangay_density d ON d.barangay_id = t.barangay_id
       LEFT JOIN severity_by_ticket s ON s.ticket_id = t.id
@@ -69,6 +74,7 @@ export class RecomputeService {
     const priorityIndices: number[] = [];
     const priorityScores: number[] = [];
     const urgencyLevels: string[] = [];
+    const newlyCritical: { id: number; office: 'MEO' | 'MDRRMO' }[] = [];
 
     for (const ticket of tickets) {
       const urgency = computeUrgency({
@@ -94,34 +100,56 @@ export class RecomputeService {
           maxActiveBarangayCount: ticket.max_active_barangay_count,
         }),
       );
+
+      // Genuine old-vs-new state comparison, not a "have we already
+      // notified" flag — naturally idempotent, since a ticket already at
+      // Critical compares Critical -> Critical and notifies nothing.
+      if (ticket.urgency_band !== 'Critical' && urgency.urgencyBand === 'Critical') {
+        newlyCritical.push({ id: ticket.id, office: ticket.assigned_office });
+      }
     }
 
-    await sql`
-      UPDATE tickets AS t SET
-        elevation_factor = u.elevation_factor,
-        precipitation_factor = u.precipitation_factor,
-        cluster_factor = u.cluster_factor,
-        urgency_score = u.urgency_score,
-        urgency_band = u.urgency_band,
-        priority_index = u.priority_index,
-        priority_score = u.priority_score,
-        urgency_level = u.urgency_level,
-        updated_at = now()
-      FROM (
-        SELECT * FROM unnest(
-          ${ids}::int[],
-          ${elevationFactors}::real[],
-          ${precipitationFactors}::real[],
-          ${clusterFactors}::real[],
-          ${urgencyScores}::real[],
-          ${urgencyBands}::text[],
-          ${priorityIndices}::int[],
-          ${priorityScores}::int[],
-          ${urgencyLevels}::text[]
-        ) AS u(id, elevation_factor, precipitation_factor, cluster_factor, urgency_score, urgency_band, priority_index, priority_score, urgency_level)
-      ) AS u
-      WHERE t.id = u.id
-    `;
+    await sql.begin(async (tx) => {
+      await tx`
+        UPDATE tickets AS t SET
+          elevation_factor = u.elevation_factor,
+          precipitation_factor = u.precipitation_factor,
+          cluster_factor = u.cluster_factor,
+          urgency_score = u.urgency_score,
+          urgency_band = u.urgency_band,
+          priority_index = u.priority_index,
+          priority_score = u.priority_score,
+          urgency_level = u.urgency_level,
+          updated_at = now()
+        FROM (
+          SELECT * FROM unnest(
+            ${ids}::int[],
+            ${elevationFactors}::real[],
+            ${precipitationFactors}::real[],
+            ${clusterFactors}::real[],
+            ${urgencyScores}::real[],
+            ${urgencyBands}::text[],
+            ${priorityIndices}::int[],
+            ${priorityScores}::int[],
+            ${urgencyLevels}::text[]
+          ) AS u(id, elevation_factor, precipitation_factor, cluster_factor, urgency_score, urgency_band, priority_index, priority_score, urgency_level)
+        ) AS u
+        WHERE t.id = u.id
+      `;
+
+      for (const ticket of newlyCritical) {
+        await this.notifications.createInTx(tx, {
+          recipientType: 'admin',
+          recipientOffice: ticket.office,
+          type: 'ticket_critical',
+          title: 'Ticket became critical',
+          message: `Ticket #${ticket.id} has crossed into the Critical urgency band.`,
+          href: `/admin/tickets/${ticket.id}`,
+          entityType: 'ticket',
+          entityId: ticket.id,
+        });
+      }
+    });
 
     return { updated: tickets.length, rain1hMm };
   }

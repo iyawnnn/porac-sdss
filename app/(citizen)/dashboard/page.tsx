@@ -5,22 +5,7 @@ import type { PublicTicketGeoRow, BarangayGeoFeatureCollection } from "@/lib/typ
 import PublicMapClientLoader from "@/components/features/citizen/map/PublicMapClientLoader";
 import { StatTile } from "@/components/features/citizen/dashboard/StatTile";
 import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "@/components/features/citizen/dashboard/reportStatusStyle";
-
-function timeAgo(isoDate: string) {
-  const seconds = Math.floor((Date.now() - new Date(isoDate).getTime()) / 1000);
-  const units: [number, string][] = [
-    [31536000, "year"],
-    [2592000, "month"],
-    [86400, "day"],
-    [3600, "hour"],
-    [60, "minute"],
-  ];
-  for (const [secondsPerUnit, label] of units) {
-    const value = Math.floor(seconds / secondsPerUnit);
-    if (value >= 1) return `${value} ${label}${value > 1 ? "s" : ""} ago`;
-  }
-  return "Just now";
-}
+import { timeAgo } from "@/lib/utils/time-ago";
 
 export default async function DashboardPage() {
   const session = await getCitizenSessionFromApi();
