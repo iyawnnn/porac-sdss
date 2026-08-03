@@ -10,7 +10,7 @@ This is a two-app monorepo (see the NestJS extraction blueprint decision record 
 - **`api/`** — NestJS, owns the database, auth, PostGIS spatial work, and the triage engine. Own `package.json`/`tsconfig.json`/`nest-cli.json`. Run `pnpm --prefix api start:dev` (or `cd api && pnpm start:dev`) for local dev, `:3001` by default. `api/src/common/` holds cross-cutting guards, decorators, and pure utils (`office`/`radius`/`distance`/`scoring`) shared across the `admin`/`auth`/`cron`/`reports` feature modules. `api/scripts/` holds the one-time DB migration/seed/verify scripts (moved from root `scripts/`) plus `api/drizzle/` for the Drizzle migration SQL — see Commands below.
 - `PLAN.md` — the authoritative build log and decision record (gap analysis vs. the original thesis paper, phase-by-phase status, every architectural deviation and why). Read it before making non-trivial changes to the triage engine, dedup logic, or geo pipeline — it explains *why* things are built the way they are, not just what.
 - `docs/migration-log-gadm-to-psgc.md` — archived copy of a deleted one-time migration script, kept for history only.
-- `angeles_psgc.json`, `angeles_city_srtm30m.tif` — raw geo source data consumed by the seed scripts in `api/scripts/seed/`. Not committed data-processing artifacts you should ever hand-edit; regenerate via the pipeline described below if the target municipality changes.
+- `public/assets/gis/porac_barangays.json`, `scripts/gis/raw/porac_srtm30m.tif` — raw geo source data consumed by the seed scripts in `api/scripts/seed/`. Not committed data-processing artifacts you should ever hand-edit; regenerate via the pipeline described below if the target municipality changes.
 - `scripts/gis/` — a frontend-asset generator (`generate-porac-boundary.ts`, run via `pnpm gis:generate-boundary`) that reads/writes root `public/assets/gis/*`. Deliberately stays at root, not `api/scripts/`, since it has nothing to do with the database — it's Next.js public-asset tooling.
 
 `lib/` is pure frontend code now — `api-client.ts`, `auth/` (session helpers), `gis/` (Leaflet styling), `municipality-config.ts` (env-driven, deliberately duplicated with `api/src/domain/municipality-config.ts`), `types/` (interface-only API response shapes, ported from the old `lib/admin/*`/`lib/citizens/*`), `utils/` (pure display/validation logic, including `utils/urgency.ts` and `utils/scoring.ts` — client-side duplicates of the triage math in `api/src/domain/urgency.ts`/`api/src/common/utils/scoring.ts`, used for badge/band display only, never for the authoritative score). Zero DB imports, zero `postgres`/`drizzle-orm` packages anywhere in `lib/`. A few of these frontend-owned files (`lib/municipality-config.ts`, `lib/utils/urgency.ts`, `lib/utils/scoring.ts`, `lib/utils/generate-exif-image.ts`) are also reached into by `api/scripts/` via relative path (`../../../lib/...`) since the one-time seed/migration scripts need the same pure logic and it isn't worth a second copy.
@@ -32,18 +32,27 @@ pnpm --prefix api test              # jest unit tests
 pnpm --prefix api test:e2e      # jest e2e tests
 ```
 
-Database setup order (one-time, run from **`api/`**, against `DATABASE_URL` in `api/.env`):
+Database setup order (one-time, run from **`api/`**, against `DATABASE_URL` in `api/.env`). Order matters — `migrate:geometry` FKs to `barangays(id)` and `migrate:config` reads `dem_points`, so both `import:barangays` and `seed:dem` must run before them, not after (verified empirically against a fresh DB: running them in the old documented order fails with `relation "barangays" does not exist` / `relation "dem_points" does not exist`):
 ```
-pnpm --prefix api migrate                    # non-spatial Drizzle tables
-pnpm --prefix api migrate:geometry           # geometry columns + GiST indexes
+pnpm --prefix api migrate                          # non-spatial Drizzle tables
 pnpm --prefix api migrate:ratelimit
 pnpm --prefix api migrate:ratelimit-citizen
 pnpm --prefix api migrate:city-boundary
-pnpm --prefix api import:barangays           # PSGC barangay polygons -> barangays
-pnpm --prefix api seed:dem                   # SRTM GeoTIFF -> dem_points
-pnpm --prefix api verify:config               # print computed elev_min/elev_max etc.
+pnpm --prefix api import:barangays                 # PSGC barangay polygons -> barangays (must precede migrate:geometry)
+pnpm --prefix api migrate:geometry                 # geometry columns + GiST indexes, FKs to barangays(id)
+pnpm --prefix api seed:dem                         # SRTM GeoTIFF -> dem_points (must precede migrate:config)
+pnpm --prefix api migrate:config                    # config cache table, reads dem_points for elev_min/elev_max
+pnpm --prefix api migrate:exif-data
+pnpm --prefix api migrate:moderation
+pnpm --prefix api migrate:resolution
+pnpm --prefix api migrate:diverse-demo              # despite the name, adds core schema (ticket_status 'Rejected', tickets.flagged) — not demo-only
+pnpm --prefix api migrate:citizen-identities
+pnpm --prefix api migrate:citizen-account-security
+pnpm --prefix api migrate:citizen-password-reset
+pnpm --prefix api migrate:notifications
+pnpm --prefix api verify:config                     # print computed elev_min/elev_max etc.
 pnpm --prefix api seed:admin -- <email> <password> <MEO|MDRRMO> <officer|supervisor>
-pnpm --prefix api seed:diverse-reports        # idempotent demo tickets/citizens
+pnpm --prefix api seed:diverse-reports              # idempotent demo tickets/citizens
 ```
 
 These live in `api/scripts/{migrations,seed,verify}/` and run via `tsx --env-file=.env`, so env vars come from `api/.env` (direct, non-pooled Neon URL) — not the root `.env.local` (pooled URL) these scripts used before the move. `api/.env` needs the **same** `DATABASE_URL`/`JWT_SECRET`/`CLOUDINARY_URL`/`OPENWEATHERMAP_API_KEY` values as root `.env.local` (see `api/.env.example`) — two separate env files, one shared set of secrets.
@@ -69,7 +78,7 @@ These live in `api/scripts/{migrations,seed,verify}/` and run via `tsx --env-fil
 
 **Barangay resolution** (`api/src/domain/barangay.service.ts`) is a two-stage lookup: strict `ST_Contains` against `barangays` (PSGC/OCHA-sourced, ~130 avg vertices/polygon) first; if that misses, check `ST_Contains` against `city_boundary_osm` (an independent OSM outer-boundary import) — if inside, snap to the nearest barangay via `ST_Distance`/`<->` rather than rejecting, and flag the report `BOUNDARY_FALLBACK:<name>:<distanceM>`; if outside even that, reject as outside city limits. Barangay *identity* always comes from the PSGC table, never from OSM — OSM is only the outer accept/reject envelope. The old GADM-sourced table survives as `barangays_gadm_old` for rollback/reference (not queried by app code) — GADM was replaced because its ~7.6-avg-vertex polygons misregistered real addresses by up to 1.8km (`PLAN.md` §4.1 has the full validation writeup).
 
-**Municipality is a config value, not a hardcoded assumption.** `MUNICIPALITY` (name, PSGC code, barangay count, city-center lat/lng, source data filenames) is read from env vars with Angeles City defaults — duplicated deliberately on both sides (`lib/municipality-config.ts` for the Next map components + `scripts/`, `api/src/domain/municipality-config.ts` for the API), since `TARGET_*` needs to be set identically in both `.env.local` and `api/.env`. Swapping the target LGU is an env-var change plus re-running the seed pipeline with new source files — not a code edit — but the source data (PSGC shapefile filter, SRTM clip, OSM boundary) still needs re-acquiring and empirically re-validated per city; nothing guarantees a new city's PSGC data is as clean as Angeles' turned out to be.
+**Municipality is a config value, not a hardcoded assumption.** `MUNICIPALITY` (name, PSGC code, barangay count, city-center lat/lng, source data filenames) is read from env vars with Porac defaults — duplicated deliberately on both sides (`lib/municipality-config.ts` for the Next map components + `scripts/`, `api/src/domain/municipality-config.ts` for the API), since `TARGET_*` needs to be set identically in both `.env.local` and `api/.env`. Swapping the target LGU is an env-var change plus re-running the seed pipeline with new source files — not a code edit — but the source data (PSGC shapefile filter, SRTM clip, OSM boundary) still needs re-acquiring and empirically re-validated per city; nothing guarantees a new city's PSGC data is as clean as Angeles' turned out to be.
 
 **Two auth systems, deliberately separate.** Admin sessions and citizen sessions (`api/src/auth/session.service.ts`) are independent JWTs (via `jose`), signed with an `aud` claim (`'admin'`/`'citizen'`) so a token from one cookie can never half-verify as the other. `AdminSessionGuard`/`CitizenSessionGuard` gate every API route; `proxy.ts` (root) keeps its own lightweight `verifySession`/`verifyCitizenSession` (`lib/auth/session.ts`/`citizenSession.ts`) purely for the page-redirect UX, sharing the same `JWT_SECRET`. There is no guest/anonymous reporting — citizen accounts are required (a deliberate deviation from the original plan, see `PLAN.md` §9/§16).
 
