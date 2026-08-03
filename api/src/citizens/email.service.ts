@@ -14,6 +14,8 @@ export interface EmailService {
   sendPasswordReset(email: string, resetUrl: string): Promise<void>;
   sendOAuthOnlyNotice(email: string): Promise<void>;
   sendPasswordResetConfirmation(email: string): Promise<void>;
+  sendReportResolved(email: string, reportUrl: string): Promise<void>;
+  sendReportRejected(email: string, reportUrl: string): Promise<void>;
 }
 
 function maskEmail(email: string): string {
@@ -47,6 +49,16 @@ export class ConsoleEmailService implements EmailService {
 
   sendPasswordResetConfirmation(email: string): Promise<void> {
     this.log('password reset confirmation sent', email);
+    return Promise.resolve();
+  }
+
+  sendReportResolved(email: string): Promise<void> {
+    this.log('report resolved email sent', email);
+    return Promise.resolve();
+  }
+
+  sendReportRejected(email: string): Promise<void> {
+    this.log('report rejected email sent', email);
     return Promise.resolve();
   }
 }

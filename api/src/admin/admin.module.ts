@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { DomainModule } from '../domain/domain.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { CitizensModule } from '../citizens/citizens.module';
 import { TicketsController } from './tickets.controller';
 import { TicketsService } from './tickets.service';
 import { ModerationController } from './moderation.controller';
@@ -16,7 +18,7 @@ import { BarangaysGeoService } from './barangays-geo.service';
 // closes the previously unguarded tickets/geo and barangays/geo routes,
 // which relied entirely on proxy.ts's matcher.
 @Module({
-  imports: [AuthModule, DomainModule],
+  imports: [AuthModule, DomainModule, NotificationsModule, CitizensModule],
   controllers: [TicketsController, ModerationController, DashboardController],
   providers: [
     TicketsService,

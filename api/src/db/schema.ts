@@ -262,6 +262,38 @@ export const citizenAuditEvents = pgTable('citizen_audit_events', {
     .defaultNow(),
 });
 
+export const notificationRecipientTypeEnum = pgEnum(
+  'notification_recipient_type',
+  ['admin', 'citizen'],
+);
+
+// One row per notification, targeted exactly one of two ways (never both):
+// recipient_id (a specific admin_id or citizen_id, depending on
+// recipient_type) for individual notifications, or recipient_office
+// (admin-only) for office-wide ones — read at query time by every admin in
+// that office, the same idiom tickets.service.ts already uses for
+// office-scoped ticket queries (no per-admin fan-out rows). No FK on
+// recipient_id since it points to one of two different tables depending on
+// recipient_type — same reasoning as status_history.admin_id/
+// office_reassignments.admin_id above, which are also FK-less for the same
+// cross-table reason.
+export const notifications = pgTable('notifications', {
+  id: serial('id').primaryKey(),
+  recipientType: notificationRecipientTypeEnum('recipient_type').notNull(),
+  recipientId: integer('recipient_id'),
+  recipientOffice: officeEnum('recipient_office'),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  href: text('href'),
+  entityType: text('entity_type'),
+  entityId: integer('entity_id'),
+  readAt: timestamp('read_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const admins = pgTable('admins', {
   id: serial('id').primaryKey(),
   firstName: text('first_name').notNull(),

@@ -27,7 +27,15 @@
       "mcp__plugin_playwright_playwright__browser_navigate",
       "mcp__plugin_playwright_playwright__browser_fill_form",
       "mcp__plugin_playwright_playwright__browser_click",
-      "mcp__plugin_playwright_playwright__browser_type"
+      "mcp__plugin_playwright_playwright__browser_type",
+      "Bash(nohup node --enable-source-maps --env-file=.env dist/main.js)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(cp /c/Users/iannm/AppData/Local/Temp/claude/C--CodeProjects-porac-sdss/7cd02ebc-1b51-4774-b9a6-4a7bf02f0b71/scratchpad/check.ts scripts/_check_live.ts)",
+      "Bash(sed -i 's#\"./scripts/db\"#\"./db\"#' scripts/_check_live.ts)",
+      "Bash(curl *)",
+      "mcp__plugin_playwright_playwright__browser_snapshot",
+      "mcp__plugin_playwright_playwright__browser_find",
+      "Bash(npx jest *)"
     ]
   }
 }

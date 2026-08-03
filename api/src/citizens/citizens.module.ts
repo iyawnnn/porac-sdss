@@ -38,6 +38,6 @@ export function createEmailService(
       useFactory: createEmailService,
     },
   ],
-  exports: [PasswordResetService],
+  exports: [PasswordResetService, EMAIL_SERVICE],
 })
 export class CitizensModule {}
