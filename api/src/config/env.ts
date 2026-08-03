@@ -15,9 +15,6 @@ const envSchema = z.object({
     .enum(['development', 'production', 'test'])
     .default('development'),
   WEB_ORIGIN: z.string().url().optional(),
-  FACEBOOK_APP_ID: z.string().min(1).optional(),
-  FACEBOOK_APP_SECRET: z.string().min(1).optional(),
-  FACEBOOK_REDIRECT_URI: z.string().url().optional(),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   GOOGLE_REDIRECT_URI: z.string().url().optional(),

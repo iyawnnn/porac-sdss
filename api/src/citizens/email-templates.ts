@@ -70,7 +70,7 @@ export function oauthOnlyNoticeEmailHtml(): string {
     <h1 style="margin:0 0 16px;font-size:18px;color:#111827;">Password reset requested</h1>
     <p style="margin:0 0 20px;">
       Someone requested a password reset for this email address on PORAC-SDSS, but this
-      account signs in with Google or Facebook and doesn't have a password to reset.
+      account signs in with Google and doesn't have a password to reset.
     </p>
     <p style="margin:0 0 20px;">
       Continue signing in with your linked provider, or add a password from the

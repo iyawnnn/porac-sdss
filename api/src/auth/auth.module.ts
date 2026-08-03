@@ -6,7 +6,6 @@ import { OAuthStateService } from './oauth-state.service';
 import { OAuthController } from './oauth/oauth.controller';
 import { OAuthService } from './oauth/oauth.service';
 import { GoogleOAuthProvider } from './oauth/google-oauth.provider';
-import { FacebookOAuthProvider } from './oauth/facebook-oauth.provider';
 import { OAuthRateLimitGuard } from '../common/guards/oauth-rate-limit.guard';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { CitizenSessionGuard } from '../common/guards/citizen-session.guard';
@@ -20,7 +19,6 @@ import { RecentReauthGuard } from '../common/guards/recent-reauth.guard';
     OAuthStateService,
     OAuthService,
     GoogleOAuthProvider,
-    FacebookOAuthProvider,
     OAuthRateLimitGuard,
     AdminSessionGuard,
     CitizenSessionGuard,
@@ -37,7 +35,6 @@ import { RecentReauthGuard } from '../common/guards/recent-reauth.guard';
     OAuthService,
     OAuthStateService,
     GoogleOAuthProvider,
-    FacebookOAuthProvider,
   ],
 })
 export class AuthModule {}

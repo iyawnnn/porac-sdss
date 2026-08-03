@@ -69,12 +69,23 @@ export interface TicketReport {
   exif_data: Record<string, unknown> | null;
   location_mismatch_m: number | null;
   created_at: string;
+  flags: string[] | null;
+  moderation_status: string | null;
 }
 
 export interface TicketStatusHistoryRow {
   status: string;
   admin_name: string | null;
   changed_at: string;
+}
+
+// Fetched by GET /admin/tickets/:id but unused by the frontend until now —
+// see api/src/admin/tickets.service.ts's getTicketDetail.
+export interface TicketReassignmentRow {
+  from_office: string;
+  to_office: string;
+  admin_name: string | null;
+  reassigned_at: string;
 }
 
 export interface TicketPriorityContext {

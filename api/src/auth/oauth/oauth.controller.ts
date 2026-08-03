@@ -20,7 +20,6 @@ import {
   type OAuthStatePurpose,
 } from '../oauth-state.service';
 import { GoogleOAuthProvider } from './google-oauth.provider';
-import { FacebookOAuthProvider } from './facebook-oauth.provider';
 import {
   AccountLinkRequiredError,
   EmailRequiredError,
@@ -45,7 +44,6 @@ export class OAuthController {
     private readonly state: OAuthStateService,
     private readonly sessions: SessionService,
     private readonly google: GoogleOAuthProvider,
-    private readonly facebook: FacebookOAuthProvider,
     private readonly oauth: OAuthService,
   ) {}
 
@@ -118,17 +116,6 @@ export class OAuthController {
     );
   }
 
-  @Get('facebook')
-  async facebookStart(
-    @Req() req: Request,
-    @Res() res: Response,
-    @Query('mode') mode?: string,
-  ) {
-    await this.start('facebook', req, res, mode, (state) =>
-      this.facebook.authorizeUrl(state),
-    );
-  }
-
   @Get('google/callback')
   async googleCallback(
     @Req() req: Request,
@@ -145,25 +132,6 @@ export class OAuthController {
       stateToken,
       providerError,
       (c) => this.google.resolveProfile(c),
-    );
-  }
-
-  @Get('facebook/callback')
-  async facebookCallback(
-    @Req() req: Request,
-    @Res() res: Response,
-    @Query('code') code?: string,
-    @Query('state') stateToken?: string,
-    @Query('error') providerError?: string,
-  ) {
-    await this.handleCallback(
-      'facebook',
-      req,
-      res,
-      code,
-      stateToken,
-      providerError,
-      (c) => this.facebook.resolveProfile(c),
     );
   }
 
