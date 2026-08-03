@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // api/ is a separate NestJS project with its own eslint.config.mjs.
     "api/**",
+    // Per-agent git worktrees (isolation: "worktree"), not part of this project.
+    ".claude/worktrees/**",
   ]),
 ]);
 

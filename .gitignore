@@ -5,4 +5,9 @@ node_modules/
 test-results/
 api/node_modules/
 api/dist/
-api/*.tsbuildinfo
+*.tsbuildinfo
+.playwright-mcp/
+playwright-report/
+api/coverage/
+public/uploads/reports/diverse_*.jpg
+public/uploads/reports/poblacion_cluster_*.jpg
