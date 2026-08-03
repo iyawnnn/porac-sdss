@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        # No `version:` input — reads the packageManager field in root package.json.
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            api/pnpm-lock.yaml
+
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install API dependencies
+        run: pnpm --prefix api install --frozen-lockfile
+
+      - name: Verify API build recovery
+        run: pnpm --prefix api run verify:build-recovery
+
+      - name: Build API
+        run: pnpm --prefix api build
+
+      - name: Test API
+        run: pnpm --prefix api test
+
+      - name: Lint root
+        run: pnpm lint
+
+      - name: Build root
+        run: pnpm build
