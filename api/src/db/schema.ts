@@ -42,17 +42,90 @@ export const ticketStatusEnum = pgEnum('ticket_status', [
 ]);
 export const officeEnum = pgEnum('office', ['MEO', 'MDRRMO']);
 export const adminRoleEnum = pgEnum('admin_role', ['officer', 'supervisor']);
+export const oauthProviderEnum = pgEnum('oauth_provider', [
+  'google',
+  'facebook',
+]);
 
 export const citizens = pgTable('citizens', {
   id: serial('id').primaryKey(),
   email: text('email').notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
+  // Nullable: OAuth-only citizens (Google/Facebook) never set a password —
+  // see citizen_identities below. Password-based signup/login still always
+  // populates this.
+  passwordHash: text('password_hash'),
+  // Set/refreshed whenever password_hash is set or changed via the Account
+  // & Security page — never touched by anything else.
+  passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }),
+  // Bumped to now() on a successful password reset (never on ordinary
+  // login/signup). SessionService.verifyCitizenSession rejects any token
+  // whose `iat` predates this — the one place a stateless JWT session can
+  // actually be invalidated server-side. Null means "never invalidated,
+  // accept any iat" (the default for every existing/new citizen).
+  sessionValidAfter: timestamp('session_valid_after', { withTimezone: true }),
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
+
+// One row per (citizen, external provider identity). A citizen can hold at
+// most one Google and one Facebook identity (unique citizen_id+provider);
+// a given provider account can only ever back one citizen (unique
+// provider+provider_subject) so two citizens can't both claim the same
+// external account.
+export const citizenIdentities = pgTable('citizen_identities', {
+  id: serial('id').primaryKey(),
+  citizenId: integer('citizen_id')
+    .notNull()
+    .references(() => citizens.id),
+  provider: oauthProviderEnum('provider').notNull(),
+  providerSubject: text('provider_subject').notNull(),
+  providerEmail: text('provider_email'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// One row per issued reset link. Only a SHA-256 hash of the actual token
+// is ever stored (the raw token exists only in the emailed URL and the
+// requesting citizen's browser) — token_hash is the lookup key precisely
+// because it's useless to an attacker who reads the database. used_at
+// makes the token single-use; expires_at makes it short-lived.
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: serial('id').primaryKey(),
+  citizenId: integer('citizen_id')
+    .notNull()
+    .references(() => citizens.id),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Independent rate-limit counters for POST /citizens/forgot-password, keyed
+// by IP and by normalized email — separate from rate_limit_events (report
+// submission) because that table's geom column is NOT NULL and doesn't fit
+// a non-geo, pre-authentication event. One row per *request attempt*,
+// including ones for emails that don't exist, so enumeration probing can't
+// dodge the limit by trying many addresses.
+export const passwordResetRateLimitEvents = pgTable(
+  'password_reset_rate_limit_events',
+  {
+    id: serial('id').primaryKey(),
+    ip: text('ip').notNull(),
+    emailNormalized: text('email_normalized').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
 
 export const tickets = pgTable('tickets', {
   id: serial('id').primaryKey(),
@@ -169,6 +242,53 @@ export const verifications = pgTable('verifications', {
     .notNull()
     .references(() => tickets.id),
   citizenId: text('citizen_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Append-only trail for the Account & Security page's sensitive actions
+// (provider linked/unlinked, password set/changed, rejected link conflicts)
+// — never updated or deleted, only inserted.
+export const citizenAuditEvents = pgTable('citizen_audit_events', {
+  id: serial('id').primaryKey(),
+  citizenId: integer('citizen_id')
+    .notNull()
+    .references(() => citizens.id),
+  eventType: text('event_type').notNull(),
+  detail: jsonb('detail'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const notificationRecipientTypeEnum = pgEnum(
+  'notification_recipient_type',
+  ['admin', 'citizen'],
+);
+
+// One row per notification, targeted exactly one of two ways (never both):
+// recipient_id (a specific admin_id or citizen_id, depending on
+// recipient_type) for individual notifications, or recipient_office
+// (admin-only) for office-wide ones — read at query time by every admin in
+// that office, the same idiom tickets.service.ts already uses for
+// office-scoped ticket queries (no per-admin fan-out rows). No FK on
+// recipient_id since it points to one of two different tables depending on
+// recipient_type — same reasoning as status_history.admin_id/
+// office_reassignments.admin_id above, which are also FK-less for the same
+// cross-table reason.
+export const notifications = pgTable('notifications', {
+  id: serial('id').primaryKey(),
+  recipientType: notificationRecipientTypeEnum('recipient_type').notNull(),
+  recipientId: integer('recipient_id'),
+  recipientOffice: officeEnum('recipient_office'),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  href: text('href'),
+  entityType: text('entity_type'),
+  entityId: integer('entity_id'),
+  readAt: timestamp('read_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
