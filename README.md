@@ -29,7 +29,7 @@ pnpm install
 
 ### Step 3: Configure Environment Variables
 
-Create a `.env.local` file at the root of `porac-sdss-nextjs` and add your database and API credentials:
+Create a `.env.local` file at the root of `porac-sdss` and add your database and API credentials:
 
 ```env
 DATABASE_URL="postgresql://user:password@ep-example.neon.tech/porac_sdss?sslmode=require"
@@ -88,4 +88,4 @@ Admin Accounts:
 
 ## H. TESTING PHOTO EXIF GPS METADATA
 
-To test the report submission pipeline with real geotagged photo metadata, drag and drop any of the pre-configured JPEG files located in `public/uploads/reports/` (for example, `pothole_poblacion.jpg`) into the report form photo uploader.
+To test the report submission pipeline with real geotagged photo metadata, drag and drop any of the pre-configured JPEG files located in `public/uploads/reports/` (for example, `01_poblacion.jpg`) into the report form photo uploader.
