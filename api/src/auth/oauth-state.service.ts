@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import type { Env } from '../config/env';
 
-export type OAuthProvider = 'google' | 'facebook';
+export type OAuthProvider = 'google';
 // 'login': the public sign-in/sign-up flow (unauthenticated). 'link': an
 // authenticated citizen attaching a new provider identity to their account.
 // 'reauth': an authenticated citizen re-proving control of a provider

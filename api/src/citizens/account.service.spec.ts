@@ -53,7 +53,7 @@ describe('AccountService.getSecurityStatus', () => {
 
     await expect(service.getSecurityStatus(1)).resolves.toEqual({
       hasPassword: true,
-      providers: { google: true, facebook: false },
+      providers: { google: true },
     });
   });
 
@@ -66,7 +66,7 @@ describe('AccountService.getSecurityStatus', () => {
 
     await expect(service.getSecurityStatus(1)).resolves.toEqual({
       hasPassword: false,
-      providers: { google: false, facebook: false },
+      providers: { google: false },
     });
   });
 });
@@ -174,12 +174,17 @@ describe('AccountService.unlinkProvider', () => {
     expect(del).toHaveBeenCalledTimes(1);
   });
 
-  it('unlinks a provider when another login method remains (a second provider)', async () => {
+  it('unlinks a provider when another login method remains (a second identity row)', async () => {
+    // The row-count logic is provider-agnostic — it just needs >1 identity
+    // row to remain. Google is the only provider the app issues today, but
+    // the enum still technically allows a second value (schema.ts), so this
+    // exercises the count check generically rather than assuming exactly
+    // one real provider can ever exist.
     const select = jest
       .fn()
       .mockReturnValueOnce(chain([{ passwordHash: null }]))
       .mockReturnValueOnce(
-        chain([{ provider: 'google' }, { provider: 'facebook' }]),
+        chain([{ provider: 'google' }, { provider: 'other' }]),
       );
     const del = jest.fn().mockReturnValue(chain(undefined));
     const transaction = jest.fn((cb: (tx: unknown) => unknown) =>

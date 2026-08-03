@@ -6,11 +6,11 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build",
+    "build": "node scripts/clean-build-cache.js && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
+    "start": "node scripts/clean-build-cache.js && nest start",
+    "start:dev": "node scripts/clean-build-cache.js && nest start --watch",
+    "start:debug": "node scripts/clean-build-cache.js && nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
@@ -43,6 +43,7 @@
     "verify:dedup-exif": "tsx --env-file=.env scripts/verify/verify-dedup-exif.ts",
     "verify:diverse-reports": "tsx --env-file=.env scripts/verify/verify-diverse-reports.ts",
     "verify:seed-images": "tsx --env-file=.env scripts/verify/verify-seed-images.ts",
+    "verify:build-recovery": "node scripts/verify/verify-build-recovery.js",
     "db:migrate": "pnpm run migrate",
     "db:seed": "tsx --env-file=.env scripts/seed/seed-diverse-reports.ts"
   },

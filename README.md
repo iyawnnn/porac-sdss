@@ -10,7 +10,8 @@ Porac SDSS is a municipal infrastructure triage platform for Porac, Pampanga. It
 
 Install or prepare the following before running the project locally:
 
-- Node.js v18 or higher
+- Node.js 24.x (the exact major pinned in root [`.nvmrc`](.nvmrc) and `package.json`'s `engines.node` — this is the version CI and all coding agents must also use)
+- pnpm 11.9.0 (pinned in root `package.json`'s `packageManager` field; enable Corepack rather than installing pnpm globally, see Step 2 below)
 - A PostGIS-enabled PostgreSQL database, such as Neon PostgreSQL Cloud
 
 ## C. LOCAL ENVIRONMENT SETUP
@@ -21,13 +22,43 @@ Install or prepare the following before running the project locally:
 git clone <repository-url>
 ```
 
-### Step 2: Install dependencies
+### Step 2: Set up the toolchain (Node + pnpm)
+
+The repository pins its own Node and pnpm versions — don't rely on whatever happens to already be on your machine.
+
+**macOS/Linux:**
+
+```bash
+nvm install    # reads .nvmrc, installs/uses Node 24.x
+corepack enable
+corepack prepare pnpm@11.9.0 --activate
+node --version   # expect v24.x
+pnpm --version    # expect 11.9.0
+```
+
+**Windows (PowerShell):**
+
+```powershell
+nvm install (Get-Content .nvmrc)
+nvm use (Get-Content .nvmrc)
+corepack enable
+corepack prepare pnpm@11.9.0 --activate
+node --version   # expect v24.x
+pnpm --version    # expect 11.9.0
+```
+
+(Any Node version manager that reads `.nvmrc` works — `nvm`, `fnm`, `nvm-windows`, Volta, etc.)
+
+### Step 3: Install dependencies
+
+This is a two-app repo — the root Next.js app and `api/` (NestJS) each have their own `package.json` and lockfile, so both need installing:
 
 ```bash
 pnpm install
+pnpm --prefix api install
 ```
 
-### Step 3: Configure Environment Variables
+### Step 4: Configure Environment Variables
 
 Create a `.env.local` file at the root of `porac-sdss` and add your database and API credentials:
 

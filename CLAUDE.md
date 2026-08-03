@@ -15,6 +15,10 @@ This is a two-app monorepo (see the NestJS extraction blueprint decision record 
 
 `lib/` is pure frontend code now — `api-client.ts`, `auth/` (session helpers), `gis/` (Leaflet styling), `municipality-config.ts` (env-driven, deliberately duplicated with `api/src/domain/municipality-config.ts`), `types/` (interface-only API response shapes, ported from the old `lib/admin/*`/`lib/citizens/*`), `utils/` (pure display/validation logic, including `utils/urgency.ts` and `utils/scoring.ts` — client-side duplicates of the triage math in `api/src/domain/urgency.ts`/`api/src/common/utils/scoring.ts`, used for badge/band display only, never for the authoritative score). Zero DB imports, zero `postgres`/`drizzle-orm` packages anywhere in `lib/`. A few of these frontend-owned files (`lib/municipality-config.ts`, `lib/utils/urgency.ts`, `lib/utils/scoring.ts`, `lib/utils/generate-exif-image.ts`) are also reached into by `api/scripts/` via relative path (`../../../lib/...`) since the one-time seed/migration scripts need the same pure logic and it isn't worth a second copy.
 
+## Toolchain
+
+Node and pnpm versions are pinned at root, not per-app: root `.nvmrc`/`package.json`'s `engines.node` declare the required Node major, and root `package.json`'s `packageManager` field declares the exact pnpm version (read via Corepack). `api/package.json` deliberately does not repeat or override either — the root declaration is the single source of truth for both apps. CI (`.github/workflows/ci.yml`) reads both from the same root files rather than hardcoding its own versions. Claude Code, Codex, and any other coding agent must use the repository-declared Node and pnpm versions (i.e. whatever `.nvmrc`/`packageManager` currently say) before running builds, tests, migrations, or seed scripts — don't assume the versions already active in your shell match.
+
 ## Commands (root, Next.js UI)
 
 ```
@@ -31,6 +35,8 @@ pnpm --prefix api build        # nest build
 pnpm --prefix api test              # jest unit tests
 pnpm --prefix api test:e2e      # jest e2e tests
 ```
+
+`build`/`start`/`start:dev`/`start:debug` all run `scripts/clean-build-cache.js` first (see that file for why) — tsc's incremental cache (`tsconfig.build.tsbuildinfo`) lives outside `dist/` and survives `nest-cli.json`'s `deleteOutDir`, so if `dist/` is ever deleted independently of a build, the next build used to trust the stale cache and silently skip re-emitting `dist/main.js`. This is now self-healing: every build/start command wipes both `dist/` and the buildinfo file first, so there is never a reason to manually delete either — if you ever see `Cannot find module .../dist/main`, just re-run the normal command. `pnpm --prefix api run verify:build-recovery` is the regression test for this.
 
 Database setup order (one-time, run from **`api/`**, against `DATABASE_URL` in `api/.env`). Order matters — `migrate:geometry` FKs to `barangays(id)` and `migrate:config` reads `dem_points`, so both `import:barangays` and `seed:dem` must run before them, not after (verified empirically against a fresh DB: running them in the old documented order fails with `relation "barangays" does not exist` / `relation "dem_points" does not exist`):
 ```
