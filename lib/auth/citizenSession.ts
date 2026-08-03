@@ -1,4 +1,4 @@
-import { SignJWT, jwtVerify } from "jose";
+import { jwtVerify } from "jose";
 
 // Same JWT pattern as admin auth (see lib/auth/session.ts) — separate
 // cookie/type because citizen sessions carry no office/role, and mixing
@@ -12,14 +12,6 @@ export interface CitizenSession {
   citizenId: number;
   email: string;
   citizenName: string;
-}
-
-export async function signCitizenSession(session: CitizenSession): Promise<string> {
-  return new SignJWT({ ...session })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("30d")
-    .sign(secret);
 }
 
 export async function verifyCitizenSession(token: string): Promise<CitizenSession | null> {

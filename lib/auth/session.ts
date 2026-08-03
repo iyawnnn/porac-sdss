@@ -1,4 +1,4 @@
-import { SignJWT, jwtVerify } from "jose";
+import { jwtVerify } from "jose";
 
 // JWT (not a DB-backed session table) so middleware can verify it on the
 // edge runtime with no extra database round trip per request. jose is used
@@ -13,14 +13,6 @@ export interface AdminSession {
   adminName: string;
   office: "MEO" | "MDRRMO";
   role: "officer" | "supervisor";
-}
-
-export async function signSession(session: AdminSession): Promise<string> {
-  return new SignJWT({ ...session })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("8h")
-    .sign(secret);
 }
 
 export async function verifySession(token: string): Promise<AdminSession | null> {
