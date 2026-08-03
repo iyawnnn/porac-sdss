@@ -119,6 +119,8 @@ export interface TicketReport {
   exif_data: Record<string, unknown> | null;
   location_mismatch_m: number | null;
   created_at: string;
+  flags: string[] | null;
+  moderation_status: string | null;
 }
 
 export interface TicketStatusHistoryRow {
@@ -336,7 +338,8 @@ export class TicketsService {
 
     const reports = await sql<TicketReport[]>`
       SELECT id, title, description, citizen_severity, image_url,
-        elevation_m, exif_captured_at, exif_data, location_mismatch_m, created_at
+        elevation_m, exif_captured_at, exif_data, location_mismatch_m, created_at,
+        flags, moderation_status
       FROM reports WHERE ticket_id = ${id} ORDER BY created_at
     `;
     const history = await sql<TicketStatusHistoryRow[]>`

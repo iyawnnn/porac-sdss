@@ -4,7 +4,6 @@ import { OAuthController } from './oauth.controller';
 import { OAuthStateService } from '../oauth-state.service';
 import { SessionService } from '../session.service';
 import { GoogleOAuthProvider } from './google-oauth.provider';
-import { FacebookOAuthProvider } from './facebook-oauth.provider';
 import { IdentityConflictError, OAuthService } from './oauth.service';
 import type { Env } from '../../config/env';
 
@@ -71,7 +70,6 @@ function makeController(overrides: {
       .mockReturnValue('https://accounts.google.com/o/oauth2/v2/auth?x=1'),
     resolveProfile: jest.fn().mockResolvedValue(profile),
   } as unknown as GoogleOAuthProvider;
-  const facebook = {} as unknown as FacebookOAuthProvider;
   const linkIdentity =
     overrides.linkIdentity ?? jest.fn().mockResolvedValue(undefined);
   const verifyProviderControl =
@@ -88,7 +86,6 @@ function makeController(overrides: {
     state,
     sessions,
     google,
-    facebook,
     oauth,
   );
   return {

@@ -158,7 +158,7 @@ export class AccountController {
     @CurrentCitizen() citizen: CitizenSession,
     @Res({ passthrough: true }) res: Response,
   ) {
-    if (providerParam !== 'google' && providerParam !== 'facebook') {
+    if (providerParam !== 'google') {
       throw new BadRequestException('Unknown provider.');
     }
 

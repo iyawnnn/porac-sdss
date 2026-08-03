@@ -73,33 +73,6 @@ describe('OAuthService.loginOrCreate', () => {
     });
   });
 
-  it('signs in an existing Facebook identity the same way', async () => {
-    const select = jest.fn().mockReturnValueOnce(
-      chain([
-        {
-          id: 2,
-          email: 'fb@example.com',
-          firstName: 'Maria',
-          lastName: 'Santos',
-        },
-      ]),
-    );
-    const db = {
-      select,
-      transaction: jest.fn(),
-    } as unknown as PostgresJsDatabase;
-    const service = new OAuthService(db, makeSessions().sessions);
-
-    const { token } = await service.loginOrCreate('facebook', {
-      subject: 'fb-sub-1',
-      email: 'fb@example.com',
-      firstName: 'Maria',
-      lastName: 'Santos',
-    });
-
-    expect(token).toBe('signed-token');
-  });
-
   it('creates a new citizen + identity atomically when the email is unused', async () => {
     const select = jest
       .fn()
@@ -185,8 +158,8 @@ describe('OAuthService.loginOrCreate', () => {
     const service = new OAuthService(db, makeSessions().sessions);
 
     await expect(
-      service.loginOrCreate('facebook', {
-        subject: 'fb-sub-2',
+      service.loginOrCreate('google', {
+        subject: 'google-sub-2',
         email: null,
         firstName: 'No',
         lastName: 'Email',

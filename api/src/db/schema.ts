@@ -42,6 +42,11 @@ export const ticketStatusEnum = pgEnum('ticket_status', [
 ]);
 export const officeEnum = pgEnum('office', ['MEO', 'MDRRMO']);
 export const adminRoleEnum = pgEnum('admin_role', ['officer', 'supervisor']);
+// 'facebook' is retained in the enum only because Postgres can't cheaply
+// drop an enum value (would need a full type-rebuild migration) — no code
+// path issues it anymore (Facebook OAuth was removed; Google is the only
+// social login provider) and no row has ever used it (verified empty
+// citizen_identities before removal). Not worth a migration to excise.
 export const oauthProviderEnum = pgEnum('oauth_provider', [
   'google',
   'facebook',
@@ -50,7 +55,7 @@ export const oauthProviderEnum = pgEnum('oauth_provider', [
 export const citizens = pgTable('citizens', {
   id: serial('id').primaryKey(),
   email: text('email').notNull().unique(),
-  // Nullable: OAuth-only citizens (Google/Facebook) never set a password —
+  // Nullable: OAuth-only citizens (Google) never set a password —
   // see citizen_identities below. Password-based signup/login still always
   // populates this.
   passwordHash: text('password_hash'),
@@ -71,10 +76,10 @@ export const citizens = pgTable('citizens', {
 });
 
 // One row per (citizen, external provider identity). A citizen can hold at
-// most one Google and one Facebook identity (unique citizen_id+provider);
-// a given provider account can only ever back one citizen (unique
-// provider+provider_subject) so two citizens can't both claim the same
-// external account.
+// most one identity per provider (unique citizen_id+provider) — Google is
+// the only provider the app issues today; a given provider account can only
+// ever back one citizen (unique provider+provider_subject) so two citizens
+// can't both claim the same external account.
 export const citizenIdentities = pgTable('citizen_identities', {
   id: serial('id').primaryKey(),
   citizenId: integer('citizen_id')

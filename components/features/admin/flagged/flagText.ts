@@ -1,3 +1,22 @@
+// Labels for the flag-type filter dropdown (bare prefixes, no instance
+// data) — distinct from flagLabel below, which formats one flag instance
+// off an actual report (may carry a `:`-delimited suffix).
+export const FLAG_TYPE_LABELS: Record<string, string> = {
+  LOCATION_MISMATCH: "Location mismatch",
+  STALE_PHOTO: "Stale photo",
+  NO_EXIF: "No GPS EXIF",
+  DUPLICATE_IMAGE: "Duplicate image",
+  BOUNDARY_FALLBACK: "Boundary fallback",
+};
+
+export function moderationStatusLabel(status: string | null): string {
+  if (status === null) return "Pending";
+  if (status === "quarantined") return "Quarantined";
+  if (status === "dismissed") return "Dismissed";
+  if (status === "duplicate") return "Duplicate";
+  return status;
+}
+
 export function flagLabel(flag: string): string {
   if (flag.startsWith("DUPLICATE_IMAGE:")) return "Duplicate image";
   if (flag.startsWith("BOUNDARY_FALLBACK:")) return "Barangay boundary fallback";
