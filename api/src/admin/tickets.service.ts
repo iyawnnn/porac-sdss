@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
 import { WeatherService } from '../domain/weather.service';
@@ -16,6 +17,9 @@ import {
 import type { UrgencyLevel } from '../domain/urgency';
 import type { AdminSession } from '../auth/session.service';
 import { CATEGORIES } from '../contracts/schemas';
+import { NotificationsService } from '../notifications/notifications.service';
+import { EMAIL_SERVICE, type EmailService } from '../citizens/email.service';
+import type { Env } from '../config/env';
 import {
   TICKET_STATUSES,
   PAGE_LIMITS,
@@ -135,12 +139,39 @@ export interface TicketPriorityContext {
   rain1hMm: number;
 }
 
+// No entry for 'Reported' (the ladder's start, never a transition target)
+// or 'Rejected' (NEXT_STATUS has no transition that produces it — this
+// codebase has no ticket-rejection call site yet; wire one here if that
+// feature is added later).
+const STATUS_NOTIFICATION: Partial<
+  Record<TicketStatus, { type: string; title: string; message: string }>
+> = {
+  'Under Review': {
+    type: 'ticket_under_review',
+    title: 'Report under review',
+    message: 'Your report is now under review by the assigned office.',
+  },
+  'In Progress': {
+    type: 'ticket_in_progress',
+    title: 'Work in progress',
+    message: 'Work has started on your report.',
+  },
+  Resolved: {
+    type: 'ticket_resolved',
+    title: 'Report resolved',
+    message: 'Your report has been marked resolved.',
+  },
+};
+
 @Injectable()
 export class TicketsService {
   constructor(
     @Inject(PG) private readonly pg: Sql,
     private readonly weather: WeatherService,
     private readonly media: MediaService,
+    private readonly notifications: NotificationsService,
+    @Inject(EMAIL_SERVICE) private readonly email: EmailService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
 
   // URL <-> filter mapping shared between SSR first paint (Phase 8) and the
@@ -397,7 +428,7 @@ export class TicketsService {
         resolutionImageUrl = await this.media.uploadImage(imageBuffer);
     }
 
-    await sql.begin(async (tx) => {
+    const emailRecipients = await sql.begin(async (tx) => {
       await tx`
         UPDATE tickets SET
           status = ${nextStatus},
@@ -410,7 +441,62 @@ export class TicketsService {
         INSERT INTO status_history (ticket_id, status, admin_id, admin_name, changed_at)
         VALUES (${ticketId}, ${nextStatus}, ${admin.adminId}, ${admin.adminName}, now())
       `;
+
+      const notice = STATUS_NOTIFICATION[nextStatus];
+      if (!notice) return [];
+
+      const citizenRows = await tx<
+        { citizen_id: number; report_id: number; email: string }[]
+      >`
+        SELECT DISTINCT ON (r.citizen_id) r.citizen_id, r.id AS report_id, c.email
+        FROM reports r
+        JOIN citizens c ON c.id = r.citizen_id
+        WHERE r.ticket_id = ${ticketId}
+        ORDER BY r.citizen_id, r.id ASC
+      `;
+      for (const row of citizenRows) {
+        await this.notifications.createInTx(tx, {
+          recipientType: 'citizen',
+          recipientId: row.citizen_id,
+          type: notice.type,
+          title: notice.title,
+          message: notice.message,
+          href: `/dashboard/reports/${row.report_id}`,
+          entityType: 'ticket',
+          entityId: ticketId,
+        });
+      }
+
+      // Email is selective, not one-per-status — only Resolved/Rejected
+      // warrant an email (the rest stay in-app-only), per PLAN.md's
+      // notification-system design decision.
+      return nextStatus === 'Resolved' || nextStatus === 'Rejected'
+        ? citizenRows.map((row) => ({ email: row.email, reportId: row.report_id }))
+        : [];
     });
+
+    if (emailRecipients.length > 0) {
+      const webOrigin = this.config.get('WEB_ORIGIN', { infer: true });
+      // Post-commit, never inside the transaction — an external HTTP call
+      // has no place holding a DB transaction open. Both send methods
+      // never throw (ResendEmailService's existing contract), but the
+      // try/catch here is the belt-and-suspenders guarantee that a
+      // misbehaving EmailService implementation can never undo or block
+      // the status change that already committed.
+      for (const recipient of emailRecipients) {
+        try {
+          const reportUrl = `${webOrigin}/dashboard/reports/${recipient.reportId}`;
+          if (nextStatus === 'Resolved') {
+            await this.email.sendReportResolved(recipient.email, reportUrl);
+          } else {
+            await this.email.sendReportRejected(recipient.email, reportUrl);
+          }
+        } catch {
+          // Never let an email failure surface to the caller — the status
+          // change and in-app notification already committed.
+        }
+      }
+    }
 
     return { status: nextStatus };
   }

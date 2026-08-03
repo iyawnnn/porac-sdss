@@ -28,6 +28,10 @@ test("admin shell uses the approved Efferd navigation structure and real routes 
 
   await expect(nav.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
   const sidebarColor = await page.locator('[data-slot="sidebar-inner"]').first().evaluate((element) => getComputedStyle(element).backgroundColor);
+  await page.getByRole("button", { name: /notifications/i }).click();
+  await expect(page.getByText("Notifications", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("Notifications", { exact: true })).toHaveCount(0);
   expect(sidebarColor).not.toBe("rgb(23, 37, 84)");
 });
 
@@ -143,5 +147,9 @@ test("citizen shell remains light and independent of the neutral admin shell", a
 
   const canvas = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(canvas).toBe("rgb(247, 249, 251)");
+  await page.getByRole("button", { name: /notifications/i }).click();
+  await expect(page.getByText("Notifications", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("Notifications", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Porac SDSS")).toBeVisible();
 });

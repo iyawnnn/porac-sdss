@@ -20,6 +20,14 @@ const ACCOUNT_SPATIAL_LIMIT = 3;
 const SPATIAL_RADIUS_M = 25;
 const IP_HOURLY_BACKSTOP = 20;
 
+// Forgot-password (POST /citizens/forgot-password): email is the primary
+// control here (closer to "account identity" than an IP is, same reasoning
+// as ACCOUNT_HOURLY_LIMIT above), IP is the secondary backstop against a
+// single network probing many addresses. Tighter than the report limits
+// since this is a pre-authentication, security-sensitive endpoint.
+const PASSWORD_RESET_EMAIL_HOURLY_LIMIT = 3;
+const PASSWORD_RESET_IP_HOURLY_LIMIT = 10;
+
 export interface RateLimitResult {
   allowed: boolean;
   reason?: string;
@@ -91,6 +99,56 @@ export class RateLimitService {
     await tx`
       INSERT INTO rate_limit_events (citizen_id, ip, geom)
       VALUES (${citizenId}, ${ip}, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326))
+    `;
+  }
+
+  // Independent IP + email checks (both must pass) against the dedicated
+  // password_reset_rate_limit_events table — kept separate from
+  // rate_limit_events because that table's geom column is NOT NULL and
+  // this is a non-geo, pre-authentication event.
+  async checkPasswordResetRateLimit(
+    ip: string,
+    normalizedEmail: string,
+  ): Promise<RateLimitResult> {
+    const sql = this.pg;
+
+    const [{ count: emailHourlyCount }] = await sql<{ count: number }[]>`
+      SELECT count(*)::int AS count FROM password_reset_rate_limit_events
+      WHERE email_normalized = ${normalizedEmail} AND created_at > now() - interval '1 hour'
+    `;
+    if (emailHourlyCount >= PASSWORD_RESET_EMAIL_HOURLY_LIMIT) {
+      return {
+        allowed: false,
+        reason:
+          'Too many password reset requests for this email. Try again later.',
+      };
+    }
+
+    const [{ count: ipHourlyCount }] = await sql<{ count: number }[]>`
+      SELECT count(*)::int AS count FROM password_reset_rate_limit_events
+      WHERE ip = ${ip} AND created_at > now() - interval '1 hour'
+    `;
+    if (ipHourlyCount >= PASSWORD_RESET_IP_HOURLY_LIMIT) {
+      return {
+        allowed: false,
+        reason:
+          'Too many password reset requests from this network. Try again later.',
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  // Records one row per *request attempt* — including attempts for emails
+  // that don't exist — so probing many addresses can't dodge the email
+  // limit just because the enumeration-resistant response looks identical.
+  async recordPasswordResetAttempt(
+    ip: string,
+    normalizedEmail: string,
+  ): Promise<void> {
+    await this.pg`
+      INSERT INTO password_reset_rate_limit_events (ip, email_normalized)
+      VALUES (${ip}, ${normalizedEmail})
     `;
   }
 }

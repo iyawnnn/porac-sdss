@@ -21,6 +21,7 @@ import { DUPLICATE_MERGE_WINDOW_DAYS } from '../common/utils/duplicate-detection
 import { computeUrgency } from '../domain/urgency';
 import type { ReportInput } from '../contracts/schemas';
 import type { CitizenSession } from '../auth/session.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // PLAN.md §9: layered limits + flag thresholds, ported verbatim from
 // app/api/reports/route.ts.
@@ -110,6 +111,7 @@ export class ReportsService {
     private readonly media: MediaService,
     private readonly rateLimit: RateLimitService,
     private readonly recompute: RecomputeService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async submit(
@@ -301,6 +303,29 @@ export class ReportsService {
           WHERE id = ${existing.id}
         `;
 
+        // Every distinct citizen on this ticket (the new reporter included,
+        // since their report was just inserted above) gets one notification
+        // — a merge is one event from each of their perspectives, atomic
+        // with the merge itself. Each links to that citizen's own report on
+        // this ticket, not the report that just triggered the merge.
+        const citizenRows = await tx<{ citizen_id: number; report_id: number }[]>`
+          SELECT DISTINCT ON (citizen_id) citizen_id, id AS report_id
+          FROM reports WHERE ticket_id = ${existing.id}
+          ORDER BY citizen_id, id ASC
+        `;
+        for (const row of citizenRows) {
+          await this.notifications.createInTx(tx, {
+            recipientType: 'citizen',
+            recipientId: row.citizen_id,
+            type: 'report_merged',
+            title: 'Report update',
+            message: `Your report has been grouped with ${memberCount - 1} other report${memberCount - 1 === 1 ? '' : 's'} on this issue.`,
+            href: `/dashboard/reports/${row.report_id}`,
+            entityType: 'ticket',
+            entityId: existing.id,
+          });
+        }
+
         return {
           ticketId: existing.id,
           reportId: report.id,
@@ -345,6 +370,28 @@ export class ReportsService {
         )
         RETURNING id
       `;
+
+      await this.notifications.createInTx(tx, {
+        recipientType: 'citizen',
+        recipientId: citizen.citizenId,
+        type: 'report_received',
+        title: 'Report received',
+        message: 'We received your report and it is now under review.',
+        href: `/dashboard/reports/${report.id}`,
+        entityType: 'ticket',
+        entityId: ticket.id,
+      });
+
+      await this.notifications.createInTx(tx, {
+        recipientType: 'admin',
+        recipientOffice: office,
+        type: 'new_citizen_report',
+        title: 'New citizen report',
+        message: `${category} report in ${barangay.name} - Ticket #${ticket.id}, Report #${report.id}.`,
+        href: `/admin/tickets/${ticket.id}`,
+        entityType: 'ticket',
+        entityId: ticket.id,
+      });
 
       return {
         ticketId: ticket.id,
