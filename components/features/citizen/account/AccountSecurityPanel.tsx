@@ -5,11 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import type { SecurityStatus } from "@/lib/types/citizens-account";
 
-type Provider = "google" | "facebook";
+type Provider = "google";
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   google: "Google",
-  facebook: "Facebook",
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -190,14 +189,6 @@ export default function AccountSecurityPanel({ initial }: { initial: SecuritySta
                   Verify with Google
                 </a>
               )}
-              {status.providers.facebook && (
-                <a
-                  href="/api/auth/facebook?mode=reauth"
-                  className="h-9 rounded-md border border-line-200 px-4 text-sm font-medium text-ink-700 hover:bg-line-100 inline-flex items-center"
-                >
-                  Verify with Facebook
-                </a>
-              )}
             </div>
           </div>
         )}
@@ -206,7 +197,7 @@ export default function AccountSecurityPanel({ initial }: { initial: SecuritySta
       <section className="rounded-xl border border-line-200 bg-surface p-6">
         <h2 className="text-[18px] font-semibold leading-[26px] text-ink-900">Linked providers</h2>
         <div className="mt-4 flex flex-col gap-3">
-          {(["google", "facebook"] as const).map((provider) => {
+          {(["google"] as const).map((provider) => {
             const linked = status.providers[provider];
             return (
               <div

@@ -1,59 +1,38 @@
+import { AlertTriangle, Ban, CheckCircle2, Clock, type LucideIcon } from "lucide-react";
 import type { ModerationStats } from "@/lib/types/admin-moderation";
+import { Card, CardContent } from "@/components/ui/card";
 
 const CARDS: {
   key: keyof ModerationStats;
   label: string;
-  accent: string;
-  glow: string;
+  icon: LucideIcon;
+  tint: string;
   format: (stats: ModerationStats) => string;
 }[] = [
-  {
-    key: "pending",
-    label: "Pending review",
-    accent: "#f59e0b",
-    glow: "rgba(245,158,11,0.18)",
-    format: (s) => String(s.pending),
-  },
-  {
-    key: "quarantined",
-    label: "Auto-quarantined",
-    accent: "#f43f5e",
-    glow: "rgba(244,63,94,0.18)",
-    format: (s) => String(s.quarantined),
-  },
-  {
-    key: "dismissed",
-    label: "Dismissed / clean",
-    accent: "#10b981",
-    glow: "rgba(16,185,129,0.18)",
-    format: (s) => String(s.dismissed),
-  },
-  {
-    key: "avgResolutionHours",
-    label: "Avg. resolution time",
-    accent: "#6366f1",
-    glow: "rgba(99,102,241,0.18)",
-    format: (s) => (s.avgResolutionHours == null ? "—" : `${s.avgResolutionHours.toFixed(1)}h`),
-  },
+  { key: "pending", label: "Pending Review", icon: AlertTriangle, tint: "bg-amber-50 text-amber-600", format: (s) => String(s.pending) },
+  { key: "quarantined", label: "Quarantined", icon: Ban, tint: "bg-rose-50 text-rose-600", format: (s) => String(s.quarantined) },
+  { key: "dismissed", label: "Dismissed", icon: CheckCircle2, tint: "bg-emerald-50 text-emerald-600", format: (s) => String(s.dismissed) },
+  { key: "avgResolutionHours", label: "Avg. Resolution Time", icon: Clock, tint: "bg-blue-50 text-blue-600", format: (s) => (s.avgResolutionHours == null ? "—" : `${s.avgResolutionHours.toFixed(1)}h`) },
 ];
 
-// Glass treatment kept scoped to this KPI strip, matching the precedent set
-// by the admin map's floating controls (MapControls.tsx) rather than
-// introduced as a new global pattern — see DESIGN.md re: flat admin chrome.
+// Flat, bordered KpiCard — matches TicketsWorkspace.tsx's KpiCard exactly
+// (no glass, no shadow beyond shadcn Card's default xs). The previous
+// glassmorphism treatment here was a one-off, not an established pattern.
 export function KpiBar({ stats }: { stats: ModerationStats }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {CARDS.map((card) => (
-        <div
-          key={card.key}
-          className="rounded-xl border border-slate-200/60 bg-white/90 p-4 shadow-xl backdrop-blur-md"
-          style={{ boxShadow: `0 8px 24px -8px ${card.glow}` }}
-        >
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{card.label}</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums" style={{ color: card.accent }}>
-            {card.format(stats)}
-          </p>
-        </div>
+        <Card className="py-0 shadow-xs" key={card.key}>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${card.tint}`}>
+              <card.icon aria-hidden="true" className="size-4.5" />
+            </div>
+            <div className="min-w-0 space-y-0.5">
+              <p className="font-mono text-2xl font-semibold tabular-nums">{card.format(stats)}</p>
+              <p className="truncate text-xs text-muted-foreground" title={card.label}>{card.label}</p>
+            </div>
+          </CardContent>
+        </Card>
       ))}
     </div>
   );

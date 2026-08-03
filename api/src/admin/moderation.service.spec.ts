@@ -1,0 +1,287 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import type { Sql, TransactionSql } from 'postgres';
+import { ModerationService } from './moderation.service';
+import type {
+  CreateNotificationInput,
+  NotificationsService,
+} from '../notifications/notifications.service';
+
+// Captures the mock as a local, typed function rather than reading it back
+// off `notifications.createInTx` at assertion time — the latter trips
+// @typescript-eslint/unbound-method (a bare method reference pulled off an
+// object loses its `this` binding) even though jest.fn() doesn't use `this`.
+function makeNotificationsMock() {
+  const createInTx = jest.fn<
+    Promise<void>,
+    [TransactionSql, CreateNotificationInput]
+  >();
+  const notifications = { createInTx } as unknown as NotificationsService;
+  return { notifications, createInTx };
+}
+
+// Minimal fake postgres.js client: each tagged-template call consumes the
+// next queued response in order, and `.begin` just invokes the callback
+// with the same fake client (no real transaction semantics needed here —
+// moderateReport's atomicity comes from the single guarded UPDATE, which
+// this mock exercises row-by-row exactly as production code calls it).
+// Nested fragments (e.g. `const statusClause = sql\`AND ...\`` embedded via
+// `${statusClause}` in an outer query) must NOT consume a queued response —
+// only a top-level, actually-awaited call does. Returning a thenable (not a
+// resolved Promise) means a fragment used purely as an interpolation value
+// is never `.then()`-ed and so never advances the queue, matching real
+// postgres.js's lazy-fragment semantics.
+function makeFakeSql(responses: unknown[][]) {
+  let i = 0;
+  const calls: unknown[] = [];
+  const fn = ((..._args: unknown[]) => {
+    calls.push(_args);
+    return {
+      then(resolve: (v: unknown) => void, reject?: (e: unknown) => void) {
+        void Promise.resolve(responses[i++] ?? []).then(resolve, reject);
+      },
+    };
+  }) as unknown as Sql;
+  (
+    fn as unknown as {
+      begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
+    }
+  ).begin = (cb) => cb(fn);
+  return { sql: fn, calls };
+}
+
+describe('parseModerationQuery', () => {
+  const { sql } = makeFakeSql([]);
+  const service = new ModerationService(sql, {} as NotificationsService);
+
+  it('defaults status to pending when absent', () => {
+    expect(service.parseModerationQuery({}).status).toBe('pending');
+  });
+
+  it.each(['pending', 'quarantined', 'dismissed', 'duplicate'])(
+    'accepts status %s',
+    (status) => {
+      expect(service.parseModerationQuery({ status }).status).toBe(status);
+    },
+  );
+
+  it('accepts the "all" sentinel even though it is not itself an enumerated status', () => {
+    expect(service.parseModerationQuery({ status: 'all' }).status).toBe('all');
+  });
+
+  it('falls back to pending for an unknown status', () => {
+    expect(service.parseModerationQuery({ status: 'bogus' }).status).toBe(
+      'pending',
+    );
+  });
+
+  it('defaults office to the session office when no query param given', () => {
+    expect(service.parseModerationQuery({}, 'MEO').office).toBe('MEO');
+  });
+
+  it('clears office to undefined when office=all is requested explicitly', () => {
+    expect(
+      service.parseModerationQuery({ office: 'all' }, 'MEO').office,
+    ).toBeUndefined();
+  });
+
+  it('lets an explicit office param override the session office', () => {
+    expect(
+      service.parseModerationQuery({ office: 'MDRRMO' }, 'MEO').office,
+    ).toBe('MDRRMO');
+  });
+
+  it.each([
+    'LOCATION_MISMATCH',
+    'STALE_PHOTO',
+    'NO_EXIF',
+    'DUPLICATE_IMAGE',
+    'BOUNDARY_FALLBACK',
+  ])('accepts a known flag type %s', (flag) => {
+    expect(service.parseModerationQuery({ flag }).flag).toBe(flag);
+  });
+
+  it('rejects an unknown flag type', () => {
+    expect(
+      service.parseModerationQuery({ flag: 'NOT_A_FLAG' }).flag,
+    ).toBeUndefined();
+  });
+
+  it('rejects an unknown category', () => {
+    expect(
+      service.parseModerationQuery({ category: 'Not A Real Category' })
+        .category,
+    ).toBeUndefined();
+  });
+
+  it('accepts a known category', () => {
+    expect(service.parseModerationQuery({ category: 'Pothole' }).category).toBe(
+      'Pothole',
+    );
+  });
+
+  it('parses barangayId, search, from, to as provided', () => {
+    const filters = service.parseModerationQuery({
+      barangayId: '7',
+      search: 'flood',
+      from: '2026-01-01',
+      to: '2026-01-31',
+    });
+    expect(filters.barangayId).toBe(7);
+    expect(filters.search).toBe('flood');
+    expect(filters.from).toBe('2026-01-01');
+    expect(filters.to).toBe('2026-01-31');
+  });
+
+  it('clamps page to a minimum of 1', () => {
+    expect(service.parseModerationQuery({ page: '0' }).page).toBe(1);
+    expect(service.parseModerationQuery({ page: '-5' }).page).toBe(1);
+  });
+
+  it('falls back to the default page limit for an invalid limit', () => {
+    expect(service.parseModerationQuery({ limit: '999' }).limit).toBe(15);
+  });
+});
+
+describe('getModerationQueue pagination', () => {
+  it('computes totalPages from the row-carried total_count', async () => {
+    const rows = [
+      { id: 1, total_count: 42 },
+      { id: 2, total_count: 42 },
+    ];
+    const { sql } = makeFakeSql([rows]);
+    const service = new ModerationService(sql, {} as NotificationsService);
+
+    const result = await service.getModerationQueue({ page: 1, limit: 10 });
+
+    expect(result.total).toBe(42);
+    expect(result.page).toBe(1);
+    expect(result.limit).toBe(10);
+    expect(result.totalPages).toBe(5);
+    expect(result.reports).toHaveLength(2);
+  });
+
+  it('reports total 0 and totalPages 1 when nothing matches', async () => {
+    const { sql } = makeFakeSql([[]]);
+    const service = new ModerationService(sql, {} as NotificationsService);
+
+    const result = await service.getModerationQueue({ page: 1, limit: 10 });
+
+    expect(result.total).toBe(0);
+    expect(result.totalPages).toBe(1);
+    expect(result.reports).toEqual([]);
+  });
+});
+
+describe('moderateReport transitions', () => {
+  it('dismiss requires no note and sends no notification', async () => {
+    const { sql } = makeFakeSql([
+      [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
+    ]);
+    const { notifications, createInTx } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    const result = await service.moderateReport(1, 'dismiss', 'Admin A');
+
+    expect(result.status).toBe('dismissed');
+    expect(createInTx).not.toHaveBeenCalled();
+  });
+
+  it('quarantine without a note is rejected before touching the database', async () => {
+    const { sql, calls } = makeFakeSql([]);
+    const { notifications, createInTx } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    await expect(
+      service.moderateReport(1, 'quarantine', 'Admin A', undefined, '   '),
+    ).rejects.toThrow(BadRequestException);
+    expect(calls).toHaveLength(0);
+    expect(createInTx).not.toHaveBeenCalled();
+  });
+
+  it('quarantine with a note flags the ticket and notifies the citizen', async () => {
+    const { sql } = makeFakeSql([
+      [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
+      [{}], // UPDATE tickets SET flagged = true
+    ]);
+    const { notifications, createInTx } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    const result = await service.moderateReport(
+      1,
+      'quarantine',
+      'Admin A',
+      undefined,
+      'Photo GPS is 4km from the pin, likely reused stock image.',
+    );
+
+    expect(result.status).toBe('quarantined');
+    expect(createInTx).toHaveBeenCalledTimes(1);
+    const [, input] = createInTx.mock.calls[0];
+    expect(input.recipientType).toBe('citizen');
+    expect(input.recipientId).toBe(9);
+    expect(input.type).toBe('report_quarantined');
+  });
+
+  it('duplicate requires a canonicalReportId', async () => {
+    const { sql } = makeFakeSql([]);
+    const { notifications } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    await expect(
+      service.moderateReport(1, 'duplicate', 'Admin A'),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('duplicate rejects a canonicalReportId that does not exist', async () => {
+    const { sql } = makeFakeSql([[]]); // SELECT id FROM reports WHERE id = canonical -> none
+    const { notifications } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    await expect(
+      service.moderateReport(1, 'duplicate', 'Admin A', 999),
+    ).rejects.toThrow('Canonical report not found');
+  });
+
+  it('duplicate with a valid canonicalReportId stores it as the note and notifies the citizen', async () => {
+    const { sql } = makeFakeSql([
+      [{ id: 42 }], // canonical exists
+      [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
+    ]);
+    const { notifications, createInTx } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    const result = await service.moderateReport(1, 'duplicate', 'Admin A', 42);
+
+    expect(result.status).toBe('duplicate');
+    const [, input] = createInTx.mock.calls[0];
+    expect(input.type).toBe('report_flagged_duplicate');
+    expect(input.recipientId).toBe(9);
+  });
+
+  it('rejects an already-moderated report without double-writing', async () => {
+    const { sql } = makeFakeSql([
+      [], // UPDATE reports matches zero rows (already moderated)
+      [{ moderation_status: 'quarantined' }], // fallback SELECT
+    ]);
+    const { notifications, createInTx } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    await expect(
+      service.moderateReport(1, 'dismiss', 'Admin A'),
+    ).rejects.toThrow('Report was already quarantined');
+    expect(createInTx).not.toHaveBeenCalled();
+  });
+
+  it('reports NotFoundException for a report that does not exist at all', async () => {
+    const { sql } = makeFakeSql([
+      [], // UPDATE reports matches zero rows
+      [], // fallback SELECT finds nothing either
+    ]);
+    const { notifications } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    await expect(
+      service.moderateReport(1, 'dismiss', 'Admin A'),
+    ).rejects.toThrow(NotFoundException);
+  });
+});

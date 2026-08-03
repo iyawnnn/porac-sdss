@@ -74,9 +74,15 @@ describe('OAuthStateService', () => {
   });
 
   it('rejects a provider mismatch between issue and consume', async () => {
+    // 'google' is the only real provider value now, but the mismatch check
+    // itself is still real defensive logic against a forged token claiming
+    // a different provider — cast an arbitrary bad value past the narrowed
+    // type to keep exercising it.
     const service = makeService();
     const { token, nonce } = await service.issue('google');
-    await expect(service.consume('facebook', token, nonce)).rejects.toThrow();
+    await expect(
+      service.consume('other' as unknown as 'google', token, nonce),
+    ).rejects.toThrow();
   });
 
   it('rejects an expired state token', async () => {

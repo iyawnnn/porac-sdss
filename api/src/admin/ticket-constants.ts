@@ -20,3 +20,30 @@ export const NEXT_STATUS: Record<string, TicketStatus> = {
   'Under Review': 'In Progress',
   'In Progress': 'Resolved',
 };
+
+// The 5 real flag prefixes reports.service.ts ever writes (see FLAG
+// generation in submit()). Some carry a `:`-delimited suffix
+// (DUPLICATE_IMAGE:<reportId>, BOUNDARY_FALLBACK:<name>:<distanceM>) — a
+// query filtering "flag type" matches the prefix, not the full string.
+export type FlagType =
+  | 'LOCATION_MISMATCH'
+  | 'STALE_PHOTO'
+  | 'NO_EXIF'
+  | 'DUPLICATE_IMAGE'
+  | 'BOUNDARY_FALLBACK';
+export const FLAG_TYPES: FlagType[] = [
+  'LOCATION_MISMATCH',
+  'STALE_PHOTO',
+  'NO_EXIF',
+  'DUPLICATE_IMAGE',
+  'BOUNDARY_FALLBACK',
+];
+
+export type ModerationStatusFilter =
+  'pending' | 'quarantined' | 'dismissed' | 'duplicate' | 'all';
+export const MODERATION_STATUSES: ModerationStatusFilter[] = [
+  'pending',
+  'quarantined',
+  'dismissed',
+  'duplicate',
+];

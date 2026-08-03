@@ -17,7 +17,7 @@ export class FinalLoginMethodError extends Error {}
 
 export interface SecurityStatus {
   hasPassword: boolean;
-  providers: { google: boolean; facebook: boolean };
+  providers: { google: boolean };
 }
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -41,7 +41,6 @@ export class AccountService {
       hasPassword: Boolean(citizen?.passwordHash),
       providers: {
         google: identities.some((i) => i.provider === 'google'),
-        facebook: identities.some((i) => i.provider === 'facebook'),
       },
     };
   }

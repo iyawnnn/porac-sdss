@@ -74,7 +74,7 @@ export class OAuthService {
   }
 
   // Attaches a new provider identity to an already-authenticated citizen
-  // (the "Link Google/Facebook" button on Account & Security). Never
+  // (the "Link Google" button on Account & Security). Never
   // called from the public login flow, and never matches by email — the
   // citizen is already known from their own session, so the only question
   // is whether this specific provider account is free to attach.

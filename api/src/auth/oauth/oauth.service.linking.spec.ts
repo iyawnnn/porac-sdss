@@ -31,13 +31,6 @@ const googleProfile: OAuthProfile = {
   lastName: 'Dela Cruz',
 };
 
-const facebookProfile: OAuthProfile = {
-  subject: 'fb-sub-1',
-  email: 'citizen@example.com',
-  firstName: 'Juan',
-  lastName: 'Dela Cruz',
-};
-
 describe('OAuthService.linkIdentity', () => {
   it('links a brand-new Google identity to the authenticated citizen', async () => {
     const select = jest
@@ -55,26 +48,6 @@ describe('OAuthService.linkIdentity', () => {
 
     await expect(
       service.linkIdentity(1, 'google', googleProfile),
-    ).resolves.toBeUndefined();
-    expect(transaction).toHaveBeenCalledTimes(1);
-  });
-
-  it('links a brand-new Facebook identity to the authenticated citizen', async () => {
-    const select = jest
-      .fn()
-      .mockReturnValueOnce(chain([]))
-      .mockReturnValueOnce(chain([]));
-    const insert = jest
-      .fn()
-      .mockReturnValue({ values: () => Promise.resolve(undefined) });
-    const transaction = jest.fn((cb: (tx: unknown) => unknown) =>
-      cb({ insert }),
-    );
-    const db = { select, insert, transaction } as unknown as PostgresJsDatabase;
-    const service = new OAuthService(db, makeSessions());
-
-    await expect(
-      service.linkIdentity(2, 'facebook', facebookProfile),
     ).resolves.toBeUndefined();
     expect(transaction).toHaveBeenCalledTimes(1);
   });
