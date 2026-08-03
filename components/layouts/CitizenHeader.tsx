@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { CitizenSession } from "@/lib/auth/citizenSession";
 import CitizenLogoutButton from "@/components/features/citizen/auth/CitizenLogoutButton";
+import { CitizenNotificationBell } from "@/components/features/citizen/notifications/CitizenNotificationBell";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
@@ -34,6 +35,7 @@ export default function CitizenHeader({ session }: { session: CitizenSession }) 
           <span className="max-w-[18rem] truncate rounded-full bg-line-100 px-2 py-1 text-xs font-medium text-ink-500">
             {session.email}
           </span>
+          <CitizenNotificationBell />
           <CitizenLogoutButton />
         </div>
       </div>

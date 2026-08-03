@@ -167,3 +167,39 @@ describe('ResendEmailService.sendOAuthOnlyNotice / sendPasswordResetConfirmation
     expect(payload.subject).toMatch(/changed/i);
   });
 });
+
+describe('ResendEmailService.sendReportResolved / sendReportRejected', () => {
+  beforeEach(() => {
+    sendMock.mockReset();
+    sendMock.mockResolvedValue({ data: { id: 'msg_789' }, error: null });
+  });
+
+  it('sends the report-resolved email containing the report URL', async () => {
+    const service = new ResendEmailService(makeConfig());
+    await service.sendReportResolved(
+      'citizen@example.com',
+      'http://localhost:3000/dashboard/reports/13',
+    );
+
+    const [payload] = sendMock.mock.calls[0] as [
+      { to: string; subject: string; html: string },
+    ];
+    expect(payload.to).toBe('citizen@example.com');
+    expect(payload.subject).toMatch(/resolved/i);
+    expect(payload.html).toContain('http://localhost:3000/dashboard/reports/13');
+  });
+
+  it('sends the report-rejected email containing the report URL', async () => {
+    const service = new ResendEmailService(makeConfig());
+    await service.sendReportRejected(
+      'citizen@example.com',
+      'http://localhost:3000/dashboard/reports/13',
+    );
+
+    const [payload] = sendMock.mock.calls[0] as [
+      { to: string; subject: string; html: string },
+    ];
+    expect(payload.to).toBe('citizen@example.com');
+    expect(payload.html).toContain('http://localhost:3000/dashboard/reports/13');
+  });
+});

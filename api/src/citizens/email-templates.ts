@@ -94,3 +94,45 @@ export function passwordResetConfirmationEmailHtml(): string {
     </p>
   `);
 }
+
+export function reportResolvedEmailHtml(reportUrl: string): string {
+  return layout(`
+    <h1 style="margin:0 0 16px;font-size:18px;color:#111827;">Your report was resolved</h1>
+    <p style="margin:0 0 20px;">
+      Good news — the report you submitted has been marked resolved by the assigned office.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+      <tr>
+        <td style="border-radius:6px;background-color:${BRAND_COLOR};">
+          <a href="${reportUrl}" style="display:inline-block;padding:10px 24px;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px;border-radius:6px;">
+            View report
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;color:#6b7280;font-size:12px;">
+      Thank you for helping keep the community informed.
+    </p>
+  `);
+}
+
+export function reportRejectedEmailHtml(reportUrl: string): string {
+  return layout(`
+    <h1 style="margin:0 0 16px;font-size:18px;color:#111827;">Your report was not accepted</h1>
+    <p style="margin:0 0 20px;">
+      The report you submitted was reviewed and could not be acted on by the assigned office.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+      <tr>
+        <td style="border-radius:6px;background-color:${BRAND_COLOR};">
+          <a href="${reportUrl}" style="display:inline-block;padding:10px 24px;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px;border-radius:6px;">
+            View report
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;color:#6b7280;font-size:12px;">
+      If you believe this was a mistake, you can submit a new report with more detail.
+    </p>
+  `);
+}

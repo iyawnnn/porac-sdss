@@ -7,6 +7,8 @@ import {
   oauthOnlyNoticeEmailHtml,
   passwordResetConfirmationEmailHtml,
   passwordResetEmailHtml,
+  reportRejectedEmailHtml,
+  reportResolvedEmailHtml,
 } from './email-templates';
 
 function maskEmail(email: string): string {
@@ -93,6 +95,22 @@ export class ResendEmailService implements EmailService {
       email,
       'Your PORAC-SDSS password was changed',
       passwordResetConfirmationEmailHtml(),
+    );
+  }
+
+  async sendReportResolved(email: string, reportUrl: string): Promise<void> {
+    await this.send(
+      email,
+      'Your report was resolved — PORAC-SDSS',
+      reportResolvedEmailHtml(reportUrl),
+    );
+  }
+
+  async sendReportRejected(email: string, reportUrl: string): Promise<void> {
+    await this.send(
+      email,
+      'Update on your report — PORAC-SDSS',
+      reportRejectedEmailHtml(reportUrl),
     );
   }
 }
