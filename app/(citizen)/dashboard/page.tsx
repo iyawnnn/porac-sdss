@@ -5,13 +5,14 @@ import type { PublicTicketGeoRow, BarangayGeoFeatureCollection } from "@/lib/typ
 import PublicMapClientLoader from "@/components/features/citizen/map/PublicMapClientLoader";
 import { StatTile } from "@/components/features/citizen/dashboard/StatTile";
 import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "@/components/features/citizen/dashboard/reportStatusStyle";
+import { CitizenUnauthorized } from "@/components/features/citizen/dashboard/CitizenUnauthorized";
 import { timeAgo } from "@/lib/utils/time-ago";
 
 export default async function DashboardPage() {
   const session = await getCitizenSessionFromApi();
   // proxy.ts already redirects unauthenticated requests before this
-  // renders; this null-check is just defense in depth.
-  if (!session) return null;
+  // renders; this is just defense in depth.
+  if (!session) return <CitizenUnauthorized />;
 
   const [reports, publicMap] = await Promise.all([
     apiGet<MyReportRow[]>("/reports/mine"),
