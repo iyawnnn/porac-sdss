@@ -39,34 +39,45 @@ export class TicketsController {
     @CurrentAdmin() admin: AdminSession,
   ) {
     const recomputeResult = await this.recompute.recomputeActiveTicketUrgency();
-    const filters = this.tickets.parseTicketQuery(query, admin.office);
+    const filters = this.tickets.parseTicketQuery(query, admin);
     const result = await this.tickets.getTicketsForAdmin(filters);
     return { ...result, recompute: recomputeResult };
   }
 
   @Get('geo')
-  async geo(@Query('office') officeParam?: string) {
+  async geo(
+    @Query('office') officeParam: string | undefined,
+    @CurrentAdmin() admin: AdminSession,
+  ) {
     await this.recompute.recomputeActiveTicketUrgency();
-    const office =
-      officeParam === 'MEO' || officeParam === 'MDRRMO' ? officeParam : null;
-    return this.tickets.getTicketsGeo(office);
+    const requestedOffice =
+      officeParam === 'all' || officeParam === 'MEO' || officeParam === 'MDRRMO'
+        ? officeParam
+        : undefined;
+    return this.tickets.getTicketsGeo(admin, requestedOffice);
   }
 
   @Get(':id')
-  async detail(@Param('id', ParseIntPipe) id: number) {
+  async detail(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+  ) {
     // Matches the original SSR page (app/admin/tickets/[id]/page.tsx),
     // which always recomputed right before reading — otherwise the
     // priority/urgency shown could lag behind the queue by up to the
     // caller's own recompute cadence.
     await this.recompute.recomputeActiveTicketUrgency();
-    const detail = await this.tickets.getTicketDetail(id);
+    const detail = await this.tickets.getTicketDetail(id, admin);
     if (!detail) throw new NotFoundException();
     return detail;
   }
 
   @Get(':id/priority-context')
-  async priorityContext(@Param('id', ParseIntPipe) id: number) {
-    const context = await this.tickets.getTicketPriorityContext(id);
+  async priorityContext(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+  ) {
+    const context = await this.tickets.getTicketPriorityContext(id, admin);
     if (!context) throw new NotFoundException();
     return context;
   }

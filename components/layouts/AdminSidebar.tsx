@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, Map, ShieldAlert, Ticket, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
+import { isSystemAdmin } from "@/lib/utils/adminScope";
 import { Button } from "@/components/ui/button";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail, useSidebar } from "@/components/ui/sidebar";
-import OfficeScopeToggle from "@/components/features/admin/shared/OfficeScopeToggle";
 import { AdminSearch } from "@/components/layouts/AdminSearch";
 import { AdminSidebarTrigger } from "@/components/layouts/AdminSidebarTrigger";
 
@@ -56,9 +56,8 @@ export default function AdminSidebar({ session }: { session: AdminSession }) {
       </SidebarContent>
       <SidebarFooter className="px-4">
         <div className="rounded-lg border bg-background px-3 pt-4 pb-3">
-          <p className="font-medium text-xs">Current office scope</p>
-          <p className="mt-1 text-[10px] text-muted-foreground">Signed in as {session.adminName} {"\u00b7"} {session.office}</p>
-          <div className="mt-3"><OfficeScopeToggle myOffice={session.office} /></div>
+          <p className="font-medium text-xs">{isSystemAdmin(session) ? "All Offices" : `My Office: ${session.office}`}</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">Signed in as {session.adminName} {"\u00b7"} {isSystemAdmin(session) ? "System Administrator" : session.office}</p>
         </div>
       </SidebarFooter>
       <SidebarRail />

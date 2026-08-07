@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
 import type { PaginatedModeration, ModerationStats } from "@/lib/types/admin-moderation";
+import { isSystemAdmin } from "@/lib/utils/adminScope";
 import { FlaggedWorkspace } from "@/components/features/admin/flagged/FlaggedWorkspace";
 import { FlaggedQueueSkeleton } from "@/components/features/admin/flagged/FlaggedQueueSkeleton";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
@@ -48,7 +49,8 @@ async function FlaggedData({ query }: { query: Record<string, string | undefined
       initialData={initialData}
       initialQuery={query}
       initialStats={initialStats}
-      sessionOffice={session?.office}
+      sessionOffice={session?.office ?? undefined}
+      isSystemAdmin={session ? isSystemAdmin(session) : false}
     />
   );
 }

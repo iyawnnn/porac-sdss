@@ -60,8 +60,9 @@ pnpm --prefix api migrate:citizen-identities
 pnpm --prefix api migrate:citizen-account-security
 pnpm --prefix api migrate:citizen-password-reset
 pnpm --prefix api migrate:notifications
+pnpm --prefix api migrate:admin-system-role
 pnpm --prefix api verify:config                     # print computed elev_min/elev_max etc.
-pnpm --prefix api seed:admin -- <email> <password> <MEO|MDRRMO> <officer|supervisor>
+pnpm --prefix api seed:admin -- <email> <password> <MEO|MDRRMO|-> <officer|supervisor|system_admin>  # use '-' for office with system_admin
 pnpm --prefix api seed:diverse-reports              # idempotent demo tickets/citizens
 ```
 

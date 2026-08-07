@@ -17,7 +17,9 @@ interface DashboardResponse {
   categories: CategoryDistributionRow[];
   incidentTrend: IncidentTrendRow[];
   statusDistribution: DistributionRow[];
-  departmentWorkload: DistributionRow[];
+  // null for office-scoped admins — cross-office comparison is System
+  // Administrator only, see api/src/admin/dashboard.controller.ts.
+  departmentWorkload: DistributionRow[] | null;
   citizenSeverityDistribution: DistributionRow[];
   range: DashboardRange;
 }

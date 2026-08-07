@@ -25,8 +25,10 @@ export interface AdminSession {
   adminId: number;
   email: string;
   adminName: string;
-  office: 'MEO' | 'MDRRMO';
-  role: 'officer' | 'supervisor';
+  // null only for role: 'system_admin' — every officer/supervisor is
+  // pinned to exactly one office. See api/src/common/authz/admin-scope.ts.
+  office: 'MEO' | 'MDRRMO' | null;
+  role: 'officer' | 'supervisor' | 'system_admin';
 }
 
 export interface CitizenSession {

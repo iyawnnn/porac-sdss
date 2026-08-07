@@ -3,14 +3,24 @@ import { db, client } from "../db";
 import { admins } from "../../src/db/schema";
 
 async function main() {
-  const [email, password, office, role, firstName, lastName] = process.argv.slice(2);
+  const [email, password, officeArg, role, firstName, lastName] = process.argv.slice(2);
 
-  if (!email || !password || !office || !role) {
+  if (!email || !password || !officeArg || !role) {
     console.error(
-      "Usage: tsx scripts/seed-admin.ts <email> <password> <MEO|MDRRMO> <officer|supervisor> [firstName] [lastName]"
+      "Usage: tsx scripts/seed-admin.ts <email> <password> <MEO|MDRRMO|-> <officer|supervisor|system_admin> [firstName] [lastName]\n" +
+        "  Use '-' for office when role is system_admin (system admins have no office)."
     );
     process.exit(1);
   }
+  if (role === "system_admin" && officeArg !== "-") {
+    console.error("system_admin must be seeded with office '-' (no office).");
+    process.exit(1);
+  }
+  if (role !== "system_admin" && officeArg !== "MEO" && officeArg !== "MDRRMO") {
+    console.error("office must be MEO or MDRRMO for officer/supervisor.");
+    process.exit(1);
+  }
+  const office = officeArg === "-" ? null : (officeArg as "MEO" | "MDRRMO");
 
   const passwordHash = await bcrypt.hash(password, 10);
 
@@ -22,8 +32,8 @@ async function main() {
     .values({
       email,
       passwordHash,
-      office: office as "MEO" | "MDRRMO",
-      role: role as "officer" | "supervisor",
+      office,
+      role: role as "officer" | "supervisor" | "system_admin",
       firstName: firstName ?? "Test",
       lastName: lastName ?? "Admin",
     })
@@ -31,8 +41,8 @@ async function main() {
       target: admins.email,
       set: {
         passwordHash,
-        office: office as "MEO" | "MDRRMO",
-        role: role as "officer" | "supervisor",
+        office,
+        role: role as "officer" | "supervisor" | "system_admin",
         firstName: firstName ?? "Test",
         lastName: lastName ?? "Admin",
       },

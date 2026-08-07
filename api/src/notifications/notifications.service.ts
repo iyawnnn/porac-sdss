@@ -1,12 +1,14 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, isNull, lt, lte, or } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, lt, lte, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { TransactionSql } from 'postgres';
 import { DB } from '../db/db.module';
 import { notifications } from '../db/schema';
 
 export type NotificationPrincipal =
-  | { type: 'admin'; adminId: number; office: 'MEO' | 'MDRRMO' }
+  // office is null only for a system_admin admin session — see
+  // api/src/common/authz/admin-scope.ts.
+  | { type: 'admin'; adminId: number; office: 'MEO' | 'MDRRMO' | null }
   | { type: 'citizen'; citizenId: number };
 
 export interface CreateNotificationInput {
@@ -63,9 +65,11 @@ export class NotificationsService {
   }
 
   // Authorization boundary: a citizen only ever sees rows addressed to
-  // their own citizenId; an admin sees rows addressed to their own adminId
-  // OR to their own office (office-wide, no per-admin fan-out) — never the
-  // other principal type's rows, never another office's.
+  // their own citizenId; an office admin sees rows addressed to their own
+  // adminId OR to their own office (office-wide, no per-admin fan-out); a
+  // system admin (office: null) additionally sees every office-addressed
+  // admin notification, since they aren't scoped to one office — never the
+  // other principal type's rows, never another office's for an office admin.
   private scopeFilter(principal: NotificationPrincipal) {
     if (principal.type === 'citizen') {
       return and(
@@ -77,7 +81,9 @@ export class NotificationsService {
       eq(notifications.recipientType, 'admin'),
       or(
         eq(notifications.recipientId, principal.adminId),
-        eq(notifications.recipientOffice, principal.office),
+        principal.office === null
+          ? isNotNull(notifications.recipientOffice)
+          : eq(notifications.recipientOffice, principal.office),
       ),
     );
   }

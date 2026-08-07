@@ -109,12 +109,14 @@ export function TicketsWorkspace({
   initialRecompute,
   barangays,
   sessionOffice,
+  isSystemAdmin = false,
 }: {
   initialData: PaginatedTickets;
   initialQuery: Record<string, string | undefined>;
   initialRecompute: RecomputeResult;
   barangays: Barangay[];
   sessionOffice?: string;
+  isSystemAdmin?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -238,14 +240,22 @@ export function TicketsWorkspace({
               value={searchInput}
             />
           </div>
-          <Select onValueChange={(v) => updateFilter({ office: v })} value={query.office}>
-            <SelectTrigger aria-label="Office"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All offices</SelectItem>
-              <SelectItem value="MEO">MEO</SelectItem>
-              <SelectItem value="MDRRMO">MDRRMO</SelectItem>
-            </SelectContent>
-          </Select>
+          {isSystemAdmin ? (
+            <Select onValueChange={(v) => updateFilter({ office: v })} value={query.office}>
+              <SelectTrigger aria-label="Office"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All offices</SelectItem>
+                <SelectItem value="MEO">MEO</SelectItem>
+                <SelectItem value="MDRRMO">MDRRMO</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            // Non-system-admins can't view another office's tickets — the
+            // backend clamps this regardless of what's sent, so the picker
+            // is replaced with a fixed label instead of a control that
+            // would look interactive but do nothing.
+            <Badge aria-label="Office" variant="secondary">My Office: {sessionOffice}</Badge>
+          )}
           <Select onValueChange={(v) => updateFilter({ status: v })} value={query.status}>
             <SelectTrigger aria-label="Status"><SelectValue /></SelectTrigger>
             <SelectContent>

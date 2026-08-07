@@ -17,21 +17,30 @@ export default function AdminLoginForm() {
     setError("");
 
     const form = new FormData(e.currentTarget);
-    const res = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: form.get("email"),
-        password: form.get("password"),
-      }),
-    });
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.get("email"),
+          password: form.get("password"),
+        }),
+      });
 
-    if (res.ok) {
-      router.push("/admin");
-      router.refresh();
-    } else {
-      const data = await res.json();
-      setError(data.error ?? "Login failed");
+      if (res.ok) {
+        router.push("/admin");
+        router.refresh();
+      } else {
+        const data = await res.json();
+        setError(data.error ?? "Login failed");
+        setSubmitting(false);
+      }
+    } catch {
+      // fetch() rejects on a network-level failure (DNS, connection refused,
+      // dropped connection) rather than resolving with a non-2xx response —
+      // without this, a transient connection failure left the button stuck
+      // on "Signing in…" forever with no way to retry.
+      setError("Could not reach the server. Please try again.");
       setSubmitting(false);
     }
   }

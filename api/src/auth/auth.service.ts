@@ -22,7 +22,7 @@ export class AuthService {
   async adminLogin(
     email: unknown,
     password: unknown,
-  ): Promise<{ token: string; office: 'MEO' | 'MDRRMO' }> {
+  ): Promise<{ token: string; office: 'MEO' | 'MDRRMO' | null }> {
     if (typeof email !== 'string' || typeof password !== 'string') {
       throw new BadRequestException('Email and password are required');
     }
