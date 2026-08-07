@@ -33,8 +33,12 @@ pnpm lint               # eslint
 pnpm --prefix api start:dev    # dev server (:3001), or cd api && pnpm start:dev
 pnpm --prefix api build        # nest build
 pnpm --prefix api test              # jest unit tests
-pnpm --prefix api test:e2e      # jest e2e tests
+pnpm --prefix api test:e2e      # jest e2e tests (NestJS-side, not Playwright — see below)
 ```
+
+## Playwright E2E tests (root `e2e/`)
+
+`pnpm exec playwright test -- --workers=1` drives the real Next.js dev server against the real dev database (no mocks, no isolated test DB) — the API (`pnpm --prefix api start:dev`) must already be running and migrated first. Playwright's `globalSetup` (`e2e/global-setup.ts`) idempotently provisions the demo admin/citizen accounts every spec logs in as before tests start, so you don't need to seed them by hand — see README.md §I for the full flow, why `--workers=1` is required (no per-test DB isolation), and why ticket/report demo data (`pnpm --prefix api seed:diverse-reports`) stays a separate, explicit step rather than something global setup runs automatically (it's destructive — `TRUNCATE`s existing tickets). All E2E credentials are centralized in `e2e/test-credentials.ts`; never hardcode a login in a new spec.
 
 `build`/`start`/`start:dev`/`start:debug` all run `scripts/clean-build-cache.js` first (see that file for why) — tsc's incremental cache (`tsconfig.build.tsbuildinfo`) lives outside `dist/` and survives `nest-cli.json`'s `deleteOutDir`, so if `dist/` is ever deleted independently of a build, the next build used to trust the stale cache and silently skip re-emitting `dist/main.js`. This is now self-healing: every build/start command wipes both `dist/` and the buildinfo file first, so there is never a reason to manually delete either — if you ever see `Cannot find module .../dist/main`, just re-run the normal command. `pnpm --prefix api run verify:build-recovery` is the regression test for this.
 

@@ -19,6 +19,7 @@ import { MapLegend } from "./MapLegend";
 import { MapFilterBar, EMPTY_MAP_FILTERS, type MapFilterState } from "./MapFilterBar";
 import { TicketPopup } from "./TicketPopup";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
 
 configureLeafletMarkerIcons();
 const CITY_CENTER: [number, number] = [MUNICIPALITY.centerLat, MUNICIPALITY.centerLng];
@@ -40,7 +41,10 @@ function HeatmapLayer({ tickets }: { tickets: AdminTicketGeoRow[] }) {
   const map = useMap();
   useEffect(() => {
     const points: L.HeatLatLngTuple[] = tickets.map((ticket) => [ticket.lat, ticket.lng, Math.max((ticket.priority_index ?? 1) / 100, 0.15)]);
-    const layer = L.heatLayer(points, { radius: 28, blur: 20, maxZoom: MUNICIPALITY.defaultZoom + 2, gradient: { 0.2: "#2b6cb0", 0.5: "#d99a00", 0.75: "#e2680e", 1: "#c42b1c" } }).addTo(map);
+    // Deliberately distinct from the urgency-band hex values (getUrgencyBandStyle) — the
+    // heatmap encodes priority_index, a different metric than urgency, so it must never
+    // share colors with the urgency pin/legend palette (see CLAUDE.md's Urgency vs Priority note).
+    const layer = L.heatLayer(points, { radius: 28, blur: 20, maxZoom: MUNICIPALITY.defaultZoom + 2, gradient: { 0.2: "#4338ca", 0.5: "#7c3aed", 0.75: "#c026d3", 1: "#db2777" } }).addTo(map);
     return () => { layer.remove(); };
   }, [map, tickets]);
   return null;
@@ -97,6 +101,8 @@ export default function MapClient({ office }: { office?: "MEO" | "MDRRMO" }) {
   const [barangays, setBarangays] = useState<FeatureCollection | null>(null);
   const [municipalBoundary, setMunicipalBoundary] = useState<FeatureCollection | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
   const [mode, setMode] = useState<MapMode>("pins");
   const [showBoundaries, setShowBoundaries] = useState(true);
   const [filters, setFilters] = useState<MapFilterState>(EMPTY_MAP_FILTERS);
@@ -105,8 +111,8 @@ export default function MapClient({ office }: { office?: "MEO" | "MDRRMO" }) {
   const [selectedBarangayBounds, setSelectedBarangayBounds] = useState<L.LatLngBounds | null>(null);
   const [viewportResetKey, setViewportResetKey] = useState(0);
 
-  useEffect(() => { const controller = new AbortController(); const loadTickets = async () => { setLoading(true); const qs = office ? `?office=${office}` : ""; try { const response = await fetch(`/api/admin/tickets/geo${qs}`, { signal: controller.signal }); if (!response.ok) throw new Error("Unable to load tickets"); setTickets(await response.json() as AdminTicketGeoRow[]); } catch { if (!controller.signal.aborted) setTickets([]); } finally { if (!controller.signal.aborted) setLoading(false); } }; void loadTickets(); return () => controller.abort(); }, [office]);
-  useEffect(() => { fetch("/api/admin/barangays/geo").then((res) => res.json()).then(setBarangays); fetch("/assets/gis/porac_osm_boundary.json").then((res) => res.ok ? res.json() : null).then(setMunicipalBoundary); }, []);
+  useEffect(() => { const controller = new AbortController(); const loadTickets = async () => { setLoading(true); setLoadError(false); const qs = office ? `?office=${office}` : ""; try { const response = await fetch(`/api/admin/tickets/geo${qs}`, { signal: controller.signal }); if (!response.ok) throw new Error("Unable to load tickets"); setTickets(await response.json() as AdminTicketGeoRow[]); } catch { if (!controller.signal.aborted) { setTickets([]); setLoadError(true); } } finally { if (!controller.signal.aborted) setLoading(false); } }; void loadTickets(); return () => controller.abort(); }, [office, retryNonce]);
+  useEffect(() => { fetch("/api/admin/barangays/geo").then((res) => res.ok ? res.json() : null).then(setBarangays).catch(() => setBarangays(null)); fetch("/assets/gis/porac_osm_boundary.json").then((res) => res.ok ? res.json() : null).then(setMunicipalBoundary).catch(() => setMunicipalBoundary(null)); }, []);
 
   const barangayOptions = useMemo(() => [...new Set(tickets.map((t) => t.barangay_name))].sort(), [tickets]);
   const filteredTickets = useMemo(() => tickets.filter((t) => matchesFilters(t, filters)), [tickets, filters]);
@@ -122,6 +128,7 @@ export default function MapClient({ office }: { office?: "MEO" | "MDRRMO" }) {
 
   return <section aria-labelledby="admin-map-heading" className="admin-map-workspace flex min-h-0 flex-1 flex-col"><h1 className="sr-only" id="admin-map-heading">Interactive Incident Map</h1><div className="relative isolate min-h-0 flex-1 overflow-hidden">
     {loading && <p className="absolute top-4 left-1/2 z-30 -translate-x-1/2 rounded-md border bg-card px-3 py-1 text-sm text-card-foreground shadow-sm">Loading tickets...</p>}
+    {!loading && loadError && <div className="absolute top-4 left-1/2 z-30 w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2"><AdminErrorCard message="Ticket pins couldn't load from the API. The map itself is unaffected — try again." onRetry={() => setRetryNonce((n) => n + 1)} title="Tickets Unavailable" /></div>}
     <div className="pointer-events-none absolute inset-0 z-20"><div className="pointer-events-auto"><MapControls mode={mode} onModeChange={setMode} onToggleBoundaries={() => setShowBoundaries((previous) => !previous)} showBoundaries={showBoundaries} /></div><div className="pointer-events-auto"><MapFilterBar barangayOptions={barangayOptions} filters={filters} onChange={updateFilters} onReset={() => { setFilters(EMPTY_MAP_FILTERS); setSelectedBarangay(null); setSelectedBarangayBounds(null); setViewportResetKey((current) => current + 1); }} /></div><div className="pointer-events-auto"><MapLegend /></div></div>
     {isMobile && <Sheet onOpenChange={(open) => { if (!open) setSelectedId(null); }} open={Boolean(selectedTicket)}><SheetContent className="max-h-[82vh] overflow-y-auto p-0" showCloseButton={false} side="bottom"><SheetHeader className="sr-only"><SheetTitle>Ticket details</SheetTitle></SheetHeader>{selectedTicket && <TicketPopup onClose={() => setSelectedId(null)} ticket={selectedTicket} />}</SheetContent></Sheet>}
     <MapContainer center={CITY_CENTER} className="relative z-0 h-full w-full" zoom={MUNICIPALITY.defaultZoom} zoomControl={false}><MapSizeInvalidator /><MapBackgroundReset onClear={() => { setSelectedId(null); clearBarangaySelection(); }} /><SelectedBarangayViewport bounds={selectedBarangayBounds} /><CityViewport resetKey={viewportResetKey} /><ZoomControl position="bottomright" /><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />{showBoundaries && municipalBoundary && <GeoJSON data={municipalBoundary} style={styleMunicipalBoundary} />}{showBoundaries && barangays && <BarangayBoundaries data={barangays} onSelect={selectBarangay} selectedName={selectedBarangay} />}{mode === "heatmap" ? <HeatmapLayer tickets={filteredTickets} /> : <MarkerClusterGroup chunkedLoading iconCreateFunction={categoryClusterIcon}>{filteredTickets.map((ticket) => <Marker eventHandlers={{ click: () => setSelectedId(ticket.id), popupclose: () => setSelectedId((current) => current === ticket.id ? null : current) }} icon={categoryMarkerIcon(ticket.category, ticket.urgency_band, { selected: ticket.id === selectedId })} key={ticket.id} position={[ticket.lat, ticket.lng]} ref={(marker) => { if (marker) registerMarkerUrgency(marker, ticket.urgency_band); }} >{!isMobile && <Popup autoPan={false} className="admin-ticket-popup" closeButton={false} offset={[0, -20]}><TicketPopup onClose={() => setSelectedId(null)} ticket={ticket} /></Popup>}</Marker>)}</MarkerClusterGroup>}</MapContainer>

@@ -31,8 +31,8 @@ export function AssignmentPanel({
     if (res.ok) {
       router.refresh();
     } else {
-      const data = await res.json();
-      setError(data.error ?? "Reassign failed");
+      const data = await res.json().catch(() => null);
+      setError(data?.error ?? "Reassign failed");
     }
     setReassigning(false);
   }
