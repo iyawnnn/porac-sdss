@@ -10,6 +10,7 @@ import type {
   CreateNotificationInput,
   NotificationsService,
 } from '../notifications/notifications.service';
+import type { AdminAuditService, LogAdminAuditInput } from './admin-audit.service';
 
 const MEO_ADMIN = {
   adminId: 1,
@@ -41,6 +42,12 @@ function makeNotificationsMock() {
   >();
   const notifications = { createInTx } as unknown as NotificationsService;
   return { notifications, createInTx };
+}
+
+function makeAuditMock() {
+  const logInPgTx = jest.fn<Promise<void>, [TransactionSql, LogAdminAuditInput]>();
+  const audit = { logInPgTx } as unknown as AdminAuditService;
+  return { audit, logInPgTx };
 }
 
 // Minimal fake postgres.js client: each tagged-template call consumes the
@@ -75,7 +82,7 @@ function makeFakeSql(responses: unknown[][]) {
 
 describe('parseModerationQuery', () => {
   const { sql } = makeFakeSql([]);
-  const service = new ModerationService(sql, {} as NotificationsService);
+  const service = new ModerationService(sql, {} as NotificationsService, {} as AdminAuditService);
 
   it('defaults status to pending when absent', () => {
     expect(service.parseModerationQuery({}, MEO_ADMIN).status).toBe('pending');
@@ -201,7 +208,7 @@ describe('getModerationQueue pagination', () => {
       { id: 2, total_count: 42 },
     ];
     const { sql } = makeFakeSql([rows]);
-    const service = new ModerationService(sql, {} as NotificationsService);
+    const service = new ModerationService(sql, {} as NotificationsService, {} as AdminAuditService);
 
     const result = await service.getModerationQueue({ page: 1, limit: 10 });
 
@@ -214,7 +221,7 @@ describe('getModerationQueue pagination', () => {
 
   it('reports total 0 and totalPages 1 when nothing matches', async () => {
     const { sql } = makeFakeSql([[]]);
-    const service = new ModerationService(sql, {} as NotificationsService);
+    const service = new ModerationService(sql, {} as NotificationsService, {} as AdminAuditService);
 
     const result = await service.getModerationQueue({ page: 1, limit: 10 });
 
@@ -231,12 +238,19 @@ describe('moderateReport transitions', () => {
       [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
     ]);
     const { notifications, createInTx } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit, logInPgTx } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     const result = await service.moderateReport(1, 'dismiss', MEO_ADMIN);
 
     expect(result.status).toBe('dismissed');
     expect(createInTx).not.toHaveBeenCalled();
+    expect(logInPgTx).toHaveBeenCalledTimes(1);
+    const [, input] = logInPgTx.mock.calls[0];
+    expect(input.actionType).toBe('report_moderated');
+    expect(input.targetType).toBe('report');
+    expect(input.targetId).toBe(1);
+    expect(input.metadata).toEqual({ action: 'dismiss', note: null });
   });
 
   it('quarantine without a note is rejected before writing anything', async () => {
@@ -244,13 +258,15 @@ describe('moderateReport transitions', () => {
       [{ assigned_office: 'MEO' }], // report -> ticket office lookup
     ]);
     const { notifications, createInTx } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit, logInPgTx } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     await expect(
       service.moderateReport(1, 'quarantine', MEO_ADMIN, undefined, '   '),
     ).rejects.toThrow(BadRequestException);
     expect(calls).toHaveLength(1); // only the office lookup, no UPDATE
     expect(createInTx).not.toHaveBeenCalled();
+    expect(logInPgTx).not.toHaveBeenCalled();
   });
 
   it('quarantine with a note flags the ticket and notifies the citizen', async () => {
@@ -260,7 +276,8 @@ describe('moderateReport transitions', () => {
       [{}], // UPDATE tickets SET flagged = true
     ]);
     const { notifications, createInTx } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit, logInPgTx } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     const result = await service.moderateReport(
       1,
@@ -276,6 +293,14 @@ describe('moderateReport transitions', () => {
     expect(input.recipientType).toBe('citizen');
     expect(input.recipientId).toBe(9);
     expect(input.type).toBe('report_quarantined');
+
+    expect(logInPgTx).toHaveBeenCalledTimes(1);
+    const [, auditInput] = logInPgTx.mock.calls[0];
+    expect(auditInput.actionType).toBe('report_moderated');
+    expect(auditInput.metadata).toEqual({
+      action: 'quarantine',
+      note: 'Photo GPS is 4km from the pin, likely reused stock image.',
+    });
   });
 
   it('duplicate requires a canonicalReportId', async () => {
@@ -283,7 +308,8 @@ describe('moderateReport transitions', () => {
       [{ assigned_office: 'MEO' }], // report -> ticket office lookup
     ]);
     const { notifications } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     await expect(
       service.moderateReport(1, 'duplicate', MEO_ADMIN),
@@ -296,7 +322,8 @@ describe('moderateReport transitions', () => {
       [], // SELECT id FROM reports WHERE id = canonical -> none
     ]);
     const { notifications } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     await expect(
       service.moderateReport(1, 'duplicate', MEO_ADMIN, 999),
@@ -310,7 +337,8 @@ describe('moderateReport transitions', () => {
       [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
     ]);
     const { notifications, createInTx } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit, logInPgTx } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     const result = await service.moderateReport(1, 'duplicate', MEO_ADMIN, 42);
 
@@ -318,6 +346,10 @@ describe('moderateReport transitions', () => {
     const [, input] = createInTx.mock.calls[0];
     expect(input.type).toBe('report_flagged_duplicate');
     expect(input.recipientId).toBe(9);
+
+    const [, auditInput] = logInPgTx.mock.calls[0];
+    expect(auditInput.actionType).toBe('report_moderated');
+    expect(auditInput.metadata).toEqual({ action: 'duplicate', note: '42' });
   });
 
   it('rejects an already-moderated report without double-writing', async () => {
@@ -327,12 +359,14 @@ describe('moderateReport transitions', () => {
       [{ moderation_status: 'quarantined' }], // fallback SELECT
     ]);
     const { notifications, createInTx } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit, logInPgTx } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     await expect(
       service.moderateReport(1, 'dismiss', MEO_ADMIN),
     ).rejects.toThrow('Report was already quarantined');
     expect(createInTx).not.toHaveBeenCalled();
+    expect(logInPgTx).not.toHaveBeenCalled();
   });
 
   it('reports NotFoundException for a report that does not exist at all', async () => {
@@ -340,7 +374,8 @@ describe('moderateReport transitions', () => {
       [], // report -> ticket office lookup finds nothing
     ]);
     const { notifications } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     await expect(
       service.moderateReport(1, 'dismiss', MEO_ADMIN),
@@ -352,7 +387,8 @@ describe('moderateReport transitions', () => {
       [{ assigned_office: 'MDRRMO' }], // report -> ticket office lookup
     ]);
     const { notifications } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     await expect(
       service.moderateReport(1, 'dismiss', MEO_ADMIN),
@@ -365,7 +401,8 @@ describe('moderateReport transitions', () => {
       [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
     ]);
     const { notifications } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     const result = await service.moderateReport(1, 'dismiss', MDRRMO_ADMIN);
     expect(result.status).toBe('dismissed');
@@ -377,7 +414,8 @@ describe('moderateReport transitions', () => {
       [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
     ]);
     const { notifications } = makeNotificationsMock();
-    const service = new ModerationService(sql, notifications);
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
 
     const result = await service.moderateReport(1, 'dismiss', SYSTEM_ADMIN);
     expect(result.status).toBe('dismissed');

@@ -8,6 +8,7 @@ import type { MediaService } from '../domain/media.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { EmailService } from '../citizens/email.service';
 import type { Env } from '../config/env';
+import type { AdminAuditService } from './admin-audit.service';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -33,6 +34,7 @@ describe('parseTicketQuery category filter', () => {
     {} as NotificationsService,
     {} as EmailService,
     {} as ConfigService<Env, true>,
+    {} as AdminAuditService,
   );
 
   it.each(['Flooding', 'Pothole', 'Other'])(
@@ -67,6 +69,7 @@ describe('parseTicketQuery office scoping', () => {
     {} as NotificationsService,
     {} as EmailService,
     {} as ConfigService<Env, true>,
+    {} as AdminAuditService,
   );
 
   it('clamps an officer to their own office regardless of the query param', () => {
@@ -118,6 +121,7 @@ describe('cross-office access to single-resource ticket endpoints', () => {
       {} as NotificationsService,
       {} as EmailService,
       {} as ConfigService<Env, true>,
+      {} as AdminAuditService,
     );
   }
 
@@ -168,6 +172,72 @@ describe('cross-office access to single-resource ticket endpoints', () => {
     await expect(
       service.reassignOffice(1, MEO_OFFICER as AdminSession, 'MEO'),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('admin audit logging for ticket mutations', () => {
+  // sql.begin just runs the callback against the same fake client — no real
+  // transaction semantics needed, mirroring moderation.service.spec.ts's
+  // makeFakeSql. logInPgTx is a mocked AdminAuditService method, not a
+  // tagged-template call, so it never consumes a slot from `rows`.
+  function makeService(rows: unknown[][]) {
+    let i = 0;
+    const sql = ((..._args: unknown[]) => {
+      return {
+        then(resolve: (v: unknown) => void) {
+          void Promise.resolve(rows[i++] ?? []).then(resolve);
+        },
+      };
+    }) as unknown as Sql;
+    (sql as unknown as { begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown> }).begin = (
+      cb,
+    ) => cb(sql);
+    const logInPgTx = jest.fn().mockResolvedValue(undefined);
+    const audit = { logInPgTx } as unknown as AdminAuditService;
+    const service = new TicketsService(
+      sql,
+      {} as WeatherService,
+      {} as MediaService,
+      { createInTx: jest.fn() } as unknown as NotificationsService,
+      {} as EmailService,
+      {} as ConfigService<Env, true>,
+      audit,
+    );
+    return { service, logInPgTx };
+  }
+
+  it('logs ticket_status_advanced inside the same transaction as the status change', async () => {
+    const { service, logInPgTx } = makeService([
+      [{ status: 'Reported', assigned_office: 'MEO', category: 'Flooding' }], // ticket lookup
+      [{}], // UPDATE tickets
+      [{}], // INSERT status_history
+      [], // citizenRows (no notification recipients)
+    ]);
+
+    await service.advanceStatus(7, MEO_OFFICER as AdminSession, undefined, undefined);
+
+    expect(logInPgTx).toHaveBeenCalledTimes(1);
+    const [, input] = logInPgTx.mock.calls[0];
+    expect(input.actionType).toBe('ticket_status_advanced');
+    expect(input.targetType).toBe('ticket');
+    expect(input.targetId).toBe(7);
+    expect(input.metadata).toEqual({ from: 'Reported', to: 'Under Review' });
+  });
+
+  it('logs ticket_reassigned inside the same transaction as the reassignment', async () => {
+    const { service, logInPgTx } = makeService([
+      [{ assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
+      [{}], // UPDATE tickets
+      [{}], // INSERT office_reassignments
+    ]);
+
+    await service.reassignOffice(9, MEO_OFFICER as AdminSession, 'MDRRMO');
+
+    expect(logInPgTx).toHaveBeenCalledTimes(1);
+    const [, input] = logInPgTx.mock.calls[0];
+    expect(input.actionType).toBe('ticket_reassigned');
+    expect(input.targetId).toBe(9);
+    expect(input.metadata).toEqual({ from: 'MEO', to: 'MDRRMO' });
   });
 });
 

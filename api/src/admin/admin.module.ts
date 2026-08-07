@@ -12,14 +12,17 @@ import { DashboardService } from './dashboard.service';
 import { BarangaysGeoService } from './barangays-geo.service';
 import { AdminsController } from './admins.controller';
 import { AdminsService } from './admins.service';
+import { AdminAuditController } from './admin-audit.controller';
+import { AdminAuditService } from './admin-audit.service';
 
-// Four controllers sharing one module — they share nothing else, but
+// Five controllers sharing one module — they share nothing else, but
 // splitting into separate modules buys nothing (see blueprint §1). Each
 // controller carries its own @UseGuards(...) (not an APP_GUARD provider,
 // which would leak the guard onto every module app-wide) — closes the
 // previously unguarded tickets/geo and barangays/geo routes, which relied
-// entirely on proxy.ts's matcher. AdminsController additionally stacks
-// SystemAdminGuard since account management is System Administrator only.
+// entirely on proxy.ts's matcher. AdminsController and AdminAuditController
+// additionally stack SystemAdminGuard since account management and the
+// activity log are both System Administrator only.
 @Module({
   imports: [AuthModule, DomainModule, NotificationsModule, CitizensModule],
   controllers: [
@@ -27,6 +30,7 @@ import { AdminsService } from './admins.service';
     ModerationController,
     DashboardController,
     AdminsController,
+    AdminAuditController,
   ],
   providers: [
     TicketsService,
@@ -34,6 +38,7 @@ import { AdminsService } from './admins.service';
     DashboardService,
     BarangaysGeoService,
     AdminsService,
+    AdminAuditService,
   ],
 })
 export class AdminModule {}
