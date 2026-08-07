@@ -318,3 +318,27 @@ export const admins = pgTable('admins', {
     .notNull()
     .defaultNow(),
 });
+
+// Append-only trail for administrative actions (account create/role change,
+// ticket status/reassignment, report moderation) — System Administrator
+// visible only, see api/src/admin/admin-audit.service.ts. actor_* columns
+// are a snapshot at write time (name/role/office can change later on the
+// admins row itself) so history reads correctly even after the actor is
+// edited. No FK on actor_admin_id — same cross-table reasoning as
+// status_history.admin_id/office_reassignments.admin_id above.
+export const adminAuditEvents = pgTable('admin_audit_events', {
+  id: serial('id').primaryKey(),
+  actorAdminId: integer('actor_admin_id').notNull(),
+  actorName: text('actor_name').notNull(),
+  actorEmail: text('actor_email').notNull(),
+  actorRole: adminRoleEnum('actor_role').notNull(),
+  actorOffice: officeEnum('actor_office'),
+  actionType: text('action_type').notNull(),
+  targetType: text('target_type').notNull(),
+  targetId: integer('target_id').notNull(),
+  targetSummary: text('target_summary').notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

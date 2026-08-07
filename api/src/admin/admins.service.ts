@@ -10,6 +10,8 @@ import bcrypt from 'bcryptjs';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
 import { admins } from '../db/schema';
+import type { AdminSession } from '../auth/session.service';
+import { AdminAuditService } from './admin-audit.service';
 
 export type AdminRole = 'officer' | 'supervisor' | 'system_admin';
 export type AdminOffice = 'MEO' | 'MDRRMO';
@@ -64,7 +66,10 @@ function assertRoleOfficeCombination(
 
 @Injectable()
 export class AdminsService {
-  constructor(@Inject(DB) private readonly db: PostgresJsDatabase) {}
+  constructor(
+    @Inject(DB) private readonly db: PostgresJsDatabase,
+    private readonly audit: AdminAuditService,
+  ) {}
 
   async list(): Promise<AdminAccountRow[]> {
     return this.db
@@ -73,14 +78,17 @@ export class AdminsService {
       .orderBy(desc(admins.createdAt)) as Promise<AdminAccountRow[]>;
   }
 
-  async create(input: {
-    email: unknown;
-    password: unknown;
-    firstName: unknown;
-    lastName: unknown;
-    role: unknown;
-    office: unknown;
-  }): Promise<AdminAccountRow> {
+  async create(
+    input: {
+      email: unknown;
+      password: unknown;
+      firstName: unknown;
+      lastName: unknown;
+      role: unknown;
+      office: unknown;
+    },
+    actor: AdminSession,
+  ): Promise<AdminAccountRow> {
     const { email, password, firstName, lastName } = input;
     if (
       typeof email !== 'string' ||
@@ -113,16 +121,38 @@ export class AdminsService {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const [row] = await this.db
-      .insert(admins)
-      .values({ email, passwordHash, firstName, lastName, role, office })
-      .returning(SAFE_COLUMNS);
+    // Audit insert shares the transaction with the account creation itself
+    // — if the audit write fails, account creation rolls back with it
+    // rather than leaving an untracked admin account behind (see
+    // admin-audit.service.ts for why the audit trail is load-bearing here).
+    const row = await this.db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(admins)
+        .values({ email, passwordHash, firstName, lastName, role, office })
+        .returning(SAFE_COLUMNS);
+      await this.audit.logInTx(tx, {
+        actor: {
+          adminId: actor.adminId,
+          adminName: actor.adminName,
+          email: actor.email,
+          role: actor.role,
+          office: actor.office,
+        },
+        actionType: 'admin_created',
+        targetType: 'admin',
+        targetId: created.id,
+        targetSummary: `${created.first_name} ${created.last_name} <${created.email}>`,
+        metadata: { role: created.role, office: created.office },
+      });
+      return created;
+    });
     return row as AdminAccountRow;
   }
 
   async update(
     id: number,
     input: { role: unknown; office: unknown },
+    actor: AdminSession,
   ): Promise<AdminAccountRow> {
     const [existing] = await this.db
       .select()
@@ -152,11 +182,31 @@ export class AdminsService {
       }
     }
 
-    const [row] = await this.db
-      .update(admins)
-      .set({ role, office })
-      .where(eq(admins.id, id))
-      .returning(SAFE_COLUMNS);
+    const row = await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(admins)
+        .set({ role, office })
+        .where(eq(admins.id, id))
+        .returning(SAFE_COLUMNS);
+      await this.audit.logInTx(tx, {
+        actor: {
+          adminId: actor.adminId,
+          adminName: actor.adminName,
+          email: actor.email,
+          role: actor.role,
+          office: actor.office,
+        },
+        actionType: 'admin_role_updated',
+        targetType: 'admin',
+        targetId: updated.id,
+        targetSummary: `${updated.first_name} ${updated.last_name} <${updated.email}>`,
+        metadata: {
+          from: { role: existing.role, office: existing.office },
+          to: { role: updated.role, office: updated.office },
+        },
+      });
+      return updated;
+    });
     return row as AdminAccountRow;
   }
 }

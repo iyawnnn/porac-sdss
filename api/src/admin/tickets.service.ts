@@ -21,6 +21,7 @@ import { CATEGORIES } from '../contracts/schemas';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EMAIL_SERVICE, type EmailService } from '../citizens/email.service';
 import type { Env } from '../config/env';
+import { AdminAuditService } from './admin-audit.service';
 import {
   TICKET_STATUSES,
   PAGE_LIMITS,
@@ -175,6 +176,7 @@ export class TicketsService {
     private readonly notifications: NotificationsService,
     @Inject(EMAIL_SERVICE) private readonly email: EmailService,
     private readonly config: ConfigService<Env, true>,
+    private readonly audit: AdminAuditService,
   ) {}
 
   // URL <-> filter mapping shared between SSR first paint (Phase 8) and the
@@ -418,9 +420,9 @@ export class TicketsService {
   ): Promise<{ status: TicketStatus }> {
     const sql = this.pg;
     const [ticket] = await sql<
-      { status: TicketStatus; assigned_office: 'MEO' | 'MDRRMO' }[]
+      { status: TicketStatus; assigned_office: 'MEO' | 'MDRRMO'; category: string }[]
     >`
-      SELECT status, assigned_office FROM tickets WHERE id = ${ticketId}
+      SELECT status, assigned_office, category FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
     assertOfficeAccess(admin, ticket.assigned_office);
@@ -453,6 +455,20 @@ export class TicketsService {
         INSERT INTO status_history (ticket_id, status, admin_id, admin_name, changed_at)
         VALUES (${ticketId}, ${nextStatus}, ${admin.adminId}, ${admin.adminName}, now())
       `;
+      await this.audit.logInPgTx(tx, {
+        actor: {
+          adminId: admin.adminId,
+          adminName: admin.adminName,
+          email: admin.email,
+          role: admin.role,
+          office: admin.office,
+        },
+        actionType: 'ticket_status_advanced',
+        targetType: 'ticket',
+        targetId: ticketId,
+        targetSummary: `Ticket #${ticketId} (${ticket.category})`,
+        metadata: { from: ticket.status, to: nextStatus },
+      });
 
       const notice = STATUS_NOTIFICATION[nextStatus];
       if (!notice) return [];
@@ -519,8 +535,8 @@ export class TicketsService {
     toOffice: 'MEO' | 'MDRRMO',
   ): Promise<{ assignedOffice: 'MEO' | 'MDRRMO' }> {
     const sql = this.pg;
-    const [ticket] = await sql<{ assigned_office: 'MEO' | 'MDRRMO' }[]>`
-      SELECT assigned_office FROM tickets WHERE id = ${ticketId}
+    const [ticket] = await sql<{ assigned_office: 'MEO' | 'MDRRMO'; category: string }[]>`
+      SELECT assigned_office, category FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
     assertOfficeAccess(admin, ticket.assigned_office);
@@ -536,6 +552,20 @@ export class TicketsService {
         INSERT INTO office_reassignments (ticket_id, from_office, to_office, admin_id, admin_name)
         VALUES (${ticketId}, ${ticket.assigned_office}, ${toOffice}, ${admin.adminId}, ${admin.adminName})
       `;
+      await this.audit.logInPgTx(tx, {
+        actor: {
+          adminId: admin.adminId,
+          adminName: admin.adminName,
+          email: admin.email,
+          role: admin.role,
+          office: admin.office,
+        },
+        actionType: 'ticket_reassigned',
+        targetType: 'ticket',
+        targetId: ticketId,
+        targetSummary: `Ticket #${ticketId} (${ticket.category})`,
+        metadata: { from: ticket.assigned_office, to: toOffice },
+      });
     });
 
     return { assignedOffice: toOffice };

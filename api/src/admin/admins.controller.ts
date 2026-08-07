@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { SystemAdminGuard } from '../common/guards/system-admin.guard';
+import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
+import type { AdminSession } from '../auth/session.service';
 import { AdminsService } from './admins.service';
 
 // SystemAdminGuard must run after AdminSessionGuard (it reads
@@ -18,6 +20,7 @@ export class AdminsController {
 
   @Post()
   create(
+    @CurrentAdmin() actor: AdminSession,
     @Body('email') email: unknown,
     @Body('password') password: unknown,
     @Body('firstName') firstName: unknown,
@@ -25,15 +28,16 @@ export class AdminsController {
     @Body('role') role: unknown,
     @Body('office') office: unknown,
   ) {
-    return this.admins.create({ email, password, firstName, lastName, role, office });
+    return this.admins.create({ email, password, firstName, lastName, role, office }, actor);
   }
 
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() actor: AdminSession,
     @Body('role') role: unknown,
     @Body('office') office: unknown,
   ) {
-    return this.admins.update(id, { role, office });
+    return this.admins.update(id, { role, office }, actor);
   }
 }
