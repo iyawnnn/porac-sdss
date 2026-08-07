@@ -35,7 +35,8 @@
       "Bash(curl *)",
       "mcp__plugin_playwright_playwright__browser_snapshot",
       "mcp__plugin_playwright_playwright__browser_find",
-      "Bash(npx jest *)"
+      "Bash(npx jest *)",
+      "Bash(pnpm --prefix api build)"
     ]
   }
 }
