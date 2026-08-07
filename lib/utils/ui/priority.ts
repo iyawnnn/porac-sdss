@@ -11,6 +11,15 @@ export function priorityBandClass(priority: number | null): string {
   return "bg-rose-100 text-rose-700";
 }
 
+// Text label to pair with priorityBandClass — badges must never be
+// color-only (a11y), so every priority badge renders this alongside the score.
+export function priorityBandLabel(priority: number | null): string {
+  if (priority === null) return "—";
+  if (priority < 34) return "Low";
+  if (priority < 67) return "Medium";
+  return "High";
+}
+
 // priorityScore (0-100, lib/triage/urgency.ts) badge color — shares
 // urgencyLevelFromScore's thresholds with the URGENCY badge
 // (getUrgencyBadgeConfig, lib/ui/urgency.ts) so PRIORITY and URGENCY are

@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import sharp from "sharp";
 import { generateExifImage } from "../lib/utils/generate-exif-image";
+import { E2E_CITIZEN_ACCOUNT, E2E_MEO_ADMIN } from "./test-credentials";
 
 test.setTimeout(90_000);
 
@@ -14,10 +15,12 @@ const poblacionFixture = path.join(process.cwd(), "public", "uploads", "reports"
 async function loginCitizen(page: import("@playwright/test").Page) {
   await page.goto("/login");
   await page.waitForTimeout(500);
-  await page.getByLabel("Email").fill("citizen1@porac.ph");
-  await page.getByPlaceholder("Password").fill("PoracDemo2026!");
+  await page.getByLabel("Email").fill(E2E_CITIZEN_ACCOUNT.email);
+  await page.getByPlaceholder("Password").fill(E2E_CITIZEN_ACCOUNT.password);
   await page.getByRole("button", { name: "Sign In with Email" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  // 15s (vs. the 5s default): tolerates the Next.js dev server's on-demand
+  // Turbopack compile of /dashboard on its first hit in this file.
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
   await page.getByRole("link", { name: "My Reports" }).click();
   await expect(page).toHaveURL(/\/reports/);
 }
@@ -36,10 +39,12 @@ test("MEO admin can open the Porac map without runtime failures", async ({ page 
   page.on("response", response => { if (response.status() >= 500) failures.push(`${response.status()} ${response.url()}`); });
   await page.goto("/admin/login");
   await page.waitForTimeout(1_000);
-  await page.getByLabel("Email").fill("meo@porac.gov.ph");
-  await page.getByPlaceholder("Password").fill("PoracDemo2026!");
+  await page.getByLabel("Email").fill(E2E_MEO_ADMIN.email);
+  await page.getByPlaceholder("Password").fill(E2E_MEO_ADMIN.password);
   await page.getByRole("button", { name: "Sign In" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  // 15s (vs. the 5s default): tolerates the Next.js dev server's on-demand
+  // Turbopack compile of /admin on its first hit in this file.
+  await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 });
   await page.getByRole("link", { name: "Interactive Map" }).click();
   await expect(page).toHaveURL(/\/admin\/map/);
   await expect(page.locator(".leaflet-container")).toBeVisible();
@@ -62,7 +67,7 @@ test("citizen header navigates public map, my reports, report form, and logs out
 
   await loginCitizen(page);
   await expect(page.getByText("Porac SDSS")).toBeVisible();
-  await expect(page.locator("header").getByText("citizen1@porac.ph", { exact: true })).toBeVisible();
+  await expect(page.locator("header").getByText(E2E_CITIZEN_ACCOUNT.email, { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "My Reports" })).toBeVisible();
   const image = page.locator('img[src^="/uploads/reports/"]').first();
   await expect(image).toBeVisible();

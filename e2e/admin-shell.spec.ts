@@ -1,13 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
+import { E2E_CITIZEN_ACCOUNT, E2E_MEO_ADMIN } from "./test-credentials";
 
 test.setTimeout(60_000);
 
 async function loginAdmin(page: Page) {
   await page.goto("/admin/login");
-  await page.getByLabel("Email").fill("meo@porac.gov.ph");
-  await page.getByPlaceholder("Password").fill("PoracDemo2026!");
+  await page.getByLabel("Email").fill(E2E_MEO_ADMIN.email);
+  await page.getByPlaceholder("Password").fill(E2E_MEO_ADMIN.password);
   await page.getByRole("button", { name: "Sign In" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  // 15s (vs. the 5s default): tolerates the Next.js dev server's on-demand
+  // Turbopack compile of /admin on its first hit in this file.
+  await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 });
   await expect(page.getByText("Incident Reports Over Time")).toBeVisible();
 }
 
@@ -140,10 +143,12 @@ test("rendered admin routes contain no mojibake", async ({ page }) => {
 
 test("citizen shell remains light and independent of the neutral admin shell", async ({ page }) => {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("citizen1@porac.ph");
-  await page.getByPlaceholder("Password").fill("PoracDemo2026!");
+  await page.getByLabel("Email").fill(E2E_CITIZEN_ACCOUNT.email);
+  await page.getByPlaceholder("Password").fill(E2E_CITIZEN_ACCOUNT.password);
   await page.getByRole("button", { name: "Sign In with Email" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  // 15s (vs. the 5s default): tolerates the Next.js dev server's on-demand
+  // Turbopack compile of /dashboard on its first hit in this file.
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
 
   const canvas = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(canvas).toBe("rgb(247, 249, 251)");

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { LayersIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
@@ -15,7 +17,7 @@ const OFFICE_OPTIONS = [
   { value: "MDRRMO", label: "MDRRMO" },
 ] as const;
 
-export function MapControls({
+function ControlsBody({
   mode,
   onModeChange,
   showBoundaries,
@@ -31,7 +33,7 @@ export function MapControls({
   const activeOffice = searchParams.get("office");
 
   return (
-    <Card className="absolute top-4 right-4 w-52 gap-3 p-3 text-sm">
+    <>
       <section>
         <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"><LayersIcon aria-hidden="true" className="size-3.5" /> Layers</p>
         <ToggleGroup
@@ -90,6 +92,47 @@ export function MapControls({
           })}
         </div>
       </section>
-    </Card>
+    </>
+  );
+}
+
+export function MapControls({
+  mode,
+  onModeChange,
+  showBoundaries,
+  onToggleBoundaries,
+}: {
+  mode: MapMode;
+  onModeChange: (mode: MapMode) => void;
+  showBoundaries: boolean;
+  onToggleBoundaries: () => void;
+}) {
+  const body = <ControlsBody mode={mode} onModeChange={onModeChange} onToggleBoundaries={onToggleBoundaries} showBoundaries={showBoundaries} />;
+
+  return (
+    <>
+      {/* Desktop: floating corner card, mirrors MapFilterBar/MapLegend. */}
+      <Card aria-label="Map controls" className="absolute top-4 right-4 hidden w-52 gap-3 p-3 text-sm md:flex md:flex-col">
+        {body}
+      </Card>
+
+      {/* Mobile: Sheet, opened from a compact floating button. */}
+      <div className="absolute top-4 right-4 md:hidden">
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button className="cursor-pointer shadow-md" size="sm" variant="secondary">
+              <LayersIcon aria-hidden="true" className="size-3.5" />
+              Controls
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom">
+            <SheetHeader>
+              <SheetTitle>Map Controls</SheetTitle>
+            </SheetHeader>
+            <div className="flex flex-col gap-3 px-4 pb-4">{body}</div>
+          </SheetContent>
+        </Sheet>
+      </div>
+    </>
   );
 }

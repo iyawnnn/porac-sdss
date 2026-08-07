@@ -117,6 +117,31 @@ Admin Accounts:
 - Municipal Engineering Office (MEO): `meo@porac.gov.ph`
 - MDRRMO: `mdrrmo@porac.gov.ph`
 
+These two admin accounts are also the accounts the Playwright E2E suite logs in as — see Section I, they are provisioned automatically, you do not need to run `seed:admin` for them manually.
+
 ## H. TESTING PHOTO EXIF GPS METADATA
 
 To test the report submission pipeline with real geotagged photo metadata, drag and drop any of the pre-configured JPEG files located in `public/uploads/reports/` (for example, `01_poblacion.jpg`) into the report form photo uploader.
+
+## I. RUNNING END-TO-END (PLAYWRIGHT) TESTS
+
+The E2E suite (`e2e/*.spec.ts`) drives a real dev server against a real database — there is no mocked backend and no isolated test database, so a few things are required first:
+
+1. `api/.env` must be configured and migrated (Section D) — the NestJS API must be able to start and reach Postgres.
+2. Start the API separately (Playwright's `webServer` only boots the Next.js app, not the API): `pnpm --prefix api start:dev`
+3. Run the suite from root:
+   ```bash
+   pnpm exec playwright test -- --workers=1
+   ```
+
+**Demo accounts are provisioned automatically.** Playwright's `globalSetup` (`e2e/global-setup.ts`) runs once before any test and idempotently upserts the two admin accounts (`meo@porac.gov.ph`, `mdrrmo@porac.gov.ph` — via `pnpm --prefix api seed:e2e-admins`) and the citizen demo accounts (via the existing `pnpm --prefix api seed:users`). Re-running the suite never duplicates accounts or errors on a second run — both scripts use `ON CONFLICT` upserts, not plain inserts. You never need to run these by hand; global setup does it for you as long as `api/.env` is reachable.
+
+All test credentials live in one place — `e2e/test-credentials.ts` — imported by every spec that needs to log in. Never hardcode an email/password in a new spec; import `E2E_MEO_ADMIN`, `E2E_MDRRMO_ADMIN`, or `E2E_CITIZEN_ACCOUNT` instead.
+
+**Demo tickets/reports are a separate, explicit step.** Global setup deliberately does *not* reseed tickets/reports automatically, because that seed script (`seed:diverse-reports`) is destructive — it runs `TRUNCATE reports, tickets` before reinserting a fixed demo set, which would silently wipe any tickets a developer is manually testing against. If a spec needs real ticket data (e.g. `admin-flagged`, `admin-dashboard`, the map smoke test) and the database has none, global setup prints a warning telling you to run:
+```bash
+pnpm --prefix api seed:diverse-reports
+```
+This is idempotent in the sense that re-running it always produces the same deterministic set of demo tickets — but it is destructive to whatever tickets existed before, so it's opt-in rather than automatic.
+
+**Why `--workers=1`:** the suite runs against one shared dev database with no per-test transaction isolation. Parallel workers would race on the same admin sessions, ticket rows, and moderation state (e.g. one worker resetting filters while another asserts on them), producing flaky failures unrelated to real bugs. Keep `--workers=1` until the suite gets real test-database isolation (e.g. a per-run schema or transactional rollback) — that is a bigger change than this fix and out of scope here.
