@@ -105,11 +105,14 @@ function formatDate(value: string): string {
 
 const HEAD_CLASS = "text-xs font-semibold tracking-wide text-muted-foreground uppercase";
 
+// Deliberately distinct from FLAG_CATEGORIES' palette (lib/utils/flag-risk.ts) — moderation
+// status and flag type are different axes shown in the same row, and must not share hues
+// (e.g. "Quarantined" status vs. "Photo authenticity" flag both being rose read as one signal).
 const STATUS_BADGE_CLASS: Record<string, string> = {
-  pending: "border-amber-200 bg-amber-50 text-amber-800",
-  quarantined: "border-rose-200 bg-rose-50 text-rose-700",
+  pending: "border-blue-200 bg-blue-50 text-blue-800",
+  quarantined: "border-orange-200 bg-orange-50 text-orange-700",
   dismissed: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  duplicate: "border-violet-200 bg-violet-50 text-violet-700",
+  duplicate: "border-sky-200 bg-sky-50 text-sky-700",
 };
 
 function ModerationStatusBadge({ status }: { status: string | null }) {

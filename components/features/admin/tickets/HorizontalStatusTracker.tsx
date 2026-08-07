@@ -66,6 +66,7 @@ export function HorizontalStatusTracker({
 }) {
   const router = useRouter();
   const [advancing, setAdvancing] = useState(false);
+  const [advanceError, setAdvanceError] = useState("");
   const [showResolveModal, setShowResolveModal] = useState(false);
 
   const isRejected = currentStatus === "Rejected";
@@ -78,8 +79,14 @@ export function HorizontalStatusTracker({
 
   async function advanceStatus() {
     setAdvancing(true);
-    await fetch(`/api/admin/tickets/${ticketId}/status`, { method: "POST" });
-    router.refresh();
+    setAdvanceError("");
+    const res = await fetch(`/api/admin/tickets/${ticketId}/status`, { method: "POST" });
+    if (res.ok) {
+      router.refresh();
+    } else {
+      const data = await res.json().catch(() => null);
+      setAdvanceError(data?.error ?? "Could not advance this ticket's status.");
+    }
     setAdvancing(false);
   }
 
@@ -127,6 +134,7 @@ export function HorizontalStatusTracker({
           ) : (
             <p className="text-sm text-ink-500">{isRejected ? "This ticket was rejected." : "No further status transition."}</p>
           )}
+          {advanceError && <p className="mt-1.5 text-xs text-destructive">{advanceError}</p>}
         </div>
       </CardContent>
 
@@ -178,8 +186,8 @@ function ResolveDialog({
     if (res.ok) {
       onResolved();
     } else {
-      const data = await res.json();
-      setError(data.error ?? "Could not mark this ticket resolved.");
+      const data = await res.json().catch(() => null);
+      setError(data?.error ?? "Could not mark this ticket resolved.");
       setSubmitting(false);
     }
   }
