@@ -13,6 +13,10 @@ export interface MyReportRow {
   urgency_band: string | null;
   barangay_name: string;
   created_at: string;
+  assigned_office: "MEO" | "MDRRMO";
+  member_count: number;
+  moderation_status: string | null;
+  is_merged: boolean;
 }
 
 export interface MyReportDetail {
@@ -33,6 +37,12 @@ export interface MyReportDetail {
   created_at: string;
   ticket_created_at: string;
   ticket_updated_at: string;
+  assigned_office: "MEO" | "MDRRMO";
+  member_count: number;
+  moderation_status: string | null;
+  moderated_at: string | null;
+  resolution_notes: string | null;
+  is_merged: boolean;
 }
 
 export interface StatusHistoryStep {

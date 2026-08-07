@@ -105,3 +105,86 @@ describe('new-report admin notification wiring', () => {
     expect(mergeBranch).not.toContain("title: 'New citizen report'");
   });
 });
+
+// Same rationale as the blocks above (no DB test harness) — these guard the
+// citizen Report Tracking feature's two hard requirements: (1) a citizen can
+// only ever read their own reports, (2) the query never selects a column
+// that would leak fraud-detection internals or another citizen's data to
+// the frontend. Both are asserted on the SQL template text itself, scoped
+// to just the getMyReports/getMyReportDetail method bodies so an unrelated
+// query elsewhere in the file can't accidentally satisfy the assertion.
+describe('citizen report-tracking ownership and data exposure (getMyReports/getMyReportDetail)', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+
+  function methodBody(name: string): string {
+    const start = reportsServiceSource.indexOf(`async ${name}(`);
+    if (start === -1) throw new Error(`method ${name} not found in reports.service.ts`);
+    const nextMethodMarkers = ['\n  async ', '\n}'];
+    const ends = nextMethodMarkers
+      .map((marker) => reportsServiceSource.indexOf(marker, start + 1))
+      .filter((i) => i !== -1);
+    const end = Math.min(...ends);
+    return reportsServiceSource.slice(start, end);
+  }
+
+  const getMyReports = methodBody('getMyReports');
+  const getMyReportDetail = methodBody('getMyReportDetail');
+
+  it('getMyReports scopes to the requesting citizen only', () => {
+    expect(getMyReports).toMatch(/WHERE r\.citizen_id = \$\{citizenId\}/);
+  });
+
+  it('getMyReportDetail scopes to the requesting citizen only (ownership + existence in one clause)', () => {
+    expect(getMyReportDetail).toMatch(
+      /WHERE r\.id = \$\{reportId\} AND r\.citizen_id = \$\{citizenId\}/,
+    );
+  });
+
+  const CITIZEN_UNSAFE_COLUMNS = [
+    'exif_data',
+    'r.flags',
+    'image_phash',
+    'location_mismatch_m',
+    'moderation_note',
+    'moderated_by',
+    'elevation_factor',
+    'precipitation_factor',
+    'cluster_factor',
+  ];
+
+  it.each(CITIZEN_UNSAFE_COLUMNS)(
+    'getMyReports never selects %s',
+    (column) => {
+      expect(getMyReports).not.toContain(column);
+    },
+  );
+
+  it.each(CITIZEN_UNSAFE_COLUMNS)(
+    'getMyReportDetail never selects %s',
+    (column) => {
+      expect(getMyReportDetail).not.toContain(column);
+    },
+  );
+
+  const EXPECTED_ROW_FIELDS = ['t.assigned_office', 't.member_count', 'r.moderation_status'];
+
+  it.each(EXPECTED_ROW_FIELDS)('getMyReports selects %s for the list view', (field) => {
+    expect(getMyReports).toContain(field);
+  });
+
+  it.each([...EXPECTED_ROW_FIELDS, 'r.moderated_at', 't.resolution_notes'])(
+    'getMyReportDetail selects %s',
+    (field) => {
+      expect(getMyReportDetail).toContain(field);
+    },
+  );
+
+  it('both queries derive is_merged from this report being later than the ticket\'s earliest report, not a stored column', () => {
+    const isMergedPattern = /r\.id != \(SELECT MIN\(id\) FROM reports WHERE ticket_id = r\.ticket_id\) AS is_merged/;
+    expect(getMyReports).toMatch(isMergedPattern);
+    expect(getMyReportDetail).toMatch(isMergedPattern);
+  });
+});
