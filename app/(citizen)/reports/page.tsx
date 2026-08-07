@@ -4,6 +4,7 @@ import type { MyReportRow } from "@/lib/types/citizens-reports";
 import { StatTile } from "@/components/features/citizen/dashboard/StatTile";
 import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "@/components/features/citizen/dashboard/reportStatusStyle";
 import { CitizenUnauthorized } from "@/components/features/citizen/dashboard/CitizenUnauthorized";
+import { ReportImage } from "@/components/features/citizen/dashboard/ReportImage";
 import { latestUpdateLine, officeLabel } from "@/lib/utils/citizen-report-copy";
 
 function PinIcon() {
@@ -142,8 +143,7 @@ export default async function MyReportsPage() {
               className="flex flex-col overflow-hidden rounded-xl border border-line-200 bg-surface transition-shadow duration-[120ms] hover:shadow-sm"
             >
               <div className="relative h-48 w-full overflow-hidden bg-line-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={report.image_url} alt={report.title} className="h-full w-full object-cover" />
+                <ReportImage alt={report.title} className="h-full w-full object-cover" src={report.image_url} />
                 <span className="absolute left-3 top-3 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-surface/90 px-2 text-xs font-semibold text-ink-700">
                   #{idx + 1}
                 </span>
