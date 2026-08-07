@@ -14,6 +14,7 @@ import {
 } from "@/lib/utils/citizen-report-copy";
 import LocationPreviewMapLoader from "@/components/features/citizen/dashboard/LocationPreviewMapLoader";
 import ReportTimeline from "@/components/features/citizen/dashboard/ReportTimeline";
+import { ReportImage } from "@/components/features/citizen/dashboard/ReportImage";
 
 const STATUS_STYLE: Record<string, { tint: string; ink: string; dot: string }> = {
   Reported: { tint: "#F1F3F5", ink: "#434B54", dot: "#98A2AC" },
@@ -281,8 +282,7 @@ export default async function MyReportDetailPage({
         <div className="flex flex-col gap-6">
           <div className="overflow-hidden rounded-xl border border-line-200 bg-surface">
             <div className="relative h-64 w-full sm:h-72">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={report.image_url} alt={report.title} className="h-full w-full object-cover" />
+              <ReportImage alt={report.title} className="h-full w-full object-cover" src={report.image_url} />
               <span className="absolute left-3 top-3 inline-flex items-center rounded-full bg-surface/90 px-3 py-1 text-xs font-medium text-ink-700">
                 Submitted {submittedDate.toLocaleDateString(undefined, dateFmt)}
               </span>

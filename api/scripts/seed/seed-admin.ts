@@ -14,6 +14,9 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(password, 10);
 
+  // Upsert by email — idempotent, so re-running this (e.g. re-provisioning
+  // a demo account right before a live run) updates the existing account
+  // instead of failing on the unique constraint.
   const [admin] = await db
     .insert(admins)
     .values({
@@ -24,9 +27,19 @@ async function main() {
       firstName: firstName ?? "Test",
       lastName: lastName ?? "Admin",
     })
+    .onConflictDoUpdate({
+      target: admins.email,
+      set: {
+        passwordHash,
+        office: office as "MEO" | "MDRRMO",
+        role: role as "officer" | "supervisor",
+        firstName: firstName ?? "Test",
+        lastName: lastName ?? "Admin",
+      },
+    })
     .returning();
 
-  console.log(`Created admin: ${admin.email} (${admin.office}, ${admin.role})`);
+  console.log(`Seeded admin: ${admin.email} (${admin.office}, ${admin.role})`);
   await client.end();
 }
 
