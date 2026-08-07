@@ -58,6 +58,18 @@ export interface MyReportRow {
   urgency_band: string | null;
   barangay_name: string;
   created_at: string;
+  assigned_office: 'MEO' | 'MDRRMO';
+  member_count: number;
+  // Only the enum, never moderation_note/moderated_by — those carry
+  // free-text admin reasoning that must stay internal (CLAUDE.md's
+  // "Fraud/integrity flags" section).
+  moderation_status: string | null;
+  // True when this specific report joined an *already-existing* ticket
+  // rather than creating one — i.e. this row's id isn't the earliest report
+  // on its ticket. Reports have no "merged" column of their own; this is
+  // the citizen-safe way to derive that fact without exposing ticket
+  // internals.
+  is_merged: boolean;
 }
 
 export interface MyReportDetail {
@@ -78,6 +90,12 @@ export interface MyReportDetail {
   created_at: string;
   ticket_created_at: string;
   ticket_updated_at: string;
+  assigned_office: 'MEO' | 'MDRRMO';
+  member_count: number;
+  moderation_status: string | null;
+  moderated_at: string | null;
+  resolution_notes: string | null;
+  is_merged: boolean;
 }
 
 export interface StatusHistoryStep {
@@ -421,7 +439,9 @@ export class ReportsService {
     return this.pg<MyReportRow[]>`
       SELECT
         r.id, r.ticket_id, r.title, t.category, r.citizen_severity, r.image_url,
-        t.status, t.urgency_band, b.name AS barangay_name, r.created_at
+        t.status, t.urgency_band, b.name AS barangay_name, r.created_at,
+        t.assigned_office, t.member_count, r.moderation_status,
+        r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id) AS is_merged
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
@@ -441,7 +461,9 @@ export class ReportsService {
         t.category, t.status, t.urgency_band, b.name AS barangay_name,
         ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng,
         c.first_name AS citizen_first_name, c.last_name AS citizen_last_name,
-        r.created_at, t.created_at AS ticket_created_at, t.updated_at AS ticket_updated_at
+        r.created_at, t.created_at AS ticket_created_at, t.updated_at AS ticket_updated_at,
+        t.assigned_office, t.member_count, r.moderation_status, r.moderated_at, t.resolution_notes,
+        r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id) AS is_merged
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id

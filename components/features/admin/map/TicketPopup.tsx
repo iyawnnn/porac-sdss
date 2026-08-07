@@ -51,7 +51,7 @@ export function TicketPopup({ ticket, onClose }: { ticket: AdminTicketGeoRow; on
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge className={urgencyBadge.className} variant="outline">{urgencyBadge.label} urgency</Badge>
-          <Badge className="font-mono tabular-nums" variant="secondary">Score {ticket.priority_score ?? "Unavailable"}</Badge>
+          <Badge className="font-mono tabular-nums" variant="secondary">Score {ticket.priority_score ?? "—"}</Badge>
           <StatusPill status={ticket.status} />
         </div>
         <Separator />
