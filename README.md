@@ -71,14 +71,33 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
 ## D. DATABASE MIGRATIONS & SEEDING
 
-Apply PostGIS schema migrations and seed municipal boundaries, demo users, and realistic hazard tickets:
+Apply PostGIS schema migrations and seed municipal boundaries, demo accounts, and realistic hazard tickets. **Order matters** — several later steps depend on tables/columns an earlier step creates (e.g. `import:barangays` must run before `migrate:geometry`, and `seed:dem` before `migrate:config`), and running them out of order fails with errors like `relation "barangays" does not exist`:
 
 ```bash
-pnpm --prefix api migrate
-pnpm --prefix api seed:users
-pnpm gis:generate-boundary
-pnpm --prefix api seed:diverse-reports
+pnpm --prefix api migrate                          # non-spatial Drizzle tables
+pnpm --prefix api migrate:ratelimit
+pnpm --prefix api migrate:ratelimit-citizen
+pnpm --prefix api migrate:city-boundary
+pnpm --prefix api import:barangays                 # PSGC barangay polygons -> barangays (must precede migrate:geometry)
+pnpm --prefix api migrate:geometry                 # geometry columns + GiST indexes, FKs to barangays(id)
+pnpm --prefix api seed:dem                         # SRTM GeoTIFF -> dem_points (must precede migrate:config)
+pnpm --prefix api migrate:config                   # config cache table, reads dem_points for elev_min/elev_max
+pnpm --prefix api migrate:exif-data
+pnpm --prefix api migrate:moderation
+pnpm --prefix api migrate:resolution
+pnpm --prefix api migrate:diverse-demo              # despite the name, adds core schema (ticket_status 'Rejected', tickets.flagged) — not demo-only
+pnpm --prefix api migrate:citizen-identities
+pnpm --prefix api migrate:citizen-account-security
+pnpm --prefix api migrate:citizen-password-reset
+pnpm --prefix api migrate:notifications
+pnpm --prefix api seed:users                        # citizen demo accounts (Section G) — idempotent, safe to rerun
+pnpm --prefix api seed:admin -- meo@porac.gov.ph PoracDemo2026! MEO supervisor      # admin demo account (Section G)
+pnpm --prefix api seed:admin -- mdrrmo@porac.gov.ph PoracDemo2026! MDRRMO supervisor # second admin demo account
+pnpm --prefix api seed:diverse-reports              # demo tickets/reports — idempotent (truncates and reseeds a fixed set)
+pnpm gis:generate-boundary                          # frontend map boundary overlay — independent of the DB steps above, run any time
 ```
+
+All seed commands above are idempotent (upsert by unique email, or truncate-and-reseed for `seed:diverse-reports`) — safe to rerun any of them right before a live demo without erroring or duplicating data.
 
 ## E. RUNNING THE APPLICATION
 

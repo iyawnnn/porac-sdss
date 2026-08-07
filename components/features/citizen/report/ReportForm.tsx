@@ -389,7 +389,10 @@ export default function ReportForm() {
 
     if (res.ok) {
       setStatus("success");
-      const flagNote = data.flags?.length ? ` Flags: ${data.flags.join(", ")}.` : "";
+      // Flags are internal review signals (EXIF/GPS/staleness/duplicate checks) —
+      // never shown as raw codes to the citizen; the report goes through review
+      // either way, so a short neutral note is enough here.
+      const flagNote: string = data.flags?.length ? " This report has been flagged for additional review by city staff." : "";
       setMessage(
         `Report submitted. Ticket #${data.ticketId}, barangay: ${data.barangay}, elevation: ${data.elevationM}m, office: ${data.assignedOffice}.${flagNote}`
       );

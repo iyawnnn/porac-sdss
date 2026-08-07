@@ -220,7 +220,7 @@ export function TicketsWorkspace({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard icon={TicketIcon} label="Total Tickets" tint="bg-slate-100 text-slate-600" value={data.total.toLocaleString()} />
         <KpiCard icon={Activity} label="Active Tickets" tint="bg-blue-50 text-blue-600" value={activeCount.toLocaleString()} />
-        <KpiCard icon={AlertTriangle} label="High Priority" tint="bg-red-50 text-red-600" value={highPriorityCount.toLocaleString()} />
+        <KpiCard icon={AlertTriangle} label="High Urgency" tint="bg-red-50 text-red-600" value={highPriorityCount.toLocaleString()} />
         <KpiCard icon={Gauge} label="Avg. Urgency Score" tint="bg-amber-50 text-amber-600" value={avgUrgencyScore === null ? "—" : String(avgUrgencyScore)} />
         <KpiCard icon={MapPin} label="Active Barangays" tint="bg-emerald-50 text-emerald-600" value={activeBarangayCount.toLocaleString()} />
       </div>

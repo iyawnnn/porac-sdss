@@ -3,13 +3,9 @@ import { apiGet, getCitizenSessionFromApi } from "@/lib/api-client";
 import type { MyReportRow } from "@/lib/types/citizens-reports";
 import { StatTile } from "@/components/features/citizen/dashboard/StatTile";
 import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "@/components/features/citizen/dashboard/reportStatusStyle";
-
-const PROGRESS_STEPS = [
-  { status: "Reported", note: "Received" },
-  { status: "Under Review", note: "Queued" },
-  { status: "In Progress", note: "Work ongoing" },
-  { status: "Resolved", note: "Closed" },
-];
+import { CitizenUnauthorized } from "@/components/features/citizen/dashboard/CitizenUnauthorized";
+import { ReportImage } from "@/components/features/citizen/dashboard/ReportImage";
+import { latestUpdateLine, officeLabel } from "@/lib/utils/citizen-report-copy";
 
 function PinIcon() {
   return (
@@ -48,18 +44,11 @@ function TagIcon() {
   );
 }
 
-function CheckIcon() {
+function OfficeIcon() {
   return (
-    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function XIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M4 4l8 8M12 4l-8 8" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="text-ink-400">
+      <path d="M4 21V9l8-5 8 5v12" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M9 21v-6h6v6" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -76,75 +65,9 @@ function MetaItem({ icon, label, value }: { icon: React.ReactNode; label: string
   );
 }
 
-function ProgressSteps({ status }: { status: string }) {
-  const isRejected = status === "Rejected";
-  const currentIndex = isRejected ? -1 : PROGRESS_STEPS.findIndex((s) => s.status === status);
-
-  return (
-    <div className="flex items-start">
-      <div className="flex flex-1 items-start">
-        {PROGRESS_STEPS.map((step, i) => {
-          const isReached = currentIndex >= 0 && i <= currentIndex;
-          const rightFilled = isReached && i < currentIndex;
-
-          return (
-            <div key={step.status} className="flex flex-1 flex-col items-center text-center">
-              <div className="flex w-full items-center">
-                <div
-                  className="h-0.5 flex-1"
-                  style={{
-                    visibility: i === 0 ? "hidden" : "visible",
-                    background: isReached ? "var(--color-brand-500)" : "var(--color-line-200)",
-                  }}
-                />
-                <div
-                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-                  style={
-                    isReached
-                      ? { background: "var(--color-brand-500)", color: "white" }
-                      : { background: "var(--color-line-100)", color: "var(--color-ink-400)" }
-                  }
-                >
-                  {isReached ? <CheckIcon /> : i + 1}
-                </div>
-                <div
-                  className="h-0.5 flex-1"
-                  style={{
-                    visibility: i === PROGRESS_STEPS.length - 1 ? "hidden" : "visible",
-                    background: rightFilled ? "var(--color-brand-500)" : "var(--color-line-200)",
-                  }}
-                />
-              </div>
-              <p className="mt-2 text-[12px] font-semibold text-ink-900">{step.status}</p>
-              <p className="mt-0.5 text-[11px] text-ink-400">{step.note}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Rejected — a separate outcome, not a 5th step in the pipeline, so it's
-          deliberately not wired into the connector line above. */}
-      <div className="ml-4 flex flex-shrink-0 flex-col items-center border-l border-dashed border-line-200 pl-4 text-center">
-        <div
-          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-          style={
-            isRejected
-              ? { background: REPORT_STATUS_STYLE.Rejected.dot, color: "white" }
-              : { background: "var(--color-line-100)", color: "var(--color-ink-400)" }
-          }
-        >
-          {isRejected && <XIcon />}
-        </div>
-        <p className="mt-2 text-[12px] font-semibold text-ink-900">Rejected</p>
-        <p className="mt-0.5 text-[11px] text-ink-400">Not accepted</p>
-      </div>
-    </div>
-  );
-}
-
 export default async function MyReportsPage() {
   const session = await getCitizenSessionFromApi();
-  if (!session) return null;
+  if (!session) return <CitizenUnauthorized />;
 
   const reports = await apiGet<MyReportRow[]>("/reports/mine");
 
@@ -220,8 +143,7 @@ export default async function MyReportsPage() {
               className="flex flex-col overflow-hidden rounded-xl border border-line-200 bg-surface transition-shadow duration-[120ms] hover:shadow-sm"
             >
               <div className="relative h-48 w-full overflow-hidden bg-line-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={report.image_url} alt={report.title} className="h-full w-full object-cover" />
+                <ReportImage alt={report.title} className="h-full w-full object-cover" src={report.image_url} />
                 <span className="absolute left-3 top-3 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-surface/90 px-2 text-xs font-semibold text-ink-700">
                   #{idx + 1}
                 </span>
@@ -257,8 +179,12 @@ export default async function MyReportsPage() {
 
                   <div className="border-t border-line-100" />
 
-                  <div className="flex-1 overflow-x-auto">
-                    <ProgressSteps status={report.status} />
+                  <div className="flex flex-col gap-2">
+                    <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-line-200 px-2.5 py-1 text-[11px] font-medium text-ink-700">
+                      <OfficeIcon />
+                      {officeLabel(report.assigned_office)}
+                    </span>
+                    <p className="text-[13px] leading-[18px] text-ink-500">{latestUpdateLine(report)}</p>
                   </div>
                 </div>
 
