@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { LayersIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -22,11 +23,15 @@ function ControlsBody({
   onModeChange,
   showBoundaries,
   onToggleBoundaries,
+  isSystemAdmin,
+  myOffice,
 }: {
   mode: MapMode;
   onModeChange: (mode: MapMode) => void;
   showBoundaries: boolean;
   onToggleBoundaries: () => void;
+  isSystemAdmin: boolean;
+  myOffice?: "MEO" | "MDRRMO";
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -73,24 +78,32 @@ function ControlsBody({
 
       <section>
         <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Office</p>
-        <div className="flex h-8 w-full justify-center overflow-hidden rounded-md border border-input" role="group">
-          {OFFICE_OPTIONS.map((option) => {
-            const isActive = option.value === null ? !activeOffice || activeOffice === "all" : activeOffice === option.value;
-            const href = option.value === null ? `${pathname}?office=all` : `${pathname}?office=${option.value}`;
-            return (
-              <Link
-                aria-current={isActive ? "true" : undefined}
-                className={`flex shrink-0 cursor-pointer items-center justify-center px-3 text-[0.8rem] font-medium whitespace-nowrap transition-colors not-first:border-l not-first:border-input ${
-                  isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted"
-                }`}
-                href={href}
-                key={option.label}
-              >
-                {option.label}
-              </Link>
-            );
-          })}
-        </div>
+        {isSystemAdmin ? (
+          <div className="flex h-8 w-full justify-center overflow-hidden rounded-md border border-input" role="group">
+            {OFFICE_OPTIONS.map((option) => {
+              const isActive = option.value === null ? !activeOffice || activeOffice === "all" : activeOffice === option.value;
+              const href = option.value === null ? `${pathname}?office=all` : `${pathname}?office=${option.value}`;
+              return (
+                <Link
+                  aria-current={isActive ? "true" : undefined}
+                  className={`flex shrink-0 cursor-pointer items-center justify-center px-3 text-[0.8rem] font-medium whitespace-nowrap transition-colors not-first:border-l not-first:border-input ${
+                    isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted"
+                  }`}
+                  href={href}
+                  key={option.label}
+                >
+                  {option.label}
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          // Non-system-admins can't view another office's markers — the
+          // backend clamps this regardless of what's requested, so the
+          // toggle is replaced with a fixed label instead of a control
+          // that would look interactive but do nothing.
+          <Badge variant="secondary">My Office: {myOffice}</Badge>
+        )}
       </section>
     </>
   );
@@ -101,13 +114,17 @@ export function MapControls({
   onModeChange,
   showBoundaries,
   onToggleBoundaries,
+  isSystemAdmin,
+  myOffice,
 }: {
   mode: MapMode;
   onModeChange: (mode: MapMode) => void;
   showBoundaries: boolean;
   onToggleBoundaries: () => void;
+  isSystemAdmin: boolean;
+  myOffice?: "MEO" | "MDRRMO";
 }) {
-  const body = <ControlsBody mode={mode} onModeChange={onModeChange} onToggleBoundaries={onToggleBoundaries} showBoundaries={showBoundaries} />;
+  const body = <ControlsBody isSystemAdmin={isSystemAdmin} mode={mode} myOffice={myOffice} onModeChange={onModeChange} onToggleBoundaries={onToggleBoundaries} showBoundaries={showBoundaries} />;
 
   return (
     <>

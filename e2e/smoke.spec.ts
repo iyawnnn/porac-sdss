@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import sharp from "sharp";
 import { generateExifImage } from "../lib/utils/generate-exif-image";
 import { E2E_CITIZEN_ACCOUNT, E2E_MEO_ADMIN } from "./test-credentials";
+import { loginAdmin as sharedLoginAdmin, loginCitizen as sharedLoginCitizen } from "./helpers";
 
 test.setTimeout(90_000);
 
@@ -13,14 +14,7 @@ const outsidePoracFixture = path.join(fixtureDir, "outside_porac.jpg");
 const poblacionFixture = path.join(process.cwd(), "public", "uploads", "reports", "01_poblacion.jpg");
 
 async function loginCitizen(page: import("@playwright/test").Page) {
-  await page.goto("/login");
-  await page.waitForTimeout(500);
-  await page.getByLabel("Email").fill(E2E_CITIZEN_ACCOUNT.email);
-  await page.getByPlaceholder("Password").fill(E2E_CITIZEN_ACCOUNT.password);
-  await page.getByRole("button", { name: "Sign In with Email" }).click();
-  // 15s (vs. the 5s default): tolerates the Next.js dev server's on-demand
-  // Turbopack compile of /dashboard on its first hit in this file.
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+  await sharedLoginCitizen(page, E2E_CITIZEN_ACCOUNT);
   await page.getByRole("link", { name: "My Reports" }).click();
   await expect(page).toHaveURL(/\/reports/);
 }
@@ -37,14 +31,7 @@ test("MEO admin can open the Porac map without runtime failures", async ({ page 
   const failures: string[] = [];
   page.on("pageerror", error => failures.push(`pageerror: ${error.message}`));
   page.on("response", response => { if (response.status() >= 500) failures.push(`${response.status()} ${response.url()}`); });
-  await page.goto("/admin/login");
-  await page.waitForTimeout(1_000);
-  await page.getByLabel("Email").fill(E2E_MEO_ADMIN.email);
-  await page.getByPlaceholder("Password").fill(E2E_MEO_ADMIN.password);
-  await page.getByRole("button", { name: "Sign In" }).click();
-  // 15s (vs. the 5s default): tolerates the Next.js dev server's on-demand
-  // Turbopack compile of /admin on its first hit in this file.
-  await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 });
+  await sharedLoginAdmin(page, E2E_MEO_ADMIN);
   await page.getByRole("link", { name: "Interactive Map" }).click();
   await expect(page).toHaveURL(/\/admin\/map/);
   await expect(page.locator(".leaflet-container")).toBeVisible();
@@ -85,7 +72,10 @@ test("citizen header navigates public map, my reports, report form, and logs out
 
   await page.getByRole("link", { name: "Report Hazard" }).first().click();
   await expect(page).toHaveURL(/\/report/);
-  await expect(page.getByRole("heading", { name: "Report a Hazard" })).toBeVisible();
+  // 15s (vs. the 5s default): this navigation occasionally lands on a
+  // transient network stall under sustained --workers=1 full-suite load —
+  // same class of environmental flakiness documented in e2e/helpers.ts.
+  await expect(page.getByRole("heading", { name: "Report a Hazard" })).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("button", { name: "Logout" }).click();
   await expect(page).toHaveURL(/\/login/);

@@ -27,7 +27,7 @@ export function AdminUserMenu({ session }: { session: AdminSession }) {
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="flex items-center gap-3">
           <Avatar className="size-10"><AvatarFallback>{initials(session.adminName)}</AvatarFallback></Avatar>
-          <span className="min-w-0"><span className="block truncate font-medium text-foreground">{session.adminName}</span><span className="block truncate text-xs font-normal text-muted-foreground">{session.email}</span><span className="block text-xs font-normal text-muted-foreground">{session.office} {"\u00b7"} {session.role}</span></span>
+          <span className="min-w-0"><span className="block truncate font-medium text-foreground">{session.adminName}</span><span className="block truncate text-xs font-normal text-muted-foreground">{session.email}</span><span className="block text-xs font-normal text-muted-foreground">{session.office ?? "All Offices"} {"\u00b7"} {session.role}</span></span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup><DropdownMenuItem className="cursor-pointer" onClick={handleSignOut} variant="destructive"><LogOut />Sign out</DropdownMenuItem></DropdownMenuGroup>

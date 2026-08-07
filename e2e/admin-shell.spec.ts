@@ -1,17 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { E2E_CITIZEN_ACCOUNT, E2E_MEO_ADMIN } from "./test-credentials";
+import { loginAdmin as sharedLoginAdmin, loginCitizen as sharedLoginCitizen } from "./helpers";
 
 test.setTimeout(60_000);
 
 async function loginAdmin(page: Page) {
-  await page.goto("/admin/login");
-  await page.getByLabel("Email").fill(E2E_MEO_ADMIN.email);
-  await page.getByPlaceholder("Password").fill(E2E_MEO_ADMIN.password);
-  await page.getByRole("button", { name: "Sign In" }).click();
-  // 15s (vs. the 5s default): tolerates the Next.js dev server's on-demand
-  // Turbopack compile of /admin on its first hit in this file.
-  await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 });
-  await expect(page.getByText("Incident Reports Over Time")).toBeVisible();
+  await sharedLoginAdmin(page, E2E_MEO_ADMIN);
 }
 
 test("admin shell uses the approved Efferd navigation structure and real routes only", async ({ page }) => {
@@ -124,7 +118,10 @@ test("mobile sidebar opens, remains usable, and closes after navigation", async 
 
 test("office scope and sign-out remain functional", async ({ page }) => {
   await loginAdmin(page);
-  await expect(page.getByRole("link", { name: /View full city|View my office/ })).toBeVisible();
+  // Office admins get a fixed, non-interactive office label, not a
+  // switchable "view all offices" control — see AdminSidebar.tsx.
+  await expect(page.getByText(`My Office: ${E2E_MEO_ADMIN.office}`)).toBeVisible();
+  await expect(page.getByRole("link", { name: /View full city|View my office/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Open administrator menu" }).click();
   const signOut = page.getByRole("menuitem", { name: "Sign out" });
@@ -142,13 +139,7 @@ test("rendered admin routes contain no mojibake", async ({ page }) => {
 });
 
 test("citizen shell remains light and independent of the neutral admin shell", async ({ page }) => {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(E2E_CITIZEN_ACCOUNT.email);
-  await page.getByPlaceholder("Password").fill(E2E_CITIZEN_ACCOUNT.password);
-  await page.getByRole("button", { name: "Sign In with Email" }).click();
-  // 15s (vs. the 5s default): tolerates the Next.js dev server's on-demand
-  // Turbopack compile of /dashboard on its first hit in this file.
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+  await sharedLoginCitizen(page, E2E_CITIZEN_ACCOUNT);
 
   const canvas = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(canvas).toBe("rgb(247, 249, 251)");

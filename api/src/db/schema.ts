@@ -41,7 +41,14 @@ export const ticketStatusEnum = pgEnum('ticket_status', [
   'Rejected',
 ]);
 export const officeEnum = pgEnum('office', ['MEO', 'MDRRMO']);
-export const adminRoleEnum = pgEnum('admin_role', ['officer', 'supervisor']);
+// 'system_admin' has no office of its own (admins.office is nullable for
+// exactly this role) — it bypasses office scoping instead of belonging to
+// a third office value. See api/src/common/authz/admin-scope.ts.
+export const adminRoleEnum = pgEnum('admin_role', [
+  'officer',
+  'supervisor',
+  'system_admin',
+]);
 // 'facebook' is retained in the enum only because Postgres can't cheaply
 // drop an enum value (would need a full type-rebuild migration) — no code
 // path issues it anymore (Facebook OAuth was removed; Google is the only
@@ -305,6 +312,6 @@ export const admins = pgTable('admins', {
   lastName: text('last_name').notNull(),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
-  office: officeEnum('office').notNull(),
+  office: officeEnum('office'),
   role: adminRoleEnum('role').notNull(),
 });

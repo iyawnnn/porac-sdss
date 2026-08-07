@@ -56,29 +56,39 @@ export class DashboardService {
   // "High urgency" follows the persisted urgency_level created by the
   // existing scoring pipeline; it intentionally does not repurpose the
   // separate workflow priority_index.
-  async getDashboardKpis(): Promise<DashboardKpis> {
+  async getDashboardKpis(office?: 'MEO' | 'MDRRMO'): Promise<DashboardKpis> {
     const sql = this.pg;
     const activeStatuses = this.activeStatuses();
     const [row] = await sql<DashboardKpis[]>`
       WITH resolved_events AS (
-        SELECT t.id, t.created_at, MIN(sh.changed_at) AS resolved_at
+        SELECT t.id, t.created_at, t.assigned_office, MIN(sh.changed_at) AS resolved_at
         FROM tickets t
         JOIN status_history sh ON sh.ticket_id = t.id AND sh.status = 'Resolved'
-        GROUP BY t.id, t.created_at
+        GROUP BY t.id, t.created_at, t.assigned_office
       )
       SELECT
-        (SELECT COUNT(*) FROM tickets WHERE status IN ${activeStatuses})::int AS active_count,
         (SELECT COUNT(*) FROM tickets WHERE status IN ${activeStatuses}
-          AND urgency_level = ${HIGH_URGENCY_LEVEL})::int AS high_urgency_count,
-        (SELECT COUNT(*) FROM reports
-          WHERE created_at >= date_trunc('month', now()))::int AS reports_this_month_count,
+          AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office))::int AS active_count,
+        (SELECT COUNT(*) FROM tickets WHERE status IN ${activeStatuses}
+          AND urgency_level = ${HIGH_URGENCY_LEVEL}
+          AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office))::int AS high_urgency_count,
+        (SELECT COUNT(*) FROM reports r
+          WHERE r.created_at >= date_trunc('month', now())
+          AND (${office ?? null}::text IS NULL OR EXISTS (
+            SELECT 1 FROM tickets t WHERE t.id = r.ticket_id AND t.assigned_office = ${office ?? null}::office
+          )))::int AS reports_this_month_count,
         (SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600)
-          FROM resolved_events WHERE resolved_at > now() - interval '30 days') AS avg_resolution_hours_30d
+          FROM resolved_events
+          WHERE resolved_at > now() - interval '30 days'
+          AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office)) AS avg_resolution_hours_30d
     `;
     return row;
   }
 
-  async getBarangayRiskRanking(limit = 5): Promise<BarangayRiskRow[]> {
+  async getBarangayRiskRanking(
+    limit = 5,
+    office?: 'MEO' | 'MDRRMO',
+  ): Promise<BarangayRiskRow[]> {
     const sql = this.pg;
     return sql<BarangayRiskRow[]>`
       SELECT b.id AS barangay_id, b.name AS barangay_name,
@@ -87,19 +97,24 @@ export class DashboardService {
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
       WHERE t.status IN ${this.activeStatuses()}
+        AND (${office ?? null}::text IS NULL OR t.assigned_office = ${office ?? null}::office)
       GROUP BY b.id, b.name
       ORDER BY active_count DESC, avg_priority DESC NULLS LAST, b.name ASC
       LIMIT ${limit}
     `;
   }
 
-  async getCategoryDistribution(limit = 5): Promise<CategoryDistributionRow[]> {
+  async getCategoryDistribution(
+    limit = 5,
+    office?: 'MEO' | 'MDRRMO',
+  ): Promise<CategoryDistributionRow[]> {
     const sql = this.pg;
     return sql<CategoryDistributionRow[]>`
       SELECT category, COUNT(*)::int AS active_count,
         SUM(COUNT(*)) OVER ()::int AS active_total
       FROM tickets
       WHERE status IN ${this.activeStatuses()}
+        AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office)
       GROUP BY category
       ORDER BY active_count DESC, category ASC
       LIMIT ${limit}
@@ -107,7 +122,10 @@ export class DashboardService {
   }
 
   /** Requested calendar dates in the database timezone, including zero-report days. */
-  async getIncidentTrend(days: DashboardRangeDays = 30): Promise<IncidentTrendRow[]> {
+  async getIncidentTrend(
+    days: DashboardRangeDays = 30,
+    office?: 'MEO' | 'MDRRMO',
+  ): Promise<IncidentTrendRow[]> {
     const sql = this.pg;
     return sql<IncidentTrendRow[]>`
       WITH date_range AS (
@@ -121,8 +139,11 @@ export class DashboardService {
         FROM date_range
       ), counts AS (
         SELECT created_at::date AS date, COUNT(*)::int AS report_count
-        FROM reports
-        WHERE created_at >= (SELECT start_date FROM date_range)
+        FROM reports r
+        WHERE r.created_at >= (SELECT start_date FROM date_range)
+          AND (${office ?? null}::text IS NULL OR EXISTS (
+            SELECT 1 FROM tickets t WHERE t.id = r.ticket_id AND t.assigned_office = ${office ?? null}::office
+          ))
         GROUP BY created_at::date
       )
       SELECT to_char(dates.date, 'YYYY-MM-DD') AS date,
@@ -133,11 +154,12 @@ export class DashboardService {
     `;
   }
 
-  async getStatusDistribution(): Promise<DistributionRow[]> {
+  async getStatusDistribution(office?: 'MEO' | 'MDRRMO'): Promise<DistributionRow[]> {
     const sql = this.pg;
     return sql<DistributionRow[]>`
       SELECT status::text AS label, COUNT(*)::int AS count
       FROM tickets
+      WHERE (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office)
       GROUP BY status
       ORDER BY CASE status
         WHEN 'Reported' THEN 1
@@ -150,9 +172,12 @@ export class DashboardService {
     `;
   }
 
-  // assigned_office is NOT NULL. VALUES deliberately includes both supported
-  // offices so a temporarily empty queue is represented as zero rather than
-  // silently disappearing from the workload card.
+  // Deliberately never office-scoped — this is the cross-office comparison
+  // itself. dashboard.controller.ts only includes it in the response for
+  // system admins. assigned_office is NOT NULL. VALUES deliberately
+  // includes both supported offices so a temporarily empty queue is
+  // represented as zero rather than silently disappearing from the
+  // workload card.
   async getDepartmentWorkload(): Promise<DistributionRow[]> {
     const sql = this.pg;
     return sql<DistributionRow[]>`
@@ -167,12 +192,17 @@ export class DashboardService {
     `;
   }
 
-  async getCitizenSeverityDistribution(): Promise<DistributionRow[]> {
+  async getCitizenSeverityDistribution(
+    office?: 'MEO' | 'MDRRMO',
+  ): Promise<DistributionRow[]> {
     const sql = this.pg;
     return sql<DistributionRow[]>`
       SELECT citizen_severity AS label, COUNT(*)::int AS count
-      FROM reports
-      WHERE created_at >= current_date - interval '29 days'
+      FROM reports r
+      WHERE r.created_at >= current_date - interval '29 days'
+        AND (${office ?? null}::text IS NULL OR EXISTS (
+          SELECT 1 FROM tickets t WHERE t.id = r.ticket_id AND t.assigned_office = ${office ?? null}::office
+        ))
       GROUP BY citizen_severity
       ORDER BY count DESC, label ASC
     `;

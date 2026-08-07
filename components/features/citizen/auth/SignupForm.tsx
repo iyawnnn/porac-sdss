@@ -21,23 +21,31 @@ export default function SignupForm() {
     setError("");
 
     const form = new FormData(e.currentTarget);
-    const res = await fetch("/api/citizens/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: form.get("email"),
-        password: form.get("password"),
-        firstName: form.get("firstName"),
-        lastName: form.get("lastName"),
-      }),
-    });
+    try {
+      const res = await fetch("/api/citizens/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.get("email"),
+          password: form.get("password"),
+          firstName: form.get("firstName"),
+          lastName: form.get("lastName"),
+        }),
+      });
 
-    if (res.ok) {
-      router.push("/dashboard");
-      router.refresh();
-    } else {
-      const data = await res.json();
-      setError(data.error ?? "Sign up failed");
+      if (res.ok) {
+        router.push("/dashboard");
+        router.refresh();
+      } else {
+        const data = await res.json();
+        setError(data.error ?? "Sign up failed");
+        setSubmitting(false);
+      }
+    } catch {
+      // Same network-failure gap as AdminLoginForm/LoginForm — fetch()
+      // rejecting (rather than resolving non-2xx) used to leave the button
+      // stuck on "Signing up…" forever with no error shown.
+      setError("Could not reach the server. Please try again.");
       setSubmitting(false);
     }
   }
