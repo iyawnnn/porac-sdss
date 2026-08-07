@@ -1,8 +1,9 @@
 ﻿import { expect, test, type Page } from "@playwright/test";
 import { formatDistributionPercent, normalizeDistribution } from "@/components/features/admin/dashboard/DistributionChartUtils";
+import { E2E_MEO_ADMIN } from "./test-credentials";
 
 test.setTimeout(60_000);
-async function loginAdmin(page: Page) { await page.goto("/admin/login"); await page.getByLabel("Email").fill("meo@porac.gov.ph"); await page.getByPlaceholder("Password").fill("PoracDemo2026!"); await page.getByRole("button", { name: "Sign In" }).click(); await expect(page).toHaveURL(/\/admin$/); await expect(page.getByText("Incident Reports Over Time")).toBeVisible(); }
+async function loginAdmin(page: Page) { await page.goto("/admin/login"); await page.getByLabel("Email").fill(E2E_MEO_ADMIN.email); await page.getByPlaceholder("Password").fill(E2E_MEO_ADMIN.password); await page.getByRole("button", { name: "Sign In" }).click(); await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 }); await expect(page.getByText("Incident Reports Over Time")).toBeVisible(); }
 function cardFor(page: Page, title: string) { return page.locator('[data-slot="card"]').filter({ has: page.getByText(title, { exact: true }) }); }
 function expectDailyBuckets(rows: Array<{ date: string; report_count: number }>, days: number) { expect(rows).toHaveLength(days); for (let index = 1; index < rows.length; index += 1) expect(new Date(rows[index].date + "T00:00:00").getTime() - new Date(rows[index - 1].date + "T00:00:00").getTime()).toBe(86_400_000); }
 

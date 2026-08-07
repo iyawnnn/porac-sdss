@@ -35,6 +35,7 @@
     "import:barangays": "tsx --env-file=.env scripts/seed/import-barangays.ts",
     "seed:dem": "tsx --env-file=.env scripts/seed/seed-dem.ts",
     "seed:admin": "tsx --env-file=.env scripts/seed/seed-admin.ts",
+    "seed:e2e-admins": "tsx --env-file=.env scripts/seed/seed-e2e-admins.ts",
     "seed:users": "tsx --env-file=.env scripts/seed/seed-users.ts",
     "seed:mock-report": "tsx --env-file=.env scripts/seed/seed-mock-report.ts",
     "seed:bulk-reports": "tsx --env-file=.env scripts/seed/seed-bulk-reports.ts",

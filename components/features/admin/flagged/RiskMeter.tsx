@@ -16,7 +16,7 @@ export function RiskMeter({ score, size = "sm" }: { score: number; size?: "sm" |
 
   return (
     <div className="flex items-center gap-2">
-      <div className={`${width} ${height} rounded-full bg-slate-200 overflow-hidden`}>
+      <div className={`${width} ${height} rounded-full bg-muted overflow-hidden`}>
         <div
           className="h-full rounded-full transition-[width]"
           style={{ width: `${score}%`, backgroundColor: color }}

@@ -11,7 +11,7 @@ import type {
   TicketPriorityContext,
 } from "@/lib/types/admin-tickets";
 import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
-import { priorityBandClass } from "@/lib/utils/ui/priority";
+import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { StatusPill } from "@/components/features/admin/shared/StatusPill";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
 import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
@@ -82,7 +82,12 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
   const nextStatus = NEXT_STATUS[ticket.status];
   const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
   const primaryReport = reports[0] as TicketReport | undefined;
-  const barangayGeometry = ticket.barangay_geojson ? JSON.parse(ticket.barangay_geojson) : null;
+  let barangayGeometry = null;
+  try {
+    barangayGeometry = ticket.barangay_geojson ? JSON.parse(ticket.barangay_geojson) : null;
+  } catch {
+    barangayGeometry = null;
+  }
 
   return (
     <div className="space-y-4">
@@ -321,7 +326,7 @@ function ScoringTab({
           <p className="mt-0.5 text-xs text-ink-400">Citizen severity + ticket age + barangay density — a separate signal from urgency above.</p>
           <div className="mt-3 flex items-baseline gap-2">
             <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
-              <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span>
+              <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> · {priorityBandLabel(ticket.priority_index)}
             </Badge>
           </div>
           <table className="mt-3 w-full border-collapse text-xs text-ink-700">

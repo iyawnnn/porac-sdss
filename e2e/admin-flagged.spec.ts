@@ -1,13 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
+import { E2E_MEO_ADMIN } from "./test-credentials";
 
 test.setTimeout(60_000);
 
 async function loginAdmin(page: Page) {
   await page.goto("/admin/login");
-  await page.getByLabel("Email").fill("meo@porac.gov.ph");
-  await page.getByPlaceholder("Password").fill("PoracDemo2026!");
+  await page.getByLabel("Email").fill(E2E_MEO_ADMIN.email);
+  await page.getByPlaceholder("Password").fill(E2E_MEO_ADMIN.password);
   await page.getByRole("button", { name: "Sign In" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  // 15s (vs. the 5s default): tolerates the Next.js dev server's on-demand
+  // Turbopack compile of /admin on its first hit in this file.
+  await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 });
   await expect(page.getByText("Incident Reports Over Time")).toBeVisible();
 }
 
