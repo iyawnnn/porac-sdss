@@ -3,7 +3,18 @@ import Link from "next/link";
 import { apiGetOptional } from "@/lib/api-client";
 import type { MyReportDetail, StatusHistoryStep } from "@/lib/types/citizens-reports";
 import { getUrgencyBandStyle } from "@/lib/utils/ui/urgency";
+import {
+  duplicateCopy,
+  mergedCopy,
+  officeLabel,
+  othersJoinedCopy,
+  quarantinedCopy,
+  resolvedUpdateLine,
+  statusCopy,
+} from "@/lib/utils/citizen-report-copy";
 import LocationPreviewMapLoader from "@/components/features/citizen/dashboard/LocationPreviewMapLoader";
+import ReportTimeline from "@/components/features/citizen/dashboard/ReportTimeline";
+import { ReportImage } from "@/components/features/citizen/dashboard/ReportImage";
 
 const STATUS_STYLE: Record<string, { tint: string; ink: string; dot: string }> = {
   Reported: { tint: "#F1F3F5", ink: "#434B54", dot: "#98A2AC" },
@@ -13,37 +24,6 @@ const STATUS_STYLE: Record<string, { tint: string; ink: string; dot: string }> =
   Rejected: { tint: "#FDEAEA", ink: "#8A1D12", dot: "#B42318" },
 };
 const FALLBACK_STATUS_STYLE = { tint: "#F1F3F5", ink: "#434B54", dot: "#98A2AC" };
-
-const PROGRESS_STEPS = [
-  { status: "Reported", note: "Received" },
-  { status: "Under Review", note: "Queued" },
-  { status: "In Progress", note: "Work ongoing" },
-  { status: "Resolved", note: "Closed" },
-];
-
-const STATUS_COPY: Record<string, { subtitle: string; update: string }> = {
-  Reported: {
-    subtitle: "Awaiting staff review",
-    update: "Your report has been logged and is waiting for formal review.",
-  },
-  "Under Review": {
-    subtitle: "Being reviewed by city staff",
-    update: "City staff are currently reviewing your submitted report.",
-  },
-  "In Progress": {
-    subtitle: "Work is currently ongoing",
-    update: "Your report is being actively worked on by the assigned office.",
-  },
-  Resolved: {
-    subtitle: "This report has been resolved",
-    update: "Your report has been marked resolved by city staff.",
-  },
-  Rejected: {
-    subtitle: "This report was not accepted",
-    update: "This report was reviewed and was not accepted for action.",
-  },
-};
-const FALLBACK_STATUS_COPY = { subtitle: "", update: "" };
 
 function PinIcon({ className = "" }: { className?: string }) {
   return (
@@ -91,19 +71,31 @@ function ClockIcon({ className = "" }: { className?: string }) {
   );
 }
 
-function CheckIcon() {
+function OfficeIcon({ className = "" }: { className?: string }) {
   return (
-    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M4 21V9l8-5 8 5v12" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M9 21v-6h6v6" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
     </svg>
   );
 }
 
-function XIcon() {
+function InfoBanner({ tone, title, children }: { tone: "brand" | "amber" | "violet"; title: string; children: React.ReactNode }) {
+  const toneClass =
+    tone === "amber"
+      ? "bg-amber-50 text-amber-900"
+      : tone === "violet"
+        ? "bg-violet-50 text-violet-900"
+        : "bg-brand-50 text-ink-700";
+  const titleClass = tone === "amber" ? "text-amber-700" : tone === "violet" ? "text-violet-700" : "text-brand-700";
   return (
-    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M4 4l8 8M12 4l-8 8" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
+    <div className={`flex items-start gap-2 rounded-lg p-3 ${toneClass}`}>
+      <ClockIcon className="mt-0.5 flex-shrink-0" />
+      <div>
+        <p className={`text-[11px] font-semibold uppercase tracking-[0.04em] ${titleClass}`}>{title}</p>
+        <p className="mt-0.5 text-[13px] leading-[18px]">{children}</p>
+      </div>
+    </div>
   );
 }
 
@@ -173,72 +165,6 @@ function MiniTile({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
-function ProgressSteps({ status }: { status: string }) {
-  const isRejected = status === "Rejected";
-  const currentIndex = isRejected ? -1 : PROGRESS_STEPS.findIndex((s) => s.status === status);
-
-  return (
-    <div className="flex items-start">
-      <div className="flex flex-1 items-start">
-        {PROGRESS_STEPS.map((step, i) => {
-          const isReached = currentIndex >= 0 && i <= currentIndex;
-          const rightFilled = isReached && i < currentIndex;
-
-          return (
-            <div key={step.status} className="flex flex-1 flex-col items-center text-center">
-              <div className="flex w-full items-center">
-                <div
-                  className="h-0.5 flex-1"
-                  style={{
-                    visibility: i === 0 ? "hidden" : "visible",
-                    background: isReached ? "var(--color-brand-500)" : "var(--color-line-200)",
-                  }}
-                />
-                <div
-                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-                  style={
-                    isReached
-                      ? { background: "var(--color-brand-500)", color: "white" }
-                      : { background: "var(--color-line-100)", color: "var(--color-ink-400)" }
-                  }
-                >
-                  {isReached ? <CheckIcon /> : i + 1}
-                </div>
-                <div
-                  className="h-0.5 flex-1"
-                  style={{
-                    visibility: i === PROGRESS_STEPS.length - 1 ? "hidden" : "visible",
-                    background: rightFilled ? "var(--color-brand-500)" : "var(--color-line-200)",
-                  }}
-                />
-              </div>
-              <p className="mt-2 text-[12px] font-semibold text-ink-900">{step.status}</p>
-              <p className="mt-0.5 text-[11px] text-ink-400">{step.note}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Rejected — a separate outcome, not a 5th step in the pipeline, so it's
-          deliberately not wired into the connector line above. */}
-      <div className="ml-4 flex flex-shrink-0 flex-col items-center border-l border-dashed border-line-200 pl-4 text-center">
-        <div
-          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-          style={
-            isRejected
-              ? { background: STATUS_STYLE.Rejected.dot, color: "white" }
-              : { background: "var(--color-line-100)", color: "var(--color-ink-400)" }
-          }
-        >
-          {isRejected && <XIcon />}
-        </div>
-        <p className="mt-2 text-[12px] font-semibold text-ink-900">Rejected</p>
-        <p className="mt-0.5 text-[11px] text-ink-400">Not accepted</p>
-      </div>
-    </div>
-  );
-}
-
 export default async function MyReportDetailPage({
   params,
 }: {
@@ -256,19 +182,20 @@ export default async function MyReportDetailPage({
 
   if (!data) notFound();
 
-  const { report } = data;
+  const { report, history } = data;
 
   const submittedDate = new Date(report.created_at);
   const updatedDate = new Date(report.ticket_updated_at);
   const dateFmt: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" };
   const timeFmt: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
-  const statusCopy = STATUS_COPY[report.status] ?? FALLBACK_STATUS_COPY;
+  const copy = statusCopy(report.status);
   const citizenName = `${report.citizen_first_name} ${report.citizen_last_name}`;
   const initials = `${report.citizen_first_name[0] ?? ""}${report.citizen_last_name[0] ?? ""}`.toUpperCase();
+  const resolvedUpdate = resolvedUpdateLine(report);
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <Link href="/dashboard" className="text-sm text-brand-500 underline">
+      <Link href="/reports" className="text-sm text-brand-500 underline">
         ← Back to my reports
       </Link>
 
@@ -292,10 +219,31 @@ export default async function MyReportDetailPage({
               <OutlineChip icon={<PinIcon className="text-ink-400" />}>{report.barangay_name}</OutlineChip>
               <OutlineChip icon={<TagIcon className="text-ink-400" />}>{report.category}</OutlineChip>
               <OutlineChip icon={<ClockIcon className="text-ink-400" />}>{report.status}</OutlineChip>
+              <OutlineChip icon={<OfficeIcon className="text-ink-400" />}>{officeLabel(report.assigned_office)}</OutlineChip>
             </div>
             <p className="mt-3 text-[12px] font-medium uppercase tracking-[0.04em] text-ink-400">
               Reported as <span className="text-ink-500">{report.citizen_severity}</span>
             </p>
+
+            {(report.moderation_status === "quarantined" || report.moderation_status === "duplicate" || report.member_count > 1) && (
+              <div className="mt-4 flex flex-col gap-2">
+                {report.moderation_status === "quarantined" && (
+                  <InfoBanner tone="amber" title={quarantinedCopy(report.title).title}>
+                    {quarantinedCopy(report.title).message}
+                  </InfoBanner>
+                )}
+                {report.moderation_status === "duplicate" && (
+                  <InfoBanner tone="violet" title={duplicateCopy(report.title).title}>
+                    {duplicateCopy(report.title).message}
+                  </InfoBanner>
+                )}
+                {report.moderation_status !== "duplicate" && report.member_count > 1 && (
+                  <InfoBanner tone="brand" title={report.is_merged ? "Merged with an existing issue" : "Other residents joined this report"}>
+                    {report.is_merged ? mergedCopy(report.member_count) : othersJoinedCopy(report.member_count)}
+                  </InfoBanner>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="shrink-0 sm:text-right">
@@ -334,8 +282,7 @@ export default async function MyReportDetailPage({
         <div className="flex flex-col gap-6">
           <div className="overflow-hidden rounded-xl border border-line-200 bg-surface">
             <div className="relative h-64 w-full sm:h-72">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={report.image_url} alt={report.title} className="h-full w-full object-cover" />
+              <ReportImage alt={report.title} className="h-full w-full object-cover" src={report.image_url} />
               <span className="absolute left-3 top-3 inline-flex items-center rounded-full bg-surface/90 px-3 py-1 text-xs font-medium text-ink-700">
                 Submitted {submittedDate.toLocaleDateString(undefined, dateFmt)}
               </span>
@@ -348,25 +295,25 @@ export default async function MyReportDetailPage({
           <div className="rounded-xl border border-line-200 bg-surface p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-[16px] font-semibold text-ink-900">Progress Status</h2>
+                <h2 className="text-[16px] font-semibold text-ink-900">Timeline</h2>
                 <p className="mt-0.5 text-[13px] text-ink-500">
                   Submitted {submittedDate.toLocaleDateString(undefined, dateFmt)}
-                  {statusCopy.subtitle && ` · ${statusCopy.subtitle}`}
+                  {copy.subtitle && ` · ${copy.subtitle}`}
                 </p>
               </div>
               <StatusPill status={report.status} />
             </div>
 
-            <div className="mt-4 overflow-x-auto rounded-lg bg-canvas p-4">
-              <ProgressSteps status={report.status} />
+            <div className="mt-4 rounded-lg bg-canvas p-4">
+              <ReportTimeline report={report} history={history} />
             </div>
 
-            {statusCopy.update && (
+            {(resolvedUpdate || copy.update) && (
               <div className="mt-4 flex items-start gap-2 rounded-lg bg-brand-50 p-3">
                 <ClockIcon className="mt-0.5 flex-shrink-0 text-brand-700" />
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-brand-700">Latest Update</p>
-                  <p className="mt-0.5 text-[13px] leading-[18px] text-ink-700">{statusCopy.update}</p>
+                  <p className="mt-0.5 text-[13px] leading-[18px] text-ink-700">{resolvedUpdate ?? copy.update}</p>
                 </div>
               </div>
             )}
