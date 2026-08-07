@@ -55,7 +55,16 @@ describe('OAuthStateService', () => {
   it('rejects a tampered state token', async () => {
     const service = makeService();
     const { token, nonce } = await service.issue('google');
-    const tampered = token.slice(0, -1) + (token.at(-1) === 'a' ? 'b' : 'a');
+    // Flip the first character of the signature segment rather than the
+    // token's last character: base64url's final character of a segment can
+    // carry unused padding bits (true here for a 32-byte HS256 signature),
+    // so some last-character edits decode to the identical signature bytes
+    // and leave the token valid. A non-terminal character always changes
+    // the decoded bytes.
+    const parts = token.split('.');
+    const sig = parts[2];
+    parts[2] = (sig[0] === 'a' ? 'b' : 'a') + sig.slice(1);
+    const tampered = parts.join('.');
     await expect(service.consume('google', tampered, nonce)).rejects.toThrow();
   });
 
