@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
 import type { PaginatedTickets } from "@/lib/types/admin-tickets";
+import { isSystemAdmin } from "@/lib/utils/adminScope";
 import { TicketsWorkspace } from "@/components/features/admin/tickets/TicketsWorkspace";
 import { TicketQueueSkeleton } from "@/components/features/admin/tickets/TicketQueueSkeleton";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
@@ -54,7 +55,8 @@ async function TicketsData({ query }: { query: Record<string, string | undefined
       initialQuery={query}
       initialRecompute={initialRecompute}
       barangays={barangays}
-      sessionOffice={session?.office}
+      sessionOffice={session?.office ?? undefined}
+      isSystemAdmin={session ? isSystemAdmin(session) : false}
     />
   );
 }

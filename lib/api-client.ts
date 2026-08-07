@@ -15,6 +15,13 @@ async function cookieHeader(): Promise<HeadersInit> {
   return { cookie: (await headers()).get("cookie") ?? "" };
 }
 
+const NETWORK_FAILURE_RETRIES = 2;
+const NETWORK_FAILURE_RETRY_DELAY_MS = 150;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // fetch() rejects (ECONNREFUSED, DNS failure, etc.) rather than resolving
 // with a bad status, so that failure mode needs its own catch — a bare
 // `await fetch(...)` on a down API surfaces to the page as an opaque
@@ -23,16 +30,30 @@ async function cookieHeader(): Promise<HeadersInit> {
 // throws Next's internal DYNAMIC_SERVER_USAGE control-flow signal during
 // static generation, and that error's `digest` must reach Next unwrapped
 // or the route fails the build instead of just bailing to dynamic render.
+//
+// A short bounded retry is scoped to exactly this connection-level failure
+// (never to a resolved response, however its status) — the two local dev
+// processes (Next + NestJS) occasionally drop a request with ECONNREFUSED
+// under bursty concurrent load with no server actually down, and every
+// Server Component on every admin/citizen page goes through this one
+// function, so this is the single place to absorb that blip. A real 401 or
+// 429 still resolves normally and is never retried here — this only
+// changes behavior for genuine socket-level failures.
 async function fetchApi(path: string): Promise<Response> {
   const requestHeaders = await cookieHeader();
-  try {
-    return await fetch(`${BASE}${path}`, {
-      headers: requestHeaders,
-      cache: "no-store",
-    });
-  } catch (cause) {
-    console.error(`[api-client] request to ${BASE}${path} failed:`, cause);
-    throw new Error(`${path} -> network error reaching ${BASE}`, { cause });
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetch(`${BASE}${path}`, {
+        headers: requestHeaders,
+        cache: "no-store",
+      });
+    } catch (cause) {
+      if (attempt >= NETWORK_FAILURE_RETRIES) {
+        console.error(`[api-client] request to ${BASE}${path} failed:`, cause);
+        throw new Error(`${path} -> network error reaching ${BASE}`, { cause });
+      }
+      await sleep(NETWORK_FAILURE_RETRY_DELAY_MS);
+    }
   }
 }
 

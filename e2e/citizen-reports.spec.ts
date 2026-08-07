@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { E2E_CITIZEN_ACCOUNT, E2E_MEO_ADMIN } from "./test-credentials";
+import { loginAdmin as sharedLoginAdmin, loginCitizen as sharedLoginCitizen } from "./helpers";
 
 test.setTimeout(60_000);
 
@@ -17,21 +18,11 @@ interface MyReportRow {
 }
 
 async function loginCitizen(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(E2E_CITIZEN_ACCOUNT.email);
-  await page.getByPlaceholder("Password").fill(E2E_CITIZEN_ACCOUNT.password);
-  await page.getByRole("button", { name: "Sign In with Email" }).click();
-  // 15s (vs. the 5s default): tolerates the Next.js dev server's on-demand
-  // Turbopack compile of /dashboard on its first hit in this file.
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+  await sharedLoginCitizen(page, E2E_CITIZEN_ACCOUNT);
 }
 
 async function loginAdmin(page: Page) {
-  await page.goto("/admin/login");
-  await page.getByLabel("Email").fill(E2E_MEO_ADMIN.email);
-  await page.getByPlaceholder("Password").fill(E2E_MEO_ADMIN.password);
-  await page.getByRole("button", { name: "Sign In" }).click();
-  await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 });
+  await sharedLoginAdmin(page, E2E_MEO_ADMIN);
 }
 
 async function fetchMyReports(page: Page): Promise<MyReportRow[]> {

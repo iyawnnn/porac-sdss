@@ -7,8 +7,9 @@
 export interface E2EAdminAccount {
   email: string;
   password: string;
-  office: "MEO" | "MDRRMO";
-  role: "officer" | "supervisor";
+  // null only for role: "system_admin" — see api/src/common/authz/admin-scope.ts.
+  office: "MEO" | "MDRRMO" | null;
+  role: "officer" | "supervisor" | "system_admin";
   firstName: string;
   lastName: string;
 }
@@ -19,10 +20,12 @@ const DEMO_PASSWORD = process.env.E2E_DEMO_PASSWORD ?? "PoracDemo2026!";
 export const E2E_ADMIN_ACCOUNTS: readonly E2EAdminAccount[] = [
   { email: "meo@porac.gov.ph", password: DEMO_PASSWORD, office: "MEO", role: "supervisor", firstName: "MEO", lastName: "Supervisor" },
   { email: "mdrrmo@porac.gov.ph", password: DEMO_PASSWORD, office: "MDRRMO", role: "supervisor", firstName: "MDRRMO", lastName: "Supervisor" },
+  { email: "sysadmin@porac.gov.ph", password: DEMO_PASSWORD, office: null, role: "system_admin", firstName: "System", lastName: "Administrator" },
 ];
 
 export const E2E_MEO_ADMIN = E2E_ADMIN_ACCOUNTS[0];
 export const E2E_MDRRMO_ADMIN = E2E_ADMIN_ACCOUNTS[1];
+export const E2E_SYSTEM_ADMIN = E2E_ADMIN_ACCOUNTS[2];
 
 // Citizen demo accounts are already seeded idempotently by api/scripts/seed/seed-users.ts
 // (ON CONFLICT upsert) — listed here only so specs share one constant instead of

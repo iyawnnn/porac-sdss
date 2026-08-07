@@ -12,6 +12,7 @@ import {
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
+import { resolveOfficeScope } from '../common/authz/admin-scope';
 import { ModerationService, type ModerationAction } from './moderation.service';
 
 const ACTIONS: ModerationAction[] = ['dismiss', 'quarantine', 'duplicate'];
@@ -26,13 +27,22 @@ export class ModerationController {
     @Query() query: Record<string, string | undefined>,
     @CurrentAdmin() admin: AdminSession,
   ) {
-    const filters = this.moderation.parseModerationQuery(query, admin.office);
+    const filters = this.moderation.parseModerationQuery(query, admin);
     return this.moderation.getModerationQueue(filters);
   }
 
   @Get('moderation/stats')
-  stats() {
-    return this.moderation.getModerationStats();
+  stats(
+    @Query('office') officeParam: string | undefined,
+    @CurrentAdmin() admin: AdminSession,
+  ) {
+    const requestedOffice =
+      officeParam === 'all' || officeParam === 'MEO' || officeParam === 'MDRRMO'
+        ? officeParam
+        : undefined;
+    return this.moderation.getModerationStats(
+      resolveOfficeScope(admin, requestedOffice),
+    );
   }
 
   @Post('reports/:id/moderate')
@@ -51,7 +61,7 @@ export class ModerationController {
     const result = await this.moderation.moderateReport(
       id,
       action as ModerationAction,
-      admin.adminName,
+      admin,
       canonicalReportId,
       note,
     );
