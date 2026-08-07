@@ -27,6 +27,7 @@
     "migrate:citizen-password-reset": "tsx --env-file=.env scripts/migrations/migrate-citizen-password-reset.ts",
     "migrate:notifications": "tsx --env-file=.env scripts/migrations/migrate-notifications.ts",
     "migrate:admin-system-role": "tsx --env-file=.env scripts/migrations/migrate-admin-system-role.ts",
+    "migrate:admin-created-at": "tsx --env-file=.env scripts/migrations/migrate-admin-created-at.ts",
     "migrate:city-boundary": "tsx --env-file=.env scripts/migrations/migrate-city-boundary.ts",
     "migrate:config": "tsx --env-file=.env scripts/migrations/migrate-config.ts",
     "migrate:exif-data": "tsx --env-file=.env scripts/migrations/migrate-exif-data.ts",

@@ -314,4 +314,7 @@ export const admins = pgTable('admins', {
   passwordHash: text('password_hash').notNull(),
   office: officeEnum('office'),
   role: adminRoleEnum('role').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
