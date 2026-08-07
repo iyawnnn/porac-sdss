@@ -16,6 +16,7 @@ import {
 } from '../common/utils/scoring';
 import type { UrgencyLevel } from '../domain/urgency';
 import type { AdminSession } from '../auth/session.service';
+import { resolveOfficeScope, assertOfficeAccess } from '../common/authz/admin-scope';
 import { CATEGORIES } from '../contracts/schemas';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EMAIL_SERVICE, type EmailService } from '../citizens/email.service';
@@ -180,18 +181,17 @@ export class TicketsService {
   // client refetch route, so the two never drift.
   parseTicketQuery(
     query: Record<string, string | undefined>,
-    sessionOffice?: 'MEO' | 'MDRRMO',
+    admin: Pick<AdminSession, 'role' | 'office'>,
   ): Required<Pick<AdminTicketFilters, 'status' | 'sort' | 'page' | 'limit'>> &
     Pick<
       AdminTicketFilters,
       'office' | 'urgency' | 'category' | 'barangayId' | 'search'
     > {
-    const office =
-      query.office === 'all'
-        ? undefined
-        : query.office === 'MEO' || query.office === 'MDRRMO'
-          ? query.office
-          : sessionOffice;
+    const requestedOffice =
+      query.office === 'all' || query.office === 'MEO' || query.office === 'MDRRMO'
+        ? query.office
+        : undefined;
+    const office = resolveOfficeScope(admin, requestedOffice);
     const status =
       query.status === 'all' ||
       query.status === 'active' ||
@@ -300,8 +300,10 @@ export class TicketsService {
   }
 
   async getTicketsGeo(
-    office: 'MEO' | 'MDRRMO' | null,
+    admin: Pick<AdminSession, 'role' | 'office'>,
+    requestedOffice: 'MEO' | 'MDRRMO' | 'all' | undefined,
   ): Promise<AdminTicketGeoRow[]> {
+    const office = resolveOfficeScope(admin, requestedOffice) ?? null;
     const sql = this.pg;
     return sql<AdminTicketGeoRow[]>`
       SELECT t.id, t.category, t.status, t.assigned_office, b.name AS barangay_name,
@@ -320,7 +322,7 @@ export class TicketsService {
     `;
   }
 
-  async getTicketDetail(id: number) {
+  async getTicketDetail(id: number, admin: Pick<AdminSession, 'role' | 'office'>) {
     const sql = this.pg;
     const [ticket] = await sql<TicketDetail[]>`
       SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, ST_AsGeoJSON(b.geom) AS barangay_geojson,
@@ -335,6 +337,7 @@ export class TicketsService {
     `;
 
     if (!ticket) return null;
+    assertOfficeAccess(admin, ticket.assigned_office as 'MEO' | 'MDRRMO');
 
     const reports = await sql<TicketReport[]>`
       SELECT id, title, description, citizen_severity, image_url,
@@ -360,6 +363,7 @@ export class TicketsService {
   // only and freezes once resolved/rejected.
   async getTicketPriorityContext(
     ticketId: number,
+    admin: Pick<AdminSession, 'role' | 'office'>,
   ): Promise<TicketPriorityContext | null> {
     const sql = this.pg;
     const [row] = await sql<
@@ -369,6 +373,7 @@ export class TicketsService {
         severity_rank: number;
         active_barangay_count: number;
         max_active_barangay_count: number;
+        assigned_office: 'MEO' | 'MDRRMO';
       }[]
     >`
       WITH barangay_density AS (
@@ -377,7 +382,7 @@ export class TicketsService {
         WHERE status IN ('Reported', 'Under Review', 'In Progress')
         GROUP BY barangay_id
       )
-      SELECT t.barangay_id, t.created_at,
+      SELECT t.barangay_id, t.created_at, t.assigned_office,
         COALESCE((
           SELECT MAX(CASE citizen_severity
             WHEN 'Critical' THEN 4 WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 ELSE 1 END)
@@ -390,6 +395,7 @@ export class TicketsService {
       WHERE t.id = ${ticketId}
     `;
     if (!row) return null;
+    assertOfficeAccess(admin, row.assigned_office);
 
     const rain1hMm = await this.weather.getCurrentRain1hMm();
     const breakdown = computePriorityBreakdown({
@@ -411,10 +417,13 @@ export class TicketsService {
     imageBuffer: Buffer | undefined,
   ): Promise<{ status: TicketStatus }> {
     const sql = this.pg;
-    const [ticket] = await sql<{ status: TicketStatus }[]>`
-      SELECT status FROM tickets WHERE id = ${ticketId}
+    const [ticket] = await sql<
+      { status: TicketStatus; assigned_office: 'MEO' | 'MDRRMO' }[]
+    >`
+      SELECT status, assigned_office FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
+    assertOfficeAccess(admin, ticket.assigned_office);
 
     const nextStatus = NEXT_STATUS[ticket.status];
     if (!nextStatus) {
@@ -514,6 +523,7 @@ export class TicketsService {
       SELECT assigned_office FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
+    assertOfficeAccess(admin, ticket.assigned_office);
     if (ticket.assigned_office === toOffice) {
       throw new BadRequestException(
         `Ticket is already assigned to ${toOffice}`,

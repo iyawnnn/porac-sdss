@@ -1,10 +1,34 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Sql, TransactionSql } from 'postgres';
 import { ModerationService } from './moderation.service';
+import type { AdminSession } from '../auth/session.service';
 import type {
   CreateNotificationInput,
   NotificationsService,
 } from '../notifications/notifications.service';
+
+const MEO_ADMIN = {
+  adminId: 1,
+  adminName: 'Admin A',
+  office: 'MEO',
+  role: 'officer',
+} as AdminSession;
+const MDRRMO_ADMIN = {
+  adminId: 2,
+  adminName: 'Admin B',
+  office: 'MDRRMO',
+  role: 'supervisor',
+} as AdminSession;
+const SYSTEM_ADMIN = {
+  adminId: 3,
+  adminName: 'Sys Admin',
+  office: null,
+  role: 'system_admin',
+} as AdminSession;
 
 // Captures the mock as a local, typed function rather than reading it back
 // off `notifications.createInTx` at assertion time — the latter trips
@@ -54,39 +78,55 @@ describe('parseModerationQuery', () => {
   const service = new ModerationService(sql, {} as NotificationsService);
 
   it('defaults status to pending when absent', () => {
-    expect(service.parseModerationQuery({}).status).toBe('pending');
+    expect(service.parseModerationQuery({}, MEO_ADMIN).status).toBe('pending');
   });
 
   it.each(['pending', 'quarantined', 'dismissed', 'duplicate'])(
     'accepts status %s',
     (status) => {
-      expect(service.parseModerationQuery({ status }).status).toBe(status);
+      expect(service.parseModerationQuery({ status }, MEO_ADMIN).status).toBe(
+        status,
+      );
     },
   );
 
   it('accepts the "all" sentinel even though it is not itself an enumerated status', () => {
-    expect(service.parseModerationQuery({ status: 'all' }).status).toBe('all');
+    expect(
+      service.parseModerationQuery({ status: 'all' }, MEO_ADMIN).status,
+    ).toBe('all');
   });
 
   it('falls back to pending for an unknown status', () => {
-    expect(service.parseModerationQuery({ status: 'bogus' }).status).toBe(
-      'pending',
-    );
-  });
-
-  it('defaults office to the session office when no query param given', () => {
-    expect(service.parseModerationQuery({}, 'MEO').office).toBe('MEO');
-  });
-
-  it('clears office to undefined when office=all is requested explicitly', () => {
     expect(
-      service.parseModerationQuery({ office: 'all' }, 'MEO').office,
+      service.parseModerationQuery({ status: 'bogus' }, MEO_ADMIN).status,
+    ).toBe('pending');
+  });
+
+  it('defaults office to the admin\'s own office when no query param given', () => {
+    expect(service.parseModerationQuery({}, MEO_ADMIN).office).toBe('MEO');
+  });
+
+  it('clamps office to the admin\'s own office even when office=all is requested', () => {
+    expect(
+      service.parseModerationQuery({ office: 'all' }, MEO_ADMIN).office,
+    ).toBe('MEO');
+  });
+
+  it('clamps office to the admin\'s own office even when a different office is requested', () => {
+    expect(
+      service.parseModerationQuery({ office: 'MDRRMO' }, MEO_ADMIN).office,
+    ).toBe('MEO');
+  });
+
+  it('defaults a system admin to city-wide (no office filter)', () => {
+    expect(
+      service.parseModerationQuery({}, SYSTEM_ADMIN).office,
     ).toBeUndefined();
   });
 
-  it('lets an explicit office param override the session office', () => {
+  it('lets a system admin request a specific office', () => {
     expect(
-      service.parseModerationQuery({ office: 'MDRRMO' }, 'MEO').office,
+      service.parseModerationQuery({ office: 'MDRRMO' }, SYSTEM_ADMIN).office,
     ).toBe('MDRRMO');
   });
 
@@ -97,35 +137,41 @@ describe('parseModerationQuery', () => {
     'DUPLICATE_IMAGE',
     'BOUNDARY_FALLBACK',
   ])('accepts a known flag type %s', (flag) => {
-    expect(service.parseModerationQuery({ flag }).flag).toBe(flag);
+    expect(service.parseModerationQuery({ flag }, MEO_ADMIN).flag).toBe(flag);
   });
 
   it('rejects an unknown flag type', () => {
     expect(
-      service.parseModerationQuery({ flag: 'NOT_A_FLAG' }).flag,
+      service.parseModerationQuery({ flag: 'NOT_A_FLAG' }, MEO_ADMIN).flag,
     ).toBeUndefined();
   });
 
   it('rejects an unknown category', () => {
     expect(
-      service.parseModerationQuery({ category: 'Not A Real Category' })
-        .category,
+      service.parseModerationQuery(
+        { category: 'Not A Real Category' },
+        MEO_ADMIN,
+      ).category,
     ).toBeUndefined();
   });
 
   it('accepts a known category', () => {
-    expect(service.parseModerationQuery({ category: 'Pothole' }).category).toBe(
-      'Pothole',
-    );
+    expect(
+      service.parseModerationQuery({ category: 'Pothole' }, MEO_ADMIN)
+        .category,
+    ).toBe('Pothole');
   });
 
   it('parses barangayId, search, from, to as provided', () => {
-    const filters = service.parseModerationQuery({
-      barangayId: '7',
-      search: 'flood',
-      from: '2026-01-01',
-      to: '2026-01-31',
-    });
+    const filters = service.parseModerationQuery(
+      {
+        barangayId: '7',
+        search: 'flood',
+        from: '2026-01-01',
+        to: '2026-01-31',
+      },
+      MEO_ADMIN,
+    );
     expect(filters.barangayId).toBe(7);
     expect(filters.search).toBe('flood');
     expect(filters.from).toBe('2026-01-01');
@@ -133,12 +179,18 @@ describe('parseModerationQuery', () => {
   });
 
   it('clamps page to a minimum of 1', () => {
-    expect(service.parseModerationQuery({ page: '0' }).page).toBe(1);
-    expect(service.parseModerationQuery({ page: '-5' }).page).toBe(1);
+    expect(service.parseModerationQuery({ page: '0' }, MEO_ADMIN).page).toBe(
+      1,
+    );
+    expect(service.parseModerationQuery({ page: '-5' }, MEO_ADMIN).page).toBe(
+      1,
+    );
   });
 
   it('falls back to the default page limit for an invalid limit', () => {
-    expect(service.parseModerationQuery({ limit: '999' }).limit).toBe(15);
+    expect(
+      service.parseModerationQuery({ limit: '999' }, MEO_ADMIN).limit,
+    ).toBe(15);
   });
 });
 
@@ -175,31 +227,35 @@ describe('getModerationQueue pagination', () => {
 describe('moderateReport transitions', () => {
   it('dismiss requires no note and sends no notification', async () => {
     const { sql } = makeFakeSql([
+      [{ assigned_office: 'MEO' }], // report -> ticket office lookup
       [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
     ]);
     const { notifications, createInTx } = makeNotificationsMock();
     const service = new ModerationService(sql, notifications);
 
-    const result = await service.moderateReport(1, 'dismiss', 'Admin A');
+    const result = await service.moderateReport(1, 'dismiss', MEO_ADMIN);
 
     expect(result.status).toBe('dismissed');
     expect(createInTx).not.toHaveBeenCalled();
   });
 
-  it('quarantine without a note is rejected before touching the database', async () => {
-    const { sql, calls } = makeFakeSql([]);
+  it('quarantine without a note is rejected before writing anything', async () => {
+    const { sql, calls } = makeFakeSql([
+      [{ assigned_office: 'MEO' }], // report -> ticket office lookup
+    ]);
     const { notifications, createInTx } = makeNotificationsMock();
     const service = new ModerationService(sql, notifications);
 
     await expect(
-      service.moderateReport(1, 'quarantine', 'Admin A', undefined, '   '),
+      service.moderateReport(1, 'quarantine', MEO_ADMIN, undefined, '   '),
     ).rejects.toThrow(BadRequestException);
-    expect(calls).toHaveLength(0);
+    expect(calls).toHaveLength(1); // only the office lookup, no UPDATE
     expect(createInTx).not.toHaveBeenCalled();
   });
 
   it('quarantine with a note flags the ticket and notifies the citizen', async () => {
     const { sql } = makeFakeSql([
+      [{ assigned_office: 'MEO' }], // report -> ticket office lookup
       [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
       [{}], // UPDATE tickets SET flagged = true
     ]);
@@ -209,7 +265,7 @@ describe('moderateReport transitions', () => {
     const result = await service.moderateReport(
       1,
       'quarantine',
-      'Admin A',
+      MEO_ADMIN,
       undefined,
       'Photo GPS is 4km from the pin, likely reused stock image.',
     );
@@ -223,34 +279,40 @@ describe('moderateReport transitions', () => {
   });
 
   it('duplicate requires a canonicalReportId', async () => {
-    const { sql } = makeFakeSql([]);
+    const { sql } = makeFakeSql([
+      [{ assigned_office: 'MEO' }], // report -> ticket office lookup
+    ]);
     const { notifications } = makeNotificationsMock();
     const service = new ModerationService(sql, notifications);
 
     await expect(
-      service.moderateReport(1, 'duplicate', 'Admin A'),
+      service.moderateReport(1, 'duplicate', MEO_ADMIN),
     ).rejects.toThrow(BadRequestException);
   });
 
   it('duplicate rejects a canonicalReportId that does not exist', async () => {
-    const { sql } = makeFakeSql([[]]); // SELECT id FROM reports WHERE id = canonical -> none
+    const { sql } = makeFakeSql([
+      [{ assigned_office: 'MEO' }], // report -> ticket office lookup
+      [], // SELECT id FROM reports WHERE id = canonical -> none
+    ]);
     const { notifications } = makeNotificationsMock();
     const service = new ModerationService(sql, notifications);
 
     await expect(
-      service.moderateReport(1, 'duplicate', 'Admin A', 999),
+      service.moderateReport(1, 'duplicate', MEO_ADMIN, 999),
     ).rejects.toThrow('Canonical report not found');
   });
 
   it('duplicate with a valid canonicalReportId stores it as the note and notifies the citizen', async () => {
     const { sql } = makeFakeSql([
+      [{ assigned_office: 'MEO' }], // report -> ticket office lookup
       [{ id: 42 }], // canonical exists
       [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
     ]);
     const { notifications, createInTx } = makeNotificationsMock();
     const service = new ModerationService(sql, notifications);
 
-    const result = await service.moderateReport(1, 'duplicate', 'Admin A', 42);
+    const result = await service.moderateReport(1, 'duplicate', MEO_ADMIN, 42);
 
     expect(result.status).toBe('duplicate');
     const [, input] = createInTx.mock.calls[0];
@@ -260,6 +322,7 @@ describe('moderateReport transitions', () => {
 
   it('rejects an already-moderated report without double-writing', async () => {
     const { sql } = makeFakeSql([
+      [{ assigned_office: 'MEO' }], // report -> ticket office lookup
       [], // UPDATE reports matches zero rows (already moderated)
       [{ moderation_status: 'quarantined' }], // fallback SELECT
     ]);
@@ -267,21 +330,56 @@ describe('moderateReport transitions', () => {
     const service = new ModerationService(sql, notifications);
 
     await expect(
-      service.moderateReport(1, 'dismiss', 'Admin A'),
+      service.moderateReport(1, 'dismiss', MEO_ADMIN),
     ).rejects.toThrow('Report was already quarantined');
     expect(createInTx).not.toHaveBeenCalled();
   });
 
   it('reports NotFoundException for a report that does not exist at all', async () => {
     const { sql } = makeFakeSql([
-      [], // UPDATE reports matches zero rows
-      [], // fallback SELECT finds nothing either
+      [], // report -> ticket office lookup finds nothing
     ]);
     const { notifications } = makeNotificationsMock();
     const service = new ModerationService(sql, notifications);
 
     await expect(
-      service.moderateReport(1, 'dismiss', 'Admin A'),
+      service.moderateReport(1, 'dismiss', MEO_ADMIN),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('rejects moderation of another office\'s report for a non-system-admin', async () => {
+    const { sql } = makeFakeSql([
+      [{ assigned_office: 'MDRRMO' }], // report -> ticket office lookup
+    ]);
+    const { notifications } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    await expect(
+      service.moderateReport(1, 'dismiss', MEO_ADMIN),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('allows an admin to moderate a report in their own (different) office', async () => {
+    const { sql } = makeFakeSql([
+      [{ assigned_office: 'MDRRMO' }], // report -> ticket office lookup
+      [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
+    ]);
+    const { notifications } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    const result = await service.moderateReport(1, 'dismiss', MDRRMO_ADMIN);
+    expect(result.status).toBe('dismissed');
+  });
+
+  it('allows a system admin to moderate a report from any office', async () => {
+    const { sql } = makeFakeSql([
+      [{ assigned_office: 'MDRRMO' }], // report -> ticket office lookup
+      [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
+    ]);
+    const { notifications } = makeNotificationsMock();
+    const service = new ModerationService(sql, notifications);
+
+    const result = await service.moderateReport(1, 'dismiss', SYSTEM_ADMIN);
+    expect(result.status).toBe('dismissed');
   });
 });

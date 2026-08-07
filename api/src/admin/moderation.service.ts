@@ -7,6 +7,8 @@ import {
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
 import { CATEGORIES } from '../contracts/schemas';
+import type { AdminSession } from '../auth/session.service';
+import { resolveOfficeScope, assertOfficeAccess } from '../common/authz/admin-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   DEFAULT_PAGE_LIMIT,
@@ -80,20 +82,18 @@ export class ModerationService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  // Mirrors tickets.service.ts's parseTicketQuery exactly: office defaults
-  // to the requesting admin's own office (soft default, not a hard
-  // restriction — 'all' or the other office can still be requested
-  // explicitly), same convention as the ticket queue.
+  // Mirrors tickets.service.ts's parseTicketQuery: office is clamped to the
+  // requesting admin's own office via resolveOfficeScope — a non-system-admin
+  // cannot widen it by passing 'all' or the other office in the query.
   parseModerationQuery(
     query: Record<string, string | undefined>,
-    sessionOffice?: 'MEO' | 'MDRRMO',
+    admin: Pick<AdminSession, 'role' | 'office'>,
   ): ModerationFilters {
-    const office =
-      query.office === 'all'
-        ? undefined
-        : query.office === 'MEO' || query.office === 'MDRRMO'
-          ? query.office
-          : sessionOffice;
+    const requestedOffice =
+      query.office === 'all' || query.office === 'MEO' || query.office === 'MDRRMO'
+        ? query.office
+        : undefined;
+    const office = resolveOfficeScope(admin, requestedOffice);
     const status =
       query.status === 'all' ||
       (MODERATION_STATUSES as string[]).includes(query.status ?? '')
@@ -203,7 +203,9 @@ export class ModerationService {
     };
   }
 
-  async getModerationStats(): Promise<ModerationStats> {
+  async getModerationStats(
+    office?: 'MEO' | 'MDRRMO',
+  ): Promise<ModerationStats> {
     const sql = this.pg;
     const [row] = await sql<
       {
@@ -215,14 +217,16 @@ export class ModerationService {
       }[]
     >`
       SELECT
-        COUNT(*) FILTER (WHERE moderation_status IS NULL) AS pending,
-        COUNT(*) FILTER (WHERE moderation_status = 'quarantined') AS quarantined,
-        COUNT(*) FILTER (WHERE moderation_status = 'dismissed') AS dismissed,
-        COUNT(*) FILTER (WHERE moderation_status = 'duplicate') AS duplicate,
-        AVG(EXTRACT(EPOCH FROM (moderated_at - created_at)) / 3600)
-          FILTER (WHERE moderated_at IS NOT NULL) AS avg_hours
-      FROM reports
-      WHERE flags IS NOT NULL AND array_length(flags, 1) > 0
+        COUNT(*) FILTER (WHERE r.moderation_status IS NULL) AS pending,
+        COUNT(*) FILTER (WHERE r.moderation_status = 'quarantined') AS quarantined,
+        COUNT(*) FILTER (WHERE r.moderation_status = 'dismissed') AS dismissed,
+        COUNT(*) FILTER (WHERE r.moderation_status = 'duplicate') AS duplicate,
+        AVG(EXTRACT(EPOCH FROM (r.moderated_at - r.created_at)) / 3600)
+          FILTER (WHERE r.moderated_at IS NOT NULL) AS avg_hours
+      FROM reports r
+      JOIN tickets t ON t.id = r.ticket_id
+      WHERE r.flags IS NOT NULL AND array_length(r.flags, 1) > 0
+        AND (${office ?? null}::text IS NULL OR t.assigned_office = ${office ?? null}::office)
     `;
     return {
       pending: Number(row?.pending ?? 0),
@@ -243,12 +247,20 @@ export class ModerationService {
   async moderateReport(
     reportId: number,
     action: ModerationAction,
-    adminName: string,
+    admin: AdminSession,
     canonicalReportId?: number,
     note?: string,
   ): Promise<{ status: string }> {
     const sql = this.pg;
     const trimmedNote = note?.trim() || undefined;
+
+    const [report] = await sql<{ assigned_office: 'MEO' | 'MDRRMO' }[]>`
+      SELECT t.assigned_office FROM reports r
+      JOIN tickets t ON t.id = r.ticket_id
+      WHERE r.id = ${reportId}
+    `;
+    if (!report) throw new NotFoundException('Report not found');
+    assertOfficeAccess(admin, report.assigned_office);
 
     if (action === 'duplicate') {
       if (!canonicalReportId)
@@ -287,7 +299,7 @@ export class ModerationService {
       >`
         UPDATE reports
         SET moderation_status = ${status}, moderation_note = ${note_},
-          moderated_at = now(), moderated_by = ${adminName}
+          moderated_at = now(), moderated_by = ${admin.adminName}
         WHERE id = ${reportId} AND moderation_status IS NULL
         RETURNING ticket_id, citizen_id, title
       `;

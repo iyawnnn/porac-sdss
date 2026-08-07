@@ -145,12 +145,14 @@ export function FlaggedWorkspace({
   initialStats,
   barangays,
   sessionOffice,
+  isSystemAdmin = false,
 }: {
   initialData: PaginatedModeration;
   initialQuery: Record<string, string | undefined>;
   initialStats: ModerationStats;
   barangays: Barangay[];
   sessionOffice?: string;
+  isSystemAdmin?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -294,14 +296,22 @@ export function FlaggedWorkspace({
               ))}
             </SelectContent>
           </Select>
-          <Select onValueChange={(v) => updateFilter({ office: v })} value={query.office}>
-            <SelectTrigger aria-label="Office"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All offices</SelectItem>
-              <SelectItem value="MEO">MEO</SelectItem>
-              <SelectItem value="MDRRMO">MDRRMO</SelectItem>
-            </SelectContent>
-          </Select>
+          {isSystemAdmin ? (
+            <Select onValueChange={(v) => updateFilter({ office: v })} value={query.office}>
+              <SelectTrigger aria-label="Office"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All offices</SelectItem>
+                <SelectItem value="MEO">MEO</SelectItem>
+                <SelectItem value="MDRRMO">MDRRMO</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            // Non-system-admins can't view another office's flagged reports —
+            // the backend clamps this regardless of what's sent, so the
+            // picker is replaced with a fixed label instead of a control
+            // that would look interactive but do nothing.
+            <Badge aria-label="Office" variant="secondary">My Office: {sessionOffice}</Badge>
+          )}
           <Select onValueChange={(v) => updateFilter({ category: v === "all" ? "" : v })} value={query.category || "all"}>
             <SelectTrigger aria-label="Category"><SelectValue /></SelectTrigger>
             <SelectContent>
