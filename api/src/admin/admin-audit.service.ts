@@ -16,6 +16,8 @@ export type AdminAuditActionType =
   | 'admin_role_updated'
   | 'admin_password_changed'
   | 'admin_password_reset'
+  | 'admin_deactivated'
+  | 'admin_reactivated'
   | 'ticket_status_advanced'
   | 'ticket_reassigned'
   | 'report_moderated';
@@ -79,6 +81,8 @@ const ACTION_TYPES: AdminAuditActionType[] = [
   'admin_role_updated',
   'admin_password_changed',
   'admin_password_reset',
+  'admin_deactivated',
+  'admin_reactivated',
   'ticket_status_advanced',
   'ticket_reassigned',
   'report_moderated',
