@@ -20,9 +20,14 @@ export type AdminAuditActionType =
   | 'admin_reactivated'
   | 'ticket_status_advanced'
   | 'ticket_reassigned'
-  | 'report_moderated';
+  | 'report_moderated'
+  | 'work_order_created'
+  | 'work_order_updated'
+  | 'work_order_status_changed'
+  | 'work_order_completed'
+  | 'work_order_cancelled';
 
-export type AdminAuditTargetType = 'admin' | 'ticket' | 'report';
+export type AdminAuditTargetType = 'admin' | 'ticket' | 'report' | 'work_order';
 
 export interface AdminAuditActor {
   adminId: number;
@@ -86,8 +91,13 @@ const ACTION_TYPES: AdminAuditActionType[] = [
   'ticket_status_advanced',
   'ticket_reassigned',
   'report_moderated',
+  'work_order_created',
+  'work_order_updated',
+  'work_order_status_changed',
+  'work_order_completed',
+  'work_order_cancelled',
 ];
-const TARGET_TYPES: AdminAuditTargetType[] = ['admin', 'ticket', 'report'];
+const TARGET_TYPES: AdminAuditTargetType[] = ['admin', 'ticket', 'report', 'work_order'];
 
 const SAFE_COLUMNS = {
   id: adminAuditEvents.id,

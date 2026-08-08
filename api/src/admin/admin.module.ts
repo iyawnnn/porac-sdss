@@ -16,8 +16,10 @@ import { AdminAuditController } from './admin-audit.controller';
 import { AdminAuditService } from './admin-audit.service';
 import { AdminAccountController } from './admin-account.controller';
 import { AdminAccountService } from './admin-account.service';
+import { WorkOrdersController } from './work-orders.controller';
+import { WorkOrdersService } from './work-orders.service';
 
-// Six controllers sharing one module — they share nothing else, but
+// Seven controllers sharing one module — they share nothing else, but
 // splitting into separate modules buys nothing (see blueprint §1). Each
 // controller carries its own @UseGuards(...) (not an APP_GUARD provider,
 // which would leak the guard onto every module app-wide) — closes the
@@ -36,6 +38,7 @@ import { AdminAccountService } from './admin-account.service';
     AdminsController,
     AdminAuditController,
     AdminAccountController,
+    WorkOrdersController,
   ],
   providers: [
     TicketsService,
@@ -45,6 +48,7 @@ import { AdminAccountService } from './admin-account.service';
     AdminsService,
     AdminAuditService,
     AdminAccountService,
+    WorkOrdersService,
   ],
 })
 export class AdminModule {}
