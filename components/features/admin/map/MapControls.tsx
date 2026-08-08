@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
 import { LayersIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,12 +9,13 @@ import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type MapMode = "pins" | "heatmap";
+type Office = "MEO" | "MDRRMO";
 
-const OFFICE_OPTIONS = [
+const OFFICE_OPTIONS: { value: Office | null; label: string }[] = [
   { value: null, label: "All" },
   { value: "MEO", label: "MEO" },
   { value: "MDRRMO", label: "MDRRMO" },
-] as const;
+];
 
 function ControlsBody({
   mode,
@@ -24,19 +23,17 @@ function ControlsBody({
   showBoundaries,
   onToggleBoundaries,
   isSystemAdmin,
-  myOffice,
+  office,
+  onOfficeChange,
 }: {
   mode: MapMode;
   onModeChange: (mode: MapMode) => void;
   showBoundaries: boolean;
   onToggleBoundaries: () => void;
   isSystemAdmin: boolean;
-  myOffice?: "MEO" | "MDRRMO";
+  office?: Office;
+  onOfficeChange: (office: Office | undefined) => void;
 }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const activeOffice = searchParams.get("office");
-
   return (
     <>
       <section>
@@ -79,21 +76,21 @@ function ControlsBody({
       <section>
         <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Office</p>
         {isSystemAdmin ? (
-          <div className="flex h-8 w-full justify-center overflow-hidden rounded-md border border-input" role="group">
+          <div aria-label="Office" className="flex h-8 w-full justify-center overflow-hidden rounded-md border border-input" role="group">
             {OFFICE_OPTIONS.map((option) => {
-              const isActive = option.value === null ? !activeOffice || activeOffice === "all" : activeOffice === option.value;
-              const href = option.value === null ? `${pathname}?office=all` : `${pathname}?office=${option.value}`;
+              const isActive = option.value === null ? !office : office === option.value;
               return (
-                <Link
+                <button
                   aria-current={isActive ? "true" : undefined}
                   className={`flex shrink-0 cursor-pointer items-center justify-center px-3 text-[0.8rem] font-medium whitespace-nowrap transition-colors not-first:border-l not-first:border-input ${
                     isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted"
                   }`}
-                  href={href}
                   key={option.label}
+                  onClick={() => onOfficeChange(option.value ?? undefined)}
+                  type="button"
                 >
                   {option.label}
-                </Link>
+                </button>
               );
             })}
           </div>
@@ -102,7 +99,7 @@ function ControlsBody({
           // backend clamps this regardless of what's requested, so the
           // toggle is replaced with a fixed label instead of a control
           // that would look interactive but do nothing.
-          <Badge variant="secondary">My Office: {myOffice}</Badge>
+          <Badge aria-label="Office" variant="secondary">My Office: {office}</Badge>
         )}
       </section>
     </>
@@ -115,16 +112,18 @@ export function MapControls({
   showBoundaries,
   onToggleBoundaries,
   isSystemAdmin,
-  myOffice,
+  office,
+  onOfficeChange,
 }: {
   mode: MapMode;
   onModeChange: (mode: MapMode) => void;
   showBoundaries: boolean;
   onToggleBoundaries: () => void;
   isSystemAdmin: boolean;
-  myOffice?: "MEO" | "MDRRMO";
+  office?: Office;
+  onOfficeChange: (office: Office | undefined) => void;
 }) {
-  const body = <ControlsBody isSystemAdmin={isSystemAdmin} mode={mode} myOffice={myOffice} onModeChange={onModeChange} onToggleBoundaries={onToggleBoundaries} showBoundaries={showBoundaries} />;
+  const body = <ControlsBody isSystemAdmin={isSystemAdmin} mode={mode} office={office} onModeChange={onModeChange} onOfficeChange={onOfficeChange} onToggleBoundaries={onToggleBoundaries} showBoundaries={showBoundaries} />;
 
   return (
     <>
