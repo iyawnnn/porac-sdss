@@ -317,6 +317,15 @@ export const admins = pgTable('admins', {
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // Set/refreshed whenever password_hash changes (own change or a System
+  // Admin reset) — mirrors citizens.password_changed_at.
+  passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }),
+  // Bumped to now() on the same two events. SessionService.verifyAdminSession
+  // rejects any token whose `iat` predates this — the admin equivalent of
+  // citizens.session_valid_after, the one place a stateless JWT admin
+  // session can actually be invalidated server-side. Null means "never
+  // invalidated, accept any iat" (the default for every existing/new admin).
+  sessionValidAfter: timestamp('session_valid_after', { withTimezone: true }),
 });
 
 // Append-only trail for administrative actions (account create/role change,

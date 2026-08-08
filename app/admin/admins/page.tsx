@@ -1,12 +1,13 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { apiGetOptional } from "@/lib/api-client";
+import { apiGetOptional, getAdminSessionFromApi } from "@/lib/api-client";
 import type { AdminAccountRow } from "@/lib/types/admin-admins";
 import { AdminManagementWorkspace } from "@/components/features/admin/admins/AdminManagementWorkspace";
 import { AdminManagementSkeleton } from "@/components/features/admin/admins/AdminManagementSkeleton";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
 
 async function AdminManagementData() {
+  const session = await getAdminSessionFromApi();
   let admins: AdminAccountRow[] | null;
   try {
     // SystemAdminGuard rejects office-scoped admins with 403 — treated the
@@ -23,7 +24,7 @@ async function AdminManagementData() {
     );
   }
   if (!admins) notFound();
-  return <AdminManagementWorkspace initialAdmins={admins} />;
+  return <AdminManagementWorkspace currentAdminId={session?.adminId} initialAdmins={admins} />;
 }
 
 export default function AdminAdminsPage() {

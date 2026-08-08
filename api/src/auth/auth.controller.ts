@@ -10,7 +10,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { CookieOptions, Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import {
   CITIZEN_SESSION_COOKIE,
@@ -21,6 +21,7 @@ import {
   citizenCookieOptions,
   CITIZEN_SESSION_MAX_AGE_MS,
 } from './citizen-cookie.util';
+import { adminCookieOptions, ADMIN_SESSION_MAX_AGE_MS } from './admin-cookie.util';
 import type { Env } from '../config/env';
 
 interface LoginBody {
@@ -41,19 +42,6 @@ export class AuthController {
     private readonly config: ConfigService<Env, true>,
   ) {}
 
-  private cookieOptions(maxAgeSeconds: number): CookieOptions {
-    return {
-      httpOnly: true,
-      secure: this.config.get('NODE_ENV', { infer: true }) === 'production',
-      sameSite: 'lax',
-      path: '/',
-      // Express's res.cookie maxAge is milliseconds, unlike Next's
-      // cookies().set which took seconds — this is the one place that
-      // conversion matters.
-      maxAge: maxAgeSeconds * 1000,
-    };
-  }
-
   @Post('admin/login')
   @HttpCode(HttpStatus.OK)
   async adminLogin(
@@ -64,7 +52,7 @@ export class AuthController {
       body.email,
       body.password,
     );
-    res.cookie(SESSION_COOKIE, token, this.cookieOptions(8 * 60 * 60));
+    res.cookie(SESSION_COOKIE, token, adminCookieOptions(this.config, ADMIN_SESSION_MAX_AGE_MS));
     return { ok: true, office };
   }
 
