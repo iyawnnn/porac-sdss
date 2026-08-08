@@ -326,6 +326,13 @@ export const admins = pgTable('admins', {
   // session can actually be invalidated server-side. Null means "never
   // invalidated, accept any iat" (the default for every existing/new admin).
   sessionValidAfter: timestamp('session_valid_after', { withTimezone: true }),
+  // false blocks login (AuthService.adminLogin) and invalidates every
+  // existing session immediately (SessionService.verifyAdminSession) —
+  // deactivation bumps session_valid_after at the same time it flips this,
+  // so a JWT issued before deactivation dies within the request cycle
+  // rather than surviving until its 8h expiry. Reactivation only flips this
+  // back; the admin logs in fresh with their existing password.
+  isActive: boolean('is_active').notNull().default(true),
 });
 
 // Append-only trail for administrative actions (account create/role change,

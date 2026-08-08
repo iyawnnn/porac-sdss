@@ -30,6 +30,7 @@
     "migrate:admin-created-at": "tsx --env-file=.env scripts/migrations/migrate-admin-created-at.ts",
     "migrate:admin-audit-events": "tsx --env-file=.env scripts/migrations/migrate-admin-audit-events.ts",
     "migrate:admin-password-security": "tsx --env-file=.env scripts/migrations/migrate-admin-password-security.ts",
+    "migrate:admin-status": "tsx --env-file=.env scripts/migrations/migrate-admin-status.ts",
     "migrate:city-boundary": "tsx --env-file=.env scripts/migrations/migrate-city-boundary.ts",
     "migrate:config": "tsx --env-file=.env scripts/migrations/migrate-config.ts",
     "migrate:exif-data": "tsx --env-file=.env scripts/migrations/migrate-exif-data.ts",

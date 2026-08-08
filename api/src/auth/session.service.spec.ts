@@ -21,11 +21,14 @@ function chain(result: unknown) {
 
 function makeSessionService(
   sessionValidAfter: Date | null = null,
+  isActive = true,
 ): SessionService {
   const config = {
     get: () => 'a-test-secret-that-is-at-least-32-bytes-long',
   } as unknown as ConfigService<Env, true>;
-  const select = jest.fn().mockReturnValue(chain([{ sessionValidAfter }]));
+  const select = jest
+    .fn()
+    .mockReturnValue(chain([{ sessionValidAfter, isActive }]));
   const db = { select } as unknown as PostgresJsDatabase;
   return new SessionService(config, db);
 }
@@ -137,6 +140,22 @@ describe('SessionService', () => {
 
     it('accepts any admin token when session_valid_after is null (default, untouched accounts)', async () => {
       const sessions = makeSessionService(null);
+      const token = await sessions.signAdminSession(adminPayload);
+      await expect(sessions.verifyAdminSession(token)).resolves.toMatchObject(
+        adminPayload,
+      );
+    });
+  });
+
+  describe('is_active invalidation (admin deactivation)', () => {
+    it('rejects an admin token for a deactivated account, even with no session_valid_after set', async () => {
+      const sessions = makeSessionService(null, false);
+      const token = await sessions.signAdminSession(adminPayload);
+      await expect(sessions.verifyAdminSession(token)).resolves.toBeNull();
+    });
+
+    it('accepts an admin token for an active account', async () => {
+      const sessions = makeSessionService(null, true);
       const token = await sessions.signAdminSession(adminPayload);
       await expect(sessions.verifyAdminSession(token)).resolves.toMatchObject(
         adminPayload,

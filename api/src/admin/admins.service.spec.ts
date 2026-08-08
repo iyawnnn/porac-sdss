@@ -281,6 +281,97 @@ describe('AdminsService', () => {
     });
   });
 
+  describe('setActive', () => {
+    it('404s when the admin does not exist', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(chain([]));
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+      await expect(service.setActive(999, false, ACTOR)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('blocks deactivating the last active system_admin', async () => {
+      const db = makeDb();
+      db.select
+        .mockReturnValueOnce(
+          chain(fullAdminRow({ id: 3, role: 'system_admin', office: null, isActive: true })),
+        )
+        .mockReturnValueOnce(chain([{ systemAdminCount: 1 }]));
+      const { audit, logInTx } = makeAudit();
+      const service = new AdminsService(db, audit);
+      await expect(service.setActive(3, false, ACTOR)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(db.update).not.toHaveBeenCalled();
+      expect(logInTx).not.toHaveBeenCalled();
+    });
+
+    it('allows deactivating a system_admin when another active system_admin still exists, bumps session_valid_after, and logs admin_deactivated', async () => {
+      const db = makeDb();
+      db.select
+        .mockReturnValueOnce(
+          chain(fullAdminRow({ id: 3, role: 'system_admin', office: null, isActive: true })),
+        )
+        .mockReturnValueOnce(chain([{ systemAdminCount: 2 }]));
+      // .returning(SAFE_COLUMNS)'s fake projects by literal target key name
+      // (is_active), not the camelCase drizzle field fullAdminRow otherwise
+      // uses — so the *updated* row needs the snake_case key to survive it.
+      const updatedRow = fullAdminRow({ id: 3, role: 'system_admin', office: null, is_active: false });
+      db.update.mockReturnValueOnce(chain(updatedRow));
+      const { audit, logInTx } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      const result = await service.setActive(3, false, ACTOR);
+      expect(result.is_active).toBe(false);
+      expect(result).not.toHaveProperty('passwordHash');
+
+      expect(logInTx).toHaveBeenCalledTimes(1);
+      const [, input] = logInTx.mock.calls[0];
+      expect(input.actionType).toBe('admin_deactivated');
+      expect(input.targetId).toBe(3);
+      expect(input.metadata.from.active).toBe(true);
+      expect(input.metadata.to.active).toBe(false);
+    });
+
+    it('deactivating an officer/supervisor never checks the system_admin count', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(
+        chain(fullAdminRow({ id: 5, role: 'officer', office: 'MEO', isActive: true })),
+      );
+      const updatedRow = fullAdminRow({ id: 5, role: 'officer', office: 'MEO', is_active: false });
+      db.update.mockReturnValueOnce(chain(updatedRow));
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      const result = await service.setActive(5, false, ACTOR);
+      expect(result.is_active).toBe(false);
+      // Only the initial existence-check select ran — no count query.
+      expect(db.select).toHaveBeenCalledTimes(1);
+    });
+
+    it('reactivates a deactivated admin and logs admin_reactivated', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(
+        chain(fullAdminRow({ id: 5, role: 'officer', office: 'MEO', isActive: false })),
+      );
+      const updatedRow = fullAdminRow({ id: 5, role: 'officer', office: 'MEO', is_active: true });
+      db.update.mockReturnValueOnce(chain(updatedRow));
+      const { audit, logInTx } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      const result = await service.setActive(5, true, ACTOR);
+      expect(result.is_active).toBe(true);
+
+      expect(logInTx).toHaveBeenCalledTimes(1);
+      const [, input] = logInTx.mock.calls[0];
+      expect(input.actionType).toBe('admin_reactivated');
+      expect(input.metadata.from.active).toBe(false);
+      expect(input.metadata.to.active).toBe(true);
+    });
+  });
+
   it('bcrypt-hashes the stored password (sanity check on the shared hashing pattern)', async () => {
     const hash = await bcrypt.hash('longenoughpassword', 10);
     expect(await bcrypt.compare('longenoughpassword', hash)).toBe(true);
