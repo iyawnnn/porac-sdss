@@ -17,6 +17,8 @@ import { AdminErrorCard } from "../shared/AdminErrorCard";
 const ACTION_LABELS: Record<AdminAuditActionType, string> = {
   admin_created: "Admin created",
   admin_role_updated: "Role/office updated",
+  admin_password_changed: "Password changed",
+  admin_password_reset: "Password reset",
   ticket_status_advanced: "Ticket status advanced",
   ticket_reassigned: "Ticket reassigned",
   report_moderated: "Report moderated",

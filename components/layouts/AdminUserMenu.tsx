@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LogOut, ShieldCheck } from "lucide-react";
 import type { AdminSession } from "@/lib/auth/session";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -29,6 +30,10 @@ export function AdminUserMenu({ session }: { session: AdminSession }) {
           <Avatar className="size-10"><AvatarFallback>{initials(session.adminName)}</AvatarFallback></Avatar>
           <span className="min-w-0"><span className="block truncate font-medium text-foreground">{session.adminName}</span><span className="block truncate text-xs font-normal text-muted-foreground">{session.email}</span><span className="block text-xs font-normal text-muted-foreground">{session.office ?? "All Offices"} {"\u00b7"} {session.role}</span></span>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem asChild className="cursor-pointer"><Link href="/admin/account"><ShieldCheck />Account &amp; Security</Link></DropdownMenuItem>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup><DropdownMenuItem className="cursor-pointer" onClick={handleSignOut} variant="destructive"><LogOut />Sign out</DropdownMenuItem></DropdownMenuGroup>
       </DropdownMenuContent>

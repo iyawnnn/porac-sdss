@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { UserPlus } from "lucide-react";
+import { KeyRound, UserPlus } from "lucide-react";
 import type { AdminAccountRow, AdminOffice, AdminRole } from "@/lib/types/admin-admins";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -200,7 +200,96 @@ function RoleOfficeEditor({ admin, onUpdated }: { admin: AdminAccountRow; onUpda
   );
 }
 
-export function AdminManagementWorkspace({ initialAdmins }: { initialAdmins: AdminAccountRow[] }) {
+function ResetPasswordDialog({ admin }: { admin: AdminAccountRow }) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  function resetAndClose() {
+    setPassword("");
+    setConfirmed(false);
+    setError("");
+    setDone(false);
+    setOpen(false);
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError("");
+
+    const res = await fetch(`/api/admin/admins/${admin.id}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword: password }),
+    });
+
+    if (res.ok) {
+      setPassword("");
+      setDone(true);
+    } else {
+      const data = await res.json().catch(() => null);
+      setError(data?.message ?? "Could not reset the password.");
+    }
+    setSubmitting(false);
+  }
+
+  return (
+    <Dialog onOpenChange={(next) => (next ? setOpen(true) : resetAndClose())} open={open}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <KeyRound /> Reset password
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Reset password for {admin.first_name} {admin.last_name}</DialogTitle>
+          <DialogDescription>
+            {done
+              ? "Password reset. Share the new temporary password with them out of band — it won't be shown again."
+              : "Sets a new temporary password and signs them out of every existing session."}
+          </DialogDescription>
+        </DialogHeader>
+        {done ? (
+          <DialogFooter><Button onClick={resetAndClose} type="button">Done</Button></DialogFooter>
+        ) : (
+          <form className="space-y-3" onSubmit={handleSubmit}>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor={`reset-password-${admin.id}`}>New temporary password</label>
+              <Input
+                id={`reset-password-${admin.id}`}
+                minLength={8}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                type="password"
+                value={password}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} required type="checkbox" />
+              I understand this signs {admin.first_name} {admin.last_name} out everywhere.
+            </label>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+            <DialogFooter>
+              <Button disabled={submitting || !confirmed} type="submit">{submitting ? "Resetting…" : "Reset password"}</Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function AdminManagementWorkspace({
+  initialAdmins,
+  currentAdminId,
+}: {
+  initialAdmins: AdminAccountRow[];
+  currentAdminId?: number;
+}) {
   const [admins, setAdmins] = useState(initialAdmins);
 
   function handleCreated(created: AdminAccountRow) {
@@ -232,6 +321,7 @@ export function AdminManagementWorkspace({ initialAdmins }: { initialAdmins: Adm
                   <TableHead>Email</TableHead>
                   <TableHead>Role &amp; office</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead>Password</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -241,6 +331,13 @@ export function AdminManagementWorkspace({ initialAdmins }: { initialAdmins: Adm
                     <TableCell className="text-muted-foreground">{admin.email}</TableCell>
                     <TableCell><RoleOfficeEditor admin={admin} onUpdated={handleUpdated} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatCreatedDate(admin.created_at)}</TableCell>
+                    <TableCell>
+                      {admin.id === currentAdminId ? (
+                        <p className="text-xs text-muted-foreground">Use Account &amp; Security to change your own password.</p>
+                      ) : (
+                        <ResetPasswordDialog admin={admin} />
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -258,6 +355,11 @@ export function AdminManagementWorkspace({ initialAdmins }: { initialAdmins: Adm
                   <p className="text-sm text-muted-foreground">{admin.email}</p>
                   <p className="text-xs text-muted-foreground">Created {formatCreatedDate(admin.created_at)}</p>
                   <RoleOfficeEditor admin={admin} onUpdated={handleUpdated} />
+                  {admin.id === currentAdminId ? (
+                    <p className="text-xs text-muted-foreground">Use Account &amp; Security to change your own password.</p>
+                  ) : (
+                    <ResetPasswordDialog admin={admin} />
+                  )}
                 </CardContent>
               </Card>
             ))}

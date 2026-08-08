@@ -14,6 +14,8 @@ import type { AdminRole } from './admins.service';
 export type AdminAuditActionType =
   | 'admin_created'
   | 'admin_role_updated'
+  | 'admin_password_changed'
+  | 'admin_password_reset'
   | 'ticket_status_advanced'
   | 'ticket_reassigned'
   | 'report_moderated';
@@ -75,6 +77,8 @@ const DEFAULT_PAGE_LIMIT = 25;
 const ACTION_TYPES: AdminAuditActionType[] = [
   'admin_created',
   'admin_role_updated',
+  'admin_password_changed',
+  'admin_password_reset',
   'ticket_status_advanced',
   'ticket_reassigned',
   'report_moderated',
