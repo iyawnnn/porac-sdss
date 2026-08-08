@@ -48,9 +48,17 @@ The first genuinely operational feature: admins can now record and track the act
 - `notes` and every other work-order field are absent from every `api/src/citizens/*` response and the citizen tracking timeline — no citizen-facing surface exists, and none should be added.
 - Audit events (`work_order_created/updated/status_changed/completed/cancelled`) log field names on update, never note bodies.
 
-**Known limitation (carried forward, not yet resolved):** the "assigned admin" picker is not exposed in the create/edit UI — `assigned_admin_id` is schema/API-complete but unused by the forms, because populating a picker needs an office-scoped admin-directory endpoint that doesn't exist yet (`GET /admin/admins` is System-Administrator-only). Work orders are effectively office-wide-assigned from the UI's perspective today. This is item §3.1 below, not a "someday" — it's the direct unblock for real per-admin task assignment.
-
 **Folded into Work Orders, not built as separate features:** internal notes (the office progress trail on a work order) and due dates (drive the pending/in-progress/overdue workflow — "overdue" is *derived* from `due_date < now()` and status, not a stored fourth status). Do not split either back out into its own page, table, or sidebar entry.
+
+### Office-scoped Admin Directory / Assigned Admin Picker — **completed**
+
+Closes the "known limitation" that used to live here: `assigned_admin_id` was schema/API-complete since Work Orders shipped, but no office-scoped read endpoint existed to populate a picker with — `GET /admin/admins` is System-Administrator-only.
+
+- `GET /admin/admins/directory` (`AdminDirectoryController`, `api/src/admin/admin-directory.controller.ts`) — guarded only by `AdminSessionGuard` (not `SystemAdminGuard`, which stays exactly as strict as before on `AdminsController`), so MEO/MDRRMO can reach it. Scoped via `resolveOfficeScope`, the same helper every other office-scoped endpoint uses — an office admin's `?office=` query param can't widen the result. Returns only `{id, name, email, office, role}` for **active**, **officer/supervisor** accounts — never password/session/security columns, never inactive rows, never `system_admin` rows (their office is always `null`, so they could never validly be a work order's assignee anyway).
+- `WorkOrdersService.create`/`update` (`api/src/admin/work-orders.service.ts`) now validate `assignedAdminId` server-side before accepting it: the target admin must exist, be active, and belong to the *work order's* office (not the caller's) — a mismatch on any of those is a 400, not a silent accept. This closes the gap where the field existed but was never checked.
+- Frontend: `WorkOrderAssigneeSelect` (new, mirrors the existing `WorkOrderStatusSelect` pattern) renders in the Ticket Detail Work Orders panel and both the `/admin/work-orders` desktop table and mobile cards — office-scoped by the work order's own fixed `assigned_office`, editable inline. `CreateWorkOrderDialog` gained the same picker for creation, with an "Unassigned / Office-wide" option always available; a system admin creating from the standalone list (where no ticket office is known yet) gets an explicit office selector that filters the assignee options and clears any stale selection when changed.
+- Audit: `assignedAdminId` changes are logged as part of the existing `work_order_updated` event, with `{from, to}` admin ids in the metadata — bare integers, never note bodies. No new action type was needed.
+- No new route, no new sidebar item — the picker lives inside Work Orders' existing surfaces.
 
 ### Office Performance Summary — **completed**
 
@@ -67,31 +75,27 @@ Six metrics: Pending Work Orders, In Progress Work Orders, Overdue Work Orders, 
 
 ## 3. Next Product Features
 
-In priority order. The admin directory/picker is first because it directly closes Work Orders' one remaining known limitation.
+In priority order. Work Order Follow-up Improvements is first since it's the direct continuation of what §2 just shipped.
 
-### 3.1 Office-scoped Admin Directory / Assigned Admin Picker for Work Orders
+### 3.1 Work Order Follow-up Improvements
 
-Closes the known limitation in §2: add an office-scoped "list admins in my office" read endpoint (distinct from the System-Administrator-only `GET /admin/admins`), then wire the Work Orders create/edit forms to a real admin picker for `assigned_admin_id`. Office-scoped, not system-wide — an MEO officer should see MEO admins to assign to, not the full roster.
+Small increments on top of the shipped Work Orders + assignment-picker feature — e.g. bulk status actions, richer overdue surfacing, notification tuning. Scope these individually as they come up; do not batch speculative additions here ahead of an actual need.
 
-### 3.2 Work Order Follow-up Improvements
+### 3.2 URL-synced Admin Map Filters
 
-Small increments on top of the shipped Work Orders feature once the above lands — e.g. bulk status actions, richer overdue surfacing, notification tuning. Scope these individually as they come up; do not batch speculative additions here ahead of an actual need.
+`MapFilterState` in `components/features/admin/map/MapFilterBar.tsx` is currently client React state only — the map reads just `?office=` from the URL. Sync it to URL/query params, following the pattern the Ticket Queue already uses. This is purely the plumbing change; it unblocks §3.3 but doesn't itself add any office presets.
 
-### 3.3 URL-synced Admin Map Filters
+### 3.3 Office-specific Map Presets / Layers
 
-`MapFilterState` in `components/features/admin/map/MapFilterBar.tsx` is currently client React state only — the map reads just `?office=` from the URL. Sync it to URL/query params, following the pattern the Ticket Queue already uses. This is purely the plumbing change; it unblocks §3.4 but doesn't itself add any office presets.
-
-### 3.4 Office-specific Map Presets / Layers
-
-**Blocked on §3.3 — do not build until map filters are URL-synced.** A preset link that lands on an unfiltered map is a fake navigation link, which is exactly the failure this ordering exists to prevent.
+**Blocked on §3.2 — do not build until map filters are URL-synced.** A preset link that lands on an unfiltered map is a fake navigation link, which is exactly the failure this ordering exists to prevent.
 
 Once unblocked: **MEO** presets — drainage, road damage, illegal dumping, infrastructure. **MDRRMO** presets — flood/hazard reports, high urgency, low-elevation areas.
 
-### 3.5 Reporting and Export Tools
+### 3.4 Reporting and Export Tools
 
 CSV/PDF export or scheduled reports for tickets, work orders, and office activity — for handoff to LGU leadership or external stakeholders outside the admin UI. Scope precisely against a real request when it comes up; "export everything" is not a spec.
 
-### 3.6 Production Hardening / Deployment Readiness
+### 3.5 Production Hardening / Deployment Readiness
 
 Last on this list because it's continuous, not a single feature: monitoring/alerting, backup verification, load/perf validation, secrets rotation, deployment runbook. Revisit and expand this item as the system approaches real deployment, rather than treating it as a one-time checkbox.
 
@@ -101,27 +105,27 @@ Last on this list because it's continuous, not a single feature: monitoring/aler
 
 Not next, not blocked — just not prioritized yet. Revisit if a real requirement surfaces:
 
-- Bulk work-order operations beyond what §3.2 scopes concretely
-- Cross-office reporting rollups beyond §3.5's initial export scope
+- Bulk work-order operations beyond what §3.1 scopes concretely
+- Cross-office reporting rollups beyond §3.4's initial export scope
 - Citizen-facing work-order status summaries (a *rollup*, e.g. "work in progress," never the underlying work order or its notes — see §5)
 
 ---
 
 ## 5. Do Not Build Yet
 
-- Anything from §4, or later items in §3, ahead of earlier §3 items — the order in §3 reflects real dependencies (§3.4 needs §3.3), not preference.
-- **Sidebar or Quick Action entries for routes that do not exist.** Every nav item must resolve to a real page with a real backing endpoint — ship the nav entry with the route, never ahead of it. Office Performance Summary (§2) is the model: a real dashboard section, no sidebar item, because it never needed its own route.
+- Anything from §4, or later items in §3, ahead of earlier §3 items — the order in §3 reflects real dependencies (§3.3 needs §3.2), not preference.
+- **Sidebar or Quick Action entries for routes that do not exist.** Every nav item must resolve to a real page with a real backing endpoint — ship the nav entry with the route, never ahead of it. Office Performance Summary and the Admin Directory/Assigned Admin Picker (§2) are both the model: real backend + UI, no sidebar item, because neither needed its own route.
 - Any citizen-facing surface for work orders or internal notes — not even a rollup, until §4 is explicitly picked up and scoped.
-- Office-specific map presets/links before §3.3's URL-sync work lands (§3.4).
+- Office-specific map presets/links before §3.2's URL-sync work lands (§3.3).
 - A standalone internal-notes or due-dates feature — both stay inside Work Orders (§2).
-- A separate route/sidebar item for Office Performance Summary — it's a dashboard section by design; only add a dedicated route if a real, separately-scoped need for one shows up.
+- A separate route/sidebar item for Office Performance Summary or the Admin Directory — both are dashboard/Work-Orders-surface features by design; only add a dedicated route if a real, separately-scoped need for one shows up.
 
 ---
 
 ## 6. Risks to Avoid
 
-- **Weakening RBAC.** Client-side hiding (sidebar, quick actions) is cosmetic. The gate is `AdminSessionGuard` / `SystemAdminGuard` plus `resolveOfficeScope` / `assertOfficeAccess`. A new endpoint — including the §3.1 admin-directory endpoint — that forgets the scope helpers is an office-data leak, not a UI bug.
-- **Fake navigation links.** Links to nonexistent routes, or to filtered views the target page can't actually apply, make the system look finished where it isn't — the exact failure §3.4's ordering exists to prevent.
+- **Weakening RBAC.** Client-side hiding (sidebar, quick actions) is cosmetic. The gate is `AdminSessionGuard` / `SystemAdminGuard` plus `resolveOfficeScope` / `assertOfficeAccess`. A new endpoint — including `AdminDirectoryController` — that forgets the scope helpers is an office-data leak, not a UI bug.
+- **Fake navigation links.** Links to nonexistent routes, or to filtered views the target page can't actually apply, make the system look finished where it isn't — the exact failure §3.3's ordering exists to prevent.
 - **Exposing internal work orders or notes to citizens.** `notes` and every other work-order field are staff-only by design; a rollup summary (§4) is the only citizen-facing form ever worth considering, and only once explicitly scoped.
 - **Schema drift.** Any new table/column requires a matching `docs/database.md` entry in the same change.
 - **Severity vs. Urgency vs. Priority.** Three distinct concepts with distinct data sources — see the terminology section in `CLAUDE.md` before labeling anything in a new UI.

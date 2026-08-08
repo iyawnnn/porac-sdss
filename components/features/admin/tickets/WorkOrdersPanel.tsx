@@ -5,6 +5,7 @@ import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
 import { CreateWorkOrderDialog } from "@/components/features/admin/work-orders/CreateWorkOrderDialog";
 import { WorkOrderStatusBadge } from "@/components/features/admin/work-orders/WorkOrderStatusBadge";
 import { WorkOrderStatusSelect } from "@/components/features/admin/work-orders/WorkOrderStatusSelect";
+import { WorkOrderAssigneeSelect } from "@/components/features/admin/work-orders/WorkOrderAssigneeSelect";
 
 function formatDate(value: string | null): string {
   if (!value) return "No due date";
@@ -13,7 +14,15 @@ function formatDate(value: string | null): string {
 
 // Internal-only panel — work orders (and their notes) never appear on any
 // citizen-facing route. Only rendered on the admin Ticket Detail page.
-export function WorkOrdersPanel({ ticketId, initialWorkOrders }: { ticketId: number; initialWorkOrders: WorkOrderRow[] }) {
+export function WorkOrdersPanel({
+  ticketId,
+  office,
+  initialWorkOrders,
+}: {
+  ticketId: number;
+  office: "MEO" | "MDRRMO";
+  initialWorkOrders: WorkOrderRow[];
+}) {
   const [workOrders, setWorkOrders] = useState(initialWorkOrders);
 
   function handleCreated(created: WorkOrderRow) {
@@ -27,7 +36,7 @@ export function WorkOrdersPanel({ ticketId, initialWorkOrders }: { ticketId: num
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Work orders ({workOrders.length})</p>
-        <CreateWorkOrderDialog onCreated={handleCreated} ticketId={ticketId} />
+        <CreateWorkOrderDialog office={office} onCreated={handleCreated} ticketId={ticketId} />
       </div>
       {workOrders.length === 0 ? (
         <p className="text-sm text-ink-400">No work orders yet for this ticket.</p>
@@ -43,8 +52,9 @@ export function WorkOrdersPanel({ ticketId, initialWorkOrders }: { ticketId: num
                 <WorkOrderStatusBadge status={wo.status} />
               </div>
               {wo.notes && <p className="mt-1.5 text-sm text-ink-700">{wo.notes}</p>}
-              <div className="mt-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <WorkOrderStatusSelect onUpdated={handleUpdated} workOrder={wo} />
+                <WorkOrderAssigneeSelect onUpdated={handleUpdated} workOrder={wo} />
               </div>
             </li>
           ))}

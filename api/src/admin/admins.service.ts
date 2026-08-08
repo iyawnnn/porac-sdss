@@ -5,12 +5,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
 import { admins } from '../db/schema';
 import type { AdminSession } from '../auth/session.service';
+import { resolveOfficeScope } from '../common/authz/admin-scope';
 import { AdminAuditService } from './admin-audit.service';
 
 export type AdminRole = 'officer' | 'supervisor' | 'system_admin';
@@ -38,6 +39,18 @@ const SAFE_COLUMNS = {
   created_at: admins.createdAt,
   is_active: admins.isActive,
 };
+
+// Deliberately narrower than SAFE_COLUMNS/AdminAccountRow — no created_at,
+// no is_active (directory results are always active by construction), and
+// never password/session/security columns. This is the shape work-order
+// assignment pickers see, not the System Admin Management table.
+export interface AdminDirectoryRow {
+  id: number;
+  name: string;
+  email: string;
+  office: AdminOffice | null;
+  role: AdminRole;
+}
 
 // Shared by create and update — an admin's role and office must always
 // agree: system_admin implies no office, officer/supervisor implies exactly
@@ -78,6 +91,48 @@ export class AdminsService {
       .select(SAFE_COLUMNS)
       .from(admins)
       .orderBy(desc(admins.createdAt)) as Promise<AdminAccountRow[]>;
+  }
+
+  // Office-scoped read used by the Work Orders assignment picker — distinct
+  // from list() above (System-Administrator-only, unscoped, full account
+  // shape). Reuses resolveOfficeScope so an office admin can never widen
+  // this past their own office via ?office=, the same clamp every other
+  // office-scoped list endpoint applies. Only active officer/supervisor
+  // accounts are returned: system_admin rows have office: null and could
+  // never pass a work order's "assignee must belong to this office" check,
+  // and an inactive admin should never be assignable to new work.
+  async listDirectory(
+    admin: Pick<AdminSession, 'role' | 'office'>,
+    requestedOffice: 'MEO' | 'MDRRMO' | 'all' | undefined,
+  ): Promise<AdminDirectoryRow[]> {
+    const office = resolveOfficeScope(admin, requestedOffice);
+    const rows = await this.db
+      .select({
+        id: admins.id,
+        firstName: admins.firstName,
+        lastName: admins.lastName,
+        email: admins.email,
+        office: admins.office,
+        role: admins.role,
+      })
+      .from(admins)
+      .where(
+        and(
+          eq(admins.isActive, true),
+          office ? eq(admins.office, office) : undefined,
+        ),
+      )
+      .orderBy(asc(admins.firstName), asc(admins.lastName));
+
+    return rows
+      .filter((row) => row.role !== 'system_admin')
+      .map((row) => ({
+        id: row.id,
+        name: `${row.firstName} ${row.lastName}`,
+        email: row.email,
+        office: row.office,
+        role: row.role,
+      }));
   }
 
   async create(

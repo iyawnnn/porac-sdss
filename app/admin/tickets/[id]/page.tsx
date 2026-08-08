@@ -156,7 +156,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
 
           <Card>
             <CardContent className="p-4">
-              <WorkOrdersPanel initialWorkOrders={workOrders} ticketId={ticket.id} />
+              <WorkOrdersPanel initialWorkOrders={workOrders} office={ticket.assigned_office as "MEO" | "MDRRMO"} ticketId={ticket.id} />
             </CardContent>
           </Card>
 

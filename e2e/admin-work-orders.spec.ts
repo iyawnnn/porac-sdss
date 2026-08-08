@@ -151,8 +151,10 @@ test("update a work order's status from Ticket Detail", async ({ page, request }
   await dialog.getByRole("button", { name: "Create work order" }).click();
   await expect(dialog).toHaveCount(0);
 
+  // Scoped by aria-label, not a bare combobox lookup — the item now also
+  // renders an assignee combobox alongside the status one.
   const item = page.locator("li", { hasText: title });
-  await item.getByRole("combobox").click();
+  await item.getByRole("combobox", { name: /^Status for work order/ }).click();
   await page.getByRole("option", { name: "In Progress" }).click();
   // "In Progress" renders twice inside the item (status badge + select
   // value) — assert on the first match rather than requiring uniqueness.
@@ -269,4 +271,103 @@ test("mobile viewport renders the work orders card list, not the desktop table",
   await page.goto("/admin/work-orders");
   await expect(page.getByRole("heading", { name: "Work Orders" })).toBeVisible();
   await expect(page.getByRole("table")).toBeHidden();
+});
+
+// --- Office-scoped admin directory / assigned admin picker ---------------
+
+test("the assigned admin picker appears in the create work order dialog with an Unassigned option", async ({ page, request }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const ticketId = await ticketIdFor(page, request, "MEO");
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  const dialog = page.getByRole("dialog", { name: "New work order" });
+  await expect(dialog.getByLabel("Assigned admin")).toBeVisible();
+  await dialog.getByLabel("Assigned admin").click();
+  await expect(page.getByRole("option", { name: "Unassigned / Office-wide" })).toBeVisible();
+});
+
+test("MEO office admin's assignee picker only offers MEO admins", async ({ page, request }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const ticketId = await ticketIdFor(page, request, "MEO");
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  const dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Assigned admin").click();
+  // The seeded MEO supervisor must appear; the seeded MDRRMO one must not.
+  await expect(page.getByRole("option", { name: "MEO Supervisor" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "MDRRMO Supervisor" })).toHaveCount(0);
+});
+
+test("MDRRMO office admin's assignee picker only offers MDRRMO admins", async ({ page, browser }) => {
+  // Seed data never includes a real MDRRMO ticket (seed-diverse-reports.ts
+  // assigns everything to MEO), so this borrows one the same way every
+  // other MDRRMO-context test in this file does — afterAll restores it.
+  const ticketId = await ticketIdAsSystemAdmin(browser, "MDRRMO");
+  await loginAs(page, E2E_MDRRMO_ADMIN);
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  const dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Assigned admin").click();
+  await expect(page.getByRole("option", { name: "MDRRMO Supervisor" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "MEO Supervisor" })).toHaveCount(0);
+});
+
+test("system admin picks a work order office on the standalone list, then sees that office's admins", async ({ page }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await page.goto("/admin/work-orders");
+
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  const dialog = page.getByRole("dialog", { name: "New work order" });
+  // Before an office is picked, the assignee field has nothing to filter by.
+  await expect(dialog.getByLabel("Assigned admin")).toBeDisabled();
+
+  await dialog.getByLabel("Work order office").click();
+  await page.getByRole("option", { name: "MEO", exact: true }).click();
+  await dialog.getByLabel("Assigned admin").click();
+  await expect(page.getByRole("option", { name: "MEO Supervisor" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "MDRRMO Supervisor" })).toHaveCount(0);
+
+  // Switching office clears the stale selection and refilters the options.
+  await page.keyboard.press("Escape");
+  await dialog.getByLabel("Work order office").click();
+  await page.getByRole("option", { name: "MDRRMO", exact: true }).click();
+  await dialog.getByLabel("Assigned admin").click();
+  await expect(page.getByRole("option", { name: "MDRRMO Supervisor" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "MEO Supervisor" })).toHaveCount(0);
+});
+
+test("creating a work order Unassigned / Office-wide leaves it unassigned, and the assignee appears once picked", async ({ page, request }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const ticketId = await ticketIdFor(page, request, "MEO");
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  const title = `E2E assignee ${Date.now()}`;
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  const dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Title").fill(title);
+  await dialog.getByRole("button", { name: "Create work order" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const item = page.locator("li", { hasText: title });
+  const assigneeSelect = item.getByRole("combobox", { name: /^Assigned admin for work order/ });
+  await expect(assigneeSelect).toHaveText("Unassigned / Office-wide");
+
+  // Ticket Detail Work Orders panel edit: pick a real assignee.
+  await assigneeSelect.click();
+  await page.getByRole("option", { name: "MEO Supervisor" }).click();
+  await expect(assigneeSelect).toHaveText("MEO Supervisor");
+
+  // Also shows up on the standalone Work Orders list (default desktop
+  // viewport here, so the table — not the mobile card list — is visible).
+  await page.goto("/admin/work-orders");
+  const row = page.getByRole("row").filter({ hasText: title });
+  await expect(row.getByText("MEO Supervisor")).toBeVisible();
+});
+
+test("citizens cannot reach the admin directory endpoint", async ({ request }) => {
+  const res = await request.get("/api/admin/admins/directory");
+  expect(res.status()).toBe(401);
 });

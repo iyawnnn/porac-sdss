@@ -7,7 +7,7 @@ import {
 import { and, desc, eq, isNotNull, lt, sql as dsql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
-import { tickets, workOrders } from '../db/schema';
+import { admins, tickets, workOrders } from '../db/schema';
 import type { AdminSession } from '../auth/session.service';
 import { resolveOfficeScope, assertOfficeAccess } from '../common/authz/admin-scope';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -99,6 +99,26 @@ export class WorkOrdersService {
     private readonly notifications: NotificationsService,
     private readonly audit: AdminAuditService,
   ) {}
+
+  // A work order's assignee must be an active admin who belongs to *this*
+  // work order's office — never the caller's own office, since a system
+  // admin's office is null and an office admin's is already guaranteed to
+  // match by assertOfficeAccess before this runs. This is the one place
+  // that would let a cross-office leak into assigned_admin_id if skipped.
+  private async assertValidAssignee(
+    assignedAdminId: number,
+    office: 'MEO' | 'MDRRMO',
+  ): Promise<void> {
+    const [assignee] = await this.db
+      .select({ office: admins.office, isActive: admins.isActive })
+      .from(admins)
+      .where(eq(admins.id, assignedAdminId));
+    if (!assignee || !assignee.isActive || assignee.office !== office) {
+      throw new BadRequestException(
+        'assignedAdminId must be an active admin belonging to this office.',
+      );
+    }
+  }
 
   parseQuery(
     query: Record<string, string | undefined>,
@@ -209,6 +229,9 @@ export class WorkOrdersService {
       .where(eq(tickets.id, ticketId));
     if (!ticket) throw new NotFoundException('Ticket not found.');
     assertOfficeAccess(admin, ticket.assignedOffice);
+    if (assignedAdminId != null) {
+      await this.assertValidAssignee(assignedAdminId, ticket.assignedOffice);
+    }
 
     const row = await this.db.transaction(async (tx) => {
       const [created] = await tx
@@ -229,7 +252,7 @@ export class WorkOrdersService {
         targetType: 'work_order',
         targetId: created.id,
         targetSummary: `Work order #${created.id} for Ticket #${ticketId}`,
-        metadata: { ticketId, assignedOffice: ticket.assignedOffice, hasDueDate: dueDate !== null },
+        metadata: { ticketId, assignedOffice: ticket.assignedOffice, hasDueDate: dueDate !== null, assignedAdminId },
       });
       return created;
     });
@@ -291,6 +314,14 @@ export class WorkOrdersService {
       if (assignedAdminId != null && !Number.isInteger(assignedAdminId)) {
         throw new BadRequestException('assignedAdminId must be an integer.');
       }
+      // assigned_office itself is immutable via this endpoint (it's only
+      // ever set once, from the ticket, at creation — see create() above),
+      // so there is no "office changed" case to reconcile here: the
+      // assignee is always validated against the work order's one, fixed
+      // office.
+      if (assignedAdminId != null) {
+        await this.assertValidAssignee(assignedAdminId, existing.assigned_office as 'MEO' | 'MDRRMO');
+      }
       patch.assignedAdminId = assignedAdminId;
       changedFields.push('assignedAdminId');
     }
@@ -315,8 +346,14 @@ export class WorkOrdersService {
         targetType: 'work_order',
         targetId: id,
         targetSummary: `Work order #${id} for Ticket #${existing.ticket_id}`,
-        // Field names only — note bodies are never written to the audit trail.
-        metadata: { changedFields },
+        // Field names only, plus assignedAdminId's own before/after when it
+        // changed — bare integer ids, never note bodies or other content.
+        metadata: {
+          changedFields,
+          ...(changedFields.includes('assignedAdminId')
+            ? { assignedAdminId: { from: existing.assigned_admin_id, to: patch.assignedAdminId } }
+            : {}),
+        },
       });
       return updated;
     });

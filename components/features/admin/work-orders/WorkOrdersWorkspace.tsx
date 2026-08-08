@@ -17,6 +17,7 @@ import { AdminErrorCard } from "../shared/AdminErrorCard";
 import { CreateWorkOrderDialog } from "./CreateWorkOrderDialog";
 import { WorkOrderStatusBadge, isOverdue } from "./WorkOrderStatusBadge";
 import { WorkOrderStatusSelect } from "./WorkOrderStatusSelect";
+import { WorkOrderAssigneeSelect } from "./WorkOrderAssigneeSelect";
 
 const STATUS_LABELS: Record<WorkOrderStatus, string> = {
   pending: "Pending",
@@ -132,7 +133,11 @@ export function WorkOrdersWorkspace({
             {isSystemAdmin ? "Field work tracked across every office." : `Field work tracked for ${sessionOffice}.`}
           </p>
         </div>
-        <CreateWorkOrderDialog onCreated={handleCreated} />
+        <CreateWorkOrderDialog
+          isSystemAdmin={isSystemAdmin}
+          onCreated={handleCreated}
+          sessionOffice={sessionOffice === "MEO" || sessionOffice === "MDRRMO" ? sessionOffice : undefined}
+        />
       </div>
 
       <Card className="gap-0">
@@ -171,6 +176,7 @@ export function WorkOrdersWorkspace({
                 <TableHead className="pl-6">Work Order</TableHead>
                 <TableHead>Ticket</TableHead>
                 <TableHead className="text-center">Office</TableHead>
+                <TableHead className="text-center">Assigned</TableHead>
                 <TableHead className="text-center">Due</TableHead>
                 <TableHead className="text-center">Created</TableHead>
                 <TableHead className="pr-6 text-center">Status</TableHead>
@@ -179,17 +185,17 @@ export function WorkOrdersWorkspace({
             <TableBody>
               {error ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell className="p-4" colSpan={6}><AdminErrorCard message={error} onRetry={retry} title="Couldn't refresh work orders" /></TableCell>
+                  <TableCell className="p-4" colSpan={7}><AdminErrorCard message={error} onRetry={retry} title="Couldn't refresh work orders" /></TableCell>
                 </TableRow>
               ) : loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow className="hover:bg-transparent" key={i}>
-                    {Array.from({ length: 6 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full max-w-24" /></TableCell>)}
+                    {Array.from({ length: 7 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full max-w-24" /></TableCell>)}
                   </TableRow>
                 ))
               ) : data.workOrders.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell className="p-10 text-center" colSpan={6}><EmptyState /></TableCell>
+                  <TableCell className="p-10 text-center" colSpan={7}><EmptyState /></TableCell>
                 </TableRow>
               ) : (
                 data.workOrders.map((wo) => <WorkOrderDesktopRow key={wo.id} onUpdated={handleUpdated} workOrder={wo} />)
@@ -279,6 +285,7 @@ function WorkOrderDesktopRow({ workOrder, onUpdated }: { workOrder: WorkOrderRow
         <Link className="text-brand-600 hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
       </TableCell>
       <TableCell className="text-center">{workOrder.assigned_office}</TableCell>
+      <TableCell className="text-center"><WorkOrderAssigneeSelect onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
       <TableCell className="text-center text-xs"><DueDateCell workOrder={workOrder} /></TableCell>
       <TableCell className="text-center text-xs text-muted-foreground">{formatDate(workOrder.created_at)}</TableCell>
       <TableCell className="pr-6 text-center"><WorkOrderStatusSelect onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
@@ -302,7 +309,10 @@ function WorkOrderCard({ workOrder, onUpdated }: { workOrder: WorkOrderRow; onUp
           {" · "}{workOrder.assigned_office}
         </p>
         <p className="text-xs text-muted-foreground">Due: <DueDateCell workOrder={workOrder} /></p>
-        <WorkOrderStatusSelect onUpdated={onUpdated} workOrder={workOrder} />
+        <div className="flex flex-wrap items-center gap-2">
+          <WorkOrderStatusSelect onUpdated={onUpdated} workOrder={workOrder} />
+          <WorkOrderAssigneeSelect onUpdated={onUpdated} workOrder={workOrder} />
+        </div>
       </CardContent>
     </Card>
   );
