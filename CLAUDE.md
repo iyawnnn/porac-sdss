@@ -10,6 +10,7 @@ This is a two-app monorepo (see the NestJS extraction blueprint decision record 
 - **`api/`** — NestJS, owns the database, auth, PostGIS spatial work, and the triage engine. Own `package.json`/`tsconfig.json`/`nest-cli.json`. Run `pnpm --prefix api start:dev` (or `cd api && pnpm start:dev`) for local dev, `:3001` by default. `api/src/common/` holds cross-cutting guards, decorators, and pure utils (`office`/`radius`/`distance`/`scoring`) shared across the `admin`/`auth`/`cron`/`reports` feature modules. `api/scripts/` holds the one-time DB migration/seed/verify scripts (moved from root `scripts/`) plus `api/drizzle/` for the Drizzle migration SQL — see Commands below.
 - `PLAN.md` — the authoritative build log and decision record (gap analysis vs. the original thesis paper, phase-by-phase status, every architectural deviation and why). Read it before making non-trivial changes to the triage engine, dedup logic, or geo pipeline — it explains *why* things are built the way they are, not just what.
 - `docs/migration-log-gadm-to-psgc.md` — archived copy of a deleted one-time migration script, kept for history only.
+- `docs/database.md` — plain-English reference for every table/view in the schema (purpose, read/write paths, expected-empty state, PostGIS vs. application ownership). See "Database documentation" below.
 - `public/assets/gis/porac_barangays.json`, `scripts/gis/raw/porac_srtm30m.tif` — raw geo source data consumed by the seed scripts in `api/scripts/seed/`. Not committed data-processing artifacts you should ever hand-edit; regenerate via the pipeline described below if the target municipality changes.
 - `scripts/gis/` — a frontend-asset generator (`generate-porac-boundary.ts`, run via `pnpm gis:generate-boundary`) that reads/writes root `public/assets/gis/*`. Deliberately stays at root, not `api/scripts/`, since it has nothing to do with the database — it's Next.js public-asset tooling.
 
@@ -48,6 +49,7 @@ pnpm --prefix api migrate                          # non-spatial Drizzle tables
 pnpm --prefix api migrate:ratelimit
 pnpm --prefix api migrate:ratelimit-citizen
 pnpm --prefix api migrate:city-boundary
+pnpm --prefix api import:city-boundary              # municipal outer boundary -> city_boundary_osm (idempotent; see docs/database.md)
 pnpm --prefix api import:barangays                 # PSGC barangay polygons -> barangays (must precede migrate:geometry)
 pnpm --prefix api migrate:geometry                 # geometry columns + GiST indexes, FKs to barangays(id)
 pnpm --prefix api seed:dem                         # SRTM GeoTIFF -> dem_points (must precede migrate:config)
@@ -65,11 +67,16 @@ pnpm --prefix api migrate:admin-created-at
 pnpm --prefix api migrate:admin-audit-events
 pnpm --prefix api migrate:admin-password-security
 pnpm --prefix api verify:config                     # print computed elev_min/elev_max etc.
+pnpm --prefix api verify:city-boundary              # confirm city_boundary_osm is populated with valid geometry
 pnpm --prefix api seed:admin -- <email> <password> <MEO|MDRRMO|-> <officer|supervisor|system_admin>  # use '-' for office with system_admin
 pnpm --prefix api seed:diverse-reports              # idempotent demo tickets/citizens
 ```
 
 These live in `api/scripts/{migrations,seed,verify}/` and run via `tsx --env-file=.env`, so env vars come from `api/.env` (direct, non-pooled Neon URL) — not the root `.env.local` (pooled URL) these scripts used before the move. `api/.env` needs the **same** `DATABASE_URL`/`JWT_SECRET`/`CLOUDINARY_URL`/`OPENWEATHERMAP_API_KEY` values as root `.env.local` (see `api/.env.example`) — two separate env files, one shared set of secrets.
+
+## Database documentation
+
+`docs/database.md` documents every table/view in `api/src/db/schema.ts` plus the raw-PG-only spatial tables and PostGIS system views (purpose, read/write paths, expected-empty state, ownership). Before changing schema — adding, removing, renaming, or significantly altering a table, view, enum, or important column — check `docs/database.md` first for existing context, and update it as part of the same change. Never remove a table just because it's empty in a development database (several are legitimately populated only by an optional seed/import step or are PostGIS-owned metadata that's expected to be empty for columns this app never declares as `geography`) — verify against `docs/database.md` and the table's actual read paths before treating emptiness as evidence of dead schema. Never manually delete `geometry_columns`/`geography_columns` (PostGIS-managed system catalog views, not application tables).
 
 ## This is a modified Next.js — verify before assuming standard APIs
 
