@@ -14,6 +14,7 @@ import {
   type DistributionRow,
   type IncidentTrendRow,
   type OfficePerformanceSummary as OfficePerformanceSummaryData,
+  type NeedsAttention as NeedsAttentionData,
 } from "@/lib/types/admin-dashboard";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ import { DistributionDonutChart } from "./DistributionDonutChart";
 import { SeverityRadialChart } from "./SeverityRadialChart";
 import { DepartmentWorkloadComparison } from "./DepartmentWorkloadComparison";
 import { OfficePerformanceSummary } from "./OfficePerformanceSummary";
+import { NeedsAttention } from "./NeedsAttention";
 
 const SEP = "\u00b7";
 const ACTIVE_STATUS_ORDER = ["Reported", "Under Review", "In Progress"] as const;
@@ -48,7 +50,7 @@ const departmentChartConfig = { meo: { label: "MEO", color: "var(--color-office-
 // departmentWorkload is null for office-scoped admins — it's the
 // cross-office comparison, only meaningful for a System Administrator (see
 // dashboard.controller.ts).
-type DashboardData = { kpis: DashboardKpis; leaderboard: BarangayRiskRow[]; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; statusDistribution: DistributionRow[]; departmentWorkload: DistributionRow[] | null; citizenSeverityDistribution: DistributionRow[]; officePerformanceSummary: OfficePerformanceSummaryData; range?: DashboardRange };
+type DashboardData = { kpis: DashboardKpis; leaderboard: BarangayRiskRow[]; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; statusDistribution: DistributionRow[]; departmentWorkload: DistributionRow[] | null; citizenSeverityDistribution: DistributionRow[]; officePerformanceSummary: OfficePerformanceSummaryData; needsAttention: NeedsAttentionData; range?: DashboardRange };
 
 function numeric(value: number | string | null | undefined): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function formatHours(value: number | string | null | undefined): string { if (value === null || value === undefined || !Number.isFinite(Number(value))) return "\u2014"; const hours = numeric(value); if (hours < 1) return Math.round(hours * 60) + " min"; if (hours < 48) return hours.toFixed(1) + " hr"; return (hours / 24).toFixed(1) + " days"; }
@@ -114,6 +116,7 @@ export function DashboardClient({ initialData, isSystemAdmin }: { initialData: D
     <Card className="@container flex self-start flex-col gap-0 pb-0 lg:col-span-2 dashboard:col-span-1"><CardHeader className="flex flex-row items-start justify-between gap-3 border-b"><div className="flex min-w-0 flex-col gap-0"><CardTitle className="font-mono text-2xl tabular-nums">{numeric(data.kpis.active_count).toLocaleString()}</CardTitle><CardDescription>active tickets</CardDescription></div><Badge variant="secondary">{numeric(data.kpis.high_urgency_count)} high urgency</Badge></CardHeader><CardContent className="flex min-h-0 flex-1 p-0"><DistributionDonutChart ariaLabel="Active ticket lifecycle distribution" centerLabel="Active" config={statusChartConfig} description="Active tickets grouped by lifecycle status." items={activeStatusItems} size="compact" /></CardContent><div className="mt-auto grid grid-cols-2 border-t text-xs"><div className="min-w-0 px-4 py-3"><strong className="block font-mono text-base text-foreground">{numeric(data.kpis.reports_this_month_count)}</strong><span className="text-muted-foreground">Reports this month</span></div><div className="min-w-0 border-l px-4 py-3"><strong className="block font-mono text-base text-foreground">{formatHours(data.kpis.avg_resolution_hours_30d)}</strong><span className="text-muted-foreground">Avg resolution</span></div></div></Card>
     <RankedTableCard kind="barangay" rows={data.leaderboard} /><RankedTableCard kind="category" rows={data.categories} />
     <OfficePerformanceSummary summary={data.officePerformanceSummary} />
+    <NeedsAttention data={data.needsAttention} />
     <section aria-label="Dashboard analytics" className={"grid min-w-0 grid-cols-1 items-stretch gap-3 lg:col-span-2 lg:grid-cols-2 dashboard:col-span-4 " + (departments ? "dashboard:grid-cols-3" : "dashboard:grid-cols-2")}><AnalyticsCard description="All tickets grouped by lifecycle status." title="Ticket Status Distribution"><DistributionDonutChart ariaLabel="Ticket status distribution" config={statusChartConfig} description="All tickets grouped by lifecycle status." items={allStatusItems} /></AnalyticsCard><AnalyticsCard description="Citizen-selected severity in the latest 30 days; not system urgency." title="Reports by Citizen Severity"><SeverityRadialChart ariaLabel="Reports by citizen severity" config={severityChartConfig} description="Citizen-selected severity in the latest 30 days; not system urgency." items={severityItems} /></AnalyticsCard>{departments && <AnalyticsCard description="Active tickets by assigned office." title="Department Workload"><DepartmentWorkloadComparison ariaLabel="Department workload" config={departmentChartConfig} description="Active tickets assigned to MEO and MDRRMO." items={departments} /></AnalyticsCard>}</section>
   </div>;
 }

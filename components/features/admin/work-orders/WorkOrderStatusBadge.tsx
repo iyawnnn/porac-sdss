@@ -8,9 +8,23 @@ const STATUS_CONFIG: Record<WorkOrderStatus, { label: string; className: string 
   cancelled: { label: "Cancelled", className: "bg-red-50 text-red-700 border-red-200" },
 };
 
+export type DueState = "overdue" | "due_today" | "upcoming" | "none";
+
+// A terminal work order (completed/cancelled) never carries a due-state —
+// its due date is history, not something to chase.
+export function getDueState(dueDate: string | null, status: WorkOrderStatus): DueState {
+  if (!dueDate || status === "completed" || status === "cancelled") return "none";
+  const due = new Date(dueDate).getTime();
+  if (due < Date.now()) return "overdue";
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  return due < tomorrowStart.getTime() ? "due_today" : "upcoming";
+}
+
 export function isOverdue(dueDate: string | null, status: WorkOrderStatus): boolean {
-  if (!dueDate || status === "completed" || status === "cancelled") return false;
-  return new Date(dueDate).getTime() < Date.now();
+  return getDueState(dueDate, status) === "overdue";
 }
 
 export function WorkOrderStatusBadge({ status }: { status: WorkOrderStatus }) {

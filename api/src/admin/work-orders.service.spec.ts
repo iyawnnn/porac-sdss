@@ -41,6 +41,7 @@ function chain(rowOrRows: Record<string, unknown> | Record<string, unknown>[]) {
   obj.offset = self;
   obj.values = self;
   obj.set = self;
+  obj.innerJoin = self;
   obj.returning = (columns?: Record<string, unknown>) => {
     if (!columns) return Promise.resolve(rows);
     const keys = Object.keys(columns);
@@ -295,6 +296,56 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
     expect(JSON.stringify(loggedMetadata)).not.toContain('sensitive progress detail');
   });
 
+  it('update() changes the due date and logs only the field name, never the value, in audit metadata', async () => {
+    const db = makeDb();
+    db.select.mockReturnValueOnce(chain(workOrderRow()));
+    db.update.mockReturnValueOnce(chain(workOrderRow({ due_date: new Date('2026-03-01T00:00:00Z') })));
+    const { audit, notifications, logInTx } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    const result = await service.update(
+      10,
+      { title: undefined, notes: undefined, assignedAdminId: undefined, dueDate: '2026-03-01' },
+      MEO_OFFICER,
+    );
+    expect(result.due_date).toEqual(new Date('2026-03-01T00:00:00Z'));
+    expect(logInTx).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ metadata: { changedFields: ['dueDate'] } }),
+    );
+  });
+
+  it('update() clears the due date back to null when given an empty dueDate', async () => {
+    const db = makeDb();
+    db.select.mockReturnValueOnce(chain(workOrderRow({ due_date: new Date('2026-03-01T00:00:00Z') })));
+    db.update.mockReturnValueOnce(chain(workOrderRow({ due_date: null })));
+    const { audit, notifications, logInTx } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    const result = await service.update(
+      10,
+      { title: undefined, notes: undefined, assignedAdminId: undefined, dueDate: null },
+      MEO_OFFICER,
+    );
+    expect(result.due_date).toBeNull();
+    expect(logInTx).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ metadata: { changedFields: ['dueDate'] } }),
+    );
+  });
+
+  it('update() rejects an invalid due date', async () => {
+    const db = makeDb();
+    db.select.mockReturnValueOnce(chain(workOrderRow()));
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    await expect(
+      service.update(10, { title: undefined, notes: undefined, assignedAdminId: undefined, dueDate: 'not-a-date' }, MEO_OFFICER),
+    ).rejects.toThrow(BadRequestException);
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
   it('update() accepts a valid assignedAdminId and logs its from/to in audit metadata', async () => {
     const db = makeDb();
     db.select
@@ -406,6 +457,51 @@ describe('WorkOrdersService.getOfficePerformanceCounts', () => {
       inProgressWorkOrders: 0,
       overdueWorkOrders: 0,
       completedWorkOrdersThisWeek: 0,
+    });
+  });
+});
+
+describe('WorkOrdersService.getNeedsAttention', () => {
+  // Verifies the three lists map to the right buckets and that a ticket
+  // with more than one open work order is deduped, not repeated — office
+  // scoping itself (the `office` filter is applied identically to every
+  // other list/summary query in this service) is covered end-to-end in
+  // e2e/admin-work-orders.spec.ts.
+  it('maps the three independent queries to overdue/dueToday/highUrgency and dedupes repeated tickets', async () => {
+    const db = makeDb();
+    db.select
+      .mockReturnValueOnce(chain([workOrderRow({ id: 1, due_date: new Date('2020-01-01') })]))
+      .mockReturnValueOnce(chain([workOrderRow({ id: 2, due_date: new Date() })]))
+      .mockReturnValueOnce(
+        chain([
+          { id: 100, category: 'Flooding', assigned_office: 'MEO', urgency_level: 'HIGH', priority_score: 90 },
+          { id: 100, category: 'Flooding', assigned_office: 'MEO', urgency_level: 'HIGH', priority_score: 90 },
+          { id: 101, category: 'Drainage', assigned_office: 'MEO', urgency_level: 'HIGH', priority_score: 80 },
+        ]),
+      );
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    const result = await service.getNeedsAttention('MEO');
+
+    expect(result.overdueWorkOrders.map((w) => w.id)).toEqual([1]);
+    expect(result.dueTodayWorkOrders.map((w) => w.id)).toEqual([2]);
+    expect(result.highUrgencyTicketsWithOpenWork.map((t) => t.id)).toEqual([100, 101]);
+    expect(db.select).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns empty lists when nothing needs attention', async () => {
+    const db = makeDb();
+    db.select.mockReturnValue(chain([]));
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    const result = await service.getNeedsAttention(undefined);
+
+    expect(result).toEqual({
+      overdueWorkOrders: [],
+      dueTodayWorkOrders: [],
+      highUrgencyTicketsWithOpenWork: [],
     });
   });
 });

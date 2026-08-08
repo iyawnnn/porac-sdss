@@ -1,12 +1,26 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
-import { loginAdmin as loginAs } from "./helpers";
+import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN, E2E_CITIZEN_ACCOUNT } from "./test-credentials";
+import { loginAdmin as loginAs, loginCitizen } from "./helpers";
 
 test.setTimeout(60_000);
 
 function sessionCookieHeader(cookies: { name: string; value: string }[]): Record<string, string> {
   const cookie = cookies.find((c) => c.name === "ac_admin_session");
   return cookie ? { cookie: `${cookie.name}=${cookie.value}` } : {};
+}
+
+// `<input type="date">.fill()` is flaky in this repo's shadcn Input wrapper —
+// it intermittently sets the DOM value without React observing an `input`
+// event, silently no-op'ing the save. Setting the value through the native
+// setter and dispatching `input`/`change` ourselves is what React actually
+// listens for, so it fires reliably every time.
+async function setDateInput(locator: import("@playwright/test").Locator, value: string): Promise<void> {
+  await locator.evaluate((el: HTMLInputElement, val: string) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    setter.call(el, val);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
 }
 
 async function ticketIdFor(page: Page, request: import("@playwright/test").APIRequestContext, office: "MEO" | "MDRRMO"): Promise<number> {
@@ -370,4 +384,120 @@ test("creating a work order Unassigned / Office-wide leaves it unassigned, and t
 test("citizens cannot reach the admin directory endpoint", async ({ request }) => {
   const res = await request.get("/api/admin/admins/directory");
   expect(res.status()).toBe(401);
+});
+
+// --- Work order follow-up improvements: due dates + notes ----------------
+
+test("set, see overdue styling for, and clear a work order's due date from Ticket Detail", async ({ page, request }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const ticketId = await ticketIdFor(page, request, "MEO");
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  const title = `E2E due date ${Date.now()}`;
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  const dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Title").fill(title);
+  await dialog.getByRole("button", { name: "Create work order" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const item = page.locator("li", { hasText: title });
+  const dueDateInput = item.getByRole("textbox", { name: /^Due date for work order/ });
+
+  // A past date should render the overdue indicator.
+  await setDateInput(dueDateInput, "2020-01-01");
+  await expect(item.getByText("Overdue")).toBeVisible();
+
+  // Clearing removes the due date and the overdue indicator with it.
+  await item.getByRole("button", { name: /^Clear due date for work order/ }).click();
+  await expect(item.getByText("Overdue")).toHaveCount(0);
+  await expect(dueDateInput).toHaveValue("");
+});
+
+test("update and clear a work order's due date from the standalone Work Orders list", async ({ page, request }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const ticketId = await ticketIdFor(page, request, "MEO");
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  const title = `E2E list due date ${Date.now()}`;
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  const dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Title").fill(title);
+  await dialog.getByRole("button", { name: "Create work order" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await page.goto("/admin/work-orders");
+  const row = page.getByRole("row").filter({ hasText: title });
+  const dueDateInput = row.getByRole("textbox", { name: /^Due date for work order/ });
+  await setDateInput(dueDateInput, "2099-12-31");
+  await expect(dueDateInput).toHaveValue("2099-12-31");
+
+  await row.getByRole("button", { name: /^Clear due date for work order/ }).click();
+  await expect(dueDateInput).toHaveValue("");
+});
+
+test("edit a work order's internal progress notes from Ticket Detail", async ({ page, request }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const ticketId = await ticketIdFor(page, request, "MEO");
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  const title = `E2E notes ${Date.now()}`;
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  const dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Title").fill(title);
+  await dialog.getByRole("button", { name: "Create work order" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const item = page.locator("li", { hasText: title });
+  await item.getByRole("button", { name: /^Edit notes for work order/ }).click();
+  const notesField = item.getByRole("textbox", { name: /^Notes for work order/ });
+  await notesField.fill("Crew dispatched, drainage cleared halfway.");
+  await item.getByRole("button", { name: "Save" }).click();
+  await expect(item.getByText("Crew dispatched, drainage cleared halfway.")).toBeVisible();
+});
+
+test("work order notes never appear on the citizen's report tracking page", async ({ page, request, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await loginCitizen(citizenPage, E2E_CITIZEN_ACCOUNT);
+  const reports = await citizenPage.evaluate(async () => {
+    const res = await fetch("/api/reports/mine");
+    return (await res.json()) as { id: number; ticket_id: number }[];
+  });
+  test.skip(reports.length === 0, "citizen1 has no seeded reports — run `pnpm --prefix api seed:diverse-reports` first");
+  const report = reports[0];
+
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  const cookies = await page.context().cookies();
+  const createRes = await request.post("/api/admin/work-orders", {
+    headers: { ...sessionCookieHeader(cookies), "content-type": "application/json" },
+    data: {
+      ticketId: report.ticket_id,
+      title: `E2E citizen leak check ${Date.now()}`,
+      notes: "SECRET-INTERNAL-NOTE-SHOULD-NEVER-LEAK",
+      assignedAdminId: null,
+      dueDate: null,
+    },
+  });
+  expect(createRes.ok()).toBe(true);
+
+  await citizenPage.goto(`/dashboard/reports/${report.id}`);
+  const bodyText = await citizenPage.locator("body").innerText();
+  expect(bodyText).not.toContain("SECRET-INTERNAL-NOTE-SHOULD-NEVER-LEAK");
+  await citizenContext.close();
+});
+
+test("Needs Attention section on the admin dashboard is office-scoped", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto("/admin");
+  const section = page.getByRole("region", { name: "Needs attention" });
+  await expect(section).toBeVisible();
+  await expect(section.getByText("Overdue", { exact: true })).toBeVisible();
+  await expect(section.getByText("Due Today", { exact: true })).toBeVisible();
+  await expect(section.getByText("High-Urgency, Work Pending", { exact: true })).toBeVisible();
+});
+
+test("system admin's Needs Attention section loads city-wide", async ({ page }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await page.goto("/admin");
+  await expect(page.getByRole("region", { name: "Needs attention" })).toBeVisible();
 });
