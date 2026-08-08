@@ -55,7 +55,7 @@ Two ORMs are in play (see `CLAUDE.md`'s Architecture section for the full ration
 - **Ownership:** Application (Drizzle).
 
 ### `work_orders`
-- **Purpose:** The actual field work MEO/MDRRMO staff must do to resolve a ticket — a ticket may have several work orders. Carries `title`, an internal `notes` progress trail, `assigned_office`/`assigned_admin_id`, its own `work_order_status` (`pending`/`in_progress`/`completed`/`cancelled` — deliberately not `ticket_status`, same reasoning `office_reassignments` doesn't reuse it), `due_date`, and `completed_at`. Advancing or completing a work order never mutates the linked ticket's own `status` — no safe automatic coupling rule exists yet (see `docs/mvp-roadmap.md`).
+- **Purpose:** The actual field work MEO/MDRRMO staff must do to resolve a ticket — a ticket may have several work orders. Carries `title`, an internal `notes` progress trail, `assigned_office`/`assigned_admin_id`, its own `work_order_status` (`pending`/`in_progress`/`completed`/`cancelled` — deliberately not `ticket_status`, same reasoning `office_reassignments` doesn't reuse it), `due_date`, and `completed_at`. Advancing or completing a work order never mutates the linked ticket's own `status` — no safe automatic coupling rule exists yet (see `docs/product-roadmap.md`).
 - **Reads:** `/admin/work-orders` (list, office-scoped), the Work Orders panel on admin Ticket Detail.
 - **Writes:** `WorkOrdersService.create`/`update`/`setStatus` (`api/src/admin/work-orders.service.ts`), each logging an `admin_audit_events` row.
 - **Expected empty?** Normal to be empty until the first work order is created — not part of every ticket's lifecycle.

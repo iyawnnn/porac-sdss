@@ -347,7 +347,7 @@ export const admins = pgTable('admins', {
 // The actual field work MEO/MDRRMO must do to resolve a ticket — a ticket
 // may have several work orders. Independent of tickets.status: advancing or
 // completing a work order never mutates the ticket's own status, since no
-// safe automatic coupling rule exists yet (see docs/mvp-roadmap.md). Never
+// safe automatic coupling rule exists yet (see docs/product-roadmap.md). Never
 // exposed to citizens — internal-only, MEO/MDRRMO + system_admin visible.
 // assigned_admin_id/created_by_admin_id are FK-less integers, same
 // cross-table reasoning as status_history.admin_id/

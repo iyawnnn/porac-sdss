@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, isNotNull, lt, sql as dsql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, lt, sql as dsql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
 import { tickets, workOrders } from '../db/schema';
@@ -52,6 +52,16 @@ export interface PaginatedWorkOrders {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+// Feeds the admin dashboard's Office Performance Summary
+// (dashboard.controller.ts) — deliberately just counts, never note bodies
+// or other work-order content.
+export interface WorkOrderPerformanceCounts {
+  pendingWorkOrders: number;
+  inProgressWorkOrders: number;
+  overdueWorkOrders: number;
+  completedWorkOrdersThisWeek: number;
 }
 
 const SAFE_COLUMNS = {
@@ -358,5 +368,43 @@ export class WorkOrdersService {
     });
 
     return row as WorkOrderRow;
+  }
+
+  // "This week" = the last 7 days, matching the existing dashboard KPI
+  // convention (dashboard.service.ts's avg_resolution_hours_30d-style
+  // rolling windows), not a calendar-week boundary. Overdue mirrors
+  // isOverdue() on the frontend (components/features/admin/work-orders/
+  // WorkOrderStatusBadge.tsx): a due date in the past on a work order that
+  // hasn't reached a terminal status.
+  async getOfficePerformanceCounts(
+    office?: 'MEO' | 'MDRRMO',
+  ): Promise<WorkOrderPerformanceCounts> {
+    const officeFilter = office ? eq(workOrders.assignedOffice, office) : undefined;
+    const countWhere = (...conditions: SQL[]) =>
+      this.db
+        .select({ count: dsql<number>`count(*)::int` })
+        .from(workOrders)
+        .where(and(officeFilter, ...conditions));
+
+    const [[pending], [inProgress], [overdue], [completedThisWeek]] = await Promise.all([
+      countWhere(eq(workOrders.status, 'pending')),
+      countWhere(eq(workOrders.status, 'in_progress')),
+      countWhere(
+        isNotNull(workOrders.dueDate),
+        lt(workOrders.dueDate, new Date()),
+        dsql`${workOrders.status} NOT IN ('completed', 'cancelled')`,
+      ),
+      countWhere(
+        eq(workOrders.status, 'completed'),
+        dsql`${workOrders.completedAt} >= now() - interval '7 days'`,
+      ),
+    ]);
+
+    return {
+      pendingWorkOrders: pending?.count ?? 0,
+      inProgressWorkOrders: inProgress?.count ?? 0,
+      overdueWorkOrders: overdue?.count ?? 0,
+      completedWorkOrdersThisWeek: completedThisWeek?.count ?? 0,
+    };
   }
 }

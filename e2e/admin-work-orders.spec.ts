@@ -17,15 +17,27 @@ async function ticketIdFor(page: Page, request: import("@playwright/test").APIRe
   return body.tickets[0].id as number;
 }
 
+// Tracks a seeded ticket this file temporarily reassigned to MDRRMO (see
+// ticketIdAsSystemAdmin below) so afterAll can put it back — without this,
+// the reassignment is real and permanent, and other specs that read seed
+// data at its original office (e.g. citizen-reports.spec.ts's moderation
+// test) start failing with a genuine, correct 403 for a MEO admin acting
+// on what used to be a MEO ticket. Module-level state is safe here because
+// this repo's Playwright config mandates --workers=1 (no per-test DB
+// isolation, see README.md §I) — every test in this file runs serially in
+// one worker before afterAll fires.
+let borrowedTicket: { id: number; originalOffice: "MEO" | "MDRRMO" } | null = null;
+
 // Isolated incognito context so a lookup as another role never mutates the
 // calling test's own cookie jar (the "page"/"request" fixtures share one
 // cookie store per browser context) — used whenever a test needs a ticket
 // id from an office the logged-in admin can't list themselves.
 //
 // Demo seed data (seed-diverse-reports.ts) doesn't guarantee an MDRRMO
-// ticket exists, so this falls back to reassigning any ticket to the
-// target office via the already-covered POST /admin/tickets/:id/reassign
-// endpoint rather than depending on seed content this spec doesn't own.
+// ticket exists, so this falls back to *borrowing* any ticket via the
+// already-covered POST /admin/tickets/:id/reassign endpoint — recording
+// its original office so afterAll can restore it — rather than depending
+// on seed content this spec doesn't own or leaving shared state mutated.
 async function ticketIdAsSystemAdmin(browser: Browser, office: "MEO" | "MDRRMO"): Promise<number> {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -43,12 +55,27 @@ async function ticketIdAsSystemAdmin(browser: Browser, office: "MEO" | "MDRRMO")
   const anyTicket = await context.request.get(`/api/admin/tickets?office=all&status=all&limit=1`, { headers });
   const anyBody = await anyTicket.json();
   expect(anyBody.tickets.length).toBeGreaterThan(0);
-  const ticketId = anyBody.tickets[0].id as number;
-  const reassign = await context.request.post(`/api/admin/tickets/${ticketId}/reassign`, { headers, data: { toOffice: office } });
+  const ticket = anyBody.tickets[0] as { id: number; assigned_office: "MEO" | "MDRRMO" };
+  const reassign = await context.request.post(`/api/admin/tickets/${ticket.id}/reassign`, { headers, data: { toOffice: office } });
   expect(reassign.ok()).toBe(true);
+  borrowedTicket = { id: ticket.id, originalOffice: ticket.assigned_office };
   await context.close();
-  return ticketId;
+  return ticket.id;
 }
+
+test.afterAll(async ({ browser }) => {
+  if (!borrowedTicket) return;
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  const cookies = await context.cookies();
+  const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
+  await context.request.post(`/api/admin/tickets/${borrowedTicket.id}/reassign`, {
+    headers,
+    data: { toOffice: borrowedTicket.originalOffice },
+  });
+  await context.close();
+});
 
 async function createWorkOrderAsSystemAdmin(browser: Browser, ticketId: number, title: string): Promise<{ id: number; assigned_office: string }> {
   const context = await browser.newContext();
