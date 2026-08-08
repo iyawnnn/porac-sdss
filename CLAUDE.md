@@ -78,9 +78,9 @@ These live in `api/scripts/{migrations,seed,verify}/` and run via `tsx --env-fil
 
 `docs/database.md` documents every table/view in `api/src/db/schema.ts` plus the raw-PG-only spatial tables and PostGIS system views (purpose, read/write paths, expected-empty state, ownership). Before changing schema — adding, removing, renaming, or significantly altering a table, view, enum, or important column — check `docs/database.md` first for existing context, and update it as part of the same change. Never remove a table just because it's empty in a development database (several are legitimately populated only by an optional seed/import step or are PostGIS-owned metadata that's expected to be empty for columns this app never declares as `geography`) — verify against `docs/database.md` and the table's actual read paths before treating emptiness as evidence of dead schema. Never manually delete `geometry_columns`/`geography_columns` (PostGIS-managed system catalog views, not application tables).
 
-## Feature roadmap
+## Product roadmap
 
-`docs/mvp-roadmap.md` is the priority source of truth for what to build next (this file and `PLAN.md` explain *how* and *why* the existing system works, not what's queued). Check it before proposing or implementing a new feature, and update it in the same change when a planned feature is completed, skipped, or reprioritized. Never add a sidebar item or dashboard quick action for a route or feature that does not exist yet — nav entries ship with their route, not ahead of it.
+`docs/product-roadmap.md` is the priority source of truth for what to build next (this file and `PLAN.md` explain *how* and *why* the existing system works, not what's queued). Check it before proposing or implementing a new feature, and update it in the same change when a feature is completed, skipped, or reprioritized. Porac SDSS is a real operational system, not an MVP prototype — treat the roadmap's "next" items as production features, not a stopping point. Never add a sidebar item or dashboard quick action for a route or feature that does not exist yet — nav entries ship with their route, not ahead of it.
 
 ## This is a modified Next.js — verify before assuming standard APIs
 

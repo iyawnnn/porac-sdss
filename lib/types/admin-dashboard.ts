@@ -30,3 +30,18 @@ export interface CategoryDistributionRow {
   active_count: number;
   active_total: number;
 }
+
+export interface OfficePerformanceCounts {
+  pendingWorkOrders: number;
+  inProgressWorkOrders: number;
+  overdueWorkOrders: number;
+  completedWorkOrdersThisWeek: number;
+  highUrgencyOpenTickets: number;
+  flaggedReportsPending: number;
+}
+
+export interface OfficePerformanceSummary extends OfficePerformanceCounts {
+  scope: "MEO" | "MDRRMO" | "ALL";
+  // Populated only for a system admin viewing city-wide (scope: "ALL").
+  byOffice: { MEO: OfficePerformanceCounts; MDRRMO: OfficePerformanceCounts } | null;
+}

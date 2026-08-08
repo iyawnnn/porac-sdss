@@ -8,6 +8,7 @@ import type {
   DistributionRow,
   IncidentTrendRow,
   DashboardRange,
+  OfficePerformanceSummary,
 } from "@/lib/types/admin-dashboard";
 import { DashboardClient } from "@/components/features/admin/dashboard/DashboardClient";
 import { DashboardError, DashboardSkeleton } from "@/components/features/admin/dashboard/DashboardStates";
@@ -22,6 +23,7 @@ interface DashboardResponse {
   // Administrator only, see api/src/admin/dashboard.controller.ts.
   departmentWorkload: DistributionRow[] | null;
   citizenSeverityDistribution: DistributionRow[];
+  officePerformanceSummary: OfficePerformanceSummary;
   range: DashboardRange;
 }
 

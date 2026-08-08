@@ -235,3 +235,50 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
     expect(JSON.stringify(loggedMetadata)).not.toContain('sensitive progress detail');
   });
 });
+
+describe('WorkOrdersService.getOfficePerformanceCounts', () => {
+  // Feeds the admin dashboard's Office Performance Summary
+  // (dashboard.controller.ts) — verifies the four counts are wired to the
+  // right fields (a swapped-order regression would silently mislabel
+  // pending as in-progress, etc.) without depending on Drizzle's internal
+  // SQL-builder representation, which the fake `chain()` query builder
+  // doesn't model. Overdue/completed-this-week predicate correctness and
+  // office-scoping RBAC are covered end-to-end in
+  // e2e/admin-work-orders.spec.ts against a real database.
+  it('maps four independent count queries to pending/inProgress/overdue/completedThisWeek in order', async () => {
+    const db = makeDb();
+    db.select
+      .mockReturnValueOnce(chain([{ count: 3 }]))
+      .mockReturnValueOnce(chain([{ count: 5 }]))
+      .mockReturnValueOnce(chain([{ count: 1 }]))
+      .mockReturnValueOnce(chain([{ count: 7 }]));
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    const result = await service.getOfficePerformanceCounts('MEO');
+
+    expect(result).toEqual({
+      pendingWorkOrders: 3,
+      inProgressWorkOrders: 5,
+      overdueWorkOrders: 1,
+      completedWorkOrdersThisWeek: 7,
+    });
+    expect(db.select).toHaveBeenCalledTimes(4);
+  });
+
+  it('defaults every count to 0 when a query returns no row', async () => {
+    const db = makeDb();
+    db.select.mockReturnValue(chain([]));
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    const result = await service.getOfficePerformanceCounts(undefined);
+
+    expect(result).toEqual({
+      pendingWorkOrders: 0,
+      inProgressWorkOrders: 0,
+      overdueWorkOrders: 0,
+      completedWorkOrdersThisWeek: 0,
+    });
+  });
+});
