@@ -7,9 +7,14 @@ export type AdminAuditActionType =
   | "admin_password_reset"
   | "ticket_status_advanced"
   | "ticket_reassigned"
-  | "report_moderated";
+  | "report_moderated"
+  | "work_order_created"
+  | "work_order_updated"
+  | "work_order_status_changed"
+  | "work_order_completed"
+  | "work_order_cancelled";
 
-export type AdminAuditTargetType = "admin" | "ticket" | "report";
+export type AdminAuditTargetType = "admin" | "ticket" | "report" | "work_order";
 
 export interface AdminAuditRow {
   id: number;

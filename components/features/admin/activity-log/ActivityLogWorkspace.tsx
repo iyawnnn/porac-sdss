@@ -22,11 +22,17 @@ const ACTION_LABELS: Record<AdminAuditActionType, string> = {
   ticket_status_advanced: "Ticket status advanced",
   ticket_reassigned: "Ticket reassigned",
   report_moderated: "Report moderated",
+  work_order_created: "Work order created",
+  work_order_updated: "Work order updated",
+  work_order_status_changed: "Work order status changed",
+  work_order_completed: "Work order completed",
+  work_order_cancelled: "Work order cancelled",
 };
 const TARGET_LABELS: Record<AdminAuditTargetType, string> = {
   admin: "Admin",
   ticket: "Ticket",
   report: "Report",
+  work_order: "Work order",
 };
 const PAGE_LIMITS = [10, 25, 50, 100] as const;
 

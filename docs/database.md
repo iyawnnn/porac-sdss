@@ -54,6 +54,14 @@ Two ORMs are in play (see `CLAUDE.md`'s Architecture section for the full ration
 - **Expected empty?** Normal to have very few or zero rows — reassignment is a rare admin action, not part of every ticket's lifecycle.
 - **Ownership:** Application (Drizzle).
 
+### `work_orders`
+- **Purpose:** The actual field work MEO/MDRRMO staff must do to resolve a ticket — a ticket may have several work orders. Carries `title`, an internal `notes` progress trail, `assigned_office`/`assigned_admin_id`, its own `work_order_status` (`pending`/`in_progress`/`completed`/`cancelled` — deliberately not `ticket_status`, same reasoning `office_reassignments` doesn't reuse it), `due_date`, and `completed_at`. Advancing or completing a work order never mutates the linked ticket's own `status` — no safe automatic coupling rule exists yet (see `docs/mvp-roadmap.md`).
+- **Reads:** `/admin/work-orders` (list, office-scoped), the Work Orders panel on admin Ticket Detail.
+- **Writes:** `WorkOrdersService.create`/`update`/`setStatus` (`api/src/admin/work-orders.service.ts`), each logging an `admin_audit_events` row.
+- **Expected empty?** Normal to be empty until the first work order is created — not part of every ticket's lifecycle.
+- **Ownership:** Application (Drizzle) — no geometry column.
+- **Note:** `notes` is internal-only and must never appear in any `api/src/citizens/*` response or the citizen tracking timeline. `assigned_admin_id`/`created_by_admin_id` are FK-less integers, same cross-table reasoning as `status_history.admin_id`/`office_reassignments.admin_id`.
+
 ### `notifications`
 - **Purpose:** One row per notification, targeted either at a specific `recipient_id` (an admin or citizen, per `recipient_type`) or at an entire `recipient_office` (admin-only, read by every admin in that office — no per-admin fan-out rows). No FK on `recipient_id` since it points to one of two different tables depending on `recipient_type`.
 - **Reads:** Notification bell/list UI (citizen and admin), read by both a specific-recipient query and an office-wide query.
@@ -174,7 +182,7 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 ## E. System/admin security tables
 
 ### `admin_audit_events`
-- **Purpose:** Append-only trail for administrative actions — account create/role change/deactivate/reactivate, ticket status/reassignment, report moderation. System-Administrator-visible only. `actor_*` columns are a snapshot at write time (name/role/office can change later on the `admins` row itself), so history reads correctly even after the actor is edited.
+- **Purpose:** Append-only trail for administrative actions — account create/role change/deactivate/reactivate, ticket status/reassignment, report moderation, work order create/update/status change. System-Administrator-visible only. `actor_*` columns are a snapshot at write time (name/role/office can change later on the `admins` row itself), so history reads correctly even after the actor is edited.
 - **Reads:** Activity Log page (`GET /admin/activity-log`, System Admin only).
 - **Writes:** `AdminAuditService.logInTx`/`logInPgTx`, called from every admin-management/ticket/moderation write path that changes state — the write is transactional with the state change itself (a failed audit insert rolls back the whole action; this trail is treated as load-bearing, not best-effort).
 - **Expected empty?** No once any admin action has been taken; normal to be empty on a completely fresh DB.
