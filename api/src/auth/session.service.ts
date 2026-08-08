@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { SignJWT, jwtVerify } from 'jose';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
-import { citizens } from '../db/schema';
+import { admins, citizens } from '../db/schema';
 import type { Env } from '../config/env';
 
 // JWT (not a DB-backed session table) so requests can be verified with no
@@ -69,12 +69,42 @@ export class SessionService {
       .sign(this.secret);
   }
 
+  // Mirrors verifyCitizenSession's session_valid_after check below (added
+  // for admin password change/reset) — the same DB-read tradeoff is
+  // accepted here for the same reason: this is the only way a stateless
+  // JWT admin session can be invalidated server-side after a credential
+  // change, and password security is exactly the case that tradeoff exists
+  // for.
+  //
+  // Compared in whole seconds, not iat*1000 vs a millisecond timestamp:
+  // admin-account.controller.ts writes session_valid_after and then signs
+  // the rotated cookie for the *same* request a few ms later, so the two
+  // can legitimately land in the same wall-clock second. iat only has
+  // second resolution — floor(sessionValidAfter) is the earliest iat that
+  // could possibly have been issued after the write, so anything at or
+  // after that floor is accepted. This only widens acceptance by up to one
+  // second right at the boundary; a token from a genuinely earlier second
+  // is still rejected exactly as before.
   async verifyAdminSession(token: string): Promise<AdminSession | null> {
     try {
       const { payload } = await jwtVerify(token, this.secret, {
         audience: 'admin',
       });
-      return payload as unknown as AdminSession;
+      const session = payload as unknown as AdminSession;
+
+      const [admin] = await this.db
+        .select({ sessionValidAfter: admins.sessionValidAfter })
+        .from(admins)
+        .where(eq(admins.id, session.adminId));
+      if (
+        admin?.sessionValidAfter &&
+        typeof payload.iat === 'number' &&
+        payload.iat < Math.floor(admin.sessionValidAfter.getTime() / 1000)
+      ) {
+        return null;
+      }
+
+      return session;
     } catch {
       return null;
     }
@@ -89,13 +119,10 @@ export class SessionService {
       .sign(this.secret);
   }
 
-  // The one place a stateless JWT session can actually be invalidated
-  // server-side: a successful password reset (auth/citizens/password-reset
-  // flow) sets citizens.session_valid_after = now(), which is now compared
-  // against this token's iat. This is the only session-verification path
-  // that costs a DB read — a deliberate tradeoff (previously zero-DB-read)
-  // accepted specifically because this feature is about surviving session
-  // takeover after a credential compromise. verifyAdminSession is untouched.
+  // A successful password reset (auth/citizens/password-reset flow) sets
+  // citizens.session_valid_after = now(), which is now compared against
+  // this token's iat — the same DB-read tradeoff verifyAdminSession above
+  // now also makes, for the admin-side password change/reset equivalent.
   async verifyCitizenSession(token: string): Promise<CitizenSession | null> {
     try {
       const { payload } = await jwtVerify(token, this.secret, {

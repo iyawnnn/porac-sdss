@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Map, ShieldAlert, Ticket, type LucideIcon } from "lucide-react";
+import { ClipboardList, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
@@ -12,14 +12,26 @@ import { AdminSearch } from "@/components/layouts/AdminSearch";
 import { AdminSidebarTrigger } from "@/components/layouts/AdminSidebarTrigger";
 
 interface NavItem { href: string; label: string; icon: LucideIcon; }
-const NAV_SECTIONS: { heading: string; items: NavItem[] }[] = [
-  { heading: "Main", items: [
-    { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/admin/tickets", label: "Ticket Queue", icon: Ticket },
-    { href: "/admin/map", label: "Interactive Map", icon: Map },
-  ] },
-  { heading: "Management", items: [{ href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert }] },
-];
+
+// Admin Management and the Activity Log are System Administrator only —
+// backend-enforced via SystemAdminGuard on every /admin/admins and
+// /admin/activity-log route, this is just the matching UI hide (never the
+// actual gate). See api/src/common/guards/system-admin.guard.ts.
+function buildNavSections(systemAdmin: boolean): { heading: string; items: NavItem[] }[] {
+  const managementItems: NavItem[] = [{ href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert }];
+  if (systemAdmin) {
+    managementItems.push({ href: "/admin/admins", label: "Admin Management", icon: ShieldUser });
+    managementItems.push({ href: "/admin/activity-log", label: "Activity Log", icon: ClipboardList });
+  }
+  return [
+    { heading: "Main", items: [
+      { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/admin/tickets", label: "Ticket Queue", icon: Ticket },
+      { href: "/admin/map", label: "Interactive Map", icon: Map },
+    ] },
+    { heading: "Management", items: managementItems },
+  ];
+}
 
 function isActivePath(pathname: string, href: string): boolean {
   return href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -39,6 +51,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 
 export default function AdminSidebar({ session }: { session: AdminSession }) {
   const pathname = usePathname();
+  const navSections = buildNavSections(isSystemAdmin(session));
   return (
     <Sidebar className={cn("*:data-[slot=sidebar-inner]:bg-background", "transition-[left,right,top,width]")} collapsible="offcanvas" variant="sidebar">
       <SidebarHeader className="h-(--app-header-height,3rem) flex-row items-center justify-between">
@@ -46,8 +59,8 @@ export default function AdminSidebar({ session }: { session: AdminSession }) {
         <AdminSidebarTrigger place="sidebar" />
       </SidebarHeader>
       <SidebarContent role="navigation" aria-label="Admin">
-        <SidebarGroup><AdminSearch sections={NAV_SECTIONS} /></SidebarGroup>
-        {NAV_SECTIONS.map((section) => (
+        <SidebarGroup><AdminSearch sections={navSections} /></SidebarGroup>
+        {navSections.map((section) => (
           <SidebarGroup key={section.heading}>
             <SidebarGroupLabel className="group-data-[collapsible=icon]:pointer-events-none">{section.heading}</SidebarGroupLabel>
             <SidebarMenu>{section.items.map((item) => <SidebarMenuItem key={item.href}><NavLink active={isActivePath(pathname, item.href)} item={item} /></SidebarMenuItem>)}</SidebarMenu>

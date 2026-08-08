@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { apiGet } from "@/lib/api-client";
+import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
+import { isSystemAdmin } from "@/lib/utils/adminScope";
 import type {
   BarangayRiskRow,
   CategoryDistributionRow,
@@ -25,13 +26,14 @@ interface DashboardResponse {
 }
 
 async function DashboardData() {
+  const session = await getAdminSessionFromApi();
   let data: DashboardResponse;
   try {
     data = await apiGet<DashboardResponse>("/admin/dashboard");
   } catch (err) {
     return <DashboardError detail={err instanceof Error ? err.message : undefined} />;
   }
-  return <DashboardClient initialData={data} />;
+  return <DashboardClient initialData={data} isSystemAdmin={session ? isSystemAdmin(session) : false} />;
 }
 
 export default function AdminDashboardPage() {

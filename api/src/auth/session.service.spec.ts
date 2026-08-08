@@ -119,4 +119,28 @@ describe('SessionService', () => {
       );
     });
   });
+
+  describe('session_valid_after invalidation (admin password change/reset)', () => {
+    it('rejects an admin token issued before session_valid_after', async () => {
+      const sessions = makeSessionService(new Date(Date.now() + 60_000));
+      const token = await sessions.signAdminSession(adminPayload);
+      await expect(sessions.verifyAdminSession(token)).resolves.toBeNull();
+    });
+
+    it('accepts an admin token issued after session_valid_after', async () => {
+      const sessions = makeSessionService(new Date(Date.now() - 60_000));
+      const token = await sessions.signAdminSession(adminPayload);
+      await expect(sessions.verifyAdminSession(token)).resolves.toMatchObject(
+        adminPayload,
+      );
+    });
+
+    it('accepts any admin token when session_valid_after is null (default, untouched accounts)', async () => {
+      const sessions = makeSessionService(null);
+      const token = await sessions.signAdminSession(adminPayload);
+      await expect(sessions.verifyAdminSession(token)).resolves.toMatchObject(
+        adminPayload,
+      );
+    });
+  });
 });
