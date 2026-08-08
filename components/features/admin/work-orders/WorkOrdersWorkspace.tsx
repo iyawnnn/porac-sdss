@@ -15,9 +15,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { AdminErrorCard } from "../shared/AdminErrorCard";
 import { CreateWorkOrderDialog } from "./CreateWorkOrderDialog";
-import { WorkOrderStatusBadge, isOverdue } from "./WorkOrderStatusBadge";
+import { WorkOrderStatusBadge } from "./WorkOrderStatusBadge";
 import { WorkOrderStatusSelect } from "./WorkOrderStatusSelect";
 import { WorkOrderAssigneeSelect } from "./WorkOrderAssigneeSelect";
+import { WorkOrderDueDateEditor } from "./WorkOrderDueDateEditor";
 
 const STATUS_LABELS: Record<WorkOrderStatus, string> = {
   pending: "Pending",
@@ -264,16 +265,6 @@ function EmptyState() {
   );
 }
 
-function DueDateCell({ workOrder }: { workOrder: WorkOrderRow }) {
-  const overdue = isOverdue(workOrder.due_date, workOrder.status);
-  return (
-    <span className={overdue ? "font-medium text-destructive" : undefined}>
-      {formatDate(workOrder.due_date)}
-      {overdue && " (overdue)"}
-    </span>
-  );
-}
-
 function WorkOrderDesktopRow({ workOrder, onUpdated }: { workOrder: WorkOrderRow; onUpdated: (w: WorkOrderRow) => void }) {
   return (
     <TableRow>
@@ -286,7 +277,7 @@ function WorkOrderDesktopRow({ workOrder, onUpdated }: { workOrder: WorkOrderRow
       </TableCell>
       <TableCell className="text-center">{workOrder.assigned_office}</TableCell>
       <TableCell className="text-center"><WorkOrderAssigneeSelect onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
-      <TableCell className="text-center text-xs"><DueDateCell workOrder={workOrder} /></TableCell>
+      <TableCell className="text-center"><WorkOrderDueDateEditor onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
       <TableCell className="text-center text-xs text-muted-foreground">{formatDate(workOrder.created_at)}</TableCell>
       <TableCell className="pr-6 text-center"><WorkOrderStatusSelect onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
     </TableRow>
@@ -308,11 +299,11 @@ function WorkOrderCard({ workOrder, onUpdated }: { workOrder: WorkOrderRow; onUp
           <Link className="text-brand-600 hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
           {" · "}{workOrder.assigned_office}
         </p>
-        <p className="text-xs text-muted-foreground">Due: <DueDateCell workOrder={workOrder} /></p>
         <div className="flex flex-wrap items-center gap-2">
           <WorkOrderStatusSelect onUpdated={onUpdated} workOrder={workOrder} />
           <WorkOrderAssigneeSelect onUpdated={onUpdated} workOrder={workOrder} />
         </div>
+        <WorkOrderDueDateEditor onUpdated={onUpdated} workOrder={workOrder} />
       </CardContent>
     </Card>
   );

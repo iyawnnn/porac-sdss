@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, isNotNull, lt, sql as dsql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lt, sql as dsql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
 import { admins, tickets, workOrders } from '../db/schema';
@@ -63,6 +63,27 @@ export interface WorkOrderPerformanceCounts {
   overdueWorkOrders: number;
   completedWorkOrdersThisWeek: number;
 }
+
+export interface HighUrgencyTicketWithOpenWork {
+  id: number;
+  category: string;
+  assigned_office: 'MEO' | 'MDRRMO';
+  urgency_level: string | null;
+  priority_score: number | null;
+}
+
+// Feeds the dashboard's "Needs Attention" section — small, office-scoped
+// lists (never counts-only like WorkOrderPerformanceCounts) surfacing what
+// an office should look at next: overdue work, due-today work, and
+// high-urgency tickets whose field work hasn't started/finished yet.
+export interface WorkOrderNeedsAttention {
+  overdueWorkOrders: WorkOrderRow[];
+  dueTodayWorkOrders: WorkOrderRow[];
+  highUrgencyTicketsWithOpenWork: HighUrgencyTicketWithOpenWork[];
+}
+
+const ACTIVE_TICKET_STATUSES = ['Reported', 'Under Review', 'In Progress'] as const;
+const OPEN_WORK_ORDER_STATUSES = ['pending', 'in_progress'] as const;
 
 const SAFE_COLUMNS = {
   id: workOrders.id,
@@ -442,6 +463,83 @@ export class WorkOrdersService {
       inProgressWorkOrders: inProgress?.count ?? 0,
       overdueWorkOrders: overdue?.count ?? 0,
       completedWorkOrdersThisWeek: completedThisWeek?.count ?? 0,
+    };
+  }
+
+  // "Due today" uses server-local calendar day boundaries — good enough for
+  // a single-municipality LGU tool where staff and server share a timezone;
+  // ponytail: revisit with a stored timezone if this ever serves multiple
+  // timezones.
+  async getNeedsAttention(
+    office?: 'MEO' | 'MDRRMO',
+    limit = 5,
+  ): Promise<WorkOrderNeedsAttention> {
+    const officeFilter = office ? eq(workOrders.assignedOffice, office) : undefined;
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const openStatus = inArray(workOrders.status, OPEN_WORK_ORDER_STATUSES);
+
+    const [overdueWorkOrders, dueTodayWorkOrders, highUrgencyRows] = await Promise.all([
+      this.db
+        .select(SAFE_COLUMNS)
+        .from(workOrders)
+        .where(and(officeFilter, isNotNull(workOrders.dueDate), lt(workOrders.dueDate, now), openStatus))
+        .orderBy(workOrders.dueDate)
+        .limit(limit),
+      this.db
+        .select(SAFE_COLUMNS)
+        .from(workOrders)
+        .where(
+          and(
+            officeFilter,
+            isNotNull(workOrders.dueDate),
+            gte(workOrders.dueDate, todayStart),
+            lt(workOrders.dueDate, tomorrowStart),
+            openStatus,
+          ),
+        )
+        .orderBy(workOrders.dueDate)
+        .limit(limit),
+      this.db
+        .select({
+          id: tickets.id,
+          category: tickets.category,
+          assigned_office: tickets.assignedOffice,
+          urgency_level: tickets.urgencyLevel,
+          priority_score: tickets.priorityScore,
+        })
+        .from(workOrders)
+        .innerJoin(tickets, eq(workOrders.ticketId, tickets.id))
+        .where(
+          and(
+            officeFilter,
+            openStatus,
+            eq(tickets.urgencyLevel, 'HIGH'),
+            inArray(tickets.status, ACTIVE_TICKET_STATUSES),
+          ),
+        )
+        .orderBy(desc(tickets.priorityScore)),
+    ]);
+
+    // A ticket can have more than one open work order, so the join above can
+    // repeat a ticket id — dedupe in application code rather than reaching
+    // for DISTINCT ON, since the result set here is small (dashboard-sized).
+    const seen = new Set<number>();
+    const highUrgencyTicketsWithOpenWork: HighUrgencyTicketWithOpenWork[] = [];
+    for (const row of highUrgencyRows as HighUrgencyTicketWithOpenWork[]) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      highUrgencyTicketsWithOpenWork.push(row);
+      if (highUrgencyTicketsWithOpenWork.length >= limit) break;
+    }
+
+    return {
+      overdueWorkOrders: overdueWorkOrders as WorkOrderRow[],
+      dueTodayWorkOrders: dueTodayWorkOrders as WorkOrderRow[],
+      highUrgencyTicketsWithOpenWork,
     };
   }
 }

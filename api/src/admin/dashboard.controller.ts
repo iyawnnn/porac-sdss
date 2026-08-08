@@ -93,6 +93,7 @@ export class DashboardController {
       topUrgencyQueueData,
       rain1hMm,
       officePerformanceSummary,
+      needsAttention,
     ] = await Promise.all([
       this.dashboard.getDashboardKpis(office),
       this.dashboard.getBarangayRiskRanking(5, office),
@@ -112,6 +113,7 @@ export class DashboardController {
       }),
       this.weather.getCurrentRain1hMm(),
       this.getOfficePerformanceSummary(office),
+      this.workOrders.getNeedsAttention(office),
     ]);
 
     return {
@@ -127,6 +129,7 @@ export class DashboardController {
       range,
       rain1hMm,
       officePerformanceSummary,
+      needsAttention,
     };
   }
 

@@ -71,31 +71,39 @@ Six metrics: Pending Work Orders, In Progress Work Orders, Overdue Work Orders, 
 - Never returns work-order note bodies or any other note content — counts only.
 - Loading/error handling reuses the dashboard's existing single-fetch pattern (`DashboardSkeleton`/`DashboardError`) — the summary is part of the same `GET /admin/dashboard` payload as everything else on the page, not a separately-fetched section.
 
+### Work Order Follow-up Improvements — **completed (first increment)**
+
+A small, focused pass on top of the shipped Work Orders feature — due dates and notes went from create-only/display-only to fully editable, plus a new dashboard "Needs Attention" section. No new table, no new route, no crew scheduling/cost tracking/attachments/checklists (explicitly out of scope, see §5).
+
+- **Due date editing.** `WorkOrderDueDateEditor` (`components/features/admin/work-orders/WorkOrderDueDateEditor.tsx`) is a native `<input type="date">` + Clear button, used on both the Ticket Detail Work Orders panel and the standalone `/admin/work-orders` list (desktop table + mobile cards) — PATCHes the existing `PATCH /admin/work-orders/:id` endpoint, which already supported `dueDate` (including clearing it to `null`) since Work Orders shipped; no backend change was needed for the edit path itself.
+- **Overdue / due-today derivation.** `getDueState()` (`components/features/admin/work-orders/WorkOrderStatusBadge.tsx`) replaces the old boolean `isOverdue()` (kept as a thin wrapper for compatibility) with a three-state `overdue | due_today | upcoming | none` derived purely from `due_date`/`status` — never a stored column. "Due today" uses server-local calendar-day boundaries (a single-timezone LGU tool doesn't need per-user timezone handling yet).
+- **Notes editing.** `WorkOrderNotesEditor` (`components/features/admin/work-orders/WorkOrderNotesEditor.tsx`) turns the Ticket Detail panel's read-only notes line into an inline-editable textarea (click to edit, Save/Cancel) — still the single `work_orders.notes` column, still internal-only, never touched from any citizen-facing route or type. No separate notes/history table was needed: a single office progress note per work order is the actual usage pattern (folded into Work Orders originally, not split out — see the note under Office Work Orders above).
+- **Needs Attention dashboard section.** New `NeedsAttention` card (`components/features/admin/dashboard/NeedsAttention.tsx`) on the admin dashboard, fed by `WorkOrdersService.getNeedsAttention()` (`api/src/admin/work-orders.service.ts`) via a `needsAttention` field on the existing `GET /admin/dashboard` payload — no new endpoint. Three small lists (top 5 each): overdue work orders, work orders due today, and active HIGH-urgency tickets that still have a pending/in-progress work order. Office-scoped via the same `resolveOfficeScope`-derived `office` the rest of `GET /admin/dashboard` already uses — MEO/MDRRMO admins see only their own office's items, system admins see city-wide (no MEO/MDRRMO breakdown, unlike Office Performance Summary — a breakdown table for three short lists wasn't worth the extra UI).
+- **Audit.** No new action types were needed — `work_order_updated`'s existing `changedFields` metadata already included `'dueDate'` and `'notes'` by name (never the note body or the due-date value) since Work Orders shipped; this increment only added UI surfaces that exercise those existing code paths more often.
+- **Notifications.** Deliberately not added — due-date changes and note edits are routine progress-tracking, not the "something needs a specific person's attention" pattern `work_order_assigned`/`work_order_created` cover. Revisit only if a real "my work order is now overdue" request comes up.
+- Deferred to a later increment if a real need surfaces: bulk status/due-date actions across multiple work orders, notification tuning, a dedicated notes history/audit trail beyond the single current-value column.
+
 ---
 
 ## 3. Next Product Features
 
-In priority order. Work Order Follow-up Improvements is first since it's the direct continuation of what §2 just shipped.
+In priority order. URL-synced Admin Map Filters is first now that Work Order Follow-up Improvements (§2) has shipped its first increment.
 
-### 3.1 Work Order Follow-up Improvements
+### 3.1 URL-synced Admin Map Filters
 
-Small increments on top of the shipped Work Orders + assignment-picker feature — e.g. bulk status actions, richer overdue surfacing, notification tuning. Scope these individually as they come up; do not batch speculative additions here ahead of an actual need.
+`MapFilterState` in `components/features/admin/map/MapFilterBar.tsx` is currently client React state only — the map reads just `?office=` from the URL. Sync it to URL/query params, following the pattern the Ticket Queue already uses. This is purely the plumbing change; it unblocks §3.2 but doesn't itself add any office presets.
 
-### 3.2 URL-synced Admin Map Filters
+### 3.2 Office-specific Map Presets / Layers
 
-`MapFilterState` in `components/features/admin/map/MapFilterBar.tsx` is currently client React state only — the map reads just `?office=` from the URL. Sync it to URL/query params, following the pattern the Ticket Queue already uses. This is purely the plumbing change; it unblocks §3.3 but doesn't itself add any office presets.
-
-### 3.3 Office-specific Map Presets / Layers
-
-**Blocked on §3.2 — do not build until map filters are URL-synced.** A preset link that lands on an unfiltered map is a fake navigation link, which is exactly the failure this ordering exists to prevent.
+**Blocked on §3.1 — do not build until map filters are URL-synced.** A preset link that lands on an unfiltered map is a fake navigation link, which is exactly the failure this ordering exists to prevent.
 
 Once unblocked: **MEO** presets — drainage, road damage, illegal dumping, infrastructure. **MDRRMO** presets — flood/hazard reports, high urgency, low-elevation areas.
 
-### 3.4 Reporting and Export Tools
+### 3.3 Reporting and Export Tools
 
 CSV/PDF export or scheduled reports for tickets, work orders, and office activity — for handoff to LGU leadership or external stakeholders outside the admin UI. Scope precisely against a real request when it comes up; "export everything" is not a spec.
 
-### 3.5 Production Hardening / Deployment Readiness
+### 3.4 Production Hardening / Deployment Readiness
 
 Last on this list because it's continuous, not a single feature: monitoring/alerting, backup verification, load/perf validation, secrets rotation, deployment runbook. Revisit and expand this item as the system approaches real deployment, rather than treating it as a one-time checkbox.
 
@@ -105,18 +113,18 @@ Last on this list because it's continuous, not a single feature: monitoring/aler
 
 Not next, not blocked — just not prioritized yet. Revisit if a real requirement surfaces:
 
-- Bulk work-order operations beyond what §3.1 scopes concretely
-- Cross-office reporting rollups beyond §3.4's initial export scope
+- Bulk work-order operations and notification tuning beyond what §2's Work Order Follow-up Improvements increment shipped
+- Cross-office reporting rollups beyond §3.3's initial export scope
 - Citizen-facing work-order status summaries (a *rollup*, e.g. "work in progress," never the underlying work order or its notes — see §5)
 
 ---
 
 ## 5. Do Not Build Yet
 
-- Anything from §4, or later items in §3, ahead of earlier §3 items — the order in §3 reflects real dependencies (§3.3 needs §3.2), not preference.
+- Anything from §4, or later items in §3, ahead of earlier §3 items — the order in §3 reflects real dependencies (§3.2 needs §3.1), not preference.
 - **Sidebar or Quick Action entries for routes that do not exist.** Every nav item must resolve to a real page with a real backing endpoint — ship the nav entry with the route, never ahead of it. Office Performance Summary and the Admin Directory/Assigned Admin Picker (§2) are both the model: real backend + UI, no sidebar item, because neither needed its own route.
 - Any citizen-facing surface for work orders or internal notes — not even a rollup, until §4 is explicitly picked up and scoped.
-- Office-specific map presets/links before §3.2's URL-sync work lands (§3.3).
+- Office-specific map presets/links before §3.1's URL-sync work lands (§3.2).
 - A standalone internal-notes or due-dates feature — both stay inside Work Orders (§2).
 - A separate route/sidebar item for Office Performance Summary or the Admin Directory — both are dashboard/Work-Orders-surface features by design; only add a dedicated route if a real, separately-scoped need for one shows up.
 
@@ -125,7 +133,7 @@ Not next, not blocked — just not prioritized yet. Revisit if a real requiremen
 ## 6. Risks to Avoid
 
 - **Weakening RBAC.** Client-side hiding (sidebar, quick actions) is cosmetic. The gate is `AdminSessionGuard` / `SystemAdminGuard` plus `resolveOfficeScope` / `assertOfficeAccess`. A new endpoint — including `AdminDirectoryController` — that forgets the scope helpers is an office-data leak, not a UI bug.
-- **Fake navigation links.** Links to nonexistent routes, or to filtered views the target page can't actually apply, make the system look finished where it isn't — the exact failure §3.3's ordering exists to prevent.
+- **Fake navigation links.** Links to nonexistent routes, or to filtered views the target page can't actually apply, make the system look finished where it isn't — the exact failure §3.2's ordering exists to prevent.
 - **Exposing internal work orders or notes to citizens.** `notes` and every other work-order field are staff-only by design; a rollup summary (§4) is the only citizen-facing form ever worth considering, and only once explicitly scoped.
 - **Schema drift.** Any new table/column requires a matching `docs/database.md` entry in the same change.
 - **Severity vs. Urgency vs. Priority.** Three distinct concepts with distinct data sources — see the terminology section in `CLAUDE.md` before labeling anything in a new UI.
