@@ -377,4 +377,80 @@ describe('AdminsService', () => {
     expect(await bcrypt.compare('longenoughpassword', hash)).toBe(true);
     expect(hash).not.toBe('longenoughpassword');
   });
+
+  describe('listDirectory', () => {
+    const MEO_OFFICER = { role: 'officer', office: 'MEO' } as Pick<AdminSession, 'role' | 'office'>;
+    const MDRRMO_SUPERVISOR = { role: 'supervisor', office: 'MDRRMO' } as Pick<AdminSession, 'role' | 'office'>;
+    const SYSTEM_ADMIN = { role: 'system_admin', office: null } as Pick<AdminSession, 'role' | 'office'>;
+
+    function directoryRow(overrides: Partial<Record<string, unknown>> = {}) {
+      return {
+        id: 1,
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@example.com',
+        office: 'MEO',
+        role: 'officer',
+        ...overrides,
+      };
+    }
+
+    it('never leaks password/session/security columns — only the documented safe shape', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(chain([directoryRow()]));
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      const [row] = await service.listDirectory(SYSTEM_ADMIN, undefined);
+      expect(Object.keys(row).sort()).toEqual(['email', 'id', 'name', 'office', 'role'].sort());
+      expect(row.name).toBe('Jane Doe');
+    });
+
+    it('a system admin with no filter sees every office (city-wide)', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(
+        chain([directoryRow({ id: 1, office: 'MEO' }), directoryRow({ id: 2, office: 'MDRRMO' })]),
+      );
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      const rows = await service.listDirectory(SYSTEM_ADMIN, undefined);
+      expect(rows.map((r) => r.office)).toEqual(['MEO', 'MDRRMO']);
+    });
+
+    it('an MEO officer is clamped to MEO regardless of the office query param', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(chain([directoryRow({ office: 'MEO' })]));
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      // Requesting MDRRMO must not widen the result — resolveOfficeScope
+      // clamps this before the query is even built.
+      const rows = await service.listDirectory(MEO_OFFICER, 'MDRRMO');
+      expect(rows.every((r) => r.office === 'MEO')).toBe(true);
+    });
+
+    it('an MDRRMO supervisor is clamped to MDRRMO regardless of the office query param', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(chain([directoryRow({ office: 'MDRRMO' })]));
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      const rows = await service.listDirectory(MDRRMO_SUPERVISOR, 'all');
+      expect(rows.every((r) => r.office === 'MDRRMO')).toBe(true);
+    });
+
+    it('excludes system_admin-role rows even for a system admin caller (they have no office to be assigned within)', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(
+        chain([directoryRow({ id: 1, role: 'officer' }), directoryRow({ id: 2, role: 'system_admin', office: null })]),
+      );
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      const rows = await service.listDirectory(SYSTEM_ADMIN, undefined);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].role).toBe('officer');
+    });
+  });
 });
