@@ -83,27 +83,38 @@ A small, focused pass on top of the shipped Work Orders feature — due dates an
 - **Notifications.** Deliberately not added — due-date changes and note edits are routine progress-tracking, not the "something needs a specific person's attention" pattern `work_order_assigned`/`work_order_created` cover. Revisit only if a real "my work order is now overdue" request comes up.
 - Deferred to a later increment if a real need surfaces: bulk status/due-date actions across multiple work orders, notification tuning, a dedicated notes history/audit trail beyond the single current-value column.
 
+### URL-synced Admin Map Filters — **completed**
+
+`MapFilterState` (`components/features/admin/map/MapFilterBar.tsx`) — category, urgency, status, barangayName, search — was client React state only, and the map read just `?office=` from the URL. All of it is now URL-synced, following the Ticket Queue's `initialQueryState`/`buildParams`/`router.replace` pattern (`TicketsWorkspace.tsx`).
+
+- `app/admin/map/page.tsx` parses and validates every filter from `searchParams` server-side (same allowlist-or-fall-back-to-default shape as `TicketsService.parseTicketQuery`), passing the result down as `initialFilters`/`initialLayer` props — an unknown/invalid value (e.g. `?category=NotReal`) never reaches the client as a filter that would just silently match nothing.
+- `MapClient.tsx` seeds its `filters`/`mode`/`office` state from those props, then keeps the URL in sync with a `router.replace` effect (skips the first run, exactly like `TicketsWorkspace`) — changing a filter, switching Pins/Heatmap (`?layer=`), or (for a system admin) switching office all update the URL without remounting the map or losing Leaflet state.
+- `MapControls.tsx`'s office toggle used to be a raw `<Link href="?office=...">` (a full navigation); it's now a callback (`onOfficeChange`) into the same client-side state/URL-sync path as every other filter, so there's exactly one mechanism instead of two competing ones.
+- **Office remains the only security-sensitive filter, and nothing about its enforcement changed.** `GET /admin/tickets/geo` (`TicketsController.geo`) independently re-derives office via `resolveOfficeScope` from the session — a hand-crafted `?office=MDRRMO` request from an MEO session still only ever returns MEO markers, regardless of what the Next.js page or client state compute. Category/urgency/status/barangayName/search were already, and remain, client-side filters applied over that already-office-scoped dataset (`GET /admin/tickets/geo` has no server-side support for them, unlike the Ticket Queue's `getTicketsForAdmin`) — URL-syncing them doesn't change their trust level, since they can only narrow what an office admin was already authorized to see.
+- Query params: `office`, `category`, `urgency`, `status`, `barangayName`, `search`, `layer`. Deliberately `barangayName`, not `barangayId` like the Ticket Queue — the map's barangay filter has always matched by name (populated from the fetched ticket set, and set by clicking a boundary polygon), and there was no existing numeric-ID plumbing on `AdminTicketGeoRow` to match against; inventing one wasn't in scope for a pure URL-sync pass.
+- `router.replace` (not `push`), matching Ticket Queue/Work Orders — back/forward works at normal navigation granularity (e.g. dashboard → map), not per-filter-change, which is the same tradeoff those other workspaces already made.
+
+### Office-specific Map Presets / Layers — **completed**
+
+A dashboard section (`MapPresets`, `components/features/admin/dashboard/MapPresets.tsx`), not a new route or sidebar item — every preset is a real link to `/admin/map?...` using the query params URL-sync just added, so it lands on an actually-filtered map, never a fake navigation link.
+
+- **MEO**: Drainage Issues (`category=Clogged Drain`), Potholes & Road Damage (`category=Pothole`), Illegal Dumping (`category=Illegal Dumping`), High-Urgency Open Work (`urgency=Critical`).
+- **MDRRMO**: Flooding Reports (`category=Flooding`), Fallen Trees (`category=Fallen Tree`), High-Urgency Reports (`urgency=Critical`).
+- Office-scoped admins get only their own office's presets, with no `?office=` param — the map already scopes to their session office server-side. A system admin sees both offices' presets, grouped under an MEO/MDRRMO label, each with an explicit `office=` param — their map otherwise defaults city-wide, so the param is what actually makes an "MEO preset" MEO-only.
+- **Deferred, not built**: a "low-elevation / hazard-prone areas" MDRRMO preset — there is no elevation-based map filter today (only category/urgency/status/barangayName/search), and inventing one wasn't in scope for this pass. Revisit only alongside a real elevation-filter feature, not as part of a presets-only change.
+- No new route, no sidebar item — same "ship the nav entry with the route" rule Office Performance Summary and Needs Attention already follow.
+
 ---
 
 ## 3. Next Product Features
 
-In priority order. URL-synced Admin Map Filters is first now that Work Order Follow-up Improvements (§2) has shipped its first increment.
+In priority order.
 
-### 3.1 URL-synced Admin Map Filters
-
-`MapFilterState` in `components/features/admin/map/MapFilterBar.tsx` is currently client React state only — the map reads just `?office=` from the URL. Sync it to URL/query params, following the pattern the Ticket Queue already uses. This is purely the plumbing change; it unblocks §3.2 but doesn't itself add any office presets.
-
-### 3.2 Office-specific Map Presets / Layers
-
-**Blocked on §3.1 — do not build until map filters are URL-synced.** A preset link that lands on an unfiltered map is a fake navigation link, which is exactly the failure this ordering exists to prevent.
-
-Once unblocked: **MEO** presets — drainage, road damage, illegal dumping, infrastructure. **MDRRMO** presets — flood/hazard reports, high urgency, low-elevation areas.
-
-### 3.3 Reporting and Export Tools
+### 3.1 Reporting and Export Tools
 
 CSV/PDF export or scheduled reports for tickets, work orders, and office activity — for handoff to LGU leadership or external stakeholders outside the admin UI. Scope precisely against a real request when it comes up; "export everything" is not a spec.
 
-### 3.4 Production Hardening / Deployment Readiness
+### 3.2 Production Hardening / Deployment Readiness
 
 Last on this list because it's continuous, not a single feature: monitoring/alerting, backup verification, load/perf validation, secrets rotation, deployment runbook. Revisit and expand this item as the system approaches real deployment, rather than treating it as a one-time checkbox.
 
@@ -114,26 +125,26 @@ Last on this list because it's continuous, not a single feature: monitoring/aler
 Not next, not blocked — just not prioritized yet. Revisit if a real requirement surfaces:
 
 - Bulk work-order operations and notification tuning beyond what §2's Work Order Follow-up Improvements increment shipped
-- Cross-office reporting rollups beyond §3.3's initial export scope
+- Cross-office reporting rollups beyond §3.1's initial export scope
 - Citizen-facing work-order status summaries (a *rollup*, e.g. "work in progress," never the underlying work order or its notes — see §5)
+- A low-elevation/hazard-prone map preset or filter — no elevation-based map filter exists yet (§2's Map Presets); revisit alongside a real elevation-filter feature
 
 ---
 
 ## 5. Do Not Build Yet
 
-- Anything from §4, or later items in §3, ahead of earlier §3 items — the order in §3 reflects real dependencies (§3.2 needs §3.1), not preference.
-- **Sidebar or Quick Action entries for routes that do not exist.** Every nav item must resolve to a real page with a real backing endpoint — ship the nav entry with the route, never ahead of it. Office Performance Summary and the Admin Directory/Assigned Admin Picker (§2) are both the model: real backend + UI, no sidebar item, because neither needed its own route.
+- Anything from §4, or later items in §3, ahead of earlier §3 items — the order in §3 reflects real dependencies, not preference.
+- **Sidebar or Quick Action entries for routes that do not exist.** Every nav item must resolve to a real page with a real backing endpoint — ship the nav entry with the route, never ahead of it. Office Performance Summary, the Admin Directory/Assigned Admin Picker, and Map Presets (§2) are all the model: real backend + UI, no sidebar item, because none needed its own route.
 - Any citizen-facing surface for work orders or internal notes — not even a rollup, until §4 is explicitly picked up and scoped.
-- Office-specific map presets/links before §3.1's URL-sync work lands (§3.2).
 - A standalone internal-notes or due-dates feature — both stay inside Work Orders (§2).
-- A separate route/sidebar item for Office Performance Summary or the Admin Directory — both are dashboard/Work-Orders-surface features by design; only add a dedicated route if a real, separately-scoped need for one shows up.
+- A separate route/sidebar item for Office Performance Summary, the Admin Directory, or Map Presets — all are dashboard/existing-surface features by design; only add a dedicated route if a real, separately-scoped need for one shows up.
 
 ---
 
 ## 6. Risks to Avoid
 
-- **Weakening RBAC.** Client-side hiding (sidebar, quick actions) is cosmetic. The gate is `AdminSessionGuard` / `SystemAdminGuard` plus `resolveOfficeScope` / `assertOfficeAccess`. A new endpoint — including `AdminDirectoryController` — that forgets the scope helpers is an office-data leak, not a UI bug.
-- **Fake navigation links.** Links to nonexistent routes, or to filtered views the target page can't actually apply, make the system look finished where it isn't — the exact failure §3.2's ordering exists to prevent.
+- **Weakening RBAC.** Client-side hiding (sidebar, quick actions) is cosmetic. The gate is `AdminSessionGuard` / `SystemAdminGuard` plus `resolveOfficeScope` / `assertOfficeAccess`. A new endpoint — including `AdminDirectoryController` — that forgets the scope helpers is an office-data leak, not a UI bug. The admin map follows the same rule: URL-syncing `?office=` (§2) is a UX convenience, not the security boundary — `TicketsController.geo` re-derives office from the session independently of whatever the client sends.
+- **Fake navigation links.** Links to nonexistent routes, or to filtered views the target page can't actually apply, make the system look finished where it isn't — the exact failure Map Presets (§2) was ordered behind URL-synced filters to prevent.
 - **Exposing internal work orders or notes to citizens.** `notes` and every other work-order field are staff-only by design; a rollup summary (§4) is the only citizen-facing form ever worth considering, and only once explicitly scoped.
 - **Schema drift.** Any new table/column requires a matching `docs/database.md` entry in the same change.
 - **Severity vs. Urgency vs. Priority.** Three distinct concepts with distinct data sources — see the terminology section in `CLAUDE.md` before labeling anything in a new UI.

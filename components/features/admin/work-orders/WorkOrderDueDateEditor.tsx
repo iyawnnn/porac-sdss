@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,17 +22,21 @@ export function WorkOrderDueDateEditor({
   workOrder: WorkOrderRow;
   onUpdated: (workOrder: WorkOrderRow) => void;
 }) {
-  // Local, optimistic value — mirrors workOrder.due_date via the effect
-  // below, but isn't overwritten by the still-old prop while a save is
-  // in flight (setSaving alone would otherwise force a re-render that
-  // reads the stale prop and visually reverts the input mid-save).
+  // Local, optimistic value — mirrors workOrder.due_date (reset during
+  // render, React's documented pattern for syncing state from a prop
+  // change, rather than a useEffect) but isn't overwritten by the still-old
+  // prop while a save is in flight — setSaving alone would otherwise force
+  // a re-render that reads the stale prop and visually reverts the input
+  // mid-save.
   const [value, setValue] = useState(() => toDateInputValue(workOrder.due_date));
+  const [lastSyncedDueDate, setLastSyncedDueDate] = useState(workOrder.due_date);
   const [saving, setSaving] = useState(false);
   const dueState = getDueState(workOrder.due_date, workOrder.status);
 
-  useEffect(() => {
+  if (workOrder.due_date !== lastSyncedDueDate) {
+    setLastSyncedDueDate(workOrder.due_date);
     setValue(toDateInputValue(workOrder.due_date));
-  }, [workOrder.due_date]);
+  }
 
   async function save(dueDate: string) {
     setSaving(true);
