@@ -31,7 +31,14 @@ export class AuthService {
       .select()
       .from(admins)
       .where(eq(admins.email, email));
-    if (!admin || !(await bcrypt.compare(password, admin.passwordHash))) {
+    // Deactivated admins get the same generic error as a wrong password —
+    // deliberately not a distinct message, so a login attempt can't be used
+    // to probe whether an email belongs to a deactivated account.
+    if (
+      !admin ||
+      !admin.isActive ||
+      !(await bcrypt.compare(password, admin.passwordHash))
+    ) {
       throw new UnauthorizedException('Invalid email or password');
     }
 

@@ -9,4 +9,5 @@ export interface AdminAccountRow {
   role: AdminRole;
   office: AdminOffice | null;
   created_at: string;
+  is_active: boolean;
 }

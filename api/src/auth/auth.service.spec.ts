@@ -36,6 +36,7 @@ describe('AuthService — existing password flows stay intact', () => {
           lastName: 'Min',
           office: 'MEO',
           role: 'officer',
+          isActive: true,
         },
       ]),
     );
@@ -48,6 +49,30 @@ describe('AuthService — existing password flows stay intact', () => {
     );
     expect(token).toBe('admin-token');
     expect(office).toBe('MEO');
+  });
+
+  it('rejects login for a deactivated admin even with the correct password', async () => {
+    const passwordHash = await bcrypt.hash('correct-horse', 10);
+    const select = jest.fn().mockReturnValueOnce(
+      chain([
+        {
+          id: 1,
+          email: 'admin@example.com',
+          passwordHash,
+          firstName: 'Ad',
+          lastName: 'Min',
+          office: 'MEO',
+          role: 'officer',
+          isActive: false,
+        },
+      ]),
+    );
+    const db = { select } as unknown as PostgresJsDatabase;
+    const service = new AuthService(db, makeSessions());
+
+    await expect(
+      service.adminLogin('admin@example.com', 'correct-horse'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('logs a citizen in with a matching password', async () => {
