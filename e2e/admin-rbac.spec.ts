@@ -86,3 +86,38 @@ test("office admin dashboard quick actions say My Office Tickets, not All Ticket
   await expect(quickActions.getByRole("link", { name: "My Office Tickets" })).toHaveAttribute("href", "/admin/tickets");
   await expect(quickActions.getByRole("link", { name: "All Tickets" })).toHaveCount(0);
 });
+
+for (const [name, account] of [["MEO", E2E_MEO_ADMIN], ["MDRRMO", E2E_MDRRMO_ADMIN]] as const) {
+  test(`${name} office admin dashboard quick actions include Pending Tickets and In Progress shortcuts`, async ({ page }) => {
+    await loginAs(page, account);
+    const quickActions = page.getByRole("region", { name: "Quick actions" });
+    await expect(quickActions.getByRole("link", { name: "Pending Tickets" })).toHaveAttribute("href", "/admin/tickets?status=Reported");
+    await expect(quickActions.getByRole("link", { name: "In Progress" })).toHaveAttribute("href", "/admin/tickets?status=In%20Progress");
+    // No System Admin-only shortcuts leak to an office admin's workbench.
+    await expect(quickActions.getByRole("link", { name: "Manage Admins" })).toHaveCount(0);
+    await expect(quickActions.getByRole("link", { name: "Activity Log" })).toHaveCount(0);
+  });
+}
+
+test("system admin dashboard quick actions do not include the office-only Pending/In Progress shortcuts", async ({ page }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  const quickActions = page.getByRole("region", { name: "Quick actions" });
+  await expect(quickActions.getByRole("link", { name: "Pending Tickets" })).toHaveCount(0);
+  await expect(quickActions.getByRole("link", { name: "In Progress" })).toHaveCount(0);
+});
+
+test("the Pending Tickets shortcut navigates to a ticket queue actually filtered to Reported", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const quickActions = page.getByRole("region", { name: "Quick actions" });
+  await quickActions.getByRole("link", { name: "Pending Tickets" }).click();
+  await expect(page).toHaveURL(/\/admin\/tickets\?status=Reported/);
+  await expect(page.getByLabel("Status", { exact: true })).toHaveText("Reported");
+});
+
+test("the In Progress shortcut navigates to a ticket queue actually filtered to In Progress", async ({ page }) => {
+  await loginAs(page, E2E_MDRRMO_ADMIN);
+  const quickActions = page.getByRole("region", { name: "Quick actions" });
+  await quickActions.getByRole("link", { name: "In Progress" }).click();
+  await expect(page).toHaveURL(/\/admin\/tickets\?status=In(%20|\+)Progress/);
+  await expect(page.getByLabel("Status", { exact: true })).toHaveText("In Progress");
+});

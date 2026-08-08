@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useId, useRef, useState, useTransition } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
-import { ClipboardList, Flame, Map as MapIcon, ShieldAlert, ShieldUser, Ticket, type LucideIcon } from "lucide-react";
+import { Activity, ClipboardList, Flame, Inbox, Map as MapIcon, ShieldAlert, ShieldUser, Ticket, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DASHBOARD_RANGES,
@@ -65,9 +65,21 @@ function QuickActions({ isSystemAdmin }: { isSystemAdmin: boolean }) {
   const actions: { href: string; label: string; icon: LucideIcon }[] = [
     { href: "/admin/tickets", label: isSystemAdmin ? "All Tickets" : "My Office Tickets", icon: Ticket },
     { href: "/admin/tickets?urgency=Critical", label: "High Urgency Tickets", icon: Flame },
+  ];
+  // Office-scoped workbench shortcuts only — status is a real
+  // TicketsService.parseTicketQuery filter (tickets.service.ts), so these
+  // land on an actually-filtered queue, not just a plain link. Not added
+  // for System Admin, matching the smaller system-level shortcut set.
+  if (!isSystemAdmin) {
+    actions.push(
+      { href: "/admin/tickets?status=Reported", label: "Pending Tickets", icon: Inbox },
+      { href: "/admin/tickets?status=In%20Progress", label: "In Progress", icon: Activity },
+    );
+  }
+  actions.push(
     { href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert },
     { href: "/admin/map", label: "GIS Map", icon: MapIcon },
-  ];
+  );
   if (isSystemAdmin) {
     actions.push({ href: "/admin/admins", label: "Manage Admins", icon: ShieldUser });
     actions.push({ href: "/admin/activity-log", label: "Activity Log", icon: ClipboardList });
