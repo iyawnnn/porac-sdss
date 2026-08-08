@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
@@ -25,6 +25,7 @@ export interface AdminAccountRow {
   role: AdminRole;
   office: AdminOffice | null;
   created_at: Date;
+  is_active: boolean;
 }
 
 const SAFE_COLUMNS = {
@@ -35,6 +36,7 @@ const SAFE_COLUMNS = {
   role: admins.role,
   office: admins.office,
   created_at: admins.createdAt,
+  is_active: admins.isActive,
 };
 
 // Shared by create and update — an admin's role and office must always
@@ -203,6 +205,73 @@ export class AdminsService {
         metadata: {
           from: { role: existing.role, office: existing.office },
           to: { role: updated.role, office: updated.office },
+        },
+      });
+      return updated;
+    });
+    return row as AdminAccountRow;
+  }
+
+  // Deactivation/reactivation. Mirrors update()'s last-system_admin lockout
+  // above, scoped to *active* system admins — losing login access is
+  // functionally equivalent to losing the role, so removing the last active
+  // system_admin must be blocked here too (this also covers a system_admin
+  // deactivating themselves when they're the only one left, since they're
+  // still counted as active at the time of this check).
+  async setActive(
+    id: number,
+    active: boolean,
+    actor: AdminSession,
+  ): Promise<AdminAccountRow> {
+    const [existing] = await this.db
+      .select()
+      .from(admins)
+      .where(eq(admins.id, id));
+    if (!existing) throw new NotFoundException('Admin not found.');
+
+    if (existing.role === 'system_admin' && !active) {
+      const [{ systemAdminCount }] = await this.db
+        .select({ systemAdminCount: count() })
+        .from(admins)
+        .where(
+          and(eq(admins.role, 'system_admin'), eq(admins.isActive, true)),
+        );
+      if (systemAdminCount <= 1) {
+        throw new ConflictException(
+          'Cannot deactivate the last active System Administrator.',
+        );
+      }
+    }
+
+    const row = await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(admins)
+        // Deactivation also bumps session_valid_after so an already-issued
+        // JWT dies immediately (see SessionService.verifyAdminSession)
+        // rather than surviving until its 8h expiry. Reactivation leaves it
+        // untouched — a fresh login is all that's required.
+        .set(
+          active
+            ? { isActive: true }
+            : { isActive: false, sessionValidAfter: new Date() },
+        )
+        .where(eq(admins.id, id))
+        .returning(SAFE_COLUMNS);
+      await this.audit.logInTx(tx, {
+        actor: {
+          adminId: actor.adminId,
+          adminName: actor.adminName,
+          email: actor.email,
+          role: actor.role,
+          office: actor.office,
+        },
+        actionType: active ? 'admin_reactivated' : 'admin_deactivated',
+        targetType: 'admin',
+        targetId: updated.id,
+        targetSummary: `${updated.first_name} ${updated.last_name} <${updated.email}>`,
+        metadata: {
+          from: { active: existing.isActive },
+          to: { active },
         },
       });
       return updated;

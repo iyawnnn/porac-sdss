@@ -93,9 +93,21 @@ export class SessionService {
       const session = payload as unknown as AdminSession;
 
       const [admin] = await this.db
-        .select({ sessionValidAfter: admins.sessionValidAfter })
+        .select({
+          sessionValidAfter: admins.sessionValidAfter,
+          isActive: admins.isActive,
+        })
         .from(admins)
         .where(eq(admins.id, session.adminId));
+      // Deactivation bumps session_valid_after in the same write (see
+      // AdminsService.setActive), so the timestamp check below would also
+      // catch this — the explicit isActive check here is what makes a
+      // deactivated-then-reactivated-then-deactivated-again admin's stale
+      // token fail even if some future code path ever bumps
+      // session_valid_after without also flipping isActive.
+      if (admin && !admin.isActive) {
+        return null;
+      }
       if (
         admin?.sessionValidAfter &&
         typeof payload.iat === 'number' &&

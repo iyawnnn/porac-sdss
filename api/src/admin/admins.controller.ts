@@ -76,4 +76,25 @@ export class AdminsController {
     }
     return { ok: true };
   }
+
+  // System Admin only (inherited from the class-level guard). Blocks
+  // deactivating/reactivating the last active system_admin — see
+  // AdminsService.setActive.
+  @Post(':id/deactivate')
+  @HttpCode(HttpStatus.OK)
+  deactivate(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() actor: AdminSession,
+  ) {
+    return this.admins.setActive(id, false, actor);
+  }
+
+  @Post(':id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  reactivate(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() actor: AdminSession,
+  ) {
+    return this.admins.setActive(id, true, actor);
+  }
 }

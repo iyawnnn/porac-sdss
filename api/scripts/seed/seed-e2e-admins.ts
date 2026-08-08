@@ -20,7 +20,8 @@ async function main() {
       ON CONFLICT (email) DO UPDATE SET
         password_hash = EXCLUDED.password_hash,
         office = EXCLUDED.office,
-        role = EXCLUDED.role
+        role = EXCLUDED.role,
+        is_active = true
     `;
     console.log(`Seeded E2E admin: ${account.email} (${account.office})`);
   }

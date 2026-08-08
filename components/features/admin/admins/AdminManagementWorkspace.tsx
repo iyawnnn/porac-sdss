@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, UserPlus } from "lucide-react";
+import { KeyRound, UserCheck, UserPlus, UserX } from "lucide-react";
 import type { AdminAccountRow, AdminOffice, AdminRole } from "@/lib/types/admin-admins";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -283,6 +283,112 @@ function ResetPasswordDialog({ admin }: { admin: AdminAccountRow }) {
   );
 }
 
+function StatusBadge({ active }: { active: boolean }) {
+  return (
+    <Badge variant={active ? "outline" : "destructive"}>
+      {active ? "Active" : "Deactivated"}
+    </Badge>
+  );
+}
+
+function DeactivateDialog({
+  admin,
+  disabledReason,
+  onUpdated,
+}: {
+  admin: AdminAccountRow;
+  disabledReason?: string;
+  onUpdated: (admin: AdminAccountRow) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  function resetAndClose() {
+    setConfirmed(false);
+    setError("");
+    setOpen(false);
+  }
+
+  async function handleConfirm() {
+    setSubmitting(true);
+    setError("");
+    const res = await fetch(`/api/admin/admins/${admin.id}/deactivate`, { method: "POST" });
+    if (res.ok) {
+      onUpdated((await res.json()) as AdminAccountRow);
+      resetAndClose();
+    } else {
+      const data = await res.json().catch(() => null);
+      setError(data?.message ?? "Could not deactivate this admin.");
+    }
+    setSubmitting(false);
+  }
+
+  if (disabledReason) {
+    return (
+      <Button disabled size="sm" title={disabledReason} variant="outline">
+        <UserX /> Deactivate
+      </Button>
+    );
+  }
+
+  return (
+    <Dialog onOpenChange={(next) => (next ? setOpen(true) : resetAndClose())} open={open}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <UserX /> Deactivate
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Deactivate {admin.first_name} {admin.last_name}?</DialogTitle>
+          <DialogDescription>
+            This immediately signs them out of every existing session and blocks login until reactivated.
+          </DialogDescription>
+        </DialogHeader>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} type="checkbox" />
+          I understand this signs {admin.first_name} {admin.last_name} out everywhere.
+        </label>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        <DialogFooter>
+          <Button disabled={submitting || !confirmed} onClick={handleConfirm} type="button" variant="destructive">
+            {submitting ? "Deactivating…" : "Deactivate"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReactivateButton({ admin, onUpdated }: { admin: AdminAccountRow; onUpdated: (admin: AdminAccountRow) => void }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleClick() {
+    setSubmitting(true);
+    setError("");
+    const res = await fetch(`/api/admin/admins/${admin.id}/reactivate`, { method: "POST" });
+    if (res.ok) {
+      onUpdated((await res.json()) as AdminAccountRow);
+    } else {
+      const data = await res.json().catch(() => null);
+      setError(data?.message ?? "Could not reactivate this admin.");
+    }
+    setSubmitting(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Button disabled={submitting} onClick={handleClick} size="sm" variant="outline">
+        <UserCheck /> {submitting ? "Reactivating…" : "Reactivate"}
+      </Button>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 export function AdminManagementWorkspace({
   initialAdmins,
   currentAdminId,
@@ -291,12 +397,19 @@ export function AdminManagementWorkspace({
   currentAdminId?: number;
 }) {
   const [admins, setAdmins] = useState(initialAdmins);
+  const activeSystemAdminCount = admins.filter((a) => a.role === "system_admin" && a.is_active).length;
 
   function handleCreated(created: AdminAccountRow) {
     setAdmins((prev) => [created, ...prev]);
   }
   function handleUpdated(updated: AdminAccountRow) {
     setAdmins((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+  }
+  function deactivateDisabledReason(admin: AdminAccountRow): string | undefined {
+    if (admin.role === "system_admin" && admin.is_active && activeSystemAdminCount <= 1) {
+      return "Cannot deactivate the last active System Administrator.";
+    }
+    return undefined;
   }
 
   return (
@@ -320,8 +433,10 @@ export function AdminManagementWorkspace({
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role &amp; office</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Password</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -330,12 +445,20 @@ export function AdminManagementWorkspace({
                     <TableCell className="font-medium">{admin.first_name} {admin.last_name}</TableCell>
                     <TableCell className="text-muted-foreground">{admin.email}</TableCell>
                     <TableCell><RoleOfficeEditor admin={admin} onUpdated={handleUpdated} /></TableCell>
+                    <TableCell><StatusBadge active={admin.is_active} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatCreatedDate(admin.created_at)}</TableCell>
                     <TableCell>
                       {admin.id === currentAdminId ? (
                         <p className="text-xs text-muted-foreground">Use Account &amp; Security to change your own password.</p>
                       ) : (
                         <ResetPasswordDialog admin={admin} />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {admin.is_active ? (
+                        <DeactivateDialog admin={admin} disabledReason={deactivateDisabledReason(admin)} onUpdated={handleUpdated} />
+                      ) : (
+                        <ReactivateButton admin={admin} onUpdated={handleUpdated} />
                       )}
                     </TableCell>
                   </TableRow>
@@ -350,7 +473,10 @@ export function AdminManagementWorkspace({
                 <CardContent className="flex flex-col gap-2 p-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-medium text-ink-900">{admin.first_name} {admin.last_name}</p>
-                    <Badge variant="outline">{ROLE_LABELS[admin.role]}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{ROLE_LABELS[admin.role]}</Badge>
+                      <StatusBadge active={admin.is_active} />
+                    </div>
                   </div>
                   <p className="text-sm text-muted-foreground">{admin.email}</p>
                   <p className="text-xs text-muted-foreground">Created {formatCreatedDate(admin.created_at)}</p>
@@ -359,6 +485,11 @@ export function AdminManagementWorkspace({
                     <p className="text-xs text-muted-foreground">Use Account &amp; Security to change your own password.</p>
                   ) : (
                     <ResetPasswordDialog admin={admin} />
+                  )}
+                  {admin.is_active ? (
+                    <DeactivateDialog admin={admin} disabledReason={deactivateDisabledReason(admin)} onUpdated={handleUpdated} />
+                  ) : (
+                    <ReactivateButton admin={admin} onUpdated={handleUpdated} />
                   )}
                 </CardContent>
               </Card>
