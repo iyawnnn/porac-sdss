@@ -10,21 +10,41 @@ import { ModerationService } from './moderation.service';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 import { BarangaysGeoService } from './barangays-geo.service';
+import { AdminsController } from './admins.controller';
+import { AdminsService } from './admins.service';
+import { AdminAuditController } from './admin-audit.controller';
+import { AdminAuditService } from './admin-audit.service';
+import { AdminAccountController } from './admin-account.controller';
+import { AdminAccountService } from './admin-account.service';
 
-// Three controllers sharing one module — they share nothing else, but
-// splitting into three modules buys nothing (see blueprint §1). Each
-// controller carries @UseGuards(AdminSessionGuard) (not an APP_GUARD
-// provider, which would leak the guard onto every module app-wide) —
-// closes the previously unguarded tickets/geo and barangays/geo routes,
-// which relied entirely on proxy.ts's matcher.
+// Six controllers sharing one module — they share nothing else, but
+// splitting into separate modules buys nothing (see blueprint §1). Each
+// controller carries its own @UseGuards(...) (not an APP_GUARD provider,
+// which would leak the guard onto every module app-wide) — closes the
+// previously unguarded tickets/geo and barangays/geo routes, which relied
+// entirely on proxy.ts's matcher. AdminsController and AdminAuditController
+// additionally stack SystemAdminGuard since account management and the
+// activity log are both System Administrator only. AdminAccountController
+// (own password change) deliberately does not — any logged-in admin owns
+// their own credentials.
 @Module({
   imports: [AuthModule, DomainModule, NotificationsModule, CitizensModule],
-  controllers: [TicketsController, ModerationController, DashboardController],
+  controllers: [
+    TicketsController,
+    ModerationController,
+    DashboardController,
+    AdminsController,
+    AdminAuditController,
+    AdminAccountController,
+  ],
   providers: [
     TicketsService,
     ModerationService,
     DashboardService,
     BarangaysGeoService,
+    AdminsService,
+    AdminAuditService,
+    AdminAccountService,
   ],
 })
 export class AdminModule {}

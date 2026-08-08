@@ -10,6 +10,7 @@ import { CATEGORIES } from '../contracts/schemas';
 import type { AdminSession } from '../auth/session.service';
 import { resolveOfficeScope, assertOfficeAccess } from '../common/authz/admin-scope';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AdminAuditService } from './admin-audit.service';
 import {
   DEFAULT_PAGE_LIMIT,
   FLAG_TYPES,
@@ -80,6 +81,7 @@ export class ModerationService {
   constructor(
     @Inject(PG) private readonly pg: Sql,
     private readonly notifications: NotificationsService,
+    private readonly audit: AdminAuditService,
   ) {}
 
   // Mirrors tickets.service.ts's parseTicketQuery: office is clamped to the
@@ -317,6 +319,21 @@ export class ModerationService {
       if (action === 'quarantine') {
         await tx`UPDATE tickets SET flagged = true, updated_at = now() WHERE id = ${updated.ticket_id}`;
       }
+
+      await this.audit.logInPgTx(tx, {
+        actor: {
+          adminId: admin.adminId,
+          adminName: admin.adminName,
+          email: admin.email,
+          role: admin.role,
+          office: admin.office,
+        },
+        actionType: 'report_moderated',
+        targetType: 'report',
+        targetId: reportId,
+        targetSummary: `"${updated.title}" (report #${reportId})`,
+        metadata: { action, note: note_ },
+      });
 
       // Only the two decisions that actually change what happens to the
       // citizen's report get a notification — dismiss is a no-op from

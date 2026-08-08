@@ -12,6 +12,9 @@ function pageLabel(pathname: string): string {
   if (pathname.startsWith("/admin/tickets")) return "Ticket Queue";
   if (pathname.startsWith("/admin/map")) return "Interactive Map";
   if (pathname.startsWith("/admin/flagged")) return "Flagged Reports";
+  if (pathname.startsWith("/admin/admins")) return "Admin Management";
+  if (pathname.startsWith("/admin/activity-log")) return "Activity Log";
+  if (pathname.startsWith("/admin/account")) return "Account & Security";
   return "Dashboard";
 }
 

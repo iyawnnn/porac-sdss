@@ -69,3 +69,20 @@ test("system admin dashboard includes the cross-office Department Workload card"
   expect(Array.isArray(response.departmentWorkload)).toBe(true);
   await expect(page.getByText("Department Workload")).toBeVisible();
 });
+
+test("system admin dashboard quick actions say All Tickets", async ({ page }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  const quickActions = page.getByRole("region", { name: "Quick actions" });
+  await expect(quickActions.getByRole("link", { name: "All Tickets" })).toHaveAttribute("href", "/admin/tickets");
+  await expect(quickActions.getByRole("link", { name: "My Office Tickets" })).toHaveCount(0);
+  await expect(quickActions.getByRole("link", { name: "High Urgency Tickets" })).toHaveAttribute("href", "/admin/tickets?urgency=Critical");
+  await expect(quickActions.getByRole("link", { name: "Flagged Reports" })).toHaveAttribute("href", "/admin/flagged");
+  await expect(quickActions.getByRole("link", { name: "GIS Map" })).toHaveAttribute("href", "/admin/map");
+});
+
+test("office admin dashboard quick actions say My Office Tickets, not All Tickets", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const quickActions = page.getByRole("region", { name: "Quick actions" });
+  await expect(quickActions.getByRole("link", { name: "My Office Tickets" })).toHaveAttribute("href", "/admin/tickets");
+  await expect(quickActions.getByRole("link", { name: "All Tickets" })).toHaveCount(0);
+});
