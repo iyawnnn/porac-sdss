@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ClipboardListIcon } from "lucide-react";
+import { ClipboardListIcon, DownloadIcon } from "lucide-react";
 import type { PaginatedWorkOrders, WorkOrderRow, WorkOrderStatus } from "@/lib/types/admin-work-orders";
 import { WORK_ORDER_STATUSES } from "@/lib/types/admin-work-orders";
 import { Badge } from "@/components/ui/badge";
@@ -134,11 +134,19 @@ export function WorkOrdersWorkspace({
             {isSystemAdmin ? "Field work tracked across every office." : `Field work tracked for ${sessionOffice}.`}
           </p>
         </div>
-        <CreateWorkOrderDialog
-          isSystemAdmin={isSystemAdmin}
-          onCreated={handleCreated}
-          sessionOffice={sessionOffice === "MEO" || sessionOffice === "MDRRMO" ? sessionOffice : undefined}
-        />
+        <div className="flex items-center gap-2">
+          <Button asChild size="sm" variant="outline">
+            <a href={`/api/admin/reports/work-orders.csv?${buildParams(query).toString()}`}>
+              <DownloadIcon />
+              Export CSV
+            </a>
+          </Button>
+          <CreateWorkOrderDialog
+            isSystemAdmin={isSystemAdmin}
+            onCreated={handleCreated}
+            sessionOffice={sessionOffice === "MEO" || sessionOffice === "MDRRMO" ? sessionOffice : undefined}
+          />
+        </div>
       </div>
 
       <Card className="gap-0">

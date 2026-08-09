@@ -19,8 +19,10 @@ import { AdminAccountService } from './admin-account.service';
 import { WorkOrdersController } from './work-orders.controller';
 import { WorkOrdersService } from './work-orders.service';
 import { AdminDirectoryController } from './admin-directory.controller';
+import { ReportsController } from './reports.controller';
+import { ReportsService } from './reports.service';
 
-// Eight controllers sharing one module — they share nothing else, but
+// Nine controllers sharing one module — they share nothing else, but
 // splitting into separate modules buys nothing (see blueprint §1). Each
 // controller carries its own @UseGuards(...) (not an APP_GUARD provider,
 // which would leak the guard onto every module app-wide) — closes the
@@ -32,6 +34,9 @@ import { AdminDirectoryController } from './admin-directory.controller';
 // list for Work Orders assignment) deliberately do not — the former because
 // any logged-in admin owns their own credentials, the latter because MEO/
 // MDRRMO need it too; it stays safe via resolveOfficeScope, not the guard.
+// ReportsController is the same shape as AdminDirectoryController: no extra
+// guard, safe because it reuses TicketsService/WorkOrdersService's own
+// office-scoped query parsing rather than any new authorization logic.
 @Module({
   imports: [AuthModule, DomainModule, NotificationsModule, CitizensModule],
   controllers: [
@@ -43,6 +48,7 @@ import { AdminDirectoryController } from './admin-directory.controller';
     AdminAccountController,
     WorkOrdersController,
     AdminDirectoryController,
+    ReportsController,
   ],
   providers: [
     TicketsService,
@@ -53,6 +59,7 @@ import { AdminDirectoryController } from './admin-directory.controller';
     AdminAuditService,
     AdminAccountService,
     WorkOrdersService,
+    ReportsService,
   ],
 })
 export class AdminModule {}

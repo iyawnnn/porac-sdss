@@ -104,17 +104,27 @@ A dashboard section (`MapPresets`, `components/features/admin/dashboard/MapPrese
 - **Deferred, not built**: a "low-elevation / hazard-prone areas" MDRRMO preset — there is no elevation-based map filter today (only category/urgency/status/barangayName/search), and inventing one wasn't in scope for this pass. Revisit only alongside a real elevation-filter feature, not as part of a presets-only change.
 - No new route, no sidebar item — same "ship the nav entry with the route" rule Office Performance Summary and Needs Attention already follow.
 
+### Reporting and Export Tools — **completed (CSV first version)**
+
+CSV export for Tickets and Work Orders, reusing the same office-scoped filter parsing the list endpoints already validate against — no PDF (no PDF library existed and none was worth adding for a first version) and no standalone `/admin/reports` route (export buttons live on the pages that already have the filters, per the "don't build a route ahead of a real need" rule).
+
+- `GET /admin/reports/tickets.csv` and `GET /admin/reports/work-orders.csv` (`ReportsController`/`ReportsService`, `api/src/admin/reports.*`) — behind `AdminSessionGuard`, no extra guard needed (same shape as `AdminDirectoryController`: safe because of what it delegates to, not a guard of its own).
+- **Office scoping is not reimplemented** — `ReportsService.ticketsCsv`/`workOrdersCsv` call `TicketsService.parseTicketQuery`/`WorkOrdersService.parseQuery` directly, the exact functions `GET /admin/tickets`/`GET /admin/work-orders` already use, so `resolveOfficeScope` is applied identically; an export can never see more than the equivalent list view already allows. Only the date-range (`dateFrom`/`dateTo`) parsing is new, added in `ReportsService.parseDateRange`.
+- New `TicketsService.getTicketsForExport` / `WorkOrdersService.getWorkOrdersForExport` — unpaginated variants of the existing list queries, capped at 5,000 rows (`ponytail:` marked — revisit with a streaming writer if a real dataset ever needs more). Work orders export left-joins `admins` for the assignee's name/email; **never selects `notes`** — the internal note body is excluded at the query level, not filtered out after the fact, matching the same rule Work Orders' dashboard summaries already follow.
+- `api/src/common/utils/csv.ts` — a small hand-rolled RFC 4180 writer (quote/escape on comma, quote, or newline); no dependency added for something this simple.
+- Ticket CSV columns: Ticket ID, Status, Assigned Office, Urgency Band, Priority Score, Category, Barangay, Report Count (`member_count`), Created At, Updated At. Work Order CSV columns: Work Order ID, Ticket ID, Title, Assigned Office, Assigned Admin Name, Assigned Admin Email, Status, Overdue (derived, same rule as `WorkOrderStatusBadge.getDueState`), Due Date, Completed At, Created At, Updated At.
+- Filters: `office`, `status`, `urgency`, `category`, `barangayId`/`search` (tickets) or `assignedAdminId`/`overdue` (work orders), plus `dateFrom`/`dateTo` on both — an invalid date is a real 400, an invalid enum value (category/urgency/status) falls back the same silent-default way every other admin list endpoint already does.
+- Frontend: an "Export CSV" button on `TicketsWorkspace`/`WorkOrdersWorkspace` (`components/features/admin/{tickets,work-orders}/*Workspace.tsx`) links to the export endpoint using each page's own existing `buildParams(query)` — the download always reflects whatever filters are currently applied on screen, not a separate export-only filter UI.
+- **Audit logging was evaluated and deliberately skipped.** `AdminAuditService`'s schema requires a specific `targetId`/`targetType` for every event (`admin | ticket | report | work_order`) — a read-only, filter-driven export has no single target to attach an event to, and inventing a synthetic one (e.g. `targetId: 0`) would be a schema-shape hack for a feature that isn't a mutation. Revisit only if a real "who exported what" compliance need surfaces, as its own scoped change.
+- **Deferred, not built**: a printable/PDF report summary — no PDF library exists in either app and none was worth adding for a first version; a print-friendly `@media print` page is the natural zero-dependency path if this becomes a real ask. A dashboard "Reports" section was also skipped — CSV buttons on the pages that already have the filters cover the actual need without adding a new dashboard card.
+
 ---
 
 ## 3. Next Product Features
 
 In priority order.
 
-### 3.1 Reporting and Export Tools
-
-CSV/PDF export or scheduled reports for tickets, work orders, and office activity — for handoff to LGU leadership or external stakeholders outside the admin UI. Scope precisely against a real request when it comes up; "export everything" is not a spec.
-
-### 3.2 Production Hardening / Deployment Readiness
+### 3.1 Production Hardening / Deployment Readiness
 
 Last on this list because it's continuous, not a single feature: monitoring/alerting, backup verification, load/perf validation, secrets rotation, deployment runbook. Revisit and expand this item as the system approaches real deployment, rather than treating it as a one-time checkbox.
 
@@ -125,9 +135,10 @@ Last on this list because it's continuous, not a single feature: monitoring/aler
 Not next, not blocked — just not prioritized yet. Revisit if a real requirement surfaces:
 
 - Bulk work-order operations and notification tuning beyond what §2's Work Order Follow-up Improvements increment shipped
-- Cross-office reporting rollups beyond §3.1's initial export scope
+- Cross-office reporting rollups, scheduled/recurring reports, and a printable/PDF summary view — beyond §2's Reporting and Export Tools' initial CSV scope
 - Citizen-facing work-order status summaries (a *rollup*, e.g. "work in progress," never the underlying work order or its notes — see §5)
 - A low-elevation/hazard-prone map preset or filter — no elevation-based map filter exists yet (§2's Map Presets); revisit alongside a real elevation-filter feature
+- Export audit logging — evaluated in §2's Reporting and Export Tools and skipped; revisit only if a real "who exported what" compliance need surfaces
 
 ---
 

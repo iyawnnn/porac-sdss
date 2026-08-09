@@ -42,6 +42,7 @@ function chain(rowOrRows: Record<string, unknown> | Record<string, unknown>[]) {
   obj.values = self;
   obj.set = self;
   obj.innerJoin = self;
+  obj.leftJoin = self;
   obj.returning = (columns?: Record<string, unknown>) => {
     if (!columns) return Promise.resolve(rows);
     const keys = Object.keys(columns);
@@ -503,5 +504,55 @@ describe('WorkOrdersService.getNeedsAttention', () => {
       dueTodayWorkOrders: [],
       highUrgencyTicketsWithOpenWork: [],
     });
+  });
+});
+
+describe('WorkOrdersService.getWorkOrdersForExport', () => {
+  it('returns the joined export shape and never a notes field', async () => {
+    const db = makeDb();
+    db.select.mockReturnValueOnce(
+      chain([
+        {
+          id: 7,
+          ticket_id: 42,
+          title: 'Clear drainage',
+          assigned_office: 'MEO',
+          assigned_admin_name: 'Jane Doe',
+          assigned_admin_email: 'jane@porac.gov.ph',
+          status: 'in_progress',
+          due_date: null,
+          completed_at: null,
+          created_at: new Date('2026-01-01'),
+          updated_at: new Date('2026-01-01'),
+        },
+      ]),
+    );
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    const rows = await service.getWorkOrdersForExport({ office: 'MEO' });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].assigned_admin_email).toBe('jane@porac.gov.ph');
+    expect(rows[0]).not.toHaveProperty('notes');
+    expect(db.select).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an empty array when nothing matches', async () => {
+    const db = makeDb();
+    db.select.mockReturnValueOnce(chain([]));
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    await expect(service.getWorkOrdersForExport({ office: 'MDRRMO' })).resolves.toEqual([]);
+  });
+
+  it('defaults to no filters when called with no arguments', async () => {
+    const db = makeDb();
+    db.select.mockReturnValueOnce(chain([]));
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    await expect(service.getWorkOrdersForExport()).resolves.toEqual([]);
   });
 });
