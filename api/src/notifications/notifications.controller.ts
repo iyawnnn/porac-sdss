@@ -53,11 +53,17 @@ export class NotificationsController {
     @Req() req: Request,
     @Query('before') before?: string,
     @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
   ) {
     const principal = await this.resolvePrincipal(req);
     return this.notifications.listForPrincipal(principal, {
       before: before ? Number(before) : undefined,
       limit: limit ? Number(limit) : undefined,
+      // Unrecognized value falls back to 'all' — same silent-default
+      // convention every other admin list endpoint already uses.
+      status: status === 'unread' || status === 'read' ? status : 'all',
+      type: type || undefined,
     });
   }
 
