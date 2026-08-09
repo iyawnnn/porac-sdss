@@ -501,3 +501,129 @@ test("system admin's Needs Attention section loads city-wide", async ({ page }) 
   await page.goto("/admin");
   await expect(page.getByRole("region", { name: "Needs attention" })).toBeVisible();
 });
+
+// --- "My Assignments" personal quick filter -------------------------------
+
+async function currentAdminId(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    const res = await fetch("/api/auth/me");
+    const body = await res.json();
+    return body.session.adminId as number;
+  });
+}
+
+test("My Assignments filter appears on Work Orders and toggles the URL", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto("/admin/work-orders");
+  await page.waitForLoadState("networkidle");
+  const toggle = page.getByRole("button", { name: "My Assignments" });
+  await expect(toggle).toBeVisible();
+
+  await toggle.click();
+  await expect(page).toHaveURL(/[?&]assignedAdminId=me(&|$)/);
+  await expect(page.getByText("Showing only work assigned to you")).toBeVisible();
+
+  // Clearing restores the broader list and drops the param from the URL.
+  await toggle.click();
+  await expect(page).not.toHaveURL(/assignedAdminId=me/);
+  await expect(page.getByText("Showing only work assigned to you")).toHaveCount(0);
+});
+
+test("enabling My Assignments filters the list to only the current admin's assigned work orders", async ({ page, request }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const ticketId = await ticketIdFor(page, request, "MEO");
+  const myId = await currentAdminId(page);
+
+  const mineTitle = `E2E my-assignments mine ${Date.now()}`;
+  const notMineTitle = `E2E my-assignments other ${Date.now()}`;
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  let dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Title").fill(mineTitle);
+  await dialog.getByLabel("Assigned admin").click();
+  await page.getByRole("option", { name: "MEO Supervisor" }).click();
+  await dialog.getByRole("button", { name: "Create work order" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Title").fill(notMineTitle);
+  await dialog.getByRole("button", { name: "Create work order" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await page.goto("/admin/work-orders?status=all");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "My Assignments" }).click();
+
+  // "MEO Supervisor" is the admin the E2E_MEO_ADMIN session logs in as, so
+  // myId identifies that same account — the assigned work order must show,
+  // the unassigned one must not. .first() because the same row renders in
+  // both the desktop table and the CSS-hidden (not DOM-removed) mobile card
+  // list — same duplicate-match reason as this file's other "In Progress"
+  // .first() usage above.
+  await expect(page.getByText(mineTitle).first()).toBeVisible();
+  await expect(page.getByText(notMineTitle)).toHaveCount(0);
+  expect(myId).toBeGreaterThan(0);
+});
+
+test("clearing My Assignments restores the broader work order list", async ({ page, request }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const ticketId = await ticketIdFor(page, request, "MEO");
+  const title = `E2E my-assignments clear ${Date.now()}`;
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  const dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Title").fill(title);
+  await dialog.getByRole("button", { name: "Create work order" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await page.goto("/admin/work-orders?status=all");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "My Assignments" }).click();
+  await expect(page.getByText(title)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "My Assignments" }).click();
+  await expect(page.getByText(title).first()).toBeVisible();
+});
+
+test("My Assignments preserves office scoping for MEO/MDRRMO admins", async ({ page, browser }) => {
+  const mdrrmoTicketId = await ticketIdAsSystemAdmin(browser, "MDRRMO");
+  const created = await createWorkOrderAsSystemAdmin(browser, mdrrmoTicketId, `E2E my-assignments scope ${Date.now()}`);
+  expect(created.assigned_office).toBe("MDRRMO");
+
+  await loginAs(page, E2E_MEO_ADMIN);
+  const cookies = await page.context().cookies();
+  const headers = { ...sessionCookieHeader(cookies) };
+
+  // A hand-crafted request combining assignedAdminId=me with an explicit
+  // ?office=MDRRMO must still clamp to MEO — the office scope in
+  // resolveOfficeScope runs independently of the assignedAdminId filter.
+  const res = await page.request.get("/api/admin/work-orders?assignedAdminId=me&office=MDRRMO&status=all&limit=50", { headers });
+  expect(res.ok()).toBe(true);
+  const body = await res.json();
+  expect(body.workOrders.every((w: { assigned_office: string }) => w.assigned_office === "MEO")).toBe(true);
+});
+
+test("system admin's My Assignments means work assigned to their own account, not all offices", async ({ page }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await page.goto("/admin/work-orders");
+  await page.waitForLoadState("networkidle");
+  const toggle = page.getByRole("button", { name: "My Assignments" });
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  await expect(page).toHaveURL(/[?&]assignedAdminId=me(&|$)/);
+
+  const cookies = await page.context().cookies();
+  const headers = { ...sessionCookieHeader(cookies) };
+  const myId = await page.evaluate(async () => {
+    const res = await fetch("/api/auth/me");
+    return (await res.json()).session.adminId as number;
+  });
+  const res = await page.request.get("/api/admin/work-orders?assignedAdminId=me&status=all&limit=50", { headers });
+  const body = await res.json();
+  expect(
+    body.workOrders.every((w: { assigned_admin_id: number | null }) => w.assigned_admin_id === myId),
+  ).toBe(true);
+});

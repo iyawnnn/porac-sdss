@@ -122,6 +122,37 @@ describe('WorkOrdersService.parseQuery office scoping', () => {
   });
 });
 
+describe('WorkOrdersService.parseQuery "My Assignments" (assignedAdminId=me)', () => {
+  const db = makeDb();
+  const { audit, notifications } = makeDeps();
+  const service = new WorkOrdersService(db, notifications, audit);
+
+  it('resolves "me" to the caller\'s own adminId, not a client-supplied id', () => {
+    expect(service.parseQuery({ assignedAdminId: 'me' }, MEO_OFFICER).assignedAdminId).toBe(1);
+    expect(service.parseQuery({ assignedAdminId: 'me' }, MDRRMO_SUPERVISOR).assignedAdminId).toBe(2);
+  });
+
+  it('resolves "me" for a system admin to their own adminId too, not city-wide/unfiltered', () => {
+    expect(service.parseQuery({ assignedAdminId: 'me' }, SYSTEM_ADMIN).assignedAdminId).toBe(3);
+  });
+
+  it('still accepts a raw numeric assignedAdminId (unrelated existing behavior, unchanged)', () => {
+    expect(service.parseQuery({ assignedAdminId: '7' }, MEO_OFFICER).assignedAdminId).toBe(7);
+  });
+
+  it('leaves assignedAdminId undefined when absent', () => {
+    expect(service.parseQuery({}, MEO_OFFICER).assignedAdminId).toBeUndefined();
+  });
+
+  it('combines with office/status/overdue rather than replacing them', () => {
+    const filters = service.parseQuery(
+      { assignedAdminId: 'me', status: 'in_progress', overdue: 'true' },
+      MEO_OFFICER,
+    );
+    expect(filters).toMatchObject({ office: 'MEO', assignedAdminId: 1, status: 'in_progress', overdue: true });
+  });
+});
+
 describe('WorkOrdersService.create', () => {
   it('rejects a missing title before touching the database', async () => {
     const db = makeDb();
