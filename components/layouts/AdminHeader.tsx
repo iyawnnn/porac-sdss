@@ -11,6 +11,8 @@ import { NotificationBell } from "@/components/layouts/NotificationBell";
 function pageLabel(pathname: string): string {
   if (pathname.startsWith("/admin/tickets")) return "Ticket Queue";
   if (pathname.startsWith("/admin/map")) return "Interactive Map";
+  if (pathname.startsWith("/admin/barangay-insights")) return "Barangay Insights";
+  if (pathname.startsWith("/admin/notifications")) return "Notifications";
   if (pathname.startsWith("/admin/flagged")) return "Flagged Reports";
   if (pathname.startsWith("/admin/admins")) return "Admin Management";
   if (pathname.startsWith("/admin/activity-log")) return "Activity Log";

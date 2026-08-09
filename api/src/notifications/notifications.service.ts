@@ -90,12 +90,18 @@ export class NotificationsService {
 
   async listForPrincipal(
     principal: NotificationPrincipal,
-    options: { before?: number; limit?: number } = {},
+    options: { before?: number; limit?: number; status?: 'all' | 'unread' | 'read'; type?: string } = {},
   ): Promise<{ items: (typeof notifications.$inferSelect)[]; nextCursor: number | null }> {
     const limit = options.limit ?? DEFAULT_PAGE_SIZE;
-    const where = options.before
-      ? and(this.scopeFilter(principal), lt(notifications.id, options.before))
-      : this.scopeFilter(principal);
+    // Additive on top of scopeFilter — status/type only ever narrow an
+    // already-scoped result set, never widen it, so a bad/unrecognized
+    // `type` value just yields zero rows rather than a security concern.
+    const conditions = [this.scopeFilter(principal)];
+    if (options.before) conditions.push(lt(notifications.id, options.before));
+    if (options.status === 'unread') conditions.push(isNull(notifications.readAt));
+    if (options.status === 'read') conditions.push(isNotNull(notifications.readAt));
+    if (options.type) conditions.push(eq(notifications.type, options.type));
+    const where = and(...conditions);
 
     const rows = await this.db
       .select()

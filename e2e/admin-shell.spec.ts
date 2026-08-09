@@ -16,7 +16,7 @@ test("admin shell uses the approved Efferd navigation structure and real routes 
   await expect(nav.getByText("Management", { exact: true })).toBeVisible();
   await expect(nav.getByLabel("Open command palette")).toBeVisible();
 
-  const expected = ["Dashboard", "Ticket Queue", "Interactive Map", "Work Orders", "Flagged Reports", "Reports & Exports"];
+  const expected = ["Dashboard", "Ticket Queue", "Interactive Map", "Barangay Insights", "Work Orders", "Flagged Reports", "Reports & Exports", "Notifications"];
   await expect(nav.getByRole("link")).toHaveCount(expected.length);
   for (const label of expected) await expect(nav.getByRole("link", { name: label })).toBeVisible();
   for (const fake of ["Analytics", "Audit Log", "Events", "Funnels", "Retention"]) {
@@ -25,10 +25,13 @@ test("admin shell uses the approved Efferd navigation structure and real routes 
 
   await expect(nav.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
   const sidebarColor = await page.locator('[data-slot="sidebar-inner"]').first().evaluate((element) => getComputedStyle(element).backgroundColor);
+  // Scoped to the dropdown menu itself — the sidebar now has its own real
+  // "Notifications" link (e2e/admin-notifications.spec.ts), so an unscoped
+  // getByText would match both and violate Playwright's strict mode.
   await page.getByRole("button", { name: /notifications/i }).click();
-  await expect(page.getByText("Notifications", { exact: true })).toBeVisible();
+  await expect(page.getByRole("menu").getByText("Notifications", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByText("Notifications", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("menu")).toHaveCount(0);
   expect(sidebarColor).not.toBe("rgb(23, 37, 84)");
 });
 
