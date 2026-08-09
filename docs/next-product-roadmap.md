@@ -31,7 +31,7 @@ A full notifications page backing the existing bell.
 
 Not a discrete feature and never "done": monitoring/alerting, backup verification, load and performance validation, secrets rotation, and a deployment runbook. Revisit and expand as the system approaches real deployment rather than treating it as a one-time checkbox.
 
-**Done:** cron scheduling (`.github/workflows/cron.yml`, daily, all five `/cron/*` routes) and rate-limit event cleanup (`POST /cron/cleanup-rate-limit-events`, 30-day retention) — see `docs/product-roadmap.md`'s Production Hardening entry for detail.
+**Done:** cron scheduling (`.github/workflows/cron.yml`, daily, all five `/cron/*` routes), rate-limit event cleanup (`POST /cron/cleanup-rate-limit-events`, 30-day retention), and setup/deployment documentation (`README.md`'s two-env-file split, GitHub Actions cron requirements, and an honest "no hosting platform decided yet" statement) — see `docs/product-roadmap.md`'s Production Hardening entry for detail.
 
 **Still open:** monitoring/alerting, backup verification, load/perf validation, credential rotation from `PLAN.md` §0 (gate on an actual deploy decision, not before), and a written deployment runbook (no hosting platform is committed anywhere in this repo yet).
 

@@ -37,6 +37,11 @@ export interface AdminTicketFilters {
   urgency?: string;
   category?: string;
   barangayId?: number;
+  // Citizen resolution-feedback loop: true narrows to tickets a citizen
+  // has flagged as "not actually fixed" (tickets.disputed_at IS NOT NULL).
+  // A pure list-narrowing filter, same shape as WorkOrdersService's
+  // `overdue` boolean — never absent-means-false, absent means unfiltered.
+  disputed?: boolean;
   sort?: TicketSort;
   search?: string;
   page?: number;
@@ -58,6 +63,7 @@ export interface AdminTicketRow {
   assigned_office: string;
   status: string;
   created_at: string;
+  disputed_at: string | null;
 }
 
 export interface PaginatedTickets {
@@ -123,6 +129,8 @@ export interface TicketDetail {
   urgency_level: UrgencyLevel | null;
   resolution_image_url: string | null;
   resolution_notes: string | null;
+  disputed_at: string | null;
+  dispute_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -204,7 +212,7 @@ export class TicketsService {
   ): Required<Pick<AdminTicketFilters, 'status' | 'sort' | 'page' | 'limit'>> &
     Pick<
       AdminTicketFilters,
-      'office' | 'urgency' | 'category' | 'barangayId' | 'search'
+      'office' | 'urgency' | 'category' | 'barangayId' | 'search' | 'disputed'
     > {
     const requestedOffice =
       query.office === 'all' || query.office === 'MEO' || query.office === 'MDRRMO'
@@ -226,6 +234,7 @@ export class TicketsService {
       ? query.category
       : undefined;
     const barangayId = query.barangayId ? Number(query.barangayId) : undefined;
+    const disputed = query.disputed === 'true' ? true : undefined;
     const sort: TicketSort =
       query.sort === 'priority_asc' || query.sort === 'newest'
         ? query.sort
@@ -241,6 +250,7 @@ export class TicketsService {
     return {
       office,
       status: status ?? 'active',
+      disputed,
       urgency,
       category,
       barangayId,
@@ -286,7 +296,7 @@ export class TicketsService {
         (SELECT r.title FROM reports r WHERE r.ticket_id = t.id ORDER BY r.created_at ASC, r.id ASC LIMIT 1) AS title,
         t.barangay_id, b.name AS barangay_name, t.member_count,
         t.urgency_score, t.urgency_band, t.priority_index, t.priority_score, t.urgency_level,
-        t.assigned_office, t.status, t.created_at,
+        t.assigned_office, t.status, t.created_at, t.disputed_at,
         COUNT(*) OVER ()::int AS total_count
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
@@ -295,6 +305,7 @@ export class TicketsService {
         AND (${filters.urgency ?? null}::text IS NULL OR t.urgency_band = ${filters.urgency ?? null})
         AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
         AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
+        AND (${filters.disputed ? true : null}::boolean IS NULL OR t.disputed_at IS NOT NULL)
         AND (
           ${search}::text IS NULL
           OR b.name ILIKE '%' || ${search} || '%'
@@ -398,7 +409,8 @@ export class TicketsService {
         t.elevation_m, t.elevation_factor, t.precipitation_factor,
         t.cluster_factor, t.urgency_score, t.urgency_band, t.priority_index,
         t.priority_score, t.urgency_level,
-        t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at
+        t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at,
+        t.disputed_at, t.dispute_reason
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
       WHERE t.id = ${id}

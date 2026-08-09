@@ -130,6 +130,16 @@ A read-only per-barangay operational drill-down: `/admin/barangay-insights` (all
 - Never selects `work_orders.notes` (this feature never touches `work_orders` at all).
 - **Out of MVP, not built**: editing/creating/deleting barangays, CSV export, elevation *filtering*, crew scheduling, due-date calendars, inspection logs, attachments/checklists — see `docs/next-product-roadmap.md` §4 for the full deferred list and reasons.
 
+### Citizen Resolution Feedback / Dispute Loop — **completed**
+
+Closes the one-way finality gap where a citizen had no way to say a `Resolved` ticket wasn't actually fixed. A citizen can "Confirm Fixed" or "Report Still Not Fixed" on a resolved report, both persisted; the latter notifies the assigned office and surfaces on the existing Ticket Queue/Ticket Detail — no new sidebar item, no new admin page.
+
+- `tickets.disputed_at`/`tickets.dispute_reason` (`api/drizzle/0022_ticket_disputes.sql`) — nullable columns, not a status value. `disputed_at` NULL means "not disputed" (single-outstanding-dispute gate). `tickets.resolution_confirmed_at` (`api/drizzle/0023_ticket_resolution_confirmation.sql`) is the positive-path mirror, same gate shape. See `docs/database.md`'s `tickets` entry.
+- `POST /reports/mine/:id/dispute` (`ReportsController`/`ReportsService.disputeReport`) — citizen-session-gated, ownership+existence checked in one clause (`WHERE r.id = ... AND r.citizen_id = ...`, joined to the ticket), only allowed when `status = 'Resolved'`, race-safe duplicate rejection via `WHERE disputed_at IS NULL` on the UPDATE (same pattern as `moderation.service.ts`). Creates an office-targeted `ticket_disputed` notification linking to `/admin/tickets/:id`, inside the same transaction as the UPDATE.
+- `POST /reports/mine/:id/confirm-resolution` (`ReportsController`/`ReportsService.confirmResolution`) — same ownership/resolved-only/race-safe-UPDATE pattern as the dispute endpoint; rejects if the ticket is already disputed or already confirmed. No notification (a confirmation isn't actionable by an office) and no admin-side surfacing, kept deliberately minimal.
+- Admin Ticket Queue gets a "Disputed only" toggle (same shape as Work Orders' "Overdue only") and a "Disputed" badge on each row/card; Ticket Detail shows the disputed date and the citizen's reason. Office scoping is unchanged — the disputed filter rides the same `filters.office` clause every other filter already goes through.
+- Never touches `urgency_score`/`priority_score`/`priority_index`/`urgency_band`/`status`/duplicate-detection/work-order logic — a workflow signal layered on top of `Resolved`, not a scoring input or a status rollback.
+
 ---
 
 ## 3. Next Product Features
@@ -142,6 +152,7 @@ Last on this list because it's continuous, not a single feature: monitoring/aler
 
 - **Cron scheduling — done.** `.github/workflows/cron.yml` calls all five `api/src/cron/*` routes (`recompute-urgency`, `recompute-weather`, `cleanup-password-reset-tokens`, `cleanup-notifications`, `cleanup-rate-limit-events`) daily via `curl`, authenticated the same way `CronSecretGuard` already accepts (`Authorization: Bearer $CRON_SECRET`). Requires two repo-level GitHub Actions configs to actually run: `vars.PORAC_API_BASE_URL` and `secrets.CRON_SECRET` — see that workflow file's header comment.
 - **Rate-limit event cleanup — done.** `RateLimitService.cleanupOldEvents()` + `POST /cron/cleanup-rate-limit-events` prunes `rate_limit_events` and `password_reset_rate_limit_events` past a 30-day retention window — see `docs/database.md` for why 30 days is safe (both tables' checks only ever look back 24 hours at most).
+- **Setup/deployment documentation — done.** `README.md`'s env var setup section previously named variables that don't exist in this codebase (`OPENWEATHER_API_KEY`, `NEXTAUTH_SECRET`, `NEXT_PUBLIC_APP_URL`) and never mentioned `api/.env` as a separate file at all — a fresh clone following it literally could not start the API. Rewritten to explain the two-env-file split accurately (with tables of what's actually required vs. optional on each side, matching `api/src/config/env.ts`'s Zod schema) and to add a new "Scheduled Jobs & Deployment" section documenting the `CRON_SECRET`/`PORAC_API_BASE_URL` GitHub Actions requirements and stating plainly that no hosting platform is decided yet.
 - **Still not done**: monitoring/alerting, backup verification, load/perf validation, credential rotation (deliberately gated on an actual deploy decision — see `PLAN.md` §0), and a written deployment runbook (no hosting platform is committed anywhere in this repo yet).
 
 ---
