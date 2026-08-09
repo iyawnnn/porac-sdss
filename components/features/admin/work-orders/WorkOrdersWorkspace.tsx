@@ -31,6 +31,7 @@ interface QueryState {
   office: string;
   status: string;
   overdue: boolean;
+  mine: boolean;
   page: number;
 }
 
@@ -38,7 +39,13 @@ function initialQueryState(query: Record<string, string | undefined>, sessionOff
   const office =
     query.office === "all" || query.office === "MEO" || query.office === "MDRRMO" ? query.office : (sessionOffice ?? "all");
   const status = (WORK_ORDER_STATUSES as string[]).includes(query.status ?? "") ? (query.status as string) : "all";
-  return { office, status, overdue: query.overdue === "true", page: Math.max(1, Number(query.page) || 1) };
+  return {
+    office,
+    status,
+    overdue: query.overdue === "true",
+    mine: query.assignedAdminId === "me",
+    page: Math.max(1, Number(query.page) || 1),
+  };
 }
 
 function buildParams(state: QueryState): URLSearchParams {
@@ -46,6 +53,11 @@ function buildParams(state: QueryState): URLSearchParams {
   params.set("office", state.office);
   if (state.status !== "all") params.set("status", state.status);
   if (state.overdue) params.set("overdue", "true");
+  // "me" is resolved server-side from the caller's own session
+  // (WorkOrdersService.parseQuery) — the URL never carries a specific
+  // admin's numeric id, so the same link means "my assignments" for
+  // whoever opens it, exactly like ?overdue=true is viewer-relative.
+  if (state.mine) params.set("assignedAdminId", "me");
   params.set("page", String(state.page));
   return params;
 }
@@ -175,6 +187,14 @@ export function WorkOrdersWorkspace({
           <Button onClick={() => updateFilter({ overdue: !query.overdue })} size="sm" variant={query.overdue ? "default" : "outline"}>
             Overdue only
           </Button>
+          <Button onClick={() => updateFilter({ mine: !query.mine })} size="sm" variant={query.mine ? "default" : "outline"}>
+            My Assignments
+          </Button>
+          {query.mine && (
+            <Badge variant="secondary">
+              Showing only work assigned to you
+            </Badge>
+          )}
         </CardContent>
 
         {/* Desktop table */}

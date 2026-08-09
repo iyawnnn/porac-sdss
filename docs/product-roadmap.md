@@ -140,6 +140,15 @@ Closes the one-way finality gap where a citizen had no way to say a `Resolved` t
 - Admin Ticket Queue gets a "Disputed only" toggle (same shape as Work Orders' "Overdue only") and a "Disputed" badge on each row/card; Ticket Detail shows the disputed date and the citizen's reason. Office scoping is unchanged — the disputed filter rides the same `filters.office` clause every other filter already goes through.
 - Never touches `urgency_score`/`priority_score`/`priority_index`/`urgency_band`/`status`/duplicate-detection/work-order logic — a workflow signal layered on top of `Resolved`, not a scoring input or a status rollback.
 
+### "My Assignments" Work Order Filter — **completed**
+
+A personal quick filter on the existing `/admin/work-orders` list — no new page, no new sidebar item, matching §5's rule against inventing a separate route for what's really a filter (the earlier "My Work" recommendation was explicitly scoped this way).
+
+- `WorkOrdersService.parseQuery` now accepts `assignedAdminId=me` as a viewer-relative sentinel, resolved server-side from the caller's own session (`admin.adminId`) — never a client-supplied numeric id, so it can't be used to probe another admin's assignments by id. Works identically for MEO/MDRRMO officers, supervisors, and system admins (every `AdminSession` carries its own `adminId`). Raw numeric `assignedAdminId` values are unaffected. This is the one existing filter path (`list`/`getWorkOrdersForExport`, and the CSV export that reuses `parseQuery`) — no parallel logic was added.
+- `WorkOrdersWorkspace.tsx` gets a "My Assignments" toggle button (same shape as the existing "Overdue only" toggle) plus an active-filter badge when enabled; the URL carries `?assignedAdminId=me` literally (not a resolved numeric id), so the link means "my assignments" for whoever opens it. Combines with office/status/overdue rather than replacing them.
+- Office scoping is unchanged — `resolveOfficeScope` still runs first in `parseQuery`, so an MEO/MDRRMO admin's "My Assignments" is still clamped to their own office.
+- No schema change, no migration, no new endpoint.
+
 ---
 
 ## 3. Next Product Features
