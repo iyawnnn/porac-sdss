@@ -31,7 +31,7 @@ Verified against the current tree, not assumed:
 - Deduplication, urgency triage, weather/DEM pipeline (see `PLAN.md` §6–§7)
 - `docs/database.md` per-table reference and the `city_boundary_osm` import
 
-Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[id]`, `/admin/map`, `/admin/flagged`, `/admin/admins`, `/admin/activity-log`, `/admin/account`, `/admin/login`, `/admin/work-orders`.
+Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[id]`, `/admin/map`, `/admin/barangay-insights`, `/admin/barangay-insights/[barangayId]`, `/admin/flagged`, `/admin/reports`, `/admin/admins`, `/admin/activity-log`, `/admin/account`, `/admin/login`, `/admin/work-orders`.
 
 ---
 
@@ -119,6 +119,16 @@ CSV export for Tickets and Work Orders, plus a centralized `/admin/reports` "Rep
 - **Printable operational summary** — a `@media print` (Tailwind's built-in `print:` variant, no new dependency) summary card sourced from the existing `GET /admin/dashboard` response (`officePerformanceSummary`, `kpis.active_count`, `statusDistribution` summed for a total-tickets count) — no new backend query. A system admin's office filter on the page re-fetches `GET /admin/dashboard?office=...` to re-scope the summary; MEO/MDRRMO admins see only their own office's numbers, matching every other office-scoped view. "Print summary" triggers `window.print()`; filter controls and buttons hide via `print:hidden` so only the summary prints.
 - **Audit logging was evaluated and deliberately skipped.** `AdminAuditService`'s schema requires a specific `targetId`/`targetType` for every event (`admin | ticket | report | work_order`) — a read-only, filter-driven export has no single target to attach an event to, and inventing a synthetic one (e.g. `targetId: 0`) would be a schema-shape hack for a feature that isn't a mutation. Revisit only if a real "who exported what" compliance need surfaces, as its own scoped change.
 - **Still deferred**: PDF generation (the print stylesheet covers the "printable summary" need without a PDF library); cross-office reporting rollups beyond the existing MEO/MDRRMO office filter; scheduled/recurring reports.
+
+### Barangay Insights — **completed (MVP)**
+
+A read-only per-barangay operational drill-down: `/admin/barangay-insights` (all 29 barangays, office-scoped summary counts) and `/admin/barangay-insights/[barangayId]` (profile), sidebar entry in the Main section. See `docs/next-product-roadmap.md` for the planning rationale (this was the "Build Next" item once the roadmap pipeline emptied out).
+
+- `BarangayInsightsController`/`BarangayInsightsService` (`api/src/admin/barangay-insights.*`) — `GET /admin/barangay-insights` and `GET /admin/barangay-insights/:id`, behind `AdminSessionGuard` only, same shape as `ReportsController`: safe because every count is office-scoped via `resolveOfficeScope`, not a guard of its own. Raw-PG (`PG` client), since every query joins `barangays.geom`/`dem_points.geom`.
+- **No schema change.** Every aggregate is a `GROUP BY`/`COUNT(*) FILTER` over `tickets`/`reports`/`dem_points`, following the exact office-scoping shape `DashboardService` already uses — the index query moves the office filter into the `tickets` `LEFT JOIN` condition (not a `WHERE`) so all 29 barangays are always returned, even ones with zero tickets for the scoped office.
+- Index columns: Total/Active/Resolved/High-Urgency ticket counts, most common category, last activity date. Profile adds: KPI tiles, an all-time category breakdown, a fixed 30-day incident trend (no range selector — this is a barangay profile, not a second dashboard), a `dem_points`-derived elevation min/avg/max (**display only, never a filter**), and the 10 most recent tickets, each linking to `/admin/tickets/{id}` and to `/admin/tickets?barangayId={id}` for the full filtered queue.
+- Never selects `work_orders.notes` (this feature never touches `work_orders` at all).
+- **Out of MVP, not built**: editing/creating/deleting barangays, CSV export, elevation *filtering*, crew scheduling, due-date calendars, inspection logs, attachments/checklists — see `docs/next-product-roadmap.md` §4 for the full deferred list and reasons.
 
 ---
 

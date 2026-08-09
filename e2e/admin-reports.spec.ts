@@ -58,9 +58,10 @@ test("Reports & Exports sidebar link exists and no fake sidebar routes were adde
   await loginAs(page, E2E_MEO_ADMIN);
   const nav = page.getByRole("navigation", { name: "Admin" });
   await expect(nav.getByRole("link", { name: "Reports & Exports", exact: true })).toBeVisible();
-  // The known, real nav set for a non-system-admin — Reports & Exports is
-  // the only addition; nothing else was added ahead of a real route.
-  await expect(nav.getByRole("link")).toHaveCount(6);
+  // The known, real nav set for a non-system-admin. Barangay Insights
+  // (e2e/admin-barangay-insights.spec.ts) is a separate, real route added
+  // since this count was fixed at 6 — it's counted here too.
+  await expect(nav.getByRole("link")).toHaveCount(7);
 });
 
 test("/admin/reports page loads for an authenticated admin", async ({ page }) => {
