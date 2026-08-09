@@ -1,6 +1,7 @@
 import { Controller, Post, UseGuards } from '@nestjs/common';
 import { RecomputeService } from '../domain/recompute.service';
 import { WeatherService } from '../domain/weather.service';
+import { RateLimitService } from '../domain/ratelimit.service';
 import { PasswordResetService } from '../citizens/password-reset.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CronSecretGuard } from '../common/guards/cron-secret.guard';
@@ -9,6 +10,8 @@ import { CronSecretGuard } from '../common/guards/cron-secret.guard';
 // allows once-daily cron, which would defeat the "live re-ranking as a
 // storm moves in" behavior (see app/api/cron/recompute/route.ts, the
 // single-endpoint predecessor this splits into two explicit triggers).
+// All five routes are now also called daily by .github/workflows/cron.yml
+// as a safety net — see that file for the schedule and required secrets.
 @UseGuards(CronSecretGuard)
 @Controller('cron')
 export class CronController {
@@ -17,6 +20,7 @@ export class CronController {
     private readonly weather: WeatherService,
     private readonly passwordReset: PasswordResetService,
     private readonly notifications: NotificationsService,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   @Post('recompute-urgency')
@@ -48,5 +52,13 @@ export class CronController {
   async cleanupNotifications() {
     await this.notifications.cleanupOldNotifications();
     return { ok: true };
+  }
+
+  // Prunes rate_limit_events / password_reset_rate_limit_events rows older
+  // than the 30-day retention window — see RateLimitService for why that's
+  // safe (both tables' checks only ever look back 24 hours at most).
+  @Post('cleanup-rate-limit-events')
+  cleanupRateLimitEvents() {
+    return this.rateLimit.cleanupOldEvents();
   }
 }

@@ -28,9 +28,20 @@ const IP_HOURLY_BACKSTOP = 20;
 const PASSWORD_RESET_EMAIL_HOURLY_LIMIT = 3;
 const PASSWORD_RESET_IP_HOURLY_LIMIT = 10;
 
+// The longest active window either table's checks ever query is 24 hours
+// (checkRateLimit's spatial check, above) — 30 days is a wide safety
+// margin, same convention as NotificationsService's RETENTION_DAYS.
+// Anything this old can never affect a live rate-limit decision.
+const RATE_LIMIT_EVENT_RETENTION_DAYS = 30;
+
 export interface RateLimitResult {
   allowed: boolean;
   reason?: string;
+}
+
+export interface RateLimitCleanupResult {
+  rateLimitEventsDeleted: number;
+  passwordResetRateLimitEventsDeleted: number;
 }
 
 @Injectable()
@@ -150,5 +161,24 @@ export class RateLimitService {
       INSERT INTO password_reset_rate_limit_events (ip, email_normalized)
       VALUES (${ip}, ${normalizedEmail})
     `;
+  }
+
+  // Manual/on-demand trigger (POST /cron/cleanup-rate-limit-events), same
+  // unscheduled-until-now shape as the notification/password-reset-token
+  // cleanup jobs. Deletes rows old enough that they can no longer factor
+  // into any live rate-limit window (see RATE_LIMIT_EVENT_RETENTION_DAYS).
+  async cleanupOldEvents(): Promise<RateLimitCleanupResult> {
+    const sql = this.pg;
+    const cutoff = new Date(
+      Date.now() - RATE_LIMIT_EVENT_RETENTION_DAYS * 86_400_000,
+    );
+    const [rateLimitResult, passwordResetResult] = await Promise.all([
+      sql`DELETE FROM rate_limit_events WHERE created_at < ${cutoff}`,
+      sql`DELETE FROM password_reset_rate_limit_events WHERE created_at < ${cutoff}`,
+    ]);
+    return {
+      rateLimitEventsDeleted: rateLimitResult.count,
+      passwordResetRateLimitEventsDeleted: passwordResetResult.count,
+    };
   }
 }
