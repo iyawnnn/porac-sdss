@@ -42,6 +42,7 @@ export interface MyReportDetail {
   moderation_status: string | null;
   moderated_at: string | null;
   resolution_notes: string | null;
+  resolution_image_url: string | null;
   disputed_at: string | null;
   resolution_confirmed_at: string | null;
   is_merged: boolean;

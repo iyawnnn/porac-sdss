@@ -159,6 +159,15 @@ A backend-only safety net: flags active tickets that have stalled with no real f
 - **Duplicate prevention is schema-free**: a ticket is escalated at most once for the lifetime of its `ticket_escalation` notification row — before creating one, the service checks whether `notifications` already has a `type: 'ticket_escalation'` row for that `entityId` and skips it if so, rather than adding a new "already escalated" column to `tickets`. Re-escalating after a stall recurs is a deliberate non-goal for this pass, not an oversight.
 - No schema change, no migration.
 
+### Citizen Case Closure Summary Card — **completed**
+
+A read-only recap of how a resolved report was closed, on the existing citizen report detail page (`/dashboard/reports/[id]`) — no new page, no new sidebar item, no new workflow.
+
+- `CaseClosureSummary` (`components/features/citizen/dashboard/CaseClosureSummary.tsx`) renders only when `report.status === "Resolved"`, above the existing `ResolutionFeedback` action card — a read-only recap of the outcome, distinct from the confirm/dispute action itself. Shows the resolved date (`ticket_updated_at`), resolution notes if any, the resolution photo if any, and a one-line recap of the citizen's own confirm/dispute feedback state if they've already given it.
+- `MyReportDetail`/`getMyReportDetail` (`api/src/reports/reports.service.ts`) gained one field, `resolution_image_url` — already selected on the admin `TicketDetail` query, just missing from the citizen one. No schema change, no new endpoint; `dispute_reason` stays excluded from the citizen DTO exactly as before (the citizen already knows their own words, only the state is shown here).
+- Reuses `ReportImage` (citizen-safe image with broken-image fallback) for the photo — no new image-handling component.
+- Dispute/confirm endpoints, ticket status behavior, and the `ResolutionFeedback` action flow are unchanged.
+
 ---
 
 ## 3. Next Product Features

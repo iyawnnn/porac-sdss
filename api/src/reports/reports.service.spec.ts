@@ -153,6 +153,11 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
     'elevation_factor',
     'precipitation_factor',
     'cluster_factor',
+    // Admin-only dispute reasoning and work-order internals — never surfaced
+    // to the citizen who submitted the report (see the Case Closure Summary
+    // card's scope: status/notes/photo/date/feedback state only).
+    'dispute_reason',
+    'work_orders',
   ];
 
   it.each(CITIZEN_UNSAFE_COLUMNS)(
@@ -175,7 +180,7 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
     expect(getMyReports).toContain(field);
   });
 
-  it.each([...EXPECTED_ROW_FIELDS, 'r.moderated_at', 't.resolution_notes'])(
+  it.each([...EXPECTED_ROW_FIELDS, 'r.moderated_at', 't.resolution_notes', 't.resolution_image_url'])(
     'getMyReportDetail selects %s',
     (field) => {
       expect(getMyReportDetail).toContain(field);
