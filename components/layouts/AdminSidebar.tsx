@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, FileBarChart2, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, Wrench, type LucideIcon } from "lucide-react";
+import { Building2, ClipboardList, FileBarChart2, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, Wrench, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
@@ -32,6 +32,7 @@ function buildNavSections(systemAdmin: boolean): { heading: string; items: NavIt
       { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
       { href: "/admin/tickets", label: "Ticket Queue", icon: Ticket },
       { href: "/admin/map", label: "Interactive Map", icon: Map },
+      { href: "/admin/barangay-insights", label: "Barangay Insights", icon: Building2 },
     ] },
     { heading: "Management", items: managementItems },
   ];

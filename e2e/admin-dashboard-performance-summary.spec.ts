@@ -75,8 +75,9 @@ test("no fake sidebar route was added for the performance summary — it stays a
   const nav = page.getByRole("navigation", { name: "Admin" });
   await expect(nav.getByRole("link", { name: /performance/i })).toHaveCount(0);
   // The known, real nav set — unchanged by this feature. Reports & Exports
-  // is a separate, real route (see e2e/admin-reports.spec.ts), not a
-  // dashboard-section link, so it's counted here too.
-  const expected = ["Dashboard", "Ticket Queue", "Interactive Map", "Work Orders", "Flagged Reports", "Reports & Exports", "Admin Management", "Activity Log"];
+  // and Barangay Insights are separate, real routes (see
+  // e2e/admin-reports.spec.ts, e2e/admin-barangay-insights.spec.ts), not
+  // dashboard-section links, so they're counted here too.
+  const expected = ["Dashboard", "Ticket Queue", "Interactive Map", "Barangay Insights", "Work Orders", "Flagged Reports", "Reports & Exports", "Admin Management", "Activity Log"];
   await expect(nav.getByRole("link")).toHaveCount(expected.length);
 });

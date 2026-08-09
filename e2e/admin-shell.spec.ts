@@ -16,7 +16,7 @@ test("admin shell uses the approved Efferd navigation structure and real routes 
   await expect(nav.getByText("Management", { exact: true })).toBeVisible();
   await expect(nav.getByLabel("Open command palette")).toBeVisible();
 
-  const expected = ["Dashboard", "Ticket Queue", "Interactive Map", "Work Orders", "Flagged Reports", "Reports & Exports"];
+  const expected = ["Dashboard", "Ticket Queue", "Interactive Map", "Barangay Insights", "Work Orders", "Flagged Reports", "Reports & Exports"];
   await expect(nav.getByRole("link")).toHaveCount(expected.length);
   for (const label of expected) await expect(nav.getByRole("link", { name: label })).toBeVisible();
   for (const fake of ["Analytics", "Audit Log", "Events", "Funnels", "Retention"]) {
