@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, type LucideIcon } from "lucide-react";
+import { ClipboardList, FileBarChart2, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, Wrench, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
@@ -18,7 +18,11 @@ interface NavItem { href: string; label: string; icon: LucideIcon; }
 // /admin/activity-log route, this is just the matching UI hide (never the
 // actual gate). See api/src/common/guards/system-admin.guard.ts.
 function buildNavSections(systemAdmin: boolean): { heading: string; items: NavItem[] }[] {
-  const managementItems: NavItem[] = [{ href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert }];
+  const managementItems: NavItem[] = [
+    { href: "/admin/work-orders", label: "Work Orders", icon: Wrench },
+    { href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert },
+    { href: "/admin/reports", label: "Reports & Exports", icon: FileBarChart2 },
+  ];
   if (systemAdmin) {
     managementItems.push({ href: "/admin/admins", label: "Admin Management", icon: ShieldUser });
     managementItems.push({ href: "/admin/activity-log", label: "Activity Log", icon: ClipboardList });

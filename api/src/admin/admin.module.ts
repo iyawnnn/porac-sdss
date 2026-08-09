@@ -16,8 +16,13 @@ import { AdminAuditController } from './admin-audit.controller';
 import { AdminAuditService } from './admin-audit.service';
 import { AdminAccountController } from './admin-account.controller';
 import { AdminAccountService } from './admin-account.service';
+import { WorkOrdersController } from './work-orders.controller';
+import { WorkOrdersService } from './work-orders.service';
+import { AdminDirectoryController } from './admin-directory.controller';
+import { ReportsController } from './reports.controller';
+import { ReportsService } from './reports.service';
 
-// Six controllers sharing one module — they share nothing else, but
+// Nine controllers sharing one module — they share nothing else, but
 // splitting into separate modules buys nothing (see blueprint §1). Each
 // controller carries its own @UseGuards(...) (not an APP_GUARD provider,
 // which would leak the guard onto every module app-wide) — closes the
@@ -25,8 +30,13 @@ import { AdminAccountService } from './admin-account.service';
 // entirely on proxy.ts's matcher. AdminsController and AdminAuditController
 // additionally stack SystemAdminGuard since account management and the
 // activity log are both System Administrator only. AdminAccountController
-// (own password change) deliberately does not — any logged-in admin owns
-// their own credentials.
+// (own password change) and AdminDirectoryController (office-scoped admin
+// list for Work Orders assignment) deliberately do not — the former because
+// any logged-in admin owns their own credentials, the latter because MEO/
+// MDRRMO need it too; it stays safe via resolveOfficeScope, not the guard.
+// ReportsController is the same shape as AdminDirectoryController: no extra
+// guard, safe because it reuses TicketsService/WorkOrdersService's own
+// office-scoped query parsing rather than any new authorization logic.
 @Module({
   imports: [AuthModule, DomainModule, NotificationsModule, CitizensModule],
   controllers: [
@@ -36,6 +46,9 @@ import { AdminAccountService } from './admin-account.service';
     AdminsController,
     AdminAuditController,
     AdminAccountController,
+    WorkOrdersController,
+    AdminDirectoryController,
+    ReportsController,
   ],
   providers: [
     TicketsService,
@@ -45,6 +58,8 @@ import { AdminAccountService } from './admin-account.service';
     AdminsService,
     AdminAuditService,
     AdminAccountService,
+    WorkOrdersService,
+    ReportsService,
   ],
 })
 export class AdminModule {}

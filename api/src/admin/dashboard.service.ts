@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
+import type { WorkOrderPerformanceCounts } from './work-orders.service';
 
 const HIGH_URGENCY_LEVEL = 'HIGH';
 export const DASHBOARD_RANGE_DAYS = [7, 30, 90] as const;
@@ -43,6 +44,22 @@ export interface CategoryDistributionRow {
   category: string;
   active_count: number;
   active_total: number;
+}
+
+// Assembled by DashboardController.officeCounts from three existing
+// office-scoped service methods (WorkOrdersService, DashboardService,
+// ModerationService) — never a new query path, and never work_orders.notes
+// or any other note body.
+export interface OfficePerformanceCounts extends WorkOrderPerformanceCounts {
+  highUrgencyOpenTickets: number;
+  flaggedReportsPending: number;
+}
+
+export interface OfficePerformanceSummary extends OfficePerformanceCounts {
+  scope: 'MEO' | 'MDRRMO' | 'ALL';
+  // Only populated for a system admin viewing city-wide (scope: 'ALL') —
+  // same rule as the existing departmentWorkload dashboard card.
+  byOffice: { MEO: OfficePerformanceCounts; MDRRMO: OfficePerformanceCounts } | null;
 }
 
 @Injectable()

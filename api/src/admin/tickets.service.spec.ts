@@ -241,6 +241,58 @@ describe('admin audit logging for ticket mutations', () => {
   });
 });
 
+describe('TicketsService.getTicketsForExport', () => {
+  function makeService(rows: unknown[]) {
+    const sql = ((..._args: unknown[]) => {
+      return {
+        then(resolve: (v: unknown) => void) {
+          void Promise.resolve(rows).then(resolve);
+        },
+      };
+    }) as unknown as Sql;
+    return new TicketsService(
+      sql,
+      {} as WeatherService,
+      {} as MediaService,
+      {} as NotificationsService,
+      {} as EmailService,
+      {} as ConfigService<Env, true>,
+      {} as AdminAuditService,
+    );
+  }
+
+  it('returns the export-shaped rows the query produces', async () => {
+    const service = makeService([
+      {
+        id: 1,
+        status: 'Reported',
+        assigned_office: 'MEO',
+        category: 'Pothole',
+        barangay_name: 'Poblacion',
+        urgency_band: 'Critical',
+        priority_score: 90,
+        member_count: 2,
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    const rows = await service.getTicketsForExport({ office: 'MEO' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(1);
+    expect(rows[0]).not.toHaveProperty('title');
+  });
+
+  it('returns an empty array when nothing matches, rather than throwing', async () => {
+    const service = makeService([]);
+    await expect(service.getTicketsForExport({ office: 'MDRRMO' })).resolves.toEqual([]);
+  });
+
+  it('defaults to no filters when called with no arguments', async () => {
+    const service = makeService([]);
+    await expect(service.getTicketsForExport()).resolves.toEqual([]);
+  });
+});
+
 describe('ticket-status notification email selection', () => {
   const ticketsServiceSource = readFileSync(
     join(__dirname, 'tickets.service.ts'),

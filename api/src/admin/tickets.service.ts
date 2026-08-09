@@ -68,6 +68,23 @@ export interface PaginatedTickets {
   totalPages: number;
 }
 
+// Feeds ReportsService's CSV export — deliberately a narrower row shape than
+// AdminTicketRow (no title, which comes from a citizen-authored report and
+// isn't a stable/moderated field worth putting in an operational handoff
+// export).
+export interface AdminTicketExportRow {
+  id: number;
+  status: string;
+  assigned_office: string;
+  category: string;
+  barangay_name: string;
+  urgency_band: string | null;
+  priority_score: number | null;
+  member_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AdminTicketGeoRow {
   id: number;
   category: string;
@@ -299,6 +316,55 @@ export class TicketsService {
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+  }
+
+  // ponytail: capped at 5,000 rows rather than streamed/paginated — fine at
+  // this LGU's current ticket volume; revisit with a cursor/streaming CSV
+  // writer if a real municipality-scale dataset ever needs a bigger export.
+  async getTicketsForExport(
+    filters: AdminTicketFilters & { dateFrom?: Date; dateTo?: Date } = {},
+  ): Promise<AdminTicketExportRow[]> {
+    const sql = this.pg;
+    const status = filters.status ?? 'active';
+    const statusClause =
+      status === 'active'
+        ? sql`AND t.status IN ('Reported', 'Under Review', 'In Progress')`
+        : status === 'all'
+          ? sql``
+          : sql`AND t.status = ${status}::ticket_status`;
+
+    const search = filters.search?.trim() || null;
+    const searchId = search && /^\d+$/.test(search) ? Number(search) : null;
+    // postgres.js's tagged template needs a string, not a raw Date, when
+    // the same placeholder value is reused across multiple interpolation
+    // sites in one query (it otherwise throws ERR_INVALID_ARG_TYPE trying
+    // to byte-serialize the Date directly) — ISO strings sidestep that.
+    const dateFrom = filters.dateFrom?.toISOString() ?? null;
+    const dateTo = filters.dateTo?.toISOString() ?? null;
+
+    return sql<AdminTicketExportRow[]>`
+      SELECT t.id, t.status, t.assigned_office, t.category, b.name AS barangay_name,
+        t.urgency_band, t.priority_score, t.member_count, t.created_at, t.updated_at
+      FROM tickets t
+      JOIN barangays b ON b.id = t.barangay_id
+      WHERE (${filters.office ?? null}::text IS NULL OR t.assigned_office = ${filters.office ?? null}::office)
+        ${statusClause}
+        AND (${filters.urgency ?? null}::text IS NULL OR t.urgency_band = ${filters.urgency ?? null})
+        AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
+        AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
+        AND (${dateFrom}::timestamptz IS NULL OR t.created_at >= ${dateFrom}::timestamptz)
+        AND (${dateTo}::timestamptz IS NULL OR t.created_at <= ${dateTo}::timestamptz)
+        AND (
+          ${search}::text IS NULL
+          OR b.name ILIKE '%' || ${search} || '%'
+          OR (${searchId}::int IS NOT NULL AND t.id = ${searchId}::int)
+          OR EXISTS (
+            SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title ILIKE '%' || ${search} || '%'
+          )
+        )
+      ORDER BY t.created_at DESC
+      LIMIT 5000
+    `;
   }
 
   async getTicketsGeo(

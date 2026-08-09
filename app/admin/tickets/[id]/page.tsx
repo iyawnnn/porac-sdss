@@ -10,6 +10,7 @@ import type {
   TicketReassignmentRow,
   TicketPriorityContext,
 } from "@/lib/types/admin-tickets";
+import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
 import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { StatusPill } from "@/components/features/admin/shared/StatusPill";
@@ -21,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AssignmentPanel } from "@/components/features/admin/tickets/AssignmentPanel";
+import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersPanel";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
 import { HorizontalStatusTracker } from "@/components/features/admin/tickets/HorizontalStatusTracker";
 import { TicketDetailSkeleton } from "@/components/features/admin/tickets/TicketDetailSkeleton";
@@ -56,12 +58,20 @@ interface TicketDetailResponse {
 async function TicketDetailData({ ticketId, from }: { ticketId: number; from: string | undefined }) {
   let data: TicketDetailResponse | null;
   let priorityContext: TicketPriorityContext | null = null;
+  let workOrders: WorkOrderRow[] = [];
   try {
     // NestJS's GET /admin/tickets/:id recomputes before reading, matching
     // this page's original SSR behavior.
     data = await apiGetOptional<TicketDetailResponse>(`/admin/tickets/${ticketId}`, [401, 404]);
     if (data && ACTIVE_STATUSES.includes(data.ticket.status)) {
       priorityContext = await apiGetOptional<TicketPriorityContext>(`/admin/tickets/${ticketId}/priority-context`, [401, 404]);
+    }
+    if (data) {
+      const workOrdersResponse = await apiGetOptional<{ workOrders: WorkOrderRow[] }>(
+        `/admin/work-orders?ticketId=${ticketId}`,
+        [401, 404],
+      );
+      workOrders = workOrdersResponse?.workOrders ?? [];
     }
   } catch (err) {
     return (
@@ -141,6 +151,12 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             <CardContent className="p-4">
               <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Assignment</p>
               <AssignmentPanel currentOffice={ticket.assigned_office} ticketId={ticket.id} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <WorkOrdersPanel initialWorkOrders={workOrders} office={ticket.assigned_office as "MEO" | "MDRRMO"} ticketId={ticket.id} />
             </CardContent>
           </Card>
 

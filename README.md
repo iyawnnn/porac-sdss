@@ -71,13 +71,14 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
 ## D. DATABASE MIGRATIONS & SEEDING
 
-Apply PostGIS schema migrations and seed municipal boundaries, demo accounts, and realistic hazard tickets. **Order matters** — several later steps depend on tables/columns an earlier step creates (e.g. `import:barangays` must run before `migrate:geometry`, and `seed:dem` before `migrate:config`), and running them out of order fails with errors like `relation "barangays" does not exist`:
+Apply PostGIS schema migrations and seed municipal boundaries, demo accounts, and realistic hazard tickets. **Order matters** — several later steps depend on tables/columns an earlier step creates (e.g. `import:barangays` must run before `migrate:geometry`, and `seed:dem` before `migrate:config`), and running them out of order fails with errors like `relation "barangays" does not exist`. See [`docs/database.md`](docs/database.md) for what each table is for, who reads/writes it, and whether an empty table is expected or a sign something's missing:
 
 ```bash
 pnpm --prefix api migrate                          # non-spatial Drizzle tables
 pnpm --prefix api migrate:ratelimit
 pnpm --prefix api migrate:ratelimit-citizen
 pnpm --prefix api migrate:city-boundary
+pnpm --prefix api import:city-boundary              # municipal outer boundary -> city_boundary_osm (idempotent)
 pnpm --prefix api import:barangays                 # PSGC barangay polygons -> barangays (must precede migrate:geometry)
 pnpm --prefix api migrate:geometry                 # geometry columns + GiST indexes, FKs to barangays(id)
 pnpm --prefix api seed:dem                         # SRTM GeoTIFF -> dem_points (must precede migrate:config)

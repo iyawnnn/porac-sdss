@@ -58,6 +58,15 @@ export const oauthProviderEnum = pgEnum('oauth_provider', [
   'google',
   'facebook',
 ]);
+// Deliberately its own enum, not ticket_status — a work order tracks office
+// task progress, not the ticket's own resolution state, same reasoning
+// office_reassignments doesn't reuse ticket_status. See work_orders below.
+export const workOrderStatusEnum = pgEnum('work_order_status', [
+  'pending',
+  'in_progress',
+  'completed',
+  'cancelled',
+]);
 
 export const citizens = pgTable('citizens', {
   id: serial('id').primaryKey(),
@@ -333,6 +342,37 @@ export const admins = pgTable('admins', {
   // rather than surviving until its 8h expiry. Reactivation only flips this
   // back; the admin logs in fresh with their existing password.
   isActive: boolean('is_active').notNull().default(true),
+});
+
+// The actual field work MEO/MDRRMO must do to resolve a ticket — a ticket
+// may have several work orders. Independent of tickets.status: advancing or
+// completing a work order never mutates the ticket's own status, since no
+// safe automatic coupling rule exists yet (see docs/product-roadmap.md). Never
+// exposed to citizens — internal-only, MEO/MDRRMO + system_admin visible.
+// assigned_admin_id/created_by_admin_id are FK-less integers, same
+// cross-table reasoning as status_history.admin_id/
+// office_reassignments.admin_id above (actor identity can outlive/change
+// independently of the admins row).
+export const workOrders = pgTable('work_orders', {
+  id: serial('id').primaryKey(),
+  ticketId: integer('ticket_id')
+    .notNull()
+    .references(() => tickets.id),
+  title: text('title').notNull(),
+  // Internal office progress trail — never returned to citizens.
+  notes: text('notes'),
+  assignedOffice: officeEnum('assigned_office').notNull(),
+  assignedAdminId: integer('assigned_admin_id'),
+  status: workOrderStatusEnum('status').notNull().default('pending'),
+  dueDate: timestamp('due_date', { withTimezone: true }),
+  createdByAdminId: integer('created_by_admin_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
 });
 
 // Append-only trail for administrative actions (account create/role change,

@@ -11,6 +11,9 @@ import {
 } from './dashboard.service';
 import { TicketsService } from './tickets.service';
 import { BarangaysGeoService } from './barangays-geo.service';
+import { ModerationService } from './moderation.service';
+import { WorkOrdersService } from './work-orders.service';
+import type { OfficePerformanceCounts, OfficePerformanceSummary } from './dashboard.service';
 
 @UseGuards(AdminSessionGuard)
 @Controller('admin')
@@ -21,7 +24,48 @@ export class DashboardController {
     private readonly recompute: RecomputeService,
     private readonly weather: WeatherService,
     private readonly barangaysGeo: BarangaysGeoService,
+    private readonly moderation: ModerationService,
+    private readonly workOrders: WorkOrdersService,
   ) {}
+
+  // Combines the office-scoped ticket/work-order/moderation counts that
+  // already exist as separate service methods — no new query engine, just
+  // one more assembly point over data these services already compute.
+  // Never touches work_orders.notes or any other note body.
+  private async officeCounts(
+    scopedOffice: 'MEO' | 'MDRRMO' | undefined,
+  ): Promise<OfficePerformanceCounts> {
+    const [workOrderCounts, kpis, moderationStats] = await Promise.all([
+      this.workOrders.getOfficePerformanceCounts(scopedOffice),
+      this.dashboard.getDashboardKpis(scopedOffice),
+      this.moderation.getModerationStats(scopedOffice),
+    ]);
+    return {
+      ...workOrderCounts,
+      highUrgencyOpenTickets: kpis.high_urgency_count,
+      flaggedReportsPending: moderationStats.pending,
+    };
+  }
+
+  private async getOfficePerformanceSummary(
+    office: 'MEO' | 'MDRRMO' | undefined,
+  ): Promise<OfficePerformanceSummary> {
+    // office is undefined only for a system admin viewing city-wide
+    // (resolveOfficeScope always resolves a concrete office for MEO/MDRRMO
+    // admins) — see api/src/common/authz/admin-scope.ts. The MEO/MDRRMO
+    // breakdown is the same "only for a system admin, city-wide" rule the
+    // existing departmentWorkload card already follows.
+    const [scoped, byOffice] = await Promise.all([
+      this.officeCounts(office),
+      office
+        ? Promise.resolve(null)
+        : Promise.all([this.officeCounts('MEO'), this.officeCounts('MDRRMO')]).then(
+            ([MEO, MDRRMO]) => ({ MEO, MDRRMO }),
+          ),
+    ]);
+
+    return { scope: office ?? 'ALL', ...scoped, byOffice };
+  }
 
   @Get('dashboard')
   async getDashboard(
@@ -48,6 +92,8 @@ export class DashboardController {
       citizenSeverityDistribution,
       topUrgencyQueueData,
       rain1hMm,
+      officePerformanceSummary,
+      needsAttention,
     ] = await Promise.all([
       this.dashboard.getDashboardKpis(office),
       this.dashboard.getBarangayRiskRanking(5, office),
@@ -66,6 +112,8 @@ export class DashboardController {
         page: 1,
       }),
       this.weather.getCurrentRain1hMm(),
+      this.getOfficePerformanceSummary(office),
+      this.workOrders.getNeedsAttention(office),
     ]);
 
     return {
@@ -80,6 +128,8 @@ export class DashboardController {
       topUrgencyQueue: topUrgencyQueueData.tickets,
       range,
       rain1hMm,
+      officePerformanceSummary,
+      needsAttention,
     };
   }
 
