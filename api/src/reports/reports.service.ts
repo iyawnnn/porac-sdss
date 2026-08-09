@@ -96,6 +96,7 @@ export interface MyReportDetail {
   moderation_status: string | null;
   moderated_at: string | null;
   resolution_notes: string | null;
+  resolution_image_url: string | null;
   // Never null unless status !== 'Resolved'. Only the timestamp is exposed
   // here — dispute_reason was the citizen's own input, already shown to
   // them once at submission time, and re-displaying it isn't needed for
@@ -481,7 +482,7 @@ export class ReportsService {
         c.first_name AS citizen_first_name, c.last_name AS citizen_last_name,
         r.created_at, t.created_at AS ticket_created_at, t.updated_at AS ticket_updated_at,
         t.assigned_office, t.member_count, r.moderation_status, r.moderated_at, t.resolution_notes,
-        t.disputed_at, t.resolution_confirmed_at,
+        t.resolution_image_url, t.disputed_at, t.resolution_confirmed_at,
         r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id) AS is_merged
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id

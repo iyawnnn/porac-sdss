@@ -15,6 +15,7 @@ import {
 import LocationPreviewMapLoader from "@/components/features/citizen/dashboard/LocationPreviewMapLoader";
 import ReportTimeline from "@/components/features/citizen/dashboard/ReportTimeline";
 import ResolutionFeedback from "@/components/features/citizen/dashboard/ResolutionFeedback";
+import CaseClosureSummary from "@/components/features/citizen/dashboard/CaseClosureSummary";
 import { ReportImage } from "@/components/features/citizen/dashboard/ReportImage";
 
 const STATUS_STYLE: Record<string, { tint: string; ink: string; dot: string }> = {
@@ -321,11 +322,14 @@ export default async function MyReportDetailPage({
           </div>
 
           {report.status === "Resolved" && (
-            <ResolutionFeedback
-              reportId={report.id}
-              disputedAt={report.disputed_at}
-              resolutionConfirmedAt={report.resolution_confirmed_at}
-            />
+            <>
+              <CaseClosureSummary report={report} />
+              <ResolutionFeedback
+                reportId={report.id}
+                disputedAt={report.disputed_at}
+                resolutionConfirmedAt={report.resolution_confirmed_at}
+              />
+            </>
           )}
         </div>
 
