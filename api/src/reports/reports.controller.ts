@@ -4,6 +4,8 @@ import {
   Controller,
   FileTypeValidator,
   Get,
+  HttpCode,
+  HttpStatus,
   MaxFileSizeValidator,
   NotFoundException,
   Param,
@@ -103,5 +105,29 @@ export class ReportsController {
   @Get('public-map')
   publicMap(@CurrentCitizen() citizen: CitizenSession) {
     return this.reports.getPublicHazardMapData(citizen.citizenId);
+  }
+
+  @Post('reports/mine/:id/dispute')
+  @HttpCode(HttpStatus.OK)
+  async dispute(
+    @CurrentCitizen() citizen: CitizenSession,
+    @Param('id', ParseIntPipe) id: number,
+    @Body('reason') reason: unknown,
+  ) {
+    if (typeof reason !== 'string') {
+      throw new BadRequestException('A short reason is required.');
+    }
+    const result = await this.reports.disputeReport(citizen.citizenId, id, reason);
+    return { ok: true, ...result };
+  }
+
+  @Post('reports/mine/:id/confirm-resolution')
+  @HttpCode(HttpStatus.OK)
+  async confirmResolution(
+    @CurrentCitizen() citizen: CitizenSession,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const result = await this.reports.confirmResolution(citizen.citizenId, id);
+    return { ok: true, ...result };
   }
 }

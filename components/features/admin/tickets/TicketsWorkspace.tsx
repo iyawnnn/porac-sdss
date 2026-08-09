@@ -39,6 +39,7 @@ interface QueryState {
   barangayId: string;
   sort: TicketSort;
   search: string;
+  disputed: boolean;
   page: number;
   limit: number;
 }
@@ -65,6 +66,7 @@ function initialQueryState(query: Record<string, string | undefined>, sessionOff
     barangayId: query.barangayId ?? "",
     sort,
     search: query.search ?? "",
+    disputed: query.disputed === "true",
     page: Math.max(1, Number(query.page) || 1),
     limit,
   };
@@ -80,6 +82,7 @@ function buildParams(state: QueryState): URLSearchParams {
   if (state.category) params.set("category", state.category);
   if (state.barangayId) params.set("barangayId", state.barangayId);
   if (state.search) params.set("search", state.search);
+  if (state.disputed) params.set("disputed", "true");
   return params;
 }
 
@@ -183,7 +186,7 @@ export function TicketsWorkspace({
 
   function resetFilters() {
     setSearchInput("");
-    setQuery({ office: sessionOffice ?? "all", status: "active", category: "", barangayId: "", sort: "priority_desc", search: "", page: 1, limit: query.limit });
+    setQuery({ office: sessionOffice ?? "all", status: "active", category: "", barangayId: "", sort: "priority_desc", search: "", disputed: false, page: 1, limit: query.limit });
   }
 
   function retry() {
@@ -196,6 +199,7 @@ export function TicketsWorkspace({
     query.category !== "" ||
     query.barangayId !== "" ||
     query.search !== "" ||
+    query.disputed ||
     query.sort !== "priority_desc";
 
   const from = data.total === 0 ? 0 : (data.page - 1) * data.limit + 1;
@@ -306,6 +310,9 @@ export function TicketsWorkspace({
               <SelectItem value="newest">Newest first</SelectItem>
             </SelectContent>
           </Select>
+          <Button onClick={() => updateFilter({ disputed: !query.disputed })} size="sm" variant={query.disputed ? "default" : "outline"}>
+            Disputed only
+          </Button>
           {hasActiveFilters && (
             <Button className="ml-auto" onClick={resetFilters} size="sm" variant="ghost">
               Reset filters
@@ -467,9 +474,12 @@ function TicketRow({ ticket, returnQuery }: { ticket: AdminTicketRow; returnQuer
   return (
     <TableRow>
       <TableCell className="max-w-56 pl-6">
-        <Link className="block truncate font-medium hover:underline" href={detailHref} title={ticket.title ?? undefined}>
-          {ticket.title ?? `Ticket #${ticket.id}`}
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <Link className="block truncate font-medium hover:underline" href={detailHref} title={ticket.title ?? undefined}>
+            {ticket.title ?? `Ticket #${ticket.id}`}
+          </Link>
+          {ticket.disputed_at && <Badge className="bg-red-50 text-red-700" variant="outline">Disputed</Badge>}
+        </div>
         <div className="text-xs text-muted-foreground">
           Ticket <span className="font-mono">#{ticket.id}</span>
         </div>
@@ -523,7 +533,10 @@ function TicketCard({ ticket, returnQuery }: { ticket: AdminTicketRow; returnQue
               #{ticket.id} {"·"} {ticket.category}
             </p>
           </div>
-          <StatusPill status={ticket.status} />
+          <div className="flex items-center gap-1.5">
+            {ticket.disputed_at && <Badge className="bg-red-50 text-red-700" variant="outline">Disputed</Badge>}
+            <StatusPill status={ticket.status} />
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
           {ticket.barangay_name} {"·"} {ticket.assigned_office} {"·"} {ticket.member_count} member{ticket.member_count === 1 ? "" : "s"}

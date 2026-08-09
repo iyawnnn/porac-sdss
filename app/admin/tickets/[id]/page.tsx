@@ -115,6 +115,11 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           <Badge className={urgencyBadge.className} variant="outline">
             Urgency {ticket.priority_score ?? "—"} · {urgencyBadge.label}
           </Badge>
+          {ticket.disputed_at && (
+            <Badge className="bg-red-50 text-red-700" variant="outline">
+              Disputed {new Date(ticket.disputed_at).toLocaleDateString()}
+            </Badge>
+          )}
         </div>
         <p className="mt-1.5 text-sm text-ink-500">
           {ticket.barangay_name} · {ticket.assigned_office} · {ticket.member_count} report{ticket.member_count === 1 ? "" : "s"} merged
@@ -143,6 +148,18 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
 
           {ticket.resolution_image_url && primaryReport && (
             <BeforeAfterCard afterUrl={ticket.resolution_image_url} beforeUrl={primaryReport.image_url} notes={ticket.resolution_notes} title={primaryReport.title} />
+          )}
+
+          {ticket.disputed_at && (
+            <Card className="border-red-200 bg-red-50">
+              <CardContent className="p-4">
+                <p className="text-xs font-semibold tracking-wide text-red-700 uppercase">
+                  Citizen reports issue not fixed
+                </p>
+                <p className="mt-1 text-xs text-red-700/80">Disputed {new Date(ticket.disputed_at).toLocaleString()}</p>
+                {ticket.dispute_reason && <p className="mt-2 text-sm text-red-900">{ticket.dispute_reason}</p>}
+              </CardContent>
+            </Card>
           )}
         </div>
 
