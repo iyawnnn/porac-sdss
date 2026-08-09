@@ -31,7 +31,9 @@ A full notifications page backing the existing bell.
 
 Not a discrete feature and never "done": monitoring/alerting, backup verification, load and performance validation, secrets rotation, and a deployment runbook. Revisit and expand as the system approaches real deployment rather than treating it as a one-time checkbox.
 
-Known items already identified: nothing currently schedules the four `POST /cron/*` endpoints (`recompute-urgency`, `recompute-weather`, `cleanup-password-reset-tokens`, `cleanup-notifications`), and the credentials listed in `PLAN.md` §0 have not been rotated.
+**Done:** cron scheduling (`.github/workflows/cron.yml`, daily, all five `/cron/*` routes) and rate-limit event cleanup (`POST /cron/cleanup-rate-limit-events`, 30-day retention) — see `docs/product-roadmap.md`'s Production Hardening entry for detail.
+
+**Still open:** monitoring/alerting, backup verification, load/perf validation, credential rotation from `PLAN.md` §0 (gate on an actual deploy decision, not before), and a written deployment runbook (no hosting platform is committed anywhere in this repo yet).
 
 ---
 
