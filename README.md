@@ -118,6 +118,8 @@ pnpm --prefix api migrate:citizen-identities
 pnpm --prefix api migrate:citizen-account-security
 pnpm --prefix api migrate:citizen-password-reset
 pnpm --prefix api migrate:notifications
+pnpm --prefix api migrate:ticket-disputes           # tickets.disputed_at/dispute_reason (citizen dispute loop)
+pnpm --prefix api migrate:ticket-resolution-confirmation  # tickets.resolution_confirmed_at (persistent Confirm Fixed)
 pnpm --prefix api seed:users                        # citizen demo accounts (Section G) — idempotent, safe to rerun
 pnpm --prefix api seed:admin -- meo@porac.gov.ph PoracDemo2026! MEO supervisor      # admin demo account (Section G)
 pnpm --prefix api seed:admin -- mdrrmo@porac.gov.ph PoracDemo2026! MDRRMO supervisor # second admin demo account
@@ -197,7 +199,7 @@ This is idempotent in the sense that re-running it always produces the same dete
 
 ### Scheduled cron jobs (GitHub Actions)
 
-`api/src/cron/cron.controller.ts` exposes five routes behind `CronSecretGuard` (urgency recompute, weather recompute, and three cleanup jobs — expired password-reset tokens, old read notifications, old rate-limit events). `.github/workflows/cron.yml` calls all five once a day via `curl`, authenticated the same way the guard already accepts (`Authorization: Bearer $CRON_SECRET`).
+`api/src/cron/cron.controller.ts` exposes six routes behind `CronSecretGuard` (urgency recompute, weather recompute, three cleanup jobs — expired password-reset tokens, old read notifications, old rate-limit events — and a ticket escalation check, `POST /cron/check-ticket-escalations`). `.github/workflows/cron.yml` calls all six once a day via `curl`, authenticated the same way the guard already accepts (`Authorization: Bearer $CRON_SECRET`).
 
 That workflow only works once two values are set under the repository's **Settings → Secrets and variables → Actions**:
 

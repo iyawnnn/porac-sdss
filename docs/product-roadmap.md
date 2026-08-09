@@ -31,7 +31,7 @@ Verified against the current tree, not assumed:
 - Deduplication, urgency triage, weather/DEM pipeline (see `PLAN.md` §6–§7)
 - `docs/database.md` per-table reference and the `city_boundary_osm` import
 
-Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[id]`, `/admin/map`, `/admin/barangay-insights`, `/admin/barangay-insights/[barangayId]`, `/admin/flagged`, `/admin/reports`, `/admin/admins`, `/admin/activity-log`, `/admin/account`, `/admin/login`, `/admin/work-orders`.
+Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[id]`, `/admin/map`, `/admin/barangay-insights`, `/admin/barangay-insights/[barangayId]`, `/admin/flagged`, `/admin/reports`, `/admin/notifications`, `/admin/admins`, `/admin/activity-log`, `/admin/account`, `/admin/login`, `/admin/work-orders`.
 
 ---
 
@@ -130,6 +130,14 @@ A read-only per-barangay operational drill-down: `/admin/barangay-insights` (all
 - Never selects `work_orders.notes` (this feature never touches `work_orders` at all).
 - **Out of MVP, not built**: editing/creating/deleting barangays, CSV export, elevation *filtering*, crew scheduling, due-date calendars, inspection logs, attachments/checklists — see `docs/next-product-roadmap.md` §4 for the full deferred list and reasons.
 
+### Notification Center — **completed**
+
+A full notifications page backing the existing bell — `/admin/notifications`, sidebar entry under Management. Closes the gap where the bell showed only the latest 10 with no filter, no pagination, and no history.
+
+- Available to all three roles (System Admin, MEO, MDRRMO) — the route carries no extra guard beyond `AdminSessionGuard`, and each admin sees only their own and their office's rows, using the same `NotificationsService` scoping (`scopeFilter`) every other notification read already goes through. No RBAC surface of its own.
+- `GET /notifications?before=&limit=&status=&type=` — the cursor pagination and `nextCursor` `NotificationsService.listForPrincipal` already computed were simply wired up on the frontend instead of discarded; `status` (`all`/`unread`/`read`) and `type` are additive narrowing filters, same pattern as every other admin list endpoint's optional filters.
+- No schema change, no new backend service — `NotificationCenterWorkspace` (`components/features/admin/notifications/`) is the only new surface of substance.
+
 ### Citizen Resolution Feedback / Dispute Loop — **completed**
 
 Closes the one-way finality gap where a citizen had no way to say a `Resolved` ticket wasn't actually fixed. A citizen can "Confirm Fixed" or "Report Still Not Fixed" on a resolved report, both persisted; the latter notifies the assigned office and surfaces on the existing Ticket Queue/Ticket Detail — no new sidebar item, no new admin page.
@@ -154,7 +162,7 @@ A personal quick filter on the existing `/admin/work-orders` list — no new pag
 A backend-only safety net: flags active tickets that have stalled with no real field-work progress, so they don't silently age out of view. No new page, no new sidebar item — it's a notification, delivered through the existing bell/Notification Center.
 
 - `EscalationService.checkTicketEscalations` (`api/src/domain/escalation.service.ts`) — active ticket (`Reported`/`Under Review`/`In Progress`) older than 7 days with no work order that ever reached `in_progress`/`completed` (a `pending`/`cancelled`-only work order, or no work order at all, still counts as stalled). Read-only against `tickets`/`work_orders`/`notifications` — never writes `tickets.status`, `work_orders.status`, or any urgency/priority column.
-- `POST /cron/check-ticket-escalations` (`CronController`), behind the same `CronSecretGuard` as every other cron route, added to `.github/workflows/cron.yml`'s daily run alongside the existing five. Returns `{ candidatesFound, notificationsCreated, duplicatesSkipped }`.
+- `POST /cron/check-ticket-escalations` (`CronController`), behind the same `CronSecretGuard` as every other cron route, added to `.github/workflows/cron.yml`'s daily run alongside the other five (six total — see the Production Hardening entry below). Returns `{ candidatesFound, notificationsCreated, duplicatesSkipped }`.
 - Notification: `type: 'ticket_escalation'`, office-targeted (`recipientOffice`, no per-admin fan-out — same shape as `ticket_critical`), linking to `/admin/tickets/:id`.
 - **Duplicate prevention is schema-free**: a ticket is escalated at most once for the lifetime of its `ticket_escalation` notification row — before creating one, the service checks whether `notifications` already has a `type: 'ticket_escalation'` row for that `entityId` and skips it if so, rather than adding a new "already escalated" column to `tickets`. Re-escalating after a stall recurs is a deliberate non-goal for this pass, not an oversight.
 - No schema change, no migration.
@@ -178,7 +186,7 @@ In priority order.
 
 Last on this list because it's continuous, not a single feature: monitoring/alerting, backup verification, load/perf validation, secrets rotation, deployment runbook. Revisit and expand this item as the system approaches real deployment, rather than treating it as a one-time checkbox.
 
-- **Cron scheduling — done.** `.github/workflows/cron.yml` calls all five `api/src/cron/*` routes (`recompute-urgency`, `recompute-weather`, `cleanup-password-reset-tokens`, `cleanup-notifications`, `cleanup-rate-limit-events`) daily via `curl`, authenticated the same way `CronSecretGuard` already accepts (`Authorization: Bearer $CRON_SECRET`). Requires two repo-level GitHub Actions configs to actually run: `vars.PORAC_API_BASE_URL` and `secrets.CRON_SECRET` — see that workflow file's header comment.
+- **Cron scheduling — done.** `.github/workflows/cron.yml` calls all six `api/src/cron/*` routes (`recompute-urgency`, `recompute-weather`, `cleanup-password-reset-tokens`, `cleanup-notifications`, `cleanup-rate-limit-events`, `check-ticket-escalations`) daily via `curl`, authenticated the same way `CronSecretGuard` already accepts (`Authorization: Bearer $CRON_SECRET`). Requires two repo-level GitHub Actions configs to actually run: `vars.PORAC_API_BASE_URL` and `secrets.CRON_SECRET` — see that workflow file's header comment.
 - **Rate-limit event cleanup — done.** `RateLimitService.cleanupOldEvents()` + `POST /cron/cleanup-rate-limit-events` prunes `rate_limit_events` and `password_reset_rate_limit_events` past a 30-day retention window — see `docs/database.md` for why 30 days is safe (both tables' checks only ever look back 24 hours at most).
 - **Setup/deployment documentation — done.** `README.md`'s env var setup section previously named variables that don't exist in this codebase (`OPENWEATHER_API_KEY`, `NEXTAUTH_SECRET`, `NEXT_PUBLIC_APP_URL`) and never mentioned `api/.env` as a separate file at all — a fresh clone following it literally could not start the API. Rewritten to explain the two-env-file split accurately (with tables of what's actually required vs. optional on each side, matching `api/src/config/env.ts`'s Zod schema) and to add a new "Scheduled Jobs & Deployment" section documenting the `CRON_SECRET`/`PORAC_API_BASE_URL` GitHub Actions requirements and stating plainly that no hosting platform is decided yet.
 - **Still not done**: monitoring/alerting, backup verification, load/perf validation, credential rotation (deliberately gated on an actual deploy decision — see `PLAN.md` §0), and a written deployment runbook (no hosting platform is committed anywhere in this repo yet).
