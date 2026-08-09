@@ -41,17 +41,23 @@ export function WorkOrderDueDateEditor({
   async function save(dueDate: string) {
     setSaving(true);
     setValue(dueDate);
-    const res = await fetch(`/api/admin/work-orders/${workOrder.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dueDate: dueDate ? new Date(dueDate).toISOString() : null }),
-    });
-    if (res.ok) {
-      onUpdated((await res.json()) as WorkOrderRow);
-    } else {
-      setValue(toDateInputValue(workOrder.due_date));
+    // finally, not a trailing setSaving(false) — a thrown network error or a
+    // non-OK response with an unparsable body would otherwise leave saving
+    // stuck true forever, permanently disabling the input and Clear button.
+    try {
+      const res = await fetch(`/api/admin/work-orders/${workOrder.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dueDate: dueDate ? new Date(dueDate).toISOString() : null }),
+      });
+      if (res.ok) {
+        onUpdated((await res.json()) as WorkOrderRow);
+      } else {
+        setValue(toDateInputValue(workOrder.due_date));
+      }
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {

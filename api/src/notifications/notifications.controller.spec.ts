@@ -127,9 +127,42 @@ describe('NotificationsController routes', () => {
 
     expect(notifications.listForPrincipal).toHaveBeenCalledWith(
       { type: 'admin', adminId: 1, office: 'MEO' },
-      { before: 42, limit: 5 },
+      { before: 42, limit: 5, status: 'all', type: undefined },
     );
     expect(result).toEqual({ items: [{ id: 1 }], nextCursor: null });
+  });
+
+  it('GET / passes through a recognized status filter', async () => {
+    const { controller, notifications, req } = makeAuthedController();
+    await controller.list(req, undefined, undefined, 'unread');
+    expect(notifications.listForPrincipal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: 'unread' }),
+    );
+
+    await controller.list(req, undefined, undefined, 'read');
+    expect(notifications.listForPrincipal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: 'read' }),
+    );
+  });
+
+  it('GET / falls back an unrecognized status value to "all" rather than passing it through raw', async () => {
+    const { controller, notifications, req } = makeAuthedController();
+    await controller.list(req, undefined, undefined, 'garbage');
+    expect(notifications.listForPrincipal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: 'all' }),
+    );
+  });
+
+  it('GET / passes through a type filter when provided', async () => {
+    const { controller, notifications, req } = makeAuthedController();
+    await controller.list(req, undefined, undefined, undefined, 'ticket_critical');
+    expect(notifications.listForPrincipal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'ticket_critical' }),
+    );
   });
 
   it('GET /unread-count returns { count }', async () => {

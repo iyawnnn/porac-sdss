@@ -190,7 +190,7 @@ test("no fake sidebar item was added for map presets", async ({ page }) => {
   await page.goto("/admin");
   const nav = page.getByRole("navigation", { name: "Admin" });
   await expect(nav.getByRole("link", { name: "Map Presets" })).toHaveCount(0);
-  // Reports & Exports and Barangay Insights are separate, real routes added
-  // since this count was fixed at 5 — both are counted here too.
-  await expect(nav.getByRole("link")).toHaveCount(7);
+  // Reports & Exports, Barangay Insights, and Notifications are separate,
+  // real routes added since this count was fixed at 5 — all are counted here too.
+  await expect(nav.getByRole("link")).toHaveCount(8);
 });
