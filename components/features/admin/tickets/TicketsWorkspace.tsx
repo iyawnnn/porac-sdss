@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, AlertTriangle, Gauge, MapPin, SearchIcon, SearchXIcon, Ticket as TicketIcon, type LucideIcon } from "lucide-react";
+import { Activity, AlertTriangle, DownloadIcon, Gauge, MapPin, SearchIcon, SearchXIcon, Ticket as TicketIcon, type LucideIcon } from "lucide-react";
 import type { AdminTicketRow, PaginatedTickets } from "@/lib/types/admin-tickets";
 import { TICKET_STATUSES, TICKET_CATEGORIES, PAGE_LIMITS, type TicketSort } from "@/lib/types/admin-ticket-constants";
 import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
@@ -214,9 +214,17 @@ export function TicketsWorkspace({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="space-y-0.5">
-        <h1 className="font-heading text-base font-semibold">Ticket Queue</h1>
-        <p className="text-xs text-muted-foreground">Current workload summary</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <h1 className="font-heading text-base font-semibold">Ticket Queue</h1>
+          <p className="text-xs text-muted-foreground">Current workload summary</p>
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <a href={`/api/admin/reports/tickets.csv?${buildParams(query).toString()}`}>
+            <DownloadIcon />
+            Export CSV
+          </a>
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

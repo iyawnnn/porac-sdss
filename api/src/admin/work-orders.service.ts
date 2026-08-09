@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, gte, inArray, isNotNull, lt, sql as dsql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lt, lte, sql as dsql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
 import { admins, tickets, workOrders } from '../db/schema';
@@ -80,6 +80,23 @@ export interface WorkOrderNeedsAttention {
   overdueWorkOrders: WorkOrderRow[];
   dueTodayWorkOrders: WorkOrderRow[];
   highUrgencyTicketsWithOpenWork: HighUrgencyTicketWithOpenWork[];
+}
+
+// Feeds ReportsService's CSV export — deliberately excludes `notes` (the
+// internal office progress trail), matching the "no note bodies in exports"
+// rule Work Orders already applies to dashboard summaries.
+export interface WorkOrderExportRow {
+  id: number;
+  ticket_id: number;
+  title: string;
+  assigned_office: 'MEO' | 'MDRRMO';
+  assigned_admin_name: string | null;
+  assigned_admin_email: string | null;
+  status: WorkOrderStatus;
+  due_date: Date | null;
+  completed_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
 const ACTIVE_TICKET_STATUSES = ['Reported', 'Under Review', 'In Progress'] as const;
@@ -541,5 +558,51 @@ export class WorkOrdersService {
       dueTodayWorkOrders: dueTodayWorkOrders as WorkOrderRow[],
       highUrgencyTicketsWithOpenWork,
     };
+  }
+
+  // ponytail: capped at 5,000 rows rather than streamed/paginated — same
+  // ceiling and rationale as TicketsService.getTicketsForExport.
+  async getWorkOrdersForExport(
+    filters: WorkOrderFilters & { dateFrom?: Date; dateTo?: Date } = {},
+  ): Promise<WorkOrderExportRow[]> {
+    const conditions = [
+      filters.office ? eq(workOrders.assignedOffice, filters.office) : undefined,
+      filters.status ? eq(workOrders.status, filters.status) : undefined,
+      filters.assignedAdminId
+        ? eq(workOrders.assignedAdminId, filters.assignedAdminId)
+        : undefined,
+      filters.overdue
+        ? and(
+            isNotNull(workOrders.dueDate),
+            lt(workOrders.dueDate, new Date()),
+            dsql`${workOrders.status} NOT IN ('completed', 'cancelled')`,
+          )
+        : undefined,
+      filters.dateFrom ? gte(workOrders.createdAt, filters.dateFrom) : undefined,
+      filters.dateTo ? lte(workOrders.createdAt, filters.dateTo) : undefined,
+    ].filter((c) => c !== undefined);
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const rows = await this.db
+      .select({
+        id: workOrders.id,
+        ticket_id: workOrders.ticketId,
+        title: workOrders.title,
+        assigned_office: workOrders.assignedOffice,
+        assigned_admin_name: dsql<string | null>`CASE WHEN ${admins.id} IS NULL THEN NULL ELSE ${admins.firstName} || ' ' || ${admins.lastName} END`,
+        assigned_admin_email: admins.email,
+        status: workOrders.status,
+        due_date: workOrders.dueDate,
+        completed_at: workOrders.completedAt,
+        created_at: workOrders.createdAt,
+        updated_at: workOrders.updatedAt,
+      })
+      .from(workOrders)
+      .leftJoin(admins, eq(workOrders.assignedAdminId, admins.id))
+      .where(where)
+      .orderBy(desc(workOrders.createdAt))
+      .limit(5000);
+
+    return rows as WorkOrderExportRow[];
   }
 }
