@@ -52,15 +52,86 @@ test("Work Orders page has an Export CSV button whose href includes the current 
   expect(href).toContain("office=MDRRMO");
 });
 
-// --- No fake route/sidebar item --------------------------------------------
+// --- Reports & Exports page: route, sidebar, no other fake routes ---------
 
-test("no fake sidebar route was added for reports/exports", async ({ page }) => {
+test("Reports & Exports sidebar link exists and no fake sidebar routes were added", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   const nav = page.getByRole("navigation", { name: "Admin" });
-  await expect(nav.getByRole("link", { name: "Reports", exact: true })).toHaveCount(0);
-  await expect(nav.getByRole("link")).toHaveCount(5);
+  await expect(nav.getByRole("link", { name: "Reports & Exports", exact: true })).toBeVisible();
+  // The known, real nav set for a non-system-admin — Reports & Exports is
+  // the only addition; nothing else was added ahead of a real route.
+  await expect(nav.getByRole("link")).toHaveCount(6);
+});
+
+test("/admin/reports page loads for an authenticated admin", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
   const response = await page.request.get("/admin/reports");
-  expect(response.status()).toBe(404);
+  expect(response.status()).toBe(200);
+  await page.goto("/admin/reports");
+  await expect(page.getByRole("heading", { name: "Reports & Exports" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Printable operational summary" })).toBeVisible();
+});
+
+test("no citizen route can access the reports page", async ({ page }) => {
+  // proxy.ts redirects any unauthenticated /admin/* request to /admin/login
+  // (page-redirect UX only — see proxy.ts) rather than returning a bare 401,
+  // matching how every other admin page route behaves.
+  const response = await page.request.get("/admin/reports");
+  expect(response.ok()).toBe(true);
+  expect(response.url()).toContain("/admin/login");
+});
+
+test("MEO admin sees an office-scoped summary and no office picker on the reports page", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto("/admin/reports");
+  await expect(page.getByText("MEO office summary", { exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Office" })).toHaveCount(0);
+  const exportLink = page.getByRole("link", { name: "Export Tickets CSV" });
+  await expect(exportLink).toHaveAttribute("href", /office=MEO/);
+});
+
+test("MDRRMO admin sees an office-scoped summary and no office picker on the reports page", async ({ page }) => {
+  await loginAs(page, E2E_MDRRMO_ADMIN);
+  await page.goto("/admin/reports");
+  await expect(page.getByText("MDRRMO office summary", { exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Office" })).toHaveCount(0);
+});
+
+test("system admin sees an office filter defaulting to city-wide on the reports page", async ({ page }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await page.goto("/admin/reports");
+  await expect(page.getByText("City-wide summary", { exact: true })).toBeVisible();
+  const officeFilter = page.getByRole("combobox", { name: "Office", exact: true });
+  await expect(officeFilter).toBeVisible();
+
+  await officeFilter.click();
+  await page.getByRole("option", { name: "MEO" }).click();
+  await expect(page.getByText("MEO office summary", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Export Tickets CSV" })).toHaveAttribute("href", /office=MEO/);
+});
+
+test("ticket export URL on the reports page includes the selected filters", async ({ page }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await page.goto("/admin/reports");
+  await page.getByLabel("Ticket category", { exact: true }).click();
+  await page.getByRole("option", { name: "Pothole" }).click();
+  await page.getByLabel("Ticket urgency", { exact: true }).click();
+  await page.getByRole("option", { name: "Critical", exact: true }).click();
+
+  const exportLink = page.getByRole("link", { name: "Export Tickets CSV" });
+  await expect(exportLink).toHaveAttribute("href", /category=Pothole/);
+  await expect(exportLink).toHaveAttribute("href", /urgency=Critical/);
+});
+
+test("work order export URL on the reports page includes the selected filters", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto("/admin/reports");
+  await page.getByLabel("Work order status", { exact: true }).click();
+  await page.getByRole("option", { name: "Pending", exact: true }).click();
+
+  const exportLink = page.getByRole("link", { name: "Export Work Orders CSV" });
+  await expect(exportLink).toHaveAttribute("href", /status=pending/);
+  await expect(exportLink).toHaveAttribute("href", /office=MEO/);
 });
 
 // --- Backend: office scoping, CSV shape, validation -----------------------

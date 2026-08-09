@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, Wrench, type LucideIcon } from "lucide-react";
+import { ClipboardList, FileBarChart2, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, Wrench, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
@@ -21,6 +21,7 @@ function buildNavSections(systemAdmin: boolean): { heading: string; items: NavIt
   const managementItems: NavItem[] = [
     { href: "/admin/work-orders", label: "Work Orders", icon: Wrench },
     { href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert },
+    { href: "/admin/reports", label: "Reports & Exports", icon: FileBarChart2 },
   ];
   if (systemAdmin) {
     managementItems.push({ href: "/admin/admins", label: "Admin Management", icon: ShieldUser });
