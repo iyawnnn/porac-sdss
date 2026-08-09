@@ -4,11 +4,13 @@ import type { WeatherService } from '../domain/weather.service';
 import type { PasswordResetService } from '../citizens/password-reset.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { RateLimitService } from '../domain/ratelimit.service';
+import type { EscalationService } from '../domain/escalation.service';
 
 function makeController(overrides: {
   cleanupExpiredTokens?: jest.Mock;
   cleanupOldNotifications?: jest.Mock;
   cleanupOldEvents?: jest.Mock;
+  checkTicketEscalations?: jest.Mock;
 }) {
   const passwordReset = {
     cleanupExpiredTokens: overrides.cleanupExpiredTokens ?? jest.fn(),
@@ -24,6 +26,11 @@ function makeController(overrides: {
         passwordResetRateLimitEventsDeleted: 0,
       }),
   } as unknown as RateLimitService;
+  const escalation = {
+    checkTicketEscalations:
+      overrides.checkTicketEscalations ??
+      jest.fn().mockResolvedValue({ candidatesFound: 0, notificationsCreated: 0, duplicatesSkipped: 0 }),
+  } as unknown as EscalationService;
 
   return new CronController(
     {} as RecomputeService,
@@ -31,6 +38,7 @@ function makeController(overrides: {
     passwordReset,
     notifications,
     rateLimit,
+    escalation,
   );
 }
 
@@ -71,6 +79,24 @@ describe('CronController.cleanupRateLimitEvents', () => {
       passwordResetRateLimitEventsDeleted: 3,
     });
     expect(cleanupOldEvents).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CronController.checkTicketEscalations', () => {
+  it('exposes POST /cron/check-ticket-escalations and returns the counts from EscalationService', async () => {
+    const checkTicketEscalations = jest.fn().mockResolvedValue({
+      candidatesFound: 4,
+      notificationsCreated: 3,
+      duplicatesSkipped: 1,
+    });
+    const controller = makeController({ checkTicketEscalations });
+
+    await expect(controller.checkTicketEscalations()).resolves.toEqual({
+      candidatesFound: 4,
+      notificationsCreated: 3,
+      duplicatesSkipped: 1,
+    });
+    expect(checkTicketEscalations).toHaveBeenCalledTimes(1);
   });
 });
 

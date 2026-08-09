@@ -149,6 +149,16 @@ A personal quick filter on the existing `/admin/work-orders` list — no new pag
 - Office scoping is unchanged — `resolveOfficeScope` still runs first in `parseQuery`, so an MEO/MDRRMO admin's "My Assignments" is still clamped to their own office.
 - No schema change, no migration, no new endpoint.
 
+### Ticket Escalation Notifications — **completed**
+
+A backend-only safety net: flags active tickets that have stalled with no real field-work progress, so they don't silently age out of view. No new page, no new sidebar item — it's a notification, delivered through the existing bell/Notification Center.
+
+- `EscalationService.checkTicketEscalations` (`api/src/domain/escalation.service.ts`) — active ticket (`Reported`/`Under Review`/`In Progress`) older than 7 days with no work order that ever reached `in_progress`/`completed` (a `pending`/`cancelled`-only work order, or no work order at all, still counts as stalled). Read-only against `tickets`/`work_orders`/`notifications` — never writes `tickets.status`, `work_orders.status`, or any urgency/priority column.
+- `POST /cron/check-ticket-escalations` (`CronController`), behind the same `CronSecretGuard` as every other cron route, added to `.github/workflows/cron.yml`'s daily run alongside the existing five. Returns `{ candidatesFound, notificationsCreated, duplicatesSkipped }`.
+- Notification: `type: 'ticket_escalation'`, office-targeted (`recipientOffice`, no per-admin fan-out — same shape as `ticket_critical`), linking to `/admin/tickets/:id`.
+- **Duplicate prevention is schema-free**: a ticket is escalated at most once for the lifetime of its `ticket_escalation` notification row — before creating one, the service checks whether `notifications` already has a `type: 'ticket_escalation'` row for that `entityId` and skips it if so, rather than adding a new "already escalated" column to `tickets`. Re-escalating after a stall recurs is a deliberate non-goal for this pass, not an oversight.
+- No schema change, no migration.
+
 ---
 
 ## 3. Next Product Features
