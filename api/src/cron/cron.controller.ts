@@ -2,6 +2,7 @@ import { Controller, Post, UseGuards } from '@nestjs/common';
 import { RecomputeService } from '../domain/recompute.service';
 import { WeatherService } from '../domain/weather.service';
 import { RateLimitService } from '../domain/ratelimit.service';
+import { EscalationService } from '../domain/escalation.service';
 import { PasswordResetService } from '../citizens/password-reset.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CronSecretGuard } from '../common/guards/cron-secret.guard';
@@ -21,6 +22,7 @@ export class CronController {
     private readonly passwordReset: PasswordResetService,
     private readonly notifications: NotificationsService,
     private readonly rateLimit: RateLimitService,
+    private readonly escalation: EscalationService,
   ) {}
 
   @Post('recompute-urgency')
@@ -60,5 +62,15 @@ export class CronController {
   @Post('cleanup-rate-limit-events')
   cleanupRateLimitEvents() {
     return this.rateLimit.cleanupOldEvents();
+  }
+
+  // Escalates active tickets (Reported/Under Review/In Progress) that have
+  // sat for 7+ days with no work order that ever reached in_progress/
+  // completed — a ticket_escalation notification to the assigned office,
+  // never a status/scoring change. See EscalationService for the full rule
+  // and its duplicate-prevention behavior.
+  @Post('check-ticket-escalations')
+  checkTicketEscalations() {
+    return this.escalation.checkTicketEscalations();
   }
 }

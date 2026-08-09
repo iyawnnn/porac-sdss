@@ -3,10 +3,10 @@ name: Scheduled Cron Jobs
 # Calls the existing api/src/cron/cron.controller.ts endpoints on a
 # schedule — none of them have any other trigger today (urgency/weather
 # recompute also happen inline on dashboard/ticket loads, so this is a
-# safety net for them; the three cleanup jobs have no other trigger at
-# all). One daily schedule for everything rather than several schedules
-# with per-job conditionals — every job here is cheap and idempotent, so
-# there's nothing to gain from splitting them.
+# safety net for them; the three cleanup jobs and the ticket-escalation
+# check have no other trigger at all). One daily schedule for everything
+# rather than several schedules with per-job conditionals — every job here
+# is cheap and idempotent, so there's nothing to gain from splitting them.
 #
 # Required repository configuration (Settings > Secrets and variables > Actions):
 #   secrets.CRON_SECRET       - same value as the deployed API's CRON_SECRET env var
@@ -46,4 +46,9 @@ jobs:
       - name: Cleanup old rate-limit events
         run: |
           curl -sf -X POST "${{ vars.PORAC_API_BASE_URL }}/cron/cleanup-rate-limit-events" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
+      - name: Check ticket escalations
+        run: |
+          curl -sf -X POST "${{ vars.PORAC_API_BASE_URL }}/cron/check-ticket-escalations" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
