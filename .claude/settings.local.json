@@ -38,7 +38,8 @@
       "Bash(npx jest *)",
       "Bash(pnpm --prefix api build)",
       "Bash(pnpm --prefix api test)",
-      "Bash(pnpm *)"
+      "Bash(pnpm *)",
+      "Bash(git *)"
     ]
   }
 }
