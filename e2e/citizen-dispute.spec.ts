@@ -133,7 +133,10 @@ test.describe("Citizen resolution feedback", () => {
     // status filter excludes — switch to "All statuses" first so the
     // disputed-only toggle has something to show.
     await adminPage.goto("/admin/tickets?status=all");
+    await adminPage.waitForLoadState("networkidle");
     await adminPage.getByRole("button", { name: "Disputed only" }).click();
+    await expect(adminPage).toHaveURL(/[?&]disputed=true(&|$)/);
+    await adminPage.waitForLoadState("networkidle");
     await expect(adminPage.getByRole("link", { name: `E2E dispute check dispute-${citizen.email}` })).toBeVisible();
     await expect(adminPage.getByText("Disputed", { exact: true }).first()).toBeVisible();
 
