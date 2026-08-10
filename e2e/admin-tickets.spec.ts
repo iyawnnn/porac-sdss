@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
-import { loginAdmin as loginAs } from "./helpers";
+import { loginAdmin as loginAs, loginCitizen } from "./helpers";
 
 test.setTimeout(60_000);
 
@@ -16,7 +16,7 @@ function sessionCookieHeader(cookies: { name: string; value: string }[]): Record
 // has no revert endpoint to restore it with afterwards. "Pothole" always
 // routes to MEO (api/src/common/utils/office.ts), so E2E_MEO_ADMIN can act
 // on it without any additional reassignment.
-async function createThrowawayTicket(citizenPage: Page, titleSuffix: string): Promise<number> {
+async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Promise<{ reportId: number; ticketId: number }> {
   // Pothole's dedup merge radius is 25m (api/src/common/utils/radius.ts) —
   // a fixed lat/lng would silently merge into whatever other fixture (e.g.
   // citizen-dispute.spec.ts's own Pothole reports) already sits at that
@@ -39,19 +39,20 @@ async function createThrowawayTicket(citizenPage: Page, titleSuffix: string): Pr
     },
   });
   expect(res.ok()).toBe(true);
-  const { ticketId } = (await res.json()) as { ticketId: number };
-  return ticketId;
+  return (await res.json()) as { reportId: number; ticketId: number };
 }
 
-async function signupCitizen(page: Page, label: string): Promise<void> {
+async function signupCitizen(page: Page, label: string): Promise<{ email: string; password: string }> {
   const email = `e2e-tickets-${label}-${Date.now()}@porac.ph`;
+  const password = "PoracDemo2026!";
   await page.goto("/signup");
   await page.getByLabel("First name").fill("Ticket");
   await page.getByLabel("Last name").fill(label);
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill("PoracDemo2026!");
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Create Account" }).click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+  return { email, password };
 }
 
 // --- 1. Ticket Queue baseline ---------------------------------------------
@@ -109,9 +110,15 @@ test("search filter narrows results to the searched ticket", async ({ page, requ
   await expect(page).toHaveURL(new RegExp(`[?&]search=${target.id}(&|$)`), { timeout: 5000 });
   await page.waitForLoadState("networkidle");
 
+  // Search matches on exact ticket ID OR a title/barangay substring
+  // (TicketsService.getTicketsForAdmin), so a bare count of 1 isn't
+  // guaranteed once enough disposable E2E tickets accumulate in a shared
+  // dev DB — a numeric ID can coincidentally substring-match another
+  // ticket's title. What must hold is that the target ticket itself is
+  // among the results.
   const rows = page.getByRole("row").filter({ hasText: "View ticket" });
-  await expect(rows).toHaveCount(1);
-  await expect(rows.first().getByText(`#${target.id}`)).toBeVisible();
+  await expect(rows.first()).toBeVisible();
+  await expect(page.getByText(`#${target.id}`, { exact: true })).toBeVisible();
 });
 
 test("disputed-only filter shows only disputed tickets or the empty state", async ({ page }) => {
@@ -255,7 +262,7 @@ test("advancing a ticket's status from the queue-linked detail page updates the 
   const citizenContext = await browser.newContext();
   const citizenPage = await citizenContext.newPage();
   await signupCitizen(citizenPage, "status");
-  const ticketId = await createThrowawayTicket(citizenPage, `${Date.now()}`);
+  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
   await citizenContext.close();
 
   await loginAs(page, E2E_MEO_ADMIN);
@@ -435,4 +442,98 @@ test("mobile viewport renders the ticket queue card list, not the desktop table,
   } else {
     await expect(page.getByText("No tickets match this filter.")).toBeVisible();
   }
+});
+
+// --- 11. Admin resolution flow + citizen Case Closure Summary integration ----
+
+// citizen-dispute.spec.ts's own "Case Closure Summary" tests already cover
+// notes/photo/confirm/dispute permutations thoroughly, but always resolve
+// via a direct API call to /status — never by actually driving
+// HorizontalStatusTracker's UI (the plain-POST intermediate steps, then the
+// ResolveDialog's file input + notes textarea for the final one). These two
+// tests share one disposable ticket (module state, safe under this file's
+// mandatory --workers=1 — see admin-work-orders.spec.ts's borrowedTicket for
+// the same pattern) so the second test can verify the citizen-facing page
+// reflects exactly what the first test resolved through the real dialog,
+// without re-creating and re-resolving a second ticket just to look at it
+// from the other side.
+let resolvedFixture: { reportId: number; ticketId: number; citizen: { email: string; password: string } } | null = null;
+const RESOLUTION_NOTES = "Pothole patched and repaved by field crew.";
+
+test("resolving a ticket through the admin UI records notes, photo, and updates the status tracker", async ({ page, browser }) => {
+  // Citizen signup + report submission + 3 real status round trips
+  // (including a live Cloudinary image upload) comfortably exceed the
+  // file's default 60s budget under load.
+  test.setTimeout(90_000);
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  const citizen = await signupCitizen(citizenPage, "resolve");
+  const { reportId, ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
+  resolvedFixture = { reportId, ticketId, citizen };
+
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  // Reported -> Under Review -> In Progress via the tracker's plain advance
+  // button (no dialog for these two steps).
+  await page.getByRole("button", { name: "Advance to Under Review" }).click();
+  await expect(page.getByRole("button", { name: "Advance to In Progress" })).toBeVisible();
+  await page.getByRole("button", { name: "Advance to In Progress" }).click();
+  await expect(page.getByRole("button", { name: "Advance to Resolved" })).toBeVisible();
+
+  // In Progress -> Resolved opens the resolve dialog instead of advancing
+  // directly.
+  await page.getByRole("button", { name: "Advance to Resolved" }).click();
+  const dialog = page.getByRole("dialog", { name: "Mark ticket resolved" });
+  await expect(dialog).toBeVisible();
+  await dialog.locator("#resolve-photo").setInputFiles({
+    name: "01_poblacion.jpg",
+    mimeType: "image/jpeg",
+    buffer: readFileSync("public/uploads/reports/01_poblacion.jpg"),
+  });
+  await dialog.getByLabel("Completion notes").fill(RESOLUTION_NOTES);
+  const resolveButton = dialog.getByRole("button", { name: "Mark resolved" });
+  await resolveButton.scrollIntoViewIfNeeded();
+  await resolveButton.click();
+  // MediaService.uploadImage is a real Cloudinary round trip, not a mock —
+  // slower and more variable than the plain-POST intermediate steps above,
+  // so this one assertion gets a longer timeout rather than bumping every
+  // wait in the file.
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+
+  // Status pill in the header row updates to Resolved.
+  const headerRow = page.locator("h1").locator("..");
+  await expect(headerRow.getByText("Resolved", { exact: true })).toBeVisible();
+  // Tracker itself shows no further transition available.
+  await expect(page.getByText("No further status transition.")).toBeVisible();
+  // Before & after resolution card only renders once resolution_image_url
+  // is set — proves the photo upload actually persisted, not just the form
+  // closing successfully.
+  await expect(page.getByText("Before & after resolution")).toBeVisible();
+  await expect(page.getByText(RESOLUTION_NOTES)).toBeVisible();
+});
+
+test("the citizen's Case Closure Summary reflects a ticket resolved through the admin UI", async ({ page }) => {
+  test.skip(!resolvedFixture, "requires the preceding admin-UI resolution test to have run and populated a fixture");
+  const { reportId, citizen } = resolvedFixture!;
+
+  await loginCitizen(page, citizen);
+  await page.goto(`/dashboard/reports/${reportId}`);
+  const summaryHeading = page.getByRole("heading", { name: "Case Closure Summary" });
+  await expect(summaryHeading).toBeVisible();
+
+  // CaseClosureSummary's own root card is three levels up from its heading
+  // (heading -> title-wrapper div -> header-row div -> card div) — scoping
+  // here, rather than to the page as a whole, avoids a strict-mode collision
+  // with the Timeline card's "Latest Update" banner, which surfaces the same
+  // resolution_notes text as a sibling section on the same page.
+  const summaryCard = summaryHeading.locator("../../..");
+  await expect(summaryCard.getByText(RESOLUTION_NOTES)).toBeVisible();
+  await expect(page.getByAltText("Photo taken by staff confirming the resolution")).toBeVisible();
+
+  // Neither confirm nor dispute has happened yet for this fresh fixture, so
+  // both feedback actions must still be offered.
+  await expect(page.getByRole("button", { name: "Confirm Fixed" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Report Still Not Fixed" })).toBeVisible();
 });
