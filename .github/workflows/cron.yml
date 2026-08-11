@@ -11,6 +11,10 @@ name: Scheduled Cron Jobs
 # Required repository configuration (Settings > Secrets and variables > Actions):
 #   secrets.CRON_SECRET       - same value as the deployed API's CRON_SECRET env var
 #   vars.PORAC_API_BASE_URL   - deployed API origin, e.g. https://api.example.com (no trailing slash)
+#
+# Until the API is actually deployed neither of those exists, so this workflow
+# is EXPECTED to skip (green, exit 0) on every scheduled run before production
+# deployment. It only starts calling endpoints once both are configured.
 
 on:
   schedule:
@@ -22,33 +26,36 @@ on:
 jobs:
   trigger-cron-endpoints:
     runs-on: ubuntu-latest
+    env:
+      PORAC_API_BASE_URL: ${{ vars.PORAC_API_BASE_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
-      - name: Recompute active ticket urgency
+      - name: Check deployment configuration
+        id: check
         run: |
-          curl -sf -X POST "${{ vars.PORAC_API_BASE_URL }}/cron/recompute-urgency" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          if [ -z "$PORAC_API_BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Skipping scheduled cron calls: deployment configuration is not set yet."
+            echo "vars.PORAC_API_BASE_URL set: $([ -n "$PORAC_API_BASE_URL" ] && echo yes || echo no)"
+            echo "secrets.CRON_SECRET set: $([ -n "$CRON_SECRET" ] && echo yes || echo no)"
+            echo "Configure both under Settings > Secrets and variables > Actions once the API is deployed."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Recompute weather cache
+      - name: Trigger cron endpoints
+        if: steps.check.outputs.configured == 'true'
         run: |
-          curl -sf -X POST "${{ vars.PORAC_API_BASE_URL }}/cron/recompute-weather" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
-
-      - name: Cleanup expired password reset tokens
-        run: |
-          curl -sf -X POST "${{ vars.PORAC_API_BASE_URL }}/cron/cleanup-password-reset-tokens" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
-
-      - name: Cleanup old read notifications
-        run: |
-          curl -sf -X POST "${{ vars.PORAC_API_BASE_URL }}/cron/cleanup-notifications" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
-
-      - name: Cleanup old rate-limit events
-        run: |
-          curl -sf -X POST "${{ vars.PORAC_API_BASE_URL }}/cron/cleanup-rate-limit-events" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
-
-      - name: Check ticket escalations
-        run: |
-          curl -sf -X POST "${{ vars.PORAC_API_BASE_URL }}/cron/check-ticket-escalations" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          set -eu
+          for path in \
+            recompute-urgency \
+            recompute-weather \
+            cleanup-password-reset-tokens \
+            cleanup-notifications \
+            cleanup-rate-limit-events \
+            check-ticket-escalations
+          do
+            echo "POST /cron/$path"
+            curl -sf -X POST "$PORAC_API_BASE_URL/cron/$path" \
+              -H "Authorization: Bearer $CRON_SECRET"
+          done
