@@ -10,6 +10,8 @@ Porac SDSS is a real operational system for MEO/MDRRMO, not an MVP prototype to 
 
 ## 1. Completed Foundation
 
+This section is a shipped-inventory checklist. For a walkthrough of how these surfaces actually behave, see [`features.md`](features.md); for the access-control model behind them, see [`security.md`](security.md).
+
 Verified against the current tree, not assumed:
 
 **Citizen side** — `app/(citizen)/`

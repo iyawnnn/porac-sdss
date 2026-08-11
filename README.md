@@ -6,6 +6,8 @@ Project Name: Porac SDSS (Spatial Decision Support System)
 
 Porac SDSS is a municipal infrastructure triage platform for Porac, Pampanga. It features spatial deduplication, DEM elevation risk scoring, OpenWeather telemetry, and automated photo EXIF GPS verification.
 
+This README covers setup and running the system. For what it actually does, see [`docs/features.md`](docs/features.md); for the security model and its known limitations, see [`docs/security.md`](docs/security.md).
+
 ## B. PREREQUISITES
 
 Install or prepare the following before running the project locally:
@@ -147,7 +149,9 @@ Open http://localhost:3000 in your browser.
 
 ## F. APPLICATION ROUTES
 
-- Public Map: http://localhost:3000/map
+Common entry points for a local demo. For the full route list and what each surface does, see [`docs/features.md`](docs/features.md).
+
+- Citizen Map: http://localhost:3000/map
 - Report Form: http://localhost:3000/report
 - My Reports: http://localhost:3000/reports
 - Admin Login: http://localhost:3000/admin/login
