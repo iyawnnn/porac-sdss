@@ -61,16 +61,24 @@ param(
     [string[]]$Only,
 
     # Skip the six deferred drafts (029-034).
-    [switch]$SkipDeferred
+    [switch]$SkipDeferred,
+
+    # Recreate drafts already listed as Active in CREATED_ISSUES.md.
+    [switch]$ForceRecreate
 )
 
 $ErrorActionPreference = 'Stop'
 
 $repoRoot  = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $draftsDir = Join-Path $repoRoot '.github\ISSUE_DRAFTS'
+$createdIssuesTracker = Join-Path $draftsDir 'CREATED_ISSUES.md'
 
 if (-not (Test-Path $draftsDir)) {
     throw "Issue drafts directory not found: $draftsDir"
+}
+
+if (-not (Test-Path $createdIssuesTracker)) {
+    throw "Created issues tracker not found: $createdIssuesTracker"
 }
 
 # -----------------------------------------------------------------------------
@@ -272,10 +280,38 @@ if ($Only) {
     $wanted = $Only | ForEach-Object { $_.PadLeft(3, '0') }
     $selected = $selected | Where-Object { $wanted -contains $_.Num }
 }
+$selected = @($selected)
+
 
 if (-not $selected) {
     Write-Host 'No issues selected. Check your -Only / -SkipDeferred arguments.' -ForegroundColor Yellow
     return
+}
+
+# CREATED_ISSUES.md is intentionally updated manually. Only rows whose Notes
+# column is Active represent existing issues to skip; closed duplicates do not.
+$activeCreatedIssues = @{}
+foreach ($line in Get-Content -LiteralPath $createdIssuesTracker) {
+    if ($line -match '^\|\s*(?<draft>\d{3})\s*\|\s*(?<issue>#\d+)\s*\|.*\|\s*Active\s*\|\s*$') {
+        $activeCreatedIssues[$matches.draft] = $matches.issue
+    }
+}
+
+if ($ForceRecreate) {
+    Write-Host ''
+    Write-Host 'WARNING: -ForceRecreate is enabled. Active tracked drafts may be recreated.' -ForegroundColor Red
+    Write-Host '         This can create duplicate GitHub issues.' -ForegroundColor Red
+} else {
+    $issuesToSkip = @($selected | Where-Object { $activeCreatedIssues.ContainsKey($_.Num) })
+    foreach ($issue in $issuesToSkip) {
+        Write-Host ("Skipping {0} because it is already tracked as {1} in CREATED_ISSUES.md" -f $issue.Num, $activeCreatedIssues[$issue.Num]) -ForegroundColor Yellow
+    }
+    $selected = @($selected | Where-Object { -not $activeCreatedIssues.ContainsKey($_.Num) })
+
+    if (-not $selected) {
+        Write-Host 'No issues remain after skipping Active entries in CREATED_ISSUES.md.' -ForegroundColor Green
+        return
+    }
 }
 
 # -----------------------------------------------------------------------------
