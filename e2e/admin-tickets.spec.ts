@@ -1,7 +1,8 @@
+
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
-import { loginAdmin as loginAs, loginCitizen } from "./helpers";
+import { loginAdmin as loginAs, loginCitizen, settleAdminPage } from "./helpers";
 
 test.setTimeout(60_000);
 
@@ -24,9 +25,10 @@ async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Pr
   // (~±550m) mirrors citizen-dispute.spec.ts's own jitter() for the same
   // reason: comfortably clear of the merge radius.
   const jitter = () => (Math.random() - 0.5) * 0.01;
+  const title = `E2E ticket-workflow ${titleSuffix}`;
   const res = await citizenPage.request.post("/api/reports", {
     multipart: {
-      title: `E2E ticket-workflow ${titleSuffix}`,
+      title,
       category: "Pothole",
       citizen_severity: "Low",
       lat: String(15.0711 + jitter()),
@@ -38,7 +40,12 @@ async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Pr
       },
     },
   });
-  expect(res.ok()).toBe(true);
+  if (!res.ok()) {
+    const bodyText = await res.text().catch((e) => `<failed to read body: ${e}>`);
+    throw new Error(
+      `createThrowawayReport: POST /api/reports failed for title "${title}" — status ${res.status()} ${res.statusText()}\nbody: ${bodyText}`,
+    );
+  }
   return (await res.json()) as { reportId: number; ticketId: number };
 }
 
@@ -200,33 +207,48 @@ test("system admin sees an office picker exposing a city-wide view", async ({ pa
 
 // --- 4. Queue to Detail navigation ------------------------------------------
 
-test("clicking a ticket from the queue opens its detail page and back link returns to the queue", async ({ page }) => {
+test("clicking a ticket from the queue opens its detail page and back link returns to the queue", async ({ page, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "queue-nav");
+  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
+
   await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto("/admin/tickets?status=all");
+  // Search-filtered to this disposable ticket specifically — the queue's
+  // default order isn't stable across a full-suite run (other specs create,
+  // resolve, and reassign tickets), so "first row" isn't guaranteed to be
+  // this ticket even though it always exists.
+  await page.goto(`/admin/tickets?status=all&search=${ticketId}`);
   await page.waitForLoadState("networkidle");
 
-  const firstLink = page.getByRole("link", { name: "View ticket" }).first();
-  test.skip((await firstLink.count()) === 0, "no MEO tickets seeded — run `pnpm --prefix api seed:diverse-reports` first");
-  await firstLink.click();
+  // Search can substring-match other tickets' titles/barangays too, so more
+  // than one row may render — locate the anchor whose href is this exact
+  // ticket's detail link rather than trusting "first visible row link".
+  const link = page.locator(`a:visible[href^="/admin/tickets/${ticketId}?"], a:visible[href="/admin/tickets/${ticketId}"]`).filter({ hasText: "View ticket" });
+  await expect(link).toBeVisible();
+  await link.click();
 
-  await expect(page).toHaveURL(/\/admin\/tickets\/\d+/);
+  await expect(page).toHaveURL(new RegExp(`/admin/tickets/${ticketId}(\\?.*)?$`));
   await expect(page.getByRole("link", { name: "Back to ticket queue" })).toBeVisible();
 
   await page.getByRole("link", { name: "Back to ticket queue" }).click();
   await expect(page).toHaveURL(/\/admin\/tickets(\?.*)?$/);
-  await expect(page.getByRole("heading", { name: "Ticket Queue" })).toBeVisible();
+  const queueHeading = page.getByRole("heading", { name: "Ticket Queue" });
+  await settleAdminPage(page, queueHeading);
+  await expect(queueHeading).toBeVisible();
 });
 
 // --- 5. Ticket Detail read-only surface --------------------------------------
 
-test("Ticket Detail shows status, office, urgency, evidence, and location sections", async ({ page, request }) => {
-  await loginAs(page, E2E_MEO_ADMIN);
-  const cookies = await page.context().cookies();
-  const res = await request.get("/api/admin/tickets?office=MEO&status=all&limit=1", { headers: sessionCookieHeader(cookies) });
-  const body = await res.json();
-  test.skip(body.tickets.length === 0, "no MEO tickets seeded — run `pnpm --prefix api seed:diverse-reports` first");
-  const ticketId = body.tickets[0].id as number;
+test("Ticket Detail shows status, office, urgency, evidence, and location sections", async ({ page, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "detail-sections");
+  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
 
+  await loginAs(page, E2E_MEO_ADMIN);
   await page.goto(`/admin/tickets/${ticketId}`);
 
   // Status tracker + assigned office.
@@ -244,13 +266,25 @@ test("Ticket Detail shows status, office, urgency, evidence, and location sectio
   await expect(page.getByText("Location", { exact: true })).toBeVisible();
 });
 
-test("Ticket Detail shows the dispute section only when the ticket is disputed", async ({ page, request }) => {
+test("Ticket Detail shows the dispute section only when the ticket is disputed", async ({ page, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "dispute-section");
+  const { reportId, ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+
   await loginAs(page, E2E_SYSTEM_ADMIN);
-  const cookies = await page.context().cookies();
-  const res = await request.get("/api/admin/tickets?office=all&status=all&disputed=true&limit=1", { headers: sessionCookieHeader(cookies) });
-  const body = await res.json();
-  test.skip(body.tickets.length === 0, "no disputed tickets in the current fixture");
-  const ticketId = body.tickets[0].id as number;
+  // Reported -> Under Review -> In Progress -> Resolved, then the citizen
+  // disputes it — deterministically produces a disputed ticket instead of
+  // depending on one already existing (and not yet consumed) in seed data.
+  for (let i = 0; i < 3; i++) {
+    const res = await page.request.post(`/api/admin/tickets/${ticketId}/status`, { multipart: { notes: "e2e" } });
+    expect(res.ok()).toBe(true);
+  }
+  const disputeRes = await citizenPage.request.post(`/api/reports/mine/${reportId}/dispute`, {
+    data: { reason: "Still broken for the e2e dispute-section check." },
+  });
+  expect(disputeRes.ok()).toBe(true);
+  await citizenContext.close();
 
   await page.goto(`/admin/tickets/${ticketId}`);
   await expect(page.getByText("Citizen reports issue not fixed")).toBeVisible();
@@ -283,14 +317,15 @@ test("advancing a ticket's status from the queue-linked detail page updates the 
 // --- 7. Office reassignment ---------------------------------------------------
 
 test("system admin can reassign a ticket's office through the UI, and office scoping still holds after restoring it", async ({ page, request, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "reassign");
+  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
+
   await loginAs(page, E2E_SYSTEM_ADMIN);
   const sysCookies = await page.context().cookies();
   const sysHeaders = { ...sessionCookieHeader(sysCookies), "content-type": "application/json" };
-
-  const listRes = await request.get("/api/admin/tickets?office=MEO&status=all&limit=1", { headers: sysHeaders });
-  const listBody = await listRes.json();
-  test.skip(listBody.tickets.length === 0, "no MEO tickets seeded — run `pnpm --prefix api seed:diverse-reports` first");
-  const ticketId = listBody.tickets[0].id as number;
 
   try {
     await page.goto(`/admin/tickets/${ticketId}`);
@@ -425,23 +460,31 @@ test("sort control reorders tickets by urgency", async ({ page }) => {
 
 // --- 10. Mobile ticket queue rendering -----------------------------------------
 
-test("mobile viewport renders the ticket queue card list, not the desktop table, and a card link works", async ({ page }) => {
+test("mobile viewport renders the ticket queue card list, not the desktop table, and a card link works", async ({ page, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "mobile-card");
+  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
+
   await page.setViewportSize({ width: 390, height: 844 });
   await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto("/admin/tickets?status=all");
+  // Search-filtered to this disposable ticket — guarantees exactly one
+  // matching card instead of depending on however many tickets happen to
+  // exist citywide at this point in a full-suite run.
+  await page.goto(`/admin/tickets?status=all&search=${ticketId}`);
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByRole("heading", { name: "Ticket Queue" })).toBeVisible();
   await expect(page.getByRole("table")).toBeHidden();
 
-  const cardLink = page.getByRole("link", { name: "View ticket" }).first();
-  const hasCard = (await cardLink.count()) > 0;
-  if (hasCard) {
-    await cardLink.click();
-    await expect(page).toHaveURL(/\/admin\/tickets\/\d+/);
-  } else {
-    await expect(page.getByText("No tickets match this filter.")).toBeVisible();
-  }
+  // Search can substring-match other tickets' titles/barangays too, so more
+  // than one card may render — locate the anchor whose href is this exact
+  // ticket's detail link rather than trusting "first visible card link".
+  const cardLink = page.locator(`a:visible[href^="/admin/tickets/${ticketId}?"], a:visible[href="/admin/tickets/${ticketId}"]`).filter({ hasText: "View ticket" });
+  await expect(cardLink).toBeVisible();
+  await cardLink.click();
+  await expect(page).toHaveURL(new RegExp(`/admin/tickets/${ticketId}(\\?.*)?$`));
 });
 
 // --- 11. Admin resolution flow + citizen Case Closure Summary integration ----

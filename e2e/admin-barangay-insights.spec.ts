@@ -99,10 +99,21 @@ test("clicking a barangay opens its profile page with KPIs, category breakdown, 
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/barangay-insights");
   const firstRowLink = page.getByRole("table").locator("tbody a").first();
-  const barangayName = await firstRowLink.innerText();
   await firstRowLink.click();
 
+  // Read the barangay id from the URL actually navigated to (post-click),
+  // then assert the profile heading against a fresh lookup of that same
+  // barangay — not a name captured from the index page before the click,
+  // which can point at a different row if the list re-sorts between the
+  // read and the click.
   await expect(page).toHaveURL(/\/admin\/barangay-insights\/\d+$/);
+  const barangayId = new URL(page.url()).pathname.split("/").pop();
+  const cookies = await page.context().cookies();
+  const profileRes = await page.request.get(`/api/admin/barangay-insights/${barangayId}`, { headers: sessionCookieHeader(cookies) });
+  expect(profileRes.ok()).toBe(true);
+  const profileBody = await profileRes.json();
+  const barangayName = profileBody.barangay_name as string;
+
   await expect(page.getByRole("heading", { name: barangayName, exact: true })).toBeVisible();
   await expect(page.getByText("Total Tickets", { exact: true })).toBeVisible();
   await expect(page.getByText("Active Tickets", { exact: true })).toBeVisible();
