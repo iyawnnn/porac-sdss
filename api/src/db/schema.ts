@@ -180,6 +180,23 @@ export const tickets = pgTable('tickets', {
   // transitions to Resolved (admin ticket detail "Mark Resolved" modal).
   resolutionImageUrl: text('resolution_image_url'),
   resolutionNotes: text('resolution_notes'),
+  // Citizen resolution-feedback loop: set when a citizen reports that a
+  // Resolved ticket isn't actually fixed (ReportsService.disputeReport).
+  // Deliberately does not roll ticket.status back to an earlier state — a
+  // workflow signal layered on top of Resolved, never a scoring input (see
+  // CLAUDE.md's Severity/Urgency/Priority terminology section). NULL means
+  // "not currently disputed"; this is a single-outstanding-dispute gate,
+  // not a dispute history log.
+  disputedAt: timestamp('disputed_at', { withTimezone: true }),
+  disputeReason: text('dispute_reason'),
+  // Citizen resolution-feedback loop, positive path: set when a citizen
+  // confirms a Resolved ticket actually was fixed (ReportsService's
+  // confirmResolution). Same gate shape as disputedAt above — NULL means
+  // "not yet confirmed" — and mutually exclusive with it in practice (the
+  // service rejects confirming an already-disputed ticket), but there's no
+  // DB constraint enforcing that since both are independent workflow
+  // signals, never a scoring input.
+  resolutionConfirmedAt: timestamp('resolution_confirmed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

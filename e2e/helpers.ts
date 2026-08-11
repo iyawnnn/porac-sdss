@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 // Shared by every spec that needs an authenticated session — replaces the
 // ~7 near-identical inline loginAdmin/loginCitizen copies that used to be
@@ -45,12 +45,49 @@ async function submitWithRetry(
   }
 }
 
+// app/admin/ has no error.tsx boundary (unlike app/(citizen)/, which has
+// six), so an unhandled throw in app/admin/layout.tsx's unguarded
+// getAdminSessionFromApi() call replaces the whole page — login form
+// included — with Next's built-in "This page couldn't load" screen. That
+// throw is the same dev-only ECONNREFUSED blip lib/api-client.ts already
+// documents and retries for; when it outlasts those ~300ms of retries, a
+// spec that navigated at that moment fails on a missing element rather than
+// on anything it was actually testing.
+//
+// Reloading is exactly what that screen's own Reload button does, and it
+// only fires while that screen is showing — a genuine 401/403/404, a wrong
+// page, or a real regression is never retried. The caller's own assertion
+// still has to pass afterwards, so a persistently broken page still fails,
+// just two reloads later.
+//
+// The regex avoids hard-coding the typographic apostrophe in "couldn’t".
+const SERVER_ERROR_HEADING = /This page could.{0,3}t load/;
+const MAX_RELOADS = 2;
+
+export async function settleAdminPage(page: Page, ready: Locator): Promise<void> {
+  const errorScreen = page.getByRole("heading", { name: SERVER_ERROR_HEADING });
+  for (let attempt = 0; attempt <= MAX_RELOADS; attempt++) {
+    try {
+      // Whichever actually renders resolves this — no polling, no sleep, and
+      // no race against a page that is still streaming.
+      await expect(ready.or(errorScreen).first()).toBeVisible();
+    } catch {
+      return; // neither appeared; let the caller's assertion report it clearly
+    }
+    if (!(await errorScreen.isVisible())) return;
+    if (attempt === MAX_RELOADS) return; // give up, caller reports the failure
+    await page.reload({ waitUntil: "domcontentloaded" });
+  }
+}
+
 export async function loginAdmin(
   page: Page,
   account: { email: string; password: string },
 ): Promise<void> {
   await page.goto("/admin/login");
-  await page.getByLabel("Email").fill(account.email);
+  const email = page.getByLabel("Email");
+  await settleAdminPage(page, email);
+  await email.fill(account.email);
   await page.getByPlaceholder("Password").fill(account.password);
   await submitWithRetry(page, "Sign In", /\/admin$/);
   await expect(page.getByText("Incident Reports Over Time")).toBeVisible();

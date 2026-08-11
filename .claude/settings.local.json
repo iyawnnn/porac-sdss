@@ -38,7 +38,11 @@
       "Bash(npx jest *)",
       "Bash(pnpm --prefix api build)",
       "Bash(pnpm --prefix api test)",
-      "Bash(pnpm *)"
+      "Bash(pnpm *)",
+      "Bash(git *)",
+      "Read(//tmp/**)",
+      "Bash(grep -n \"next-product-roadmap.md\\\\` §[0-9]\\\\|next-product-roadmap.md's §[0-9]\" docs/product-roadmap.md)",
+      "Bash(grep -oE \"PLAN\\\\.md.{0,20}§[0-9.]+\\(/§[0-9.]+\\)*\" CLAUDE.md)"
     ]
   }
 }

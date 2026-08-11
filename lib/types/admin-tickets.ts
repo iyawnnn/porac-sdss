@@ -22,6 +22,7 @@ export interface AdminTicketRow {
   assigned_office: string;
   status: string;
   created_at: string;
+  disputed_at: string | null;
 }
 
 export interface PaginatedTickets {
@@ -56,6 +57,8 @@ export interface TicketDetail {
   resolution_notes: string | null;
   created_at: string;
   updated_at: string;
+  disputed_at: string | null;
+  dispute_reason: string | null;
 }
 
 export interface TicketReport {

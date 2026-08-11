@@ -38,6 +38,8 @@ Two ORMs are in play (see `CLAUDE.md`'s Architecture section for the full ration
 - **Writes:** Ticket creation on first report in an area/category, merge (`member_count`/centroid recompute), status transitions (`StatusHistory` insert alongside), urgency recompute (on-demand, per CLAUDE.md's Urgency triage section), office reassignment.
 - **Expected empty?** No once any report has ever been submitted.
 - **Ownership:** Application, but `geom` is raw-PG-only (not in `schema.ts`).
+- **`disputed_at`/`dispute_reason`:** Citizen resolution-feedback loop, negative path — set by `ReportsService.disputeReport` (`POST /reports/mine/:id/dispute`) when a citizen reports that a `Resolved` ticket isn't actually fixed. `disputed_at` NULL means "not currently disputed" (a single-outstanding-dispute gate, not a history log); it deliberately never rolls `status` back to an earlier value — a workflow signal layered on top of `Resolved`, not a status and not a scoring input (never touches `urgency_score`/`priority_score`/`priority_index`/`urgency_band`). Cleared only by a future re-resolution, which isn't implemented yet. Surfaced on the admin Ticket Queue (a "Disputed only" filter + badge) and Ticket Detail (date + `dispute_reason`), and drives an office-targeted `ticket_disputed` notification.
+- **`resolution_confirmed_at`:** Citizen resolution-feedback loop, positive path — set by `ReportsService.confirmResolution` (`POST /reports/mine/:id/confirm-resolution`) when a citizen confirms a `Resolved` ticket actually was fixed. Same gate shape as `disputed_at` (NULL = not yet confirmed); the service rejects confirming an already-disputed ticket, but there's no DB constraint enforcing that mutual exclusivity — both are independent nullable columns. Citizen-only surface (no admin UI reads it — confirmation isn't actionable by an office the way a dispute is, so it was kept out of the admin Ticket Detail response to stay minimal). Never a scoring input, never touches `status`.
 
 ### `status_history`
 - **Purpose:** Append-only timeline of every ticket status change (`Reported` → `Under Review` → ... ), who changed it and when. Powers the citizen-facing "Pizza Tracker" and the admin ticket-detail timeline.
@@ -68,7 +70,7 @@ Two ORMs are in play (see `CLAUDE.md`'s Architecture section for the full ration
 - **Writes:** `NotificationsService.create`/`createInTx`, fired from report submission, moderation, status changes, etc.
 - **Expected empty?** Only if nothing notification-worthy has happened yet.
 - **Ownership:** Application (Drizzle).
-- **Cleanup:** `POST /cron/cleanup-notifications` prunes *read* notifications older than 30 days (unread ones are kept regardless of age until actually read) — manual/on-demand trigger, nothing schedules it automatically yet.
+- **Cleanup:** `POST /cron/cleanup-notifications` prunes *read* notifications older than 30 days (unread ones are kept regardless of age until actually read) — called daily by `.github/workflows/cron.yml` (Production Hardening), in addition to being callable on-demand.
 
 ### `admin_audit_events`
 See §E (System/admin security tables) — kept there since it's specifically part of the admin-security/oversight story, alongside `admins`' own security columns.
@@ -152,14 +154,14 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 - **Writes:** `POST /citizens/forgot-password` (insert), reset completion (`used_at`).
 - **Expected empty?** Normal to be near-empty most of the time — tokens are short-lived and single-use.
 - **Ownership:** Application (Drizzle).
-- **Cleanup:** `POST /cron/cleanup-password-reset-tokens` prunes expired/used tokens — manual/on-demand trigger, nothing schedules it automatically yet.
+- **Cleanup:** `POST /cron/cleanup-password-reset-tokens` prunes expired/used tokens — called daily by `.github/workflows/cron.yml` (Production Hardening), in addition to being callable on-demand.
 
 ### `rate_limit_events`
 - **Purpose:** Postgres-backed rate limiter for **report submission only**. Three independent checks: per-citizen hourly cap (primary), per-citizen spatial cap (3 within 25m/24h — catches repeat submissions near the same spot), per-IP hourly backstop (secondary, catches one IP spinning up many accounts).
 - **Reads/writes:** `RateLimitService.checkRateLimit`/`recordRateLimitEvent` — the write happens inside the same transaction as the ticket/report insert, so only successful submissions count against the limit.
 - **Expected empty?** Normal on a fresh DB before any report has been submitted; grows with every submission attempt otherwise.
 - **Ownership:** Application, raw-PG-only (has a `geom` column, `NOT NULL`).
-- **Cleanup:** None currently — no cron job prunes old rows (unlike `password_reset_tokens`/`notifications`, which do have one, even if unscheduled). Not an operational emergency at current scale, but a natural future addition following the same pattern as those two.
+- **Cleanup:** `POST /cron/cleanup-rate-limit-events` (`RateLimitService.cleanupOldEvents`) prunes rows older than 30 days — called daily by `.github/workflows/cron.yml`. 30 days is a wide safety margin over the longest window this table's checks ever query (24 hours, the per-citizen spatial check), so it can never delete a row a live rate-limit decision still depends on.
 
 ### `password_reset_rate_limit_events`
 - **Purpose:** A **separate** rate limiter, specifically for the forgot-password endpoint (`POST /citizens/forgot-password`) — per-email (primary, 3/hour) and per-IP (secondary backstop, 10/hour). Records a row for *every* attempt, including ones for emails that don't exist, so enumeration probing can't dodge the limit by trying many addresses.
@@ -167,7 +169,7 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 - **Why separate from `rate_limit_events`:** That table's `geom` column is `NOT NULL` — a forgot-password request has no location. Forcing this event into the geo table would mean either fake placeholder geometry (bad data) or relaxing that table's `NOT NULL` constraint (weakening its real use case). The separation is a direct consequence of a real schema constraint, not arbitrary duplication — **do not merge these two tables.**
 - **Expected empty?** Normal on a fresh DB before any forgot-password request has been made.
 - **Ownership:** Application, raw-PG-only (no geometry).
-- **Cleanup:** None currently, same gap as `rate_limit_events` above.
+- **Cleanup:** Same `POST /cron/cleanup-rate-limit-events` call prunes this table too (30-day cutoff) — both tables' checks only ever query 1-hour windows, so the same wide margin applies here even more comfortably than for `rate_limit_events` above.
 
 ### `verifications`
 - **Purpose:** **Not email/account verification.** This is planned/future schema for a citizen "upvote a ticket" signal — one row per (ticket, citizen) attesting "I also see this problem," intended as a possible future input to the urgency formula's Cluster Density factor (per `PLAN.md`'s explicit "keep and formalize" note). The feature that would write to this table has never been built.

@@ -6,6 +6,7 @@ import { WeatherService } from './weather.service';
 import { RecomputeService } from './recompute.service';
 import { MediaService } from './media.service';
 import { RateLimitService } from './ratelimit.service';
+import { EscalationService } from './escalation.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 // No controllers — feature modules (auth, reports, admin, cron) import
@@ -20,6 +21,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     RecomputeService,
     MediaService,
     RateLimitService,
+    EscalationService,
   ],
   exports: [
     BarangayService,
@@ -29,6 +31,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     RecomputeService,
     MediaService,
     RateLimitService,
+    EscalationService,
   ],
 })
 export class DomainModule {}

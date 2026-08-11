@@ -4,6 +4,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
@@ -95,7 +96,25 @@ export interface MyReportDetail {
   moderation_status: string | null;
   moderated_at: string | null;
   resolution_notes: string | null;
+  resolution_image_url: string | null;
+  // Never null unless status !== 'Resolved'. Only the timestamp is exposed
+  // here — dispute_reason was the citizen's own input, already shown to
+  // them once at submission time, and re-displaying it isn't needed for
+  // the "hide the action once already disputed" UI check this field exists
+  // for. Admins see the reason on Ticket Detail instead.
+  disputed_at: string | null;
+  resolution_confirmed_at: string | null;
   is_merged: boolean;
+}
+
+export interface DisputeResult {
+  ticket_id: number;
+  disputed_at: string;
+}
+
+export interface ConfirmResolutionResult {
+  ticket_id: number;
+  resolution_confirmed_at: string;
 }
 
 export interface StatusHistoryStep {
@@ -463,6 +482,7 @@ export class ReportsService {
         c.first_name AS citizen_first_name, c.last_name AS citizen_last_name,
         r.created_at, t.created_at AS ticket_created_at, t.updated_at AS ticket_updated_at,
         t.assigned_office, t.member_count, r.moderation_status, r.moderated_at, t.resolution_notes,
+        t.resolution_image_url, t.disputed_at, t.resolution_confirmed_at,
         r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id) AS is_merged
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
@@ -479,6 +499,121 @@ export class ReportsService {
     `;
 
     return { report, history };
+  }
+
+  // Citizen resolution-feedback loop: reports.mine ownership check (same
+  // one-clause pattern as getMyReportDetail above) joined through to the
+  // ticket, since "disputed" lives on tickets, not reports — a ticket can
+  // have multiple merged reports, and a dispute is about the underlying
+  // issue, not one citizen's specific submission. Deliberately never
+  // touches urgency_score/priority_score/priority_index/urgency_band or
+  // ticket.status — this is a workflow signal layered on top of Resolved,
+  // not a scoring input and not a status rollback.
+  async disputeReport(
+    citizenId: number,
+    reportId: number,
+    reason: string,
+  ): Promise<DisputeResult> {
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) {
+      throw new BadRequestException('A short reason is required.');
+    }
+    if (trimmedReason.length > 1000) {
+      throw new BadRequestException('Reason must be 1000 characters or fewer.');
+    }
+
+    const sql = this.pg;
+    const [row] = await sql<
+      { ticket_id: number; status: string; assigned_office: 'MEO' | 'MDRRMO'; disputed_at: string | null; title: string }[]
+    >`
+      SELECT t.id AS ticket_id, t.status, t.assigned_office, t.disputed_at,
+        (SELECT r2.title FROM reports r2 WHERE r2.ticket_id = t.id ORDER BY r2.created_at ASC, r2.id ASC LIMIT 1) AS title
+      FROM reports r
+      JOIN tickets t ON t.id = r.ticket_id
+      WHERE r.id = ${reportId} AND r.citizen_id = ${citizenId}
+    `;
+    if (!row) throw new NotFoundException('Report not found');
+
+    if (row.status !== 'Resolved') {
+      throw new BadRequestException('Only resolved tickets can be disputed.');
+    }
+    if (row.disputed_at) {
+      throw new BadRequestException('This report has already been flagged as unresolved.');
+    }
+
+    return sql.begin(async (tx) => {
+      // The WHERE clause's own `disputed_at IS NULL` guard (not a separate
+      // exists-check before this UPDATE) is what actually prevents two
+      // concurrent dispute attempts from both succeeding — same "exists-check
+      // and UPDATE as one statement" pattern moderation.service.ts's
+      // moderateReport uses for the identical race.
+      const [updated] = await tx<{ disputed_at: string }[]>`
+        UPDATE tickets
+        SET disputed_at = now(), dispute_reason = ${trimmedReason}
+        WHERE id = ${row.ticket_id} AND disputed_at IS NULL
+        RETURNING disputed_at
+      `;
+      if (!updated) {
+        throw new BadRequestException('This report has already been flagged as unresolved.');
+      }
+
+      await this.notifications.createInTx(tx, {
+        recipientType: 'admin',
+        recipientOffice: row.assigned_office,
+        type: 'ticket_disputed',
+        title: 'Citizen reports issue not fixed',
+        message: `A citizen reported that "${row.title}" (Ticket #${row.ticket_id}) is not actually fixed.`,
+        href: `/admin/tickets/${row.ticket_id}`,
+        entityType: 'ticket',
+        entityId: row.ticket_id,
+      });
+
+      return { ticket_id: row.ticket_id, disputed_at: updated.disputed_at };
+    });
+  }
+
+  // Citizen resolution-feedback loop, positive path: same ownership pattern
+  // and same race-safe "guard clause on the UPDATE itself" as disputeReport
+  // above. No notification — unlike a dispute, a confirmation isn't
+  // actionable by the office, so there's nothing for them to be alerted to.
+  // Never touches any scoring field or ticket.status — see CLAUDE.md's
+  // Severity/Urgency/Priority terminology section.
+  async confirmResolution(
+    citizenId: number,
+    reportId: number,
+  ): Promise<ConfirmResolutionResult> {
+    const sql = this.pg;
+    const [row] = await sql<
+      { ticket_id: number; status: string; disputed_at: string | null; resolution_confirmed_at: string | null }[]
+    >`
+      SELECT t.id AS ticket_id, t.status, t.disputed_at, t.resolution_confirmed_at
+      FROM reports r
+      JOIN tickets t ON t.id = r.ticket_id
+      WHERE r.id = ${reportId} AND r.citizen_id = ${citizenId}
+    `;
+    if (!row) throw new NotFoundException('Report not found');
+
+    if (row.status !== 'Resolved') {
+      throw new BadRequestException('Only resolved tickets can be confirmed.');
+    }
+    if (row.disputed_at) {
+      throw new BadRequestException('This report has already been flagged as unresolved.');
+    }
+    if (row.resolution_confirmed_at) {
+      throw new BadRequestException('This report has already been confirmed as fixed.');
+    }
+
+    const [updated] = await sql<{ resolution_confirmed_at: string }[]>`
+      UPDATE tickets
+      SET resolution_confirmed_at = now()
+      WHERE id = ${row.ticket_id} AND resolution_confirmed_at IS NULL AND disputed_at IS NULL
+      RETURNING resolution_confirmed_at
+    `;
+    if (!updated) {
+      throw new BadRequestException('This report has already been confirmed as fixed.');
+    }
+
+    return { ticket_id: row.ticket_id, resolution_confirmed_at: updated.resolution_confirmed_at };
   }
 
   async getPublicHazardMapData(citizenId: number) {

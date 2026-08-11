@@ -104,6 +104,31 @@ describe('parseTicketQuery office scoping', () => {
   });
 });
 
+describe('parseTicketQuery disputed filter', () => {
+  const sql = jest.fn() as unknown as Sql;
+  const service = new TicketsService(
+    sql,
+    {} as WeatherService,
+    {} as MediaService,
+    {} as NotificationsService,
+    {} as EmailService,
+    {} as ConfigService<Env, true>,
+    {} as AdminAuditService,
+  );
+
+  it('parses disputed=true', () => {
+    expect(service.parseTicketQuery({ disputed: 'true' }, MEO_OFFICER).disputed).toBe(true);
+  });
+
+  it('defaults to undefined (unfiltered) when absent, matching the overdue-boolean convention', () => {
+    expect(service.parseTicketQuery({}, MEO_OFFICER).disputed).toBeUndefined();
+  });
+
+  it('treats any non-"true" value as unfiltered', () => {
+    expect(service.parseTicketQuery({ disputed: 'false' }, MEO_OFFICER).disputed).toBeUndefined();
+  });
+});
+
 describe('cross-office access to single-resource ticket endpoints', () => {
   function makeService(rows: unknown[][]) {
     let i = 0;
@@ -290,6 +315,40 @@ describe('TicketsService.getTicketsForExport', () => {
   it('defaults to no filters when called with no arguments', async () => {
     const service = makeService([]);
     await expect(service.getTicketsForExport()).resolves.toEqual([]);
+  });
+});
+
+// No DB test harness (see reports.service.spec.ts's comment on this pattern)
+// — the disputed filter's office-scoping is enforced by the same
+// `filters.office` clause every other filter already goes through, so the
+// regression to guard against is a hand-rolled disputed WHERE clause that
+// bypasses it, not a logic bug in the clause itself.
+describe('getTicketsForAdmin disputed filter wiring', () => {
+  const ticketsServiceSource = readFileSync(
+    join(__dirname, 'tickets.service.ts'),
+    'utf8',
+  );
+
+  it('selects disputed_at and narrows on it only when the filter is set', () => {
+    expect(ticketsServiceSource).toMatch(/SELECT t\.id, t\.category,[\s\S]*?t\.disputed_at,/);
+    expect(ticketsServiceSource).toMatch(
+      /AND \(\$\{filters\.disputed \? true : null\}::boolean IS NULL OR t\.disputed_at IS NOT NULL\)/,
+    );
+  });
+
+  it('places the disputed filter alongside (not before) the office-scoping WHERE clause', () => {
+    const selectIdx = ticketsServiceSource.indexOf('SELECT t.id, t.category,');
+    const officeClauseIdx = ticketsServiceSource.indexOf('t.assigned_office = ${filters.office ?? null}::office)', selectIdx);
+    const disputedClauseIdx = ticketsServiceSource.indexOf('t.disputed_at IS NOT NULL)', selectIdx);
+    expect(officeClauseIdx).toBeGreaterThan(-1);
+    expect(disputedClauseIdx).toBeGreaterThan(officeClauseIdx);
+  });
+
+  it('getTicketDetail exposes disputed_at and dispute_reason for the admin Ticket Detail page', () => {
+    const detailStart = ticketsServiceSource.indexOf('async getTicketDetail(');
+    const detailSelect = ticketsServiceSource.slice(detailStart, ticketsServiceSource.indexOf('FROM tickets t', detailStart));
+    expect(detailSelect).toContain('t.disputed_at');
+    expect(detailSelect).toContain('t.dispute_reason');
   });
 });
 

@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN, E2E_CITIZEN_ACCOUNT } from "./test-credentials";
 import { loginAdmin as loginAs, loginCitizen } from "./helpers";
 
@@ -8,6 +9,92 @@ function sessionCookieHeader(cookies: { name: string; value: string }[]): Record
   const cookie = cookies.find((c) => c.name === "ac_admin_session");
   return cookie ? { cookie: `${cookie.name}=${cookie.value}` } : {};
 }
+
+async function signupCitizen(page: Page, label: string): Promise<{ email: string; password: string }> {
+  const email = `e2e-workorders-${label}-${Date.now()}@porac.ph`;
+  const password = "PoracDemo2026!";
+  await page.goto("/signup");
+  await page.getByLabel("First name").fill("WorkOrder");
+  await page.getByLabel("Last name").fill(label);
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Create Account" }).click();
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+  return { email, password };
+}
+
+// Disposable, test-owned ticket instead of "whichever ticket currently ranks
+// first for this office" (the shared-state hazard: earlier specs create,
+// resolve, and reassign tickets, so a live top-of-list query can point at a
+// different ticket — or one mid-mutation — by the time a later test reads
+// it). Pothole always routes to MEO (api/src/common/utils/office.ts); the
+// ~±550m jitter mirrors admin-tickets.spec.ts's createThrowawayReport,
+// comfortably clear of the 25m dedup merge radius so this never silently
+// merges into another fixture's ticket.
+async function createDisposableTicket(browser: Browser, label: string): Promise<number> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await signupCitizen(page, label);
+  const jitter = () => (Math.random() - 0.5) * 0.01;
+  const res = await page.request.post("/api/reports", {
+    multipart: {
+      title: `E2E work-orders ${label} ${Date.now()}`,
+      category: "Pothole",
+      citizen_severity: "Low",
+      lat: String(15.0711 + jitter()),
+      lng: String(120.5401 + jitter()),
+      image: {
+        name: "01_poblacion.jpg",
+        mimeType: "image/jpeg",
+        buffer: readFileSync("public/uploads/reports/01_poblacion.jpg"),
+      },
+    },
+  });
+  expect(res.ok()).toBe(true);
+  const { ticketId } = (await res.json()) as { ticketId: number };
+  await context.close();
+  return ticketId;
+}
+
+// For MDRRMO-context tests: creates a disposable ticket (always MEO via
+// Pothole routing) and reassigns it to MDRRMO as system admin. Since the
+// ticket is test-owned and disposable, no afterAll restore is needed —
+// unlike borrowing a shared seeded ticket, leaving it reassigned affects
+// nothing else in the suite.
+async function createDisposableTicketForOffice(browser: Browser, office: "MEO" | "MDRRMO", label: string): Promise<number> {
+  const ticketId = await createDisposableTicket(browser, label);
+  if (office === "MEO") return ticketId;
+
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  const cookies = await context.cookies();
+  const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
+  const reassign = await context.request.post(`/api/admin/tickets/${ticketId}/reassign`, { headers, data: { toOffice: "MDRRMO" } });
+  expect(reassign.ok()).toBe(true);
+  await context.close();
+  return ticketId;
+}
+
+// One shared MEO ticket and one shared MDRRMO ticket for the whole file,
+// created once, instead of a fresh disposable ticket per test. Report
+// submission is rate-limited per IP (RateLimitService's IP_HOURLY_BACKSTOP,
+// 20/hour — a real anti-abuse control, not something to work around) as a
+// backstop against exactly this shape of traffic (many accounts, same
+// network, submitting in a short window); every test in this file creating
+// its own citizen+report tripped it. All of this file's "New Work Order"
+// dialog tests only need *a* ticket to attach new, uniquely-titled work
+// orders to — not a pristine one — so sharing is safe under this repo's
+// mandatory --workers=1 (no per-test DB isolation; every test here runs
+// serially in one worker after this hook, same reasoning as
+// admin-tickets.spec.ts's resolvedFixture module state).
+let sharedMeoTicketId: number;
+let sharedMdrrmoTicketId: number;
+
+test.beforeAll(async ({ browser }) => {
+  sharedMeoTicketId = await createDisposableTicket(browser, "shared-meo");
+  sharedMdrrmoTicketId = await createDisposableTicketForOffice(browser, "MDRRMO", "shared-mdrrmo");
+});
 
 // `<input type="date">.fill()` is flaky in this repo's shadcn Input wrapper —
 // it intermittently sets the DOM value without React observing an `input`
@@ -22,74 +109,6 @@ async function setDateInput(locator: import("@playwright/test").Locator, value: 
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }, value);
 }
-
-async function ticketIdFor(page: Page, request: import("@playwright/test").APIRequestContext, office: "MEO" | "MDRRMO"): Promise<number> {
-  const cookies = await page.context().cookies();
-  const res = await request.get(`/api/admin/tickets?office=${office}&status=all&limit=1`, { headers: sessionCookieHeader(cookies) });
-  const body = await res.json();
-  expect(body.tickets.length).toBeGreaterThan(0);
-  return body.tickets[0].id as number;
-}
-
-// Tracks a seeded ticket this file temporarily reassigned to MDRRMO (see
-// ticketIdAsSystemAdmin below) so afterAll can put it back — without this,
-// the reassignment is real and permanent, and other specs that read seed
-// data at its original office (e.g. citizen-reports.spec.ts's moderation
-// test) start failing with a genuine, correct 403 for a MEO admin acting
-// on what used to be a MEO ticket. Module-level state is safe here because
-// this repo's Playwright config mandates --workers=1 (no per-test DB
-// isolation, see README.md §I) — every test in this file runs serially in
-// one worker before afterAll fires.
-let borrowedTicket: { id: number; originalOffice: "MEO" | "MDRRMO" } | null = null;
-
-// Isolated incognito context so a lookup as another role never mutates the
-// calling test's own cookie jar (the "page"/"request" fixtures share one
-// cookie store per browser context) — used whenever a test needs a ticket
-// id from an office the logged-in admin can't list themselves.
-//
-// Demo seed data (seed-diverse-reports.ts) doesn't guarantee an MDRRMO
-// ticket exists, so this falls back to *borrowing* any ticket via the
-// already-covered POST /admin/tickets/:id/reassign endpoint — recording
-// its original office so afterAll can restore it — rather than depending
-// on seed content this spec doesn't own or leaving shared state mutated.
-async function ticketIdAsSystemAdmin(browser: Browser, office: "MEO" | "MDRRMO"): Promise<number> {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  const cookies = await context.cookies();
-  const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
-
-  const res = await context.request.get(`/api/admin/tickets?office=${office}&status=all&limit=1`, { headers });
-  const body = await res.json();
-  if (body.tickets.length > 0) {
-    await context.close();
-    return body.tickets[0].id as number;
-  }
-
-  const anyTicket = await context.request.get(`/api/admin/tickets?office=all&status=all&limit=1`, { headers });
-  const anyBody = await anyTicket.json();
-  expect(anyBody.tickets.length).toBeGreaterThan(0);
-  const ticket = anyBody.tickets[0] as { id: number; assigned_office: "MEO" | "MDRRMO" };
-  const reassign = await context.request.post(`/api/admin/tickets/${ticket.id}/reassign`, { headers, data: { toOffice: office } });
-  expect(reassign.ok()).toBe(true);
-  borrowedTicket = { id: ticket.id, originalOffice: ticket.assigned_office };
-  await context.close();
-  return ticket.id;
-}
-
-test.afterAll(async ({ browser }) => {
-  if (!borrowedTicket) return;
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  const cookies = await context.cookies();
-  const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
-  await context.request.post(`/api/admin/tickets/${borrowedTicket.id}/reassign`, {
-    headers,
-    data: { toOffice: borrowedTicket.originalOffice },
-  });
-  await context.close();
-});
 
 async function createWorkOrderAsSystemAdmin(browser: Browser, ticketId: number, title: string): Promise<{ id: number; assigned_office: string }> {
   const context = await browser.newContext();
@@ -137,10 +156,9 @@ test("MDRRMO office admin sees a fixed office badge, not a picker", async ({ pag
   await expect(page.getByLabel("Office", { exact: true })).toHaveText("My Office: MDRRMO");
 });
 
-test("create a work order from Ticket Detail and see it in the panel", async ({ page, request }) => {
+test("create a work order from Ticket Detail and see it in the panel", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  const ticketId = await ticketIdFor(page, request, "MEO");
-  await page.goto(`/admin/tickets/${ticketId}`);
+  await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
 
   const title = `E2E work order ${Date.now()}`;
   await page.getByRole("button", { name: "New Work Order" }).click();
@@ -153,10 +171,9 @@ test("create a work order from Ticket Detail and see it in the panel", async ({ 
   await expect(page.getByText(title)).toBeVisible();
 });
 
-test("update a work order's status from Ticket Detail", async ({ page, request }) => {
+test("update a work order's status from Ticket Detail", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  const ticketId = await ticketIdFor(page, request, "MEO");
-  await page.goto(`/admin/tickets/${ticketId}`);
+  await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
 
   const title = `E2E status update ${Date.now()}`;
   await page.getByRole("button", { name: "New Work Order" }).click();
@@ -175,20 +192,18 @@ test("update a work order's status from Ticket Detail", async ({ page, request }
   await expect(item.getByText("In Progress").first()).toBeVisible();
 });
 
-test("MEO office admin cannot create a work order on an MDRRMO ticket (server-side rejection)", async ({ page, request, browser }) => {
+test("MEO office admin cannot create a work order on an MDRRMO ticket (server-side rejection)", async ({ page, request }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  const mdrrmoTicketId = await ticketIdAsSystemAdmin(browser, "MDRRMO");
   const cookies = await page.context().cookies();
   const res = await request.post("/api/admin/work-orders", {
     headers: { ...sessionCookieHeader(cookies), "content-type": "application/json" },
-    data: { ticketId: mdrrmoTicketId, title: "Should be blocked", notes: null, assignedAdminId: null, dueDate: null },
+    data: { ticketId: sharedMdrrmoTicketId, title: "Should be blocked", notes: null, assignedAdminId: null, dueDate: null },
   });
   expect(res.status()).toBe(403);
 });
 
 test("MEO office admin cannot read, update, or change the status of an MDRRMO work order", async ({ page, request, browser }) => {
-  const mdrrmoTicketId = await ticketIdAsSystemAdmin(browser, "MDRRMO");
-  const created = await createWorkOrderAsSystemAdmin(browser, mdrrmoTicketId, `E2E cross-office ${Date.now()}`);
+  const created = await createWorkOrderAsSystemAdmin(browser, sharedMdrrmoTicketId, `E2E cross-office ${Date.now()}`);
   expect(created.assigned_office).toBe("MDRRMO");
 
   await loginAs(page, E2E_MEO_ADMIN);
@@ -212,8 +227,7 @@ test("MEO office admin cannot read, update, or change the status of an MDRRMO wo
 });
 
 test("MDRRMO office admin cannot reach a MEO work order either (both offices are enforced, not just one)", async ({ page, request, browser }) => {
-  const meoTicketId = await ticketIdAsSystemAdmin(browser, "MEO");
-  const created = await createWorkOrderAsSystemAdmin(browser, meoTicketId, `E2E cross-office ${Date.now()}`);
+  const created = await createWorkOrderAsSystemAdmin(browser, sharedMeoTicketId, `E2E cross-office ${Date.now()}`);
   expect(created.assigned_office).toBe("MEO");
 
   await loginAs(page, E2E_MDRRMO_ADMIN);
@@ -224,16 +238,14 @@ test("MDRRMO office admin cannot reach a MEO work order either (both offices are
   expect(getRes.status()).toBe(403);
 });
 
-test("system admin can view and act on work orders from any office", async ({ page, request, browser }) => {
-  const mdrrmoTicketId = await ticketIdAsSystemAdmin(browser, "MDRRMO");
-
+test("system admin can view and act on work orders from any office", async ({ page, request }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   const cookies = await page.context().cookies();
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
 
   const createRes = await request.post("/api/admin/work-orders", {
     headers,
-    data: { ticketId: mdrrmoTicketId, title: `E2E sysadmin ${Date.now()}`, notes: null, assignedAdminId: null, dueDate: null },
+    data: { ticketId: sharedMdrrmoTicketId, title: `E2E sysadmin ${Date.now()}`, notes: null, assignedAdminId: null, dueDate: null },
   });
   expect(createRes.ok()).toBe(true);
   const created = await createRes.json();
@@ -245,9 +257,7 @@ test("system admin can view and act on work orders from any office", async ({ pa
   expect(updated.completed_at).not.toBeNull();
 });
 
-test("audit events are written for work order creation and status changes", async ({ page, request, browser }) => {
-  const meoTicketId = await ticketIdAsSystemAdmin(browser, "MEO");
-
+test("audit events are written for work order creation and status changes", async ({ page, request }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   const cookies = await page.context().cookies();
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
@@ -255,7 +265,7 @@ test("audit events are written for work order creation and status changes", asyn
   const title = `E2E audit ${Date.now()}`;
   const createRes = await request.post("/api/admin/work-orders", {
     headers,
-    data: { ticketId: meoTicketId, title, notes: null, assignedAdminId: null, dueDate: null },
+    data: { ticketId: sharedMeoTicketId, title, notes: null, assignedAdminId: null, dueDate: null },
   });
   const created = await createRes.json();
   await request.post(`/api/admin/work-orders/${created.id}/status`, { headers, data: { status: "cancelled" } });
@@ -289,10 +299,9 @@ test("mobile viewport renders the work orders card list, not the desktop table",
 
 // --- Office-scoped admin directory / assigned admin picker ---------------
 
-test("the assigned admin picker appears in the create work order dialog with an Unassigned option", async ({ page, request }) => {
+test("the assigned admin picker appears in the create work order dialog with an Unassigned option", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  const ticketId = await ticketIdFor(page, request, "MEO");
-  await page.goto(`/admin/tickets/${ticketId}`);
+  await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
 
   await page.getByRole("button", { name: "New Work Order" }).click();
   const dialog = page.getByRole("dialog", { name: "New work order" });
@@ -301,10 +310,9 @@ test("the assigned admin picker appears in the create work order dialog with an 
   await expect(page.getByRole("option", { name: "Unassigned / Office-wide" })).toBeVisible();
 });
 
-test("MEO office admin's assignee picker only offers MEO admins", async ({ page, request }) => {
+test("MEO office admin's assignee picker only offers MEO admins", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  const ticketId = await ticketIdFor(page, request, "MEO");
-  await page.goto(`/admin/tickets/${ticketId}`);
+  await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
 
   await page.getByRole("button", { name: "New Work Order" }).click();
   const dialog = page.getByRole("dialog", { name: "New work order" });
@@ -314,13 +322,12 @@ test("MEO office admin's assignee picker only offers MEO admins", async ({ page,
   await expect(page.getByRole("option", { name: "MDRRMO Supervisor" })).toHaveCount(0);
 });
 
-test("MDRRMO office admin's assignee picker only offers MDRRMO admins", async ({ page, browser }) => {
+test("MDRRMO office admin's assignee picker only offers MDRRMO admins", async ({ page }) => {
   // Seed data never includes a real MDRRMO ticket (seed-diverse-reports.ts
-  // assigns everything to MEO), so this borrows one the same way every
-  // other MDRRMO-context test in this file does — afterAll restores it.
-  const ticketId = await ticketIdAsSystemAdmin(browser, "MDRRMO");
+  // assigns everything to MEO) — reuses this file's own disposable MDRRMO
+  // ticket instead, so nothing shared is mutated.
   await loginAs(page, E2E_MDRRMO_ADMIN);
-  await page.goto(`/admin/tickets/${ticketId}`);
+  await page.goto(`/admin/tickets/${sharedMdrrmoTicketId}`);
 
   await page.getByRole("button", { name: "New Work Order" }).click();
   const dialog = page.getByRole("dialog", { name: "New work order" });
@@ -353,10 +360,9 @@ test("system admin picks a work order office on the standalone list, then sees t
   await expect(page.getByRole("option", { name: "MEO Supervisor" })).toHaveCount(0);
 });
 
-test("creating a work order Unassigned / Office-wide leaves it unassigned, and the assignee appears once picked", async ({ page, request }) => {
+test("creating a work order Unassigned / Office-wide leaves it unassigned, and the assignee appears once picked", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  const ticketId = await ticketIdFor(page, request, "MEO");
-  await page.goto(`/admin/tickets/${ticketId}`);
+  await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
 
   const title = `E2E assignee ${Date.now()}`;
   await page.getByRole("button", { name: "New Work Order" }).click();
@@ -388,10 +394,9 @@ test("citizens cannot reach the admin directory endpoint", async ({ request }) =
 
 // --- Work order follow-up improvements: due dates + notes ----------------
 
-test("set, see overdue styling for, and clear a work order's due date from Ticket Detail", async ({ page, request }) => {
+test("set, see overdue styling for, and clear a work order's due date from Ticket Detail", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  const ticketId = await ticketIdFor(page, request, "MEO");
-  await page.goto(`/admin/tickets/${ticketId}`);
+  await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
 
   const title = `E2E due date ${Date.now()}`;
   await page.getByRole("button", { name: "New Work Order" }).click();
@@ -413,10 +418,9 @@ test("set, see overdue styling for, and clear a work order's due date from Ticke
   await expect(dueDateInput).toHaveValue("");
 });
 
-test("update and clear a work order's due date from the standalone Work Orders list", async ({ page, request }) => {
+test("update and clear a work order's due date from the standalone Work Orders list", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  const ticketId = await ticketIdFor(page, request, "MEO");
-  await page.goto(`/admin/tickets/${ticketId}`);
+  await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
 
   const title = `E2E list due date ${Date.now()}`;
   await page.getByRole("button", { name: "New Work Order" }).click();
@@ -435,10 +439,9 @@ test("update and clear a work order's due date from the standalone Work Orders l
   await expect(dueDateInput).toHaveValue("");
 });
 
-test("edit a work order's internal progress notes from Ticket Detail", async ({ page, request }) => {
+test("edit a work order's internal progress notes from Ticket Detail", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  const ticketId = await ticketIdFor(page, request, "MEO");
-  await page.goto(`/admin/tickets/${ticketId}`);
+  await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
 
   const title = `E2E notes ${Date.now()}`;
   await page.getByRole("button", { name: "New Work Order" }).click();
@@ -500,4 +503,127 @@ test("system admin's Needs Attention section loads city-wide", async ({ page }) 
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin");
   await expect(page.getByRole("region", { name: "Needs attention" })).toBeVisible();
+});
+
+// --- "My Assignments" personal quick filter -------------------------------
+
+async function currentAdminId(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    const res = await fetch("/api/auth/me");
+    const body = await res.json();
+    return body.session.adminId as number;
+  });
+}
+
+test("My Assignments filter appears on Work Orders and toggles the URL", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto("/admin/work-orders");
+  await page.waitForLoadState("networkidle");
+  const toggle = page.getByRole("button", { name: "My Assignments" });
+  await expect(toggle).toBeVisible();
+
+  await toggle.click();
+  await expect(page).toHaveURL(/[?&]assignedAdminId=me(&|$)/);
+  await expect(page.getByText("Showing only work assigned to you")).toBeVisible();
+
+  // Clearing restores the broader list and drops the param from the URL.
+  await toggle.click();
+  await expect(page).not.toHaveURL(/assignedAdminId=me/);
+  await expect(page.getByText("Showing only work assigned to you")).toHaveCount(0);
+});
+
+test("enabling My Assignments filters the list to only the current admin's assigned work orders", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const myId = await currentAdminId(page);
+
+  const mineTitle = `E2E my-assignments mine ${Date.now()}`;
+  const notMineTitle = `E2E my-assignments other ${Date.now()}`;
+  await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
+
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  let dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Title").fill(mineTitle);
+  await dialog.getByLabel("Assigned admin").click();
+  await page.getByRole("option", { name: "MEO Supervisor" }).click();
+  await dialog.getByRole("button", { name: "Create work order" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Title").fill(notMineTitle);
+  await dialog.getByRole("button", { name: "Create work order" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await page.goto("/admin/work-orders?status=all");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "My Assignments" }).click();
+
+  // "MEO Supervisor" is the admin the E2E_MEO_ADMIN session logs in as, so
+  // myId identifies that same account — the assigned work order must show,
+  // the unassigned one must not. .first() because the same row renders in
+  // both the desktop table and the CSS-hidden (not DOM-removed) mobile card
+  // list — same duplicate-match reason as this file's other "In Progress"
+  // .first() usage above.
+  await expect(page.getByText(mineTitle).first()).toBeVisible();
+  await expect(page.getByText(notMineTitle)).toHaveCount(0);
+  expect(myId).toBeGreaterThan(0);
+});
+
+test("clearing My Assignments restores the broader work order list", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const title = `E2E my-assignments clear ${Date.now()}`;
+  await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
+
+  await page.getByRole("button", { name: "New Work Order" }).click();
+  const dialog = page.getByRole("dialog", { name: "New work order" });
+  await dialog.getByLabel("Title").fill(title);
+  await dialog.getByRole("button", { name: "Create work order" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await page.goto("/admin/work-orders?status=all");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "My Assignments" }).click();
+  await expect(page.getByText(title)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "My Assignments" }).click();
+  await expect(page.getByText(title).first()).toBeVisible();
+});
+
+test("My Assignments preserves office scoping for MEO/MDRRMO admins", async ({ page, browser }) => {
+  const created = await createWorkOrderAsSystemAdmin(browser, sharedMdrrmoTicketId, `E2E my-assignments scope ${Date.now()}`);
+  expect(created.assigned_office).toBe("MDRRMO");
+
+  await loginAs(page, E2E_MEO_ADMIN);
+  const cookies = await page.context().cookies();
+  const headers = { ...sessionCookieHeader(cookies) };
+
+  // A hand-crafted request combining assignedAdminId=me with an explicit
+  // ?office=MDRRMO must still clamp to MEO — the office scope in
+  // resolveOfficeScope runs independently of the assignedAdminId filter.
+  const res = await page.request.get("/api/admin/work-orders?assignedAdminId=me&office=MDRRMO&status=all&limit=50", { headers });
+  expect(res.ok()).toBe(true);
+  const body = await res.json();
+  expect(body.workOrders.every((w: { assigned_office: string }) => w.assigned_office === "MEO")).toBe(true);
+});
+
+test("system admin's My Assignments means work assigned to their own account, not all offices", async ({ page }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await page.goto("/admin/work-orders");
+  await page.waitForLoadState("networkidle");
+  const toggle = page.getByRole("button", { name: "My Assignments" });
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  await expect(page).toHaveURL(/[?&]assignedAdminId=me(&|$)/);
+
+  const cookies = await page.context().cookies();
+  const headers = { ...sessionCookieHeader(cookies) };
+  const myId = await page.evaluate(async () => {
+    const res = await fetch("/api/auth/me");
+    return (await res.json()).session.adminId as number;
+  });
+  const res = await page.request.get("/api/admin/work-orders?assignedAdminId=me&status=all&limit=50", { headers });
+  const body = await res.json();
+  expect(
+    body.workOrders.every((w: { assigned_admin_id: number | null }) => w.assigned_admin_id === myId),
+  ).toBe(true);
 });

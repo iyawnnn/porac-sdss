@@ -160,7 +160,7 @@ export class WorkOrdersService {
 
   parseQuery(
     query: Record<string, string | undefined>,
-    admin: Pick<AdminSession, 'role' | 'office'>,
+    admin: Pick<AdminSession, 'role' | 'office' | 'adminId'>,
   ): WorkOrderFilters {
     const requestedOffice =
       query.office === 'all' || query.office === 'MEO' || query.office === 'MDRRMO'
@@ -171,7 +171,17 @@ export class WorkOrdersService {
       ? (query.status as WorkOrderStatus)
       : undefined;
     const ticketId = query.ticketId ? Number(query.ticketId) : undefined;
-    const assignedAdminId = query.assignedAdminId ? Number(query.assignedAdminId) : undefined;
+    // 'me' is a viewer-relative sentinel ("My Assignments" quick filter) —
+    // resolved from the caller's own session, never trusted from the query
+    // string as a raw id, so it can't be used to probe another admin's
+    // assignments by id. Works identically for officers, supervisors, and
+    // system admins, since every AdminSession carries its own adminId.
+    const assignedAdminId =
+      query.assignedAdminId === 'me'
+        ? admin.adminId
+        : query.assignedAdminId
+          ? Number(query.assignedAdminId)
+          : undefined;
     const overdue = query.overdue === 'true' ? true : undefined;
     const page = Math.max(1, Number(query.page) || 1);
     const limit = PAGE_LIMITS.includes(
