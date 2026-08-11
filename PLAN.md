@@ -3,6 +3,8 @@
 Repository: `MMPA-Works/porac-sdss-nextjs` (commit `9a44a41`)
 Target: Municipal Infrastructure Maintenance and Topographical Hazard Mapping System for Angeles City (WD403 Group 9)
  
+> **Historical decision record and build log, not the current live plan.** The header above and some older sections refer to the earlier Angeles City / `porac-sdss-nextjs` prototype context — the current system target is **Porac, Pampanga (29 barangays)**. Some older paths (`app/api/**`, `lib/db/raw.ts`, `lib/geo/barangay.ts`, `scripts/seed-demo.ts`) are pre-NestJS-extraction history and no longer exist. For current setup and status, read `README.md`, `CLAUDE.md`, `docs/product-roadmap.md`, and `docs/next-product-roadmap.md`.
+
 ---
  
 ## 0. Security Actions (do first)

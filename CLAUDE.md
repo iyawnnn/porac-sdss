@@ -39,7 +39,7 @@ pnpm --prefix api test:e2e      # jest e2e tests (NestJS-side, not Playwright �
 
 ## Playwright E2E tests (root `e2e/`)
 
-`pnpm exec playwright test -- --workers=1` drives the real Next.js dev server against the real dev database (no mocks, no isolated test DB) — the API (`pnpm --prefix api start:dev`) must already be running and migrated first. Playwright's `globalSetup` (`e2e/global-setup.ts`) idempotently provisions the demo admin/citizen accounts every spec logs in as before tests start, so you don't need to seed them by hand — see README.md §I for the full flow, why `--workers=1` is required (no per-test DB isolation), and why ticket/report demo data (`pnpm --prefix api seed:diverse-reports`) stays a separate, explicit step rather than something global setup runs automatically (it's destructive — `TRUNCATE`s existing tickets). All E2E credentials are centralized in `e2e/test-credentials.ts`; never hardcode a login in a new spec.
+`pnpm exec playwright test -- --workers=1` drives the real Next.js dev server against the real dev database (no mocks, no isolated test DB) — the API (`pnpm --prefix api start:dev`) must already be running and migrated first. Playwright's `globalSetup` (`e2e/global-setup.ts`) idempotently provisions the demo admin/citizen accounts every spec logs in as before tests start, so you don't need to seed them by hand — see README.md §I for the full flow, why `--workers=1` is required (no per-test DB isolation), why ticket/report demo data (`pnpm --prefix api seed:diverse-reports`) stays a separate, explicit step rather than something global setup runs automatically (it's destructive — `TRUNCATE`s existing tickets), and why a full run can only be repeated once per hour (it posts ~16 real reports against `RateLimitService`'s 20/hour-per-IP backstop — prefer targeted spec runs, and never add a test-only bypass to a real anti-abuse control). All E2E credentials are centralized in `e2e/test-credentials.ts`; never hardcode a login in a new spec.
 
 `build`/`start`/`start:dev`/`start:debug` all run `scripts/clean-build-cache.js` first (see that file for why) — tsc's incremental cache (`tsconfig.build.tsbuildinfo`) lives outside `dist/` and survives `nest-cli.json`'s `deleteOutDir`, so if `dist/` is ever deleted independently of a build, the next build used to trust the stale cache and silently skip re-emitting `dist/main.js`. This is now self-healing: every build/start command wipes both `dist/` and the buildinfo file first, so there is never a reason to manually delete either — if you ever see `Cannot find module .../dist/main`, just re-run the normal command. `pnpm --prefix api run verify:build-recovery` is the regression test for this.
 
@@ -66,6 +66,10 @@ pnpm --prefix api migrate:admin-system-role
 pnpm --prefix api migrate:admin-created-at
 pnpm --prefix api migrate:admin-audit-events
 pnpm --prefix api migrate:admin-password-security
+pnpm --prefix api migrate:admin-status              # admins.is_active (account activation/deactivation)
+pnpm --prefix api migrate:work-orders               # work_orders — FKs tickets(id) and admins(id), so it follows both
+pnpm --prefix api migrate:ticket-disputes           # tickets.disputed_at/dispute_reason
+pnpm --prefix api migrate:ticket-resolution-confirmation  # tickets.resolution_confirmed_at
 pnpm --prefix api verify:config                     # print computed elev_min/elev_max etc.
 pnpm --prefix api verify:city-boundary              # confirm city_boundary_osm is populated with valid geometry
 pnpm --prefix api seed:admin -- <email> <password> <MEO|MDRRMO|-> <officer|supervisor|system_admin>  # use '-' for office with system_admin
