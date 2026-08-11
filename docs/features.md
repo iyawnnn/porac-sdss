@@ -2,7 +2,9 @@
 
 **What PORAC-SDSS currently does.** This document describes behavior that exists in the codebase today, with a source or test citation for each flow so it can be checked rather than trusted.
 
-It deliberately does not cover: **setup and environment** (see [`README.md`](../README.md) §C–§E), **table/column detail** (see [`database.md`](database.md)), **why things are built the way they are** (see [`CLAUDE.md`](../CLAUDE.md)'s Architecture section and [`PLAN.md`](../PLAN.md), which is a historical record), or **what shipped when** (see [`product-roadmap.md`](product-roadmap.md)). For the security model behind the access rules summarized here, see [`security.md`](security.md).
+For a role-by-role narrative of how each user type works through the system — citizen, MEO, MDRRMO, System Administrator, plus an end-to-end scenario — see [`user-flows.md`](user-flows.md). This file is the inventory; that one is the walkthrough.
+
+It deliberately does not cover: **setup and environment** (see [`README.md`](../README.md) §C–§E), **table/column detail** (see [`database.md`](database.md)), **why things are built the way they are** (see [`CLAUDE.md`](../CLAUDE.md)'s Architecture section and [`PLAN.md`](../PLAN.md), which is a historical record), or **what shipped when and what is queued** (see [`project-status.md`](project-status.md)). For the security model behind the access rules summarized here, see [`security.md`](security.md).
 
 ---
 
@@ -115,7 +117,7 @@ Covered by `e2e/admin-tickets.spec.ts` (~21 tests).
 
 - **Header** — ticket ID, assigned office, status pill, urgency badge.
 - **Status tracker** — a single "Advance to *next*" control walking `Reported → Under Review → In Progress → Resolved`. The final step opens a **resolve dialog** requiring completion notes and accepting a resolution photo; once set, a "Before & after resolution" card renders. There is no further transition after `Resolved`.
-- **Assignment panel** — reassign to the other office (System Administrator only), audited.
+- **Assignment panel** — reassign to the other office, audited. Available to **any admin who can access the ticket**, not System Administrators only: the endpoint uses `assertOfficeAccess` against the ticket's *current* office, and `AssignmentPanel.tsx` carries no role gate. For an office admin this is a one-way hand-off — after reassigning, the ticket belongs to the other office and they can no longer open it. System Administrators can move a ticket in either direction.
 - **Urgency decomposition** — the three factors with their explicit ⅓ weights and per-factor contributions, not just a final number.
 - **Priority breakdown** — the separate workflow-priority formula (§6.1).
 - **Evidence & reports** — every merged citizen report with its photo, and its integrity flags.
@@ -170,7 +172,7 @@ A shared office/date-range filter panel driving both the ticket and work-order C
 
 ## 4. Spatial decision support
 
-The research core. Full derivation lives in [`CLAUDE.md`](../CLAUDE.md); this is what it means operationally.
+The research core. This section is the operational summary; **[`triage-model.md`](triage-model.md) is the authoritative reference** for the exact formulas, weights, thresholds, banding discrepancies, and known limitations.
 
 ### 4.1 Barangay resolution
 
@@ -253,7 +255,7 @@ Two independent auth systems; two independent sets of API routes. No citizen-fac
 
 Separated from everything above because none of it is implemented.
 
-**Pending hardening** (see [`product-roadmap.md`](product-roadmap.md) §3.1):
+**Pending hardening** (see [`project-status.md`](project-status.md) §4):
 
 - **Admin SSR error boundary — pending, not implemented.** A transient failure of the Next → NestJS hop during server rendering currently replaces the admin app, including the login form, with the framework's built-in error screen. The only mitigation today is test-side. This is **not** done.
 - Monitoring and alerting — not started.
@@ -262,7 +264,7 @@ Separated from everything above because none of it is implemented.
 - Credential rotation — gated on an actual deployment decision.
 - Written deployment runbook — no hosting platform is committed anywhere in this repo.
 
-**Deliberately deferred product ideas** — crew scheduling, attachments/checklists, inspection logs, a standalone due-date calendar, barangay editing, elevation *filtering*, CSV export for Barangay Insights, citizen-facing work-order rollups, PDF generation, and scheduled/recurring reports. See [`next-product-roadmap.md`](next-product-roadmap.md) §3 for the full list and the reasoning. None of these are queued; each needs a real, separately-scoped requirement before it moves.
+**Deliberately deferred product ideas** — crew scheduling, attachments/checklists, inspection logs, a standalone due-date calendar, barangay editing, elevation *filtering*, CSV export for Barangay Insights, citizen-facing work-order rollups, PDF generation, and scheduled/recurring reports. See [`project-status.md`](project-status.md) §5 for the full list and the reasoning. None of these are queued; each needs a real, separately-scoped requirement before it moves.
 
 ---
 

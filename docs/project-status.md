@@ -1,14 +1,33 @@
-# Product Roadmap
+# Project Status
 
-**Purpose.** This file is the priority source of truth for *what to build next* in Porac SDSS. Read it before proposing or starting a feature. `PLAN.md` stays the architecture/decision record (why things are built the way they are); this file only answers "what's next, what's deferred, what must not be built yet."
+**Purpose.** This is the **active project status and roadmap file** for Porac SDSS. Read it before proposing or starting any work. It answers five questions:
+
+- **What has shipped** — §2 (foundation) and §3 (recently completed operational features).
+- **What is queued now** — §4.
+- **What is deferred** — §5. Considered, set aside, not scheduled.
+- **What must not be built yet** — §6.
+- **What risks and constraints future work must respect** — §7.
 
 Porac SDSS is a real operational system for MEO/MDRRMO, not an MVP prototype to be discarded once a demo is over — treat every item below as a production feature with production stakes (RBAC, audit trail, data integrity), not a proof of concept.
 
-**Maintenance rule.** Update this file in the same change whenever a planned feature is completed, skipped, or reprioritized. A roadmap that lags the code is worse than none — the next session will trust it.
+**Related docs.** `PLAN.md` is the historical architecture/decision record (why things are built the way they are, written against an earlier target). For what the system currently *does*, see [`features.md`](features.md) and [`user-flows.md`](user-flows.md). For the scoring model, [`triage-model.md`](triage-model.md). For security, [`security.md`](security.md) and [`security-hardening-plan.md`](security-hardening-plan.md). For verification, [`testing.md`](testing.md). For pre-production work, [`deployment-readiness.md`](deployment-readiness.md).
+
+This file replaced two earlier documents that split the same material and each claimed to be the authority on what to build next. **There is exactly one roadmap/status file — this one.** Do not create a second roadmap, backlog, or "next steps" document.
 
 ---
 
-## 1. Completed Foundation
+## 1. Current State Summary
+
+**Phase: polish, testing, security hardening, and deployment readiness.** Not feature development.
+
+- **No new product feature is currently queued.** The pipeline that Barangay Insights and then Notification Center filled is clear, and the most recent audit found no remaining unfinished item of real product weight outside what §5 already defers.
+- **Current work should focus on** reliability hardening, security hardening, test coverage, documentation accuracy, and deployment readiness — all of which are enumerated in §4.
+- **Do not treat an empty feature queue as licence to start something new.** Read §6 before proposing a feature. If a genuinely new feature is justified, it belongs in §4 with a stated reason, not started directly.
+- **Nothing has been deployed.** No hosting platform, production database, domain, or verified email sending domain exists yet — see [`deployment-readiness.md`](deployment-readiness.md).
+
+---
+
+## 2. Completed Foundation
 
 This section is a shipped-inventory checklist. For a walkthrough of how these surfaces actually behave, see [`features.md`](features.md); for the access-control model behind them, see [`security.md`](security.md).
 
@@ -17,7 +36,7 @@ Verified against the current tree, not assumed:
 **Citizen side** — `app/(citizen)/`
 - Report submission with photo/EXIF, server-computed elevation, barangay resolution (`report/`)
 - Report list and per-report tracking timeline (`reports/`, `dashboard/reports/[id]/`)
-- Public map (`map/`), account page, signup/login, forgot/reset password
+- Citizen map (`map/`), account page, signup/login, forgot/reset password
 
 **Admin side** — `app/admin/`
 - Operations dashboard with range control, distributions, barangay/category rankings, and role-aware Quick Actions (`page.tsx`, `components/features/admin/dashboard/`)
@@ -30,14 +49,14 @@ Verified against the current tree, not assumed:
 **Platform**
 - Notifications (`api/src/notifications/`, `NotificationBell`)
 - RBAC + office scoping: `isSystemAdmin` / `resolveOfficeScope` / `assertOfficeAccess` in `api/src/common/authz/admin-scope.ts`, plus `AdminSessionGuard` / `SystemAdminGuard`
-- Deduplication, urgency triage, weather/DEM pipeline (see `PLAN.md` §6–§7)
+- Deduplication, urgency triage, weather/DEM pipeline (see `PLAN.md` §6–§7 and [`triage-model.md`](triage-model.md))
 - `docs/database.md` per-table reference and the `city_boundary_osm` import
 
 Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[id]`, `/admin/map`, `/admin/barangay-insights`, `/admin/barangay-insights/[barangayId]`, `/admin/flagged`, `/admin/reports`, `/admin/notifications`, `/admin/admins`, `/admin/activity-log`, `/admin/account`, `/admin/login`, `/admin/work-orders`.
 
 ---
 
-## 2. Recently Completed Operational Features
+## 3. Recently Completed Operational Features
 
 ### Office Work Orders / Office Tasks — **completed**
 
@@ -75,7 +94,7 @@ Six metrics: Pending Work Orders, In Progress Work Orders, Overdue Work Orders, 
 
 ### Work Order Follow-up Improvements — **completed (first increment)**
 
-A small, focused pass on top of the shipped Work Orders feature — due dates and notes went from create-only/display-only to fully editable, plus a new dashboard "Needs Attention" section. No new table, no new route, no crew scheduling/cost tracking/attachments/checklists (explicitly out of scope, see §5).
+A small, focused pass on top of the shipped Work Orders feature — due dates and notes went from create-only/display-only to fully editable, plus a new dashboard "Needs Attention" section. No new table, no new route, no crew scheduling/cost tracking/attachments/checklists (explicitly out of scope, see §6).
 
 - **Due date editing.** `WorkOrderDueDateEditor` (`components/features/admin/work-orders/WorkOrderDueDateEditor.tsx`) is a native `<input type="date">` + Clear button, used on both the Ticket Detail Work Orders panel and the standalone `/admin/work-orders` list (desktop table + mobile cards) — PATCHes the existing `PATCH /admin/work-orders/:id` endpoint, which already supported `dueDate` (including clearing it to `null`) since Work Orders shipped; no backend change was needed for the edit path itself.
 - **Overdue / due-today derivation.** `getDueState()` (`components/features/admin/work-orders/WorkOrderStatusBadge.tsx`) replaces the old boolean `isOverdue()` (kept as a thin wrapper for compatibility) with a three-state `overdue | due_today | upcoming | none` derived purely from `due_date`/`status` — never a stored column. "Due today" uses server-local calendar-day boundaries (a single-timezone LGU tool doesn't need per-user timezone handling yet).
@@ -124,13 +143,13 @@ CSV export for Tickets and Work Orders, plus a centralized `/admin/reports` "Rep
 
 ### Barangay Insights — **completed (MVP)**
 
-A read-only per-barangay operational drill-down: `/admin/barangay-insights` (all 29 barangays, office-scoped summary counts) and `/admin/barangay-insights/[barangayId]` (profile), sidebar entry in the Main section. See `docs/next-product-roadmap.md` for the planning rationale (this was the "Build Next" item once the roadmap pipeline emptied out).
+A read-only per-barangay operational drill-down: `/admin/barangay-insights` (all 29 barangays, office-scoped summary counts) and `/admin/barangay-insights/[barangayId]` (profile), sidebar entry in the Main section. This was the "Build Next" item once the roadmap pipeline emptied out.
 
 - `BarangayInsightsController`/`BarangayInsightsService` (`api/src/admin/barangay-insights.*`) — `GET /admin/barangay-insights` and `GET /admin/barangay-insights/:id`, behind `AdminSessionGuard` only, same shape as `ReportsController`: safe because every count is office-scoped via `resolveOfficeScope`, not a guard of its own. Raw-PG (`PG` client), since every query joins `barangays.geom`/`dem_points.geom`.
 - **No schema change.** Every aggregate is a `GROUP BY`/`COUNT(*) FILTER` over `tickets`/`reports`/`dem_points`, following the exact office-scoping shape `DashboardService` already uses — the index query moves the office filter into the `tickets` `LEFT JOIN` condition (not a `WHERE`) so all 29 barangays are always returned, even ones with zero tickets for the scoped office.
 - Index columns: Total/Active/Resolved/High-Urgency ticket counts, most common category, last activity date. Profile adds: KPI tiles, an all-time category breakdown, a fixed 30-day incident trend (no range selector — this is a barangay profile, not a second dashboard), a `dem_points`-derived elevation min/avg/max (**display only, never a filter**), and the 10 most recent tickets, each linking to `/admin/tickets/{id}` and to `/admin/tickets?barangayId={id}` for the full filtered queue.
 - Never selects `work_orders.notes` (this feature never touches `work_orders` at all).
-- **Out of MVP, not built**: editing/creating/deleting barangays, CSV export, elevation *filtering*, crew scheduling, due-date calendars, inspection logs, attachments/checklists — see `docs/next-product-roadmap.md` §3 for the full deferred list and reasons.
+- **Out of MVP, not built**: editing/creating/deleting barangays, CSV export, elevation *filtering*, crew scheduling, due-date calendars, inspection logs, attachments/checklists — see §5 for the full deferred list and reasons.
 
 ### Notification Center — **completed**
 
@@ -152,7 +171,7 @@ Closes the one-way finality gap where a citizen had no way to say a `Resolved` t
 
 ### "My Assignments" Work Order Filter — **completed**
 
-A personal quick filter on the existing `/admin/work-orders` list — no new page, no new sidebar item, matching §5's rule against inventing a separate route for what's really a filter (the earlier "My Work" recommendation was explicitly scoped this way).
+A personal quick filter on the existing `/admin/work-orders` list — no new page, no new sidebar item, matching §6's rule against inventing a separate route for what's really a filter (the earlier "My Work" recommendation was explicitly scoped this way).
 
 - `WorkOrdersService.parseQuery` now accepts `assignedAdminId=me` as a viewer-relative sentinel, resolved server-side from the caller's own session (`admin.adminId`) — never a client-supplied numeric id, so it can't be used to probe another admin's assignments by id. Works identically for MEO/MDRRMO officers, supervisors, and system admins (every `AdminSession` carries its own `adminId`). Raw numeric `assignedAdminId` values are unaffected. This is the one existing filter path (`list`/`getWorkOrdersForExport`, and the CSV export that reuses `parseQuery`) — no parallel logic was added.
 - `WorkOrdersWorkspace.tsx` gets a "My Assignments" toggle button (same shape as the existing "Overdue only" toggle) plus an active-filter badge when enabled; the URL carries `?assignedAdminId=me` literally (not a resolved numeric id), so the link means "my assignments" for whoever opens it. Combines with office/status/overdue rather than replacing them.
@@ -164,7 +183,7 @@ A personal quick filter on the existing `/admin/work-orders` list — no new pag
 A backend-only safety net: flags active tickets that have stalled with no real field-work progress, so they don't silently age out of view. No new page, no new sidebar item — it's a notification, delivered through the existing bell/Notification Center.
 
 - `EscalationService.checkTicketEscalations` (`api/src/domain/escalation.service.ts`) — active ticket (`Reported`/`Under Review`/`In Progress`) older than 7 days with no work order that ever reached `in_progress`/`completed` (a `pending`/`cancelled`-only work order, or no work order at all, still counts as stalled). Read-only against `tickets`/`work_orders`/`notifications` — never writes `tickets.status`, `work_orders.status`, or any urgency/priority column.
-- `POST /cron/check-ticket-escalations` (`CronController`), behind the same `CronSecretGuard` as every other cron route, added to `.github/workflows/cron.yml`'s daily run alongside the other five (six total — see the Production Hardening entry below). Returns `{ candidatesFound, notificationsCreated, duplicatesSkipped }`.
+- `POST /cron/check-ticket-escalations` (`CronController`), behind the same `CronSecretGuard` as every other cron route, added to `.github/workflows/cron.yml`'s daily run alongside the other five (six total — see §4.4). Returns `{ candidatesFound, notificationsCreated, duplicatesSkipped }`.
 - Notification: `type: 'ticket_escalation'`, office-targeted (`recipientOffice`, no per-admin fan-out — same shape as `ticket_critical`), linking to `/admin/tickets/:id`.
 - **Duplicate prevention is schema-free**: a ticket is escalated at most once for the lifetime of its `ticket_escalation` notification row — before creating one, the service checks whether `notifications` already has a `type: 'ticket_escalation'` row for that `entityId` and skips it if so, rather than adding a new "already escalated" column to `tickets`. Re-escalating after a stall recurs is a deliberate non-goal for this pass, not an oversight.
 - No schema change, no migration.
@@ -180,51 +199,100 @@ A read-only recap of how a resolved report was closed, on the existing citizen r
 
 ---
 
-## 3. Next Product Features
+## 4. Current Queue
 
-In priority order.
+All pending work. **None of it is a new product feature** — this is hardening, testing, documentation, and deployment readiness, consistent with §1.
 
-### 3.1 Production Hardening / Deployment Readiness
+### 4.1 Security hardening — pending
 
-Last on this list because it's continuous, not a single feature: monitoring/alerting, backup verification, load/perf validation, secrets rotation, deployment runbook. Revisit and expand this item as the system approaches real deployment, rather than treating it as a one-time checkbox.
+Assessed and prioritized in [`security-hardening-plan.md`](security-hardening-plan.md), which carries severity, likelihood, right-sized scope, and the required test for each. Summarized here so this file stays the single status view:
+
+- **Failed-login throttling (R1, High) — pending.** Only bcrypt cost and a generic error message protect admin login today; there is no attempt counter, backoff, or cooldown. The admin email convention is published in `README.md` §G, so an attacker needs no username discovery. **The recommended next implementation task.**
+- **HTTP security response headers (R2, Medium) — pending.** Neither `next.config.ts` nor the API bootstrap sets any, so the admin console is framable by any origin.
+- **Free-text length bounds (R3, Medium) — pending.** Report submission is bounded by Zod; work-order title/notes, resolution notes, dispute reason, and the moderation note have type and non-empty checks but no maximum length.
+- **Login audit events (R4, Medium) — pending.** `admin_audit_events` covers mutations but not authentication events.
+- **Content-Security-Policy (R7, Low) — pending**, and deliberately staged after R2 in `Report-Only` mode first, since a blocking CSP shipped blind would break Leaflet and Cloudinary.
+
+Deployment-topology items (proxy trust depth, API network exposure, TLS/HSTS, credential rotation) are in §4.4, not here — they cannot be resolved before a hosting platform exists.
+
+### 4.2 Reliability — pending
+
+- **Admin SSR error boundary — PENDING, not implemented.** Recorded so it isn't rediscovered from scratch; no app code has been written for it. `app/admin/layout.tsx` and `app/admin/login/page.tsx` both call `getAdminSessionFromApi()` unguarded. That helper returns `null` on a 401 but *throws* when the Next → NestJS hop fails at the socket level (`lib/api-client.ts`, after its bounded retries). There is no `app/admin/error.tsx`, no `app/error.tsx`, and no `global-error.tsx`, so such a throw replaces the entire admin app — including the login form an admin would use to recover — with Next's built-in error screen. `app/(citizen)/layout.tsx` has the same shape. Two things to check before implementing: (1) per this build's own docs (`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md`), `error.js` does **not** wrap the `layout.js` in its own segment, so an `app/admin/error.tsx` alone would not catch a throw originating in `app/admin/layout.tsx`; (2) the seven existing `app/(citizen)/**/error.tsx` boundaries pass `reset`, which the same docs describe as re-rendering *without* re-fetching and therefore unable to recover a Server Component error — `unstable_retry` is the recovering prop in this Next version. Today the only mitigation is test-side: `settleAdminPage` in `e2e/helpers.ts` reloads when that error screen appears. That helper stays regardless (it also absorbs mid-run connection churn), but it is not a substitute for a real boundary.
+
+### 4.3 Testing — pending
+
+Detail and rationale in [`testing.md`](testing.md) §9. None of these blocks other work; all are recorded so they aren't lost:
+
+- **Citizen cross-account access regression test (R8) — pending.** The ownership check is correct in code but has no E2E asserting citizen A cannot read citizen B's report.
+- **Per-run database isolation — pending.** The single change that would unlock parallel workers and remove most of the suite's constraints. Also the largest.
+- **Wider fixture sharing — pending.** `admin-tickets.spec.ts` creates 7 of the suite's ~16 reports; applying the shared-`beforeAll` pattern where a pristine ticket isn't needed would push full runs further from the 20/hour IP limit without touching the rate limiter.
+- **Playwright in CI — pending**, and correctly gated behind database isolation. CI today runs API build, API unit tests, root lint, and root build — no browser tests.
+- **Security-control tests — pending**, to be written alongside whatever ships from §4.1.
+
+### 4.4 Deployment readiness — pending
+
+Full checklist in [`deployment-readiness.md`](deployment-readiness.md). Nothing has been deployed; no hosting platform is chosen.
+
+**Already done in this area:**
 
 - **Cron scheduling — done.** `.github/workflows/cron.yml` calls all six `api/src/cron/*` routes (`recompute-urgency`, `recompute-weather`, `cleanup-password-reset-tokens`, `cleanup-notifications`, `cleanup-rate-limit-events`, `check-ticket-escalations`) daily via `curl`, authenticated the same way `CronSecretGuard` already accepts (`Authorization: Bearer $CRON_SECRET`). Requires two repo-level GitHub Actions configs to actually run: `vars.PORAC_API_BASE_URL` and `secrets.CRON_SECRET` — see that workflow file's header comment.
 - **Rate-limit event cleanup — done.** `RateLimitService.cleanupOldEvents()` + `POST /cron/cleanup-rate-limit-events` prunes `rate_limit_events` and `password_reset_rate_limit_events` past a 30-day retention window — see `docs/database.md` for why 30 days is safe (both tables' checks only ever look back 24 hours at most).
-- **Setup/deployment documentation — done.** `README.md`'s env var setup section previously named variables that don't exist in this codebase (`OPENWEATHER_API_KEY`, `NEXTAUTH_SECRET`, `NEXT_PUBLIC_APP_URL`) and never mentioned `api/.env` as a separate file at all — a fresh clone following it literally could not start the API. Rewritten to explain the two-env-file split accurately (with tables of what's actually required vs. optional on each side, matching `api/src/config/env.ts`'s Zod schema) and to add a new "Scheduled Jobs & Deployment" section documenting the `CRON_SECRET`/`PORAC_API_BASE_URL` GitHub Actions requirements and stating plainly that no hosting platform is decided yet.
+- **Setup/deployment documentation — done.** `README.md`'s env var setup section previously named variables that don't exist in this codebase (`OPENWEATHER_API_KEY`, `NEXTAUTH_SECRET`, `NEXT_PUBLIC_APP_URL`) and never mentioned `api/.env` as a separate file at all — a fresh clone following it literally could not start the API. Rewritten to explain the two-env-file split accurately (with tables of what's actually required vs. optional on each side, matching `api/src/config/env.ts`'s Zod schema) and to add a "Scheduled Jobs & Deployment" section documenting the `CRON_SECRET`/`PORAC_API_BASE_URL` GitHub Actions requirements and stating plainly that no hosting platform is decided yet.
 - **Admin ticket workflow E2E coverage — done.** `e2e/admin-tickets.spec.ts` now covers the Ticket Queue and Ticket Detail end to end: queue baseline/empty state, status/search/disputed/category/barangay filters plus filter reset, office scoping (including a doctored `?office=` clamp assertion), queue → detail navigation and back, the Ticket Detail read-only surface, status advancement, office reassignment with a `finally`-block restore, pagination, sorting, the mobile card list, and a full admin-UI resolution through the resolve dialog (completion notes + resolution photo) whose outcome is then asserted from the citizen side against the Case Closure Summary card. `e2e/citizen-dispute.spec.ts` gained the matching citizen-side coverage (confirm/dispute persistence across reload, and a hydration/wait fix on the dispute flow).
-- **Ticket-dependent E2E specs decoupled from shared state — done.** Specs that need a ticket now create their own disposable one (a fresh citizen signup + a real `POST /api/reports` with jittered coordinates, comfortably outside the 25m Pothole dedup radius) instead of selecting "whichever ticket currently ranks first" for an office. That shared top-of-list selection was the standing flake source: earlier specs create, resolve, and reassign tickets, so a later spec's "first ticket" could point at a different row — or one mid-mutation — than the one it read. Where a pristine ticket isn't required, files share a single disposable fixture created once (`admin-work-orders.spec.ts`'s `sharedMeoTicketId`/`sharedMdrrmoTicketId`, `admin-tickets.spec.ts`'s `resolvedFixture`), which is safe only under the suite's mandatory `--workers=1` and is commented as such at each site. **Known local caveat**, documented in `README.md` §I: a full run posts ~16 real reports against `RateLimitService`'s 20/hour-per-IP backstop, so back-to-back full runs within the same hour fail with `429`. That is the anti-abuse control behaving correctly — the fix is targeted spec runs, never a test-only bypass.
-- **Admin SSR error boundary — PENDING, not implemented.** Recorded here so it isn't rediscovered from scratch; no app code has been written for it yet. `app/admin/layout.tsx` and `app/admin/login/page.tsx` both call `getAdminSessionFromApi()` unguarded. That helper returns `null` on a 401 but *throws* when the Next → NestJS hop fails at the socket level (`lib/api-client.ts`, after its bounded retries). There is no `app/admin/error.tsx`, no `app/error.tsx`, and no `global-error.tsx`, so such a throw replaces the entire admin app — including the login form an admin would use to recover — with Next's built-in error screen. `app/(citizen)/layout.tsx` has the same shape. Two things to check before implementing: (1) per this build's own docs (`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md`), `error.js` does **not** wrap the `layout.js` in its own segment, so an `app/admin/error.tsx` alone would not catch a throw originating in `app/admin/layout.tsx`; (2) the seven existing `app/(citizen)/**/error.tsx` boundaries pass `reset`, which the same docs describe as re-rendering *without* re-fetching and therefore unable to recover a Server Component error — `unstable_retry` is the recovering prop in this Next version. Today the only mitigation is test-side: `settleAdminPage` in `e2e/helpers.ts` reloads when that error screen appears. That helper stays regardless (it also absorbs mid-run connection churn), but it is not a substitute for a real boundary.
-- **Still not done**: the admin SSR error boundary above, monitoring/alerting, backup verification, load/perf validation, credential rotation (deliberately gated on an actual deploy decision — see `PLAN.md` §0), and a written deployment runbook (no hosting platform is committed anywhere in this repo yet).
+- **Ticket-dependent E2E specs decoupled from shared state — done.** Specs that need a ticket now create their own disposable one (a fresh citizen signup + a real `POST /api/reports` with jittered coordinates, comfortably outside the 25m Pothole dedup radius) instead of selecting "whichever ticket currently ranks first" for an office. That shared top-of-list selection was the standing flake source: earlier specs create, resolve, and reassign tickets, so a later spec's "first ticket" could point at a different row — or one mid-mutation — than the one it read. Where a pristine ticket isn't required, files share a single disposable fixture created once (`admin-work-orders.spec.ts`'s `sharedMeoTicketId`/`sharedMdrrmoTicketId`, `admin-tickets.spec.ts`'s `resolvedFixture`), which is safe only under the suite's mandatory `--workers=1` and is commented as such at each site. **Known local caveat**, documented in `README.md` §I and [`testing.md`](testing.md): a full run posts ~16 real reports against `RateLimitService`'s 20/hour-per-IP backstop, so back-to-back full runs within the same hour fail with `429`. That is the anti-abuse control behaving correctly — the fix is targeted spec runs, never a test-only bypass.
+
+**Still not done:** provisioning a production PostGIS database and running the documented migration order; automated backups and a **tested** restore; a verified email sending domain with a matching `EMAIL_FROM`; the two GitHub Actions cron values; monitoring/alerting; load and performance validation; credential rotation (deliberately gated on an actual deploy decision — see `PLAN.md` §0); re-deriving `trust proxy` depth for the real topology; ensuring the API is not publicly reachable independently of the proxy; TLS/HSTS; and a written deployment runbook (no hosting platform is committed anywhere in this repo yet).
 
 ---
 
-## 4. Deferred Enhancements
+## 5. Deferred Enhancements
 
-Not next, not blocked — just not prioritized yet. Revisit if a real requirement surfaces:
+Not next, not blocked — just not prioritized yet. Each needs a real, separately-scoped requirement before it moves into §4. Revisit if a genuine need surfaces:
 
-- Bulk work-order operations and notification tuning beyond what §2's Work Order Follow-up Improvements increment shipped
-- Cross-office reporting rollups beyond the MEO/MDRRMO office filter, scheduled/recurring reports, and PDF generation — beyond §2's Reporting and Export Tools' `/admin/reports` page and print-summary scope
-- Citizen-facing work-order status summaries (a *rollup*, e.g. "work in progress," never the underlying work order or its notes — see §5)
-- A low-elevation/hazard-prone map preset or filter — no elevation-based map filter exists yet (§2's Map Presets); revisit alongside a real elevation-filter feature
-- Export audit logging — evaluated in §2's Reporting and Export Tools and skipped; revisit only if a real "who exported what" compliance need surfaces
+- Bulk work-order operations and notification tuning beyond what §3's Work Order Follow-up Improvements increment shipped
+- Cross-office reporting rollups beyond the MEO/MDRRMO office filter, scheduled/recurring reports, and PDF generation — beyond §3's Reporting and Export Tools' `/admin/reports` page and print-summary scope
+- Citizen-facing work-order status summaries (a *rollup*, e.g. "work in progress," never the underlying work order or its notes — see §6)
+- A low-elevation/hazard-prone map preset or filter — no elevation-based map filter exists yet (§3's Map Presets); revisit alongside a real elevation-filter feature
+- Export audit logging — evaluated in §3's Reporting and Export Tools and skipped; revisit only if a real "who exported what" compliance need surfaces
+- Crew scheduling, attachments/checklists, and inspection logs — all out of scope. Inspection logs in particular collide with the deferred attachments/checklists scope, so they are not a smaller separate item
+- A standalone due-date calendar — due dates stay inside Work Orders (§6)
+- CSV export for Barangay Insights, and barangay create/edit/delete flows — both deliberately out of that feature's shipped scope (§3's Barangay Insights)
+- Elevation *filtering* anywhere in the product — elevation is display-only today (§3's Barangay Insights, and the map-preset entry above)
 
 ---
 
-## 5. Do Not Build Yet
+## 6. Do Not Build Yet
 
-- Anything from §4, or later items in §3, ahead of earlier §3 items — the order in §3 reflects real dependencies, not preference.
-- **Sidebar or Quick Action entries for routes that do not exist.** Every nav item must resolve to a real page with a real backing endpoint — ship the nav entry with the route, never ahead of it. Office Performance Summary, the Admin Directory/Assigned Admin Picker, and Map Presets (§2) are all the model: real backend + UI, no sidebar item, because none needed its own route.
-- Any citizen-facing surface for work orders or internal notes — not even a rollup, until §4 is explicitly picked up and scoped.
-- A standalone internal-notes or due-dates feature — both stay inside Work Orders (§2).
+- Anything from §5, or later items in §4, ahead of earlier §4 items — the order in §4 reflects real dependencies and severity, not preference.
+- **Sidebar or Quick Action entries for routes that do not exist.** Every nav item must resolve to a real page with a real backing endpoint — ship the nav entry with the route, never ahead of it. Office Performance Summary, the Admin Directory/Assigned Admin Picker, and Map Presets (§3) are all the model: real backend + UI, no sidebar item, because none needed its own route.
+- Any citizen-facing surface for work orders or internal notes — not even a rollup, until §5 is explicitly picked up and scoped.
+- A standalone internal-notes or due-dates feature — both stay inside Work Orders (§3).
 - A separate route/sidebar item for Office Performance Summary, the Admin Directory, or Map Presets — all are dashboard/existing-surface features by design; only add a dedicated route if a real, separately-scoped need for one shows up.
+- A generic **"Analytics"** sidebar label — must not be used as a nav label; the E2E suite asserts against the exact sidebar entry list, and a rename would break it without adding meaning. Use the specific feature name instead (e.g. "Barangay Insights").
+- Anything that weakens RBAC or office scoping, including a test-only bypass of a rate limit or guard. See §7 and [`security.md`](security.md) §8.3.
 
 ---
 
-## 6. Risks to Avoid
+## 7. Risks to Avoid
 
-- **Weakening RBAC.** Client-side hiding (sidebar, quick actions) is cosmetic. The gate is `AdminSessionGuard` / `SystemAdminGuard` plus `resolveOfficeScope` / `assertOfficeAccess`. A new endpoint — including `AdminDirectoryController` — that forgets the scope helpers is an office-data leak, not a UI bug. The admin map follows the same rule: URL-syncing `?office=` (§2) is a UX convenience, not the security boundary — `TicketsController.geo` re-derives office from the session independently of whatever the client sends.
-- **Fake navigation links.** Links to nonexistent routes, or to filtered views the target page can't actually apply, make the system look finished where it isn't — the exact failure Map Presets (§2) was ordered behind URL-synced filters to prevent.
-- **Exposing internal work orders or notes to citizens.** `notes` and every other work-order field are staff-only by design; a rollup summary (§4) is the only citizen-facing form ever worth considering, and only once explicitly scoped.
+- **Weakening RBAC.** Client-side hiding (sidebar, quick actions) is cosmetic. The gate is `AdminSessionGuard` / `SystemAdminGuard` plus `resolveOfficeScope` / `assertOfficeAccess`. A new endpoint — including `AdminDirectoryController` — that forgets the scope helpers is an office-data leak, not a UI bug. The admin map follows the same rule: URL-syncing `?office=` (§3) is a UX convenience, not the security boundary — `TicketsController.geo` re-derives office from the session independently of whatever the client sends. See [`security.md`](security.md) §3.
+- **Fake navigation links.** Links to nonexistent routes, or to filtered views the target page can't actually apply, make the system look finished where it isn't — the exact failure Map Presets (§3) was ordered behind URL-synced filters to prevent.
+- **Exposing internal work orders or notes to citizens.** `notes` and every other work-order field are staff-only by design; a rollup summary (§5) is the only citizen-facing form ever worth considering, and only once explicitly scoped. See [`security.md`](security.md) §7.
 - **Schema drift.** Any new table/column requires a matching `docs/database.md` entry in the same change.
-- **Severity vs. Urgency vs. Priority.** Three distinct concepts with distinct data sources — see the terminology section in `CLAUDE.md` before labeling anything in a new UI.
-- **Scope creep.** Ship the fields/behavior actually specified for the current item. Attachments, checklists, cost tracking, and crew scheduling are not in scope for Work Orders or its near-term follow-ups unless a §3 item says otherwise.
+- **Severity vs. Urgency vs. Priority.** Distinct concepts with distinct data sources — and there are *two* separate scoring formulas, not one. Read [`triage-model.md`](triage-model.md) before labeling anything in a new UI or changing any weight or threshold; that file also carries the change-control rule for keeping the frontend duplicates and tests in sync.
+- **Scope creep.** Ship the fields/behavior actually specified for the current item. Attachments, checklists, cost tracking, and crew scheduling are not in scope for Work Orders or its near-term follow-ups unless a §4 item says otherwise.
+
+---
+
+## 8. Maintenance Rule
+
+**Update this file in the same change whenever a feature, hardening task, deferred item, or do-not-build rule changes state.** A status file that lags the code is worse than none — the next session, human or agent, will trust it.
+
+Specifically:
+
+- A completed feature moves into §3 with enough detail that the next reader understands what shipped and what was deliberately left out.
+- A completed §4 item is marked done there, and its entry in the owning detail doc ([`security-hardening-plan.md`](security-hardening-plan.md), [`testing.md`](testing.md), [`deployment-readiness.md`](deployment-readiness.md)) is updated in the same change.
+- A deferred item promoted into §4 needs a stated reason, not a silent move.
+- **Never mark a pending item as completed before the code exists.**
+
+Keep all of this in this file. Do not split the queue, the backlog, or the shipped record into a separate document — that split existed before and produced two files claiming the same authority, which is why they were consolidated here.
