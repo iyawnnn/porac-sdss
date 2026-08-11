@@ -79,7 +79,7 @@ Root `.env.local` — what's actually required:
 | `JWT_SECRET` | **Yes** | Must match `api/.env`'s `JWT_SECRET` exactly |
 | `API_ORIGIN` | No (defaults to `http://127.0.0.1:3001`) | Server-to-server origin `next.config.ts` rewrites `/api/*` to |
 | `INTERNAL_API_URL` | No (defaults to `http://127.0.0.1:3001`) | Origin Server Components fetch from directly (`lib/api-client.ts`) |
-| `NEXT_PUBLIC_TARGET_*`, `TARGET_*` | No | Municipality config — Angeles/Porac defaults are already correct; only change these to target a different LGU |
+| `NEXT_PUBLIC_TARGET_*`, `TARGET_*` | No | Municipality config — Porac defaults are already correct; only change these to target a different LGU |
 
 `api/.env` — what's actually required (validated at **boot**, in `api/src/config/env.ts` — a missing/malformed required var fails startup immediately, not the first request):
 
@@ -118,6 +118,12 @@ pnpm --prefix api migrate:citizen-identities
 pnpm --prefix api migrate:citizen-account-security
 pnpm --prefix api migrate:citizen-password-reset
 pnpm --prefix api migrate:notifications
+pnpm --prefix api migrate:admin-system-role         # admins.role 'system_admin' + nullable office (RBAC)
+pnpm --prefix api migrate:admin-created-at
+pnpm --prefix api migrate:admin-audit-events        # admin_audit_events table (Admin Activity Log)
+pnpm --prefix api migrate:admin-password-security   # admins.password_changed_at/session_valid_after
+pnpm --prefix api migrate:admin-status              # admins.is_active (account activation/deactivation)
+pnpm --prefix api migrate:work-orders               # work_orders table — FKs tickets(id) and admins(id), so it must follow both
 pnpm --prefix api migrate:ticket-disputes           # tickets.disputed_at/dispute_reason (citizen dispute loop)
 pnpm --prefix api migrate:ticket-resolution-confirmation  # tickets.resolution_confirmed_at (persistent Confirm Fixed)
 pnpm --prefix api seed:users                        # citizen demo accounts (Section G) — idempotent, safe to rerun
@@ -194,6 +200,19 @@ pnpm --prefix api seed:diverse-reports
 This is idempotent in the sense that re-running it always produces the same deterministic set of demo tickets — but it is destructive to whatever tickets existed before, so it's opt-in rather than automatic.
 
 **Why `--workers=1`:** the suite runs against one shared dev database with no per-test transaction isolation. Parallel workers would race on the same admin sessions, ticket rows, and moderation state (e.g. one worker resetting filters while another asserts on them), producing flaky failures unrelated to real bugs. Keep `--workers=1` until the suite gets real test-database isolation (e.g. a per-run schema or transactional rollback) — that is a bigger change than this fix and out of scope here.
+
+**A full run submits real reports and can exhaust the IP rate limit.** Ticket-dependent specs create their own disposable tickets rather than mutating shared seeded ones, so a full suite run posts roughly 16 real reports through `POST /api/reports` (`admin-tickets` 7, `citizen-dispute` 6, `admin-work-orders` 2, `citizen-reports` 1). `RateLimitService` (`api/src/domain/ratelimit.service.ts`) backstops report submission at **20 per hour per IP** (`IP_HOURLY_BACKSTOP`), and every request in a local run originates from the same `127.0.0.1`. Signing up a fresh citizen per test — which the specs already do — resets the per-account limits (5/hour, 3-within-25m/24h) but **not** the IP one.
+
+So one full run fits inside the budget; a second full run started within the same hour does not, and will fail partway through with `429` on report creation (surfacing as a failed `expect(res.ok())`, or as a whole spec file failing if it trips inside `admin-work-orders`' `beforeAll`). **This is the anti-abuse control working as designed, not a bug** — do not "fix" it by loosening the limit or adding a test-only bypass. Instead:
+
+- Wait out the hour before the next full run, or
+- Run only the specs you're working on, which is the recommended day-to-day loop:
+  ```bash
+  pnpm exec playwright test e2e/admin-tickets.spec.ts -- --workers=1
+  pnpm exec playwright test -g "Case Closure Summary" -- --workers=1
+  ```
+
+**Current coverage.** Beyond the smoke/RBAC/dashboard specs, the admin ticket workflow is covered end to end in `e2e/admin-tickets.spec.ts`: Ticket Queue baseline and empty state, status/search/disputed/category/barangay filters and filter reset, office scoping (including a doctored `?office=` clamp check), queue → detail navigation, the Ticket Detail read-only surface, status advancement, office reassignment with restore, pagination and sorting, the mobile card list, and a full admin-UI resolution (notes + photo through the resolve dialog) whose result is then asserted from the citizen side via the Case Closure Summary card.
 
 ## J. SCHEDULED JOBS & DEPLOYMENT
 
