@@ -6,7 +6,7 @@ Project Name: Porac SDSS (Spatial Decision Support System)
 
 Porac SDSS is a municipal infrastructure triage platform for Porac, Pampanga. It features spatial deduplication, DEM elevation risk scoring, OpenWeather telemetry, and automated photo EXIF GPS verification.
 
-This README covers setup and running the system. For what it actually does, see [`docs/features.md`](docs/features.md); for the security model and its known limitations, see [`docs/security.md`](docs/security.md).
+This README covers setup and running the system. For what it actually does, see [`docs/features.md`](docs/features.md); for a role-by-role walkthrough of how citizens and each admin type use it, see [`docs/user-flows.md`](docs/user-flows.md); for the urgency/priority scoring model and its limitations, see [`docs/triage-model.md`](docs/triage-model.md); for the security model, see [`docs/security.md`](docs/security.md).
 
 ## B. PREREQUISITES
 
@@ -184,6 +184,8 @@ To test the report submission pipeline with real geotagged photo metadata, drag 
 
 ## I. RUNNING END-TO-END (PLAYWRIGHT) TESTS
 
+This section covers running the E2E suite. For the full testing reference — every test layer and its command, the E2E data strategy, what CI does and doesn't run, known limitations, and a checklist for adding a spec — see [`docs/testing.md`](docs/testing.md).
+
 The E2E suite (`e2e/*.spec.ts`) drives a real dev server against a real database — there is no mocked backend and no isolated test database, so a few things are required first:
 
 1. `api/.env` must be configured and migrated (Section D) — the NestJS API must be able to start and reach Postgres.
@@ -193,11 +195,11 @@ The E2E suite (`e2e/*.spec.ts`) drives a real dev server against a real database
    pnpm exec playwright test -- --workers=1
    ```
 
-**Demo accounts are provisioned automatically.** Playwright's `globalSetup` (`e2e/global-setup.ts`) runs once before any test and idempotently upserts the two admin accounts (`meo@porac.gov.ph`, `mdrrmo@porac.gov.ph` — via `pnpm --prefix api seed:e2e-admins`) and the citizen demo accounts (via the existing `pnpm --prefix api seed:users`). Re-running the suite never duplicates accounts or errors on a second run — both scripts use `ON CONFLICT` upserts, not plain inserts. You never need to run these by hand; global setup does it for you as long as `api/.env` is reachable.
+**Demo accounts are provisioned automatically.** Playwright's `globalSetup` (`e2e/global-setup.ts`) runs once before any test and idempotently upserts the three admin accounts (`meo@porac.gov.ph`, `mdrrmo@porac.gov.ph`, `sysadmin@porac.gov.ph` — via `pnpm --prefix api seed:e2e-admins`) and the citizen demo accounts (via the existing `pnpm --prefix api seed:users`), after first clearing throwaway `e2e-*@porac.gov.ph` admins left by earlier runs (`cleanup:e2e-admins`). Re-running the suite never duplicates accounts or errors on a second run — both scripts use `ON CONFLICT` upserts, not plain inserts. You never need to run these by hand; global setup does it for you as long as `api/.env` is reachable.
 
 All test credentials live in one place — `e2e/test-credentials.ts` — imported by every spec that needs to log in. Never hardcode an email/password in a new spec; import `E2E_MEO_ADMIN`, `E2E_MDRRMO_ADMIN`, or `E2E_CITIZEN_ACCOUNT` instead.
 
-**Demo tickets/reports are a separate, explicit step.** Global setup deliberately does *not* reseed tickets/reports automatically, because that seed script (`seed:diverse-reports`) is destructive — it runs `TRUNCATE reports, tickets` before reinserting a fixed demo set, which would silently wipe any tickets a developer is manually testing against. If a spec needs real ticket data (e.g. `admin-flagged`, `admin-dashboard`, the map smoke test) and the database has none, global setup prints a warning telling you to run:
+**Demo tickets/reports are a separate, explicit step.** Global setup deliberately does *not* reseed tickets/reports automatically, because that seed script (`seed:diverse-reports`) is destructive — it runs `TRUNCATE reports, tickets` before reinserting a fixed demo set, which would silently wipe any tickets a developer is manually testing against. If a spec needs real ticket data and the database has none, that spec calls `test.skip()` with a message naming the command below — the skip comes from the spec itself (`admin-tickets`, `admin-work-orders`, `citizen-reports`), not from global setup, which does not inspect ticket data at all. Watch the run output for skips, not just failures, and run:
 ```bash
 pnpm --prefix api seed:diverse-reports
 ```
@@ -220,6 +222,8 @@ So one full run fits inside the budget; a second full run started within the sam
 
 ## J. SCHEDULED JOBS & DEPLOYMENT
 
+For the full pre-production checklist — required services, production-only env concerns, database and email readiness, pending security hardening, and the decisions still open — see [`docs/deployment-readiness.md`](docs/deployment-readiness.md).
+
 ### Scheduled cron jobs (GitHub Actions)
 
 `api/src/cron/cron.controller.ts` exposes six routes behind `CronSecretGuard` (urgency recompute, weather recompute, three cleanup jobs — expired password-reset tokens, old read notifications, old rate-limit events — and a ticket escalation check, `POST /cron/check-ticket-escalations`). `.github/workflows/cron.yml` calls all six once a day via `curl`, authenticated the same way the guard already accepts (`Authorization: Bearer $CRON_SECRET`).
@@ -239,4 +243,4 @@ That workflow only works once two values are set under the repository's **Settin
 
 - Two separate deployables: the Next.js app (root) and the NestJS API (`api/`) — the API is a long-lived process (its own Postgres connection pool, in-process weather/config caching), not a serverless function, so whatever hosts it needs to support that.
 - The API needs a public, stable origin reachable from wherever the Next.js app runs (`API_ORIGIN`/`INTERNAL_API_URL`) and from GitHub Actions (`PORAC_API_BASE_URL`, same origin).
-- `docs/product-roadmap.md`'s Production Hardening entry and `PLAN.md` §0 track what else is still open before a real deployment (credential rotation, backup verification, monitoring, a written runbook) — read those before treating "it runs locally" as "it's ready to deploy."
+- [`docs/project-status.md`](docs/project-status.md) §4 and `PLAN.md` §0 track what else is still open before a real deployment (credential rotation, backup verification, monitoring, a written runbook) — read those before treating "it runs locally" as "it's ready to deploy."
