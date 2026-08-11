@@ -42,7 +42,12 @@
       "Bash(git *)",
       "Read(//tmp/**)",
       "Bash(grep -n \"next-product-roadmap.md\\\\` §[0-9]\\\\|next-product-roadmap.md's §[0-9]\" docs/product-roadmap.md)",
-      "Bash(grep -oE \"PLAN\\\\.md.{0,20}§[0-9.]+\\(/§[0-9.]+\\)*\" CLAUDE.md)"
+      "Bash(grep -oE \"PLAN\\\\.md.{0,20}§[0-9.]+\\(/§[0-9.]+\\)*\" CLAUDE.md)",
+      "Bash(node -e \"const{execSync}=require\\('child_process'\\)\")",
+      "Bash(python -c \"import yaml,sys; d=yaml.safe_load\\(open\\('.github/workflows/cron.yml'\\)\\); print\\(list\\(d.keys\\(\\)\\)\\); print\\(d['jobs']['trigger-cron-endpoints']['env']\\)\")",
+      "Bash(echo \"check-exit=$?\")",
+      "Bash(node -e \"const y=require\\('js-yaml'\\);const d=y.load\\(require\\('fs'\\).readFileSync\\('.github/workflows/cron.yml','utf8'\\)\\);console.log\\(Object.keys\\(d\\), Object.keys\\(d.jobs['trigger-cron-endpoints']\\), d.jobs['trigger-cron-endpoints'].env, d.jobs['trigger-cron-endpoints'].steps.map\\(s=>s.name\\)\\)\")",
+      "Bash(node *)"
     ]
   }
 }
