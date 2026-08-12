@@ -262,6 +262,25 @@ export class ReportsService {
       // limitation — "attempted to lock invisible tuple".)
       await tx`SELECT pg_advisory_xact_lock(hashtext(${category}), ${barangay.id})`;
 
+      // Both branches below insert an identical report row and differ only
+      // in which ticket it attaches to, so the column list lives here once
+      // — adding a report column can't be applied to the merge path and
+      // missed on the new-ticket path (or vice versa).
+      const insertReport = (ticketId: number) => tx<{ id: number }[]>`
+        INSERT INTO reports (
+          ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
+          geom, pin_geom, exif_geom, exif_captured_at, exif_data, image_phash, location_mismatch_m, flags
+        )
+        VALUES (
+          ${ticketId}, ${citizen.citizenId}, ${title}, ${description ?? null}, ${citizenSeverity}, ${elevationM}, ${imageUrl},
+          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
+          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
+          ${exifGeomFragment},
+          ${exifCapturedAtIso}, ${JSON.stringify(exif.data)}::jsonb, ${phash}, ${locationMismatchM}, ${flags}
+        )
+        RETURNING id
+      `;
+
       // PLAN.md §6: same category, active ticket, created within the last
       // DUPLICATE_MERGE_WINDOW_DAYS days (anchored to the ticket's original
       // created_at — merging additional reports never slides this window),
@@ -290,20 +309,7 @@ export class ReportsService {
       );
 
       if (existing) {
-        const [report] = await tx<{ id: number }[]>`
-          INSERT INTO reports (
-            ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
-            geom, pin_geom, exif_geom, exif_captured_at, exif_data, image_phash, location_mismatch_m, flags
-          )
-          VALUES (
-            ${existing.id}, ${citizen.citizenId}, ${title}, ${description ?? null}, ${citizenSeverity}, ${elevationM}, ${imageUrl},
-            ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
-            ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
-            ${exifGeomFragment},
-            ${exifCapturedAtIso}, ${JSON.stringify(exif.data)}::jsonb, ${phash}, ${locationMismatchM}, ${flags}
-          )
-          RETURNING id
-        `;
+        const [report] = await insertReport(existing.id);
 
         const memberCount = existing.member_count + 1;
 
@@ -393,20 +399,7 @@ export class ReportsService {
         RETURNING id
       `;
 
-      const [report] = await tx<{ id: number }[]>`
-        INSERT INTO reports (
-          ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
-          geom, pin_geom, exif_geom, exif_captured_at, exif_data, image_phash, location_mismatch_m, flags
-        )
-        VALUES (
-          ${ticket.id}, ${citizen.citizenId}, ${title}, ${description ?? null}, ${citizenSeverity}, ${elevationM}, ${imageUrl},
-          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
-          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
-          ${exifGeomFragment},
-          ${exifCapturedAtIso}, ${JSON.stringify(exif.data)}::jsonb, ${phash}, ${locationMismatchM}, ${flags}
-        )
-        RETURNING id
-      `;
+      const [report] = await insertReport(ticket.id);
 
       await this.notifications.createInTx(tx, {
         recipientType: 'citizen',
