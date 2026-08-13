@@ -53,7 +53,9 @@
       "Bash(grep -rncE '^ {14,}[^ *]' --include='*.ts' --include='*.tsx' api/src app components lib)",
       "Bash(awk -F: '$2>12')",
       "Bash(sort -t: -k2 -rn)",
-      "Bash(awk 'length>160 {print FNR\": \"substr\\($0,1,260\\)}' 'app/\\(citizen\\)/reports/page.tsx')"
+      "Bash(awk 'length>160 {print FNR\": \"substr\\($0,1,260\\)}' 'app/\\(citizen\\)/reports/page.tsx')",
+      "Bash(netstat -ano)",
+      "Bash(powershell.exe -Command 'Stop-Process -Id 45900 -Force -Confirm:$false')"
     ]
   }
 }

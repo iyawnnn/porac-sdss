@@ -8,12 +8,12 @@ import Link from "next/link";
 // own title/backHref).
 export function CitizenErrorState({
   title,
-  reset,
+  unstable_retry,
   backHref,
   backLabel,
 }: {
   title: string;
-  reset: () => void;
+  unstable_retry: () => void;
   backHref: string;
   backLabel: string;
 }) {
@@ -32,7 +32,7 @@ export function CitizenErrorState({
       <div className="mt-1 flex gap-3">
         <button
           type="button"
-          onClick={reset}
+          onClick={() => unstable_retry()}
           className="inline-flex h-11 items-center rounded-md bg-brand-500 px-5 text-sm font-medium text-white transition-colors duration-[120ms] hover:bg-brand-600"
         >
           Try Again
