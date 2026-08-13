@@ -207,6 +207,16 @@ A read-only recap of how a resolved report was closed, on the existing citizen r
 - `settleAdminPage` (`e2e/helpers.ts`) is unchanged and stays as defense-in-depth for mid-run connection churn between navigations; its comment now reflects that the boundary exists.
 - No change to `lib/api-client.ts` retry counts or throw behavior — the throw was correct, the missing boundary was the bug.
 
+### Baseline HTTP Security Response Headers (R2) — **completed**
+
+`next.config.ts`'s `headers()` applies four static headers to every route: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), camera=(), microphone=()` — closing the clickjacking gap against destructive single-click admin controls (status advance, office reassignment, deactivation).
+
+- Set on the Next.js side only — the API returns JSON to a same-origin proxy, so no `helmet` dependency was added there.
+- The `Permissions-Policy` denies are ones the app provably never calls: grepped the full app source for `navigator.geolocation`/`getUserMedia` and found neither. The report form's pin comes from EXIF GPS on the uploaded photo or a manual Leaflet marker click, never the browser geolocation API.
+- Content-Security-Policy is deliberately **not** part of this change (R7, staged separately in `Report-Only` mode first — a blocking CSP shipped blind would break Leaflet tiles and Cloudinary images).
+- `rewrites()` (the `/api/*` proxy) and API behavior are unchanged — `headers()` is a sibling config key.
+- Regression test: `e2e/smoke.spec.ts` asserts all four headers on `/admin/login` and `/login`.
+
 ---
 
 ## 4. Current Queue
@@ -218,7 +228,6 @@ All pending work. **None of it is a new product feature** — this is hardening,
 Assessed and prioritized in [`security-hardening-plan.md`](security-hardening-plan.md), which carries severity, likelihood, right-sized scope, and the required test for each. Summarized here so this file stays the single status view:
 
 - **Failed-login throttling (R1, High) — pending.** Only bcrypt cost and a generic error message protect admin login today; there is no attempt counter, backoff, or cooldown. The admin email convention is published in `README.md` §G, so an attacker needs no username discovery. **The recommended next implementation task.**
-- **HTTP security response headers (R2, Medium) — pending.** Neither `next.config.ts` nor the API bootstrap sets any, so the admin console is framable by any origin.
 - **Free-text length bounds (R3, Medium) — pending.** Report submission is bounded by Zod; work-order title/notes, resolution notes, dispute reason, and the moderation note have type and non-empty checks but no maximum length.
 - **Login audit events (R4, Medium) — pending.** `admin_audit_events` covers mutations but not authentication events.
 - **Content-Security-Policy (R7, Low) — pending**, and deliberately staged after R2 in `Report-Only` mode first, since a blocking CSP shipped blind would break Leaflet and Cloudinary.

@@ -254,3 +254,9 @@ Two constraints that must survive future changes:
 
 - **No test-only security bypass, ever.** Rate limits, guards, and scoping behave identically under test. When the E2E suite trips a limit, the suite changes — not the control.
 - **Any new endpoint must use the scope helpers.** An `/admin/*` route that forgets `resolveOfficeScope` or `assertOfficeAccess` is a cross-office data leak, not a UI bug.
+
+---
+
+## 9. Transport
+
+`next.config.ts`'s `headers()` applies four static response headers to every route (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), camera=(), microphone=()`) — closing the clickjacking gap against destructive single-click admin controls (status advance, office reassignment, deactivation). The permissions denied are ones the app never calls (verified against the app source; the report form's pin comes from EXIF GPS or a manual map click, never `navigator.geolocation`). Set on the Next.js side only, since it serves the HTML — the API returns JSON to a same-origin proxy and needs no `helmet`. **No Content-Security-Policy yet** — deliberately staged separately in `Report-Only` mode first, since a blocking CSP would break Leaflet tiles, Cloudinary images, and Next's inline styles if shipped blind.
