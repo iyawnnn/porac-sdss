@@ -4,16 +4,35 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, gte, inArray, isNotNull, lt, lte, sql as dsql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  lt,
+  lte,
+  sql as dsql,
+  type SQL,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
 import { admins, tickets, workOrders } from '../db/schema';
 import type { AdminSession } from '../auth/session.service';
-import { resolveOfficeScope, assertOfficeAccess } from '../common/authz/admin-scope';
+import {
+  resolveOfficeScope,
+  assertOfficeAccess,
+} from '../common/authz/admin-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminAuditService } from './admin-audit.service';
+import {
+  WORK_ORDER_TITLE_MAX_LENGTH,
+  WORK_ORDER_NOTES_MAX_LENGTH,
+} from '../contracts/schemas';
 
-export type WorkOrderStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+export type WorkOrderStatus =
+  'pending' | 'in_progress' | 'completed' | 'cancelled';
 const WORK_ORDER_STATUSES: WorkOrderStatus[] = [
   'pending',
   'in_progress',
@@ -99,7 +118,11 @@ export interface WorkOrderExportRow {
   updated_at: Date;
 }
 
-const ACTIVE_TICKET_STATUSES = ['Reported', 'Under Review', 'In Progress'] as const;
+const ACTIVE_TICKET_STATUSES = [
+  'Reported',
+  'Under Review',
+  'In Progress',
+] as const;
 const OPEN_WORK_ORDER_STATUSES = ['pending', 'in_progress'] as const;
 
 const SAFE_COLUMNS = {
@@ -163,7 +186,9 @@ export class WorkOrdersService {
     admin: Pick<AdminSession, 'role' | 'office' | 'adminId'>,
   ): WorkOrderFilters {
     const requestedOffice =
-      query.office === 'all' || query.office === 'MEO' || query.office === 'MDRRMO'
+      query.office === 'all' ||
+      query.office === 'MEO' ||
+      query.office === 'MDRRMO'
         ? query.office
         : undefined;
     const office = resolveOfficeScope(admin, requestedOffice);
@@ -194,9 +219,14 @@ export class WorkOrdersService {
 
   async list(filters: WorkOrderFilters = {}): Promise<PaginatedWorkOrders> {
     const page = Math.max(1, filters.page ?? 1);
-    const limit = Math.max(1, Math.min(100, filters.limit ?? DEFAULT_PAGE_LIMIT));
+    const limit = Math.max(
+      1,
+      Math.min(100, filters.limit ?? DEFAULT_PAGE_LIMIT),
+    );
     const conditions = [
-      filters.office ? eq(workOrders.assignedOffice, filters.office) : undefined,
+      filters.office
+        ? eq(workOrders.assignedOffice, filters.office)
+        : undefined,
       filters.status ? eq(workOrders.status, filters.status) : undefined,
       filters.ticketId ? eq(workOrders.ticketId, filters.ticketId) : undefined,
       filters.assignedAdminId
@@ -227,7 +257,7 @@ export class WorkOrdersService {
     ]);
 
     return {
-      workOrders: rows as WorkOrderRow[],
+      workOrders: rows,
       total,
       page,
       limit,
@@ -244,12 +274,18 @@ export class WorkOrdersService {
       .from(workOrders)
       .where(eq(workOrders.id, id));
     if (!row) throw new NotFoundException('Work order not found.');
-    assertOfficeAccess(admin, row.assigned_office as 'MEO' | 'MDRRMO');
-    return row as WorkOrderRow;
+    assertOfficeAccess(admin, row.assigned_office);
+    return row;
   }
 
   async create(
-    input: { ticketId: unknown; title: unknown; notes: unknown; assignedAdminId: unknown; dueDate: unknown },
+    input: {
+      ticketId: unknown;
+      title: unknown;
+      notes: unknown;
+      assignedAdminId: unknown;
+      dueDate: unknown;
+    },
     admin: AdminSession,
   ): Promise<WorkOrderRow> {
     const ticketId = Number(input.ticketId);
@@ -259,8 +295,20 @@ export class WorkOrdersService {
     if (typeof input.title !== 'string' || !input.title.trim()) {
       throw new BadRequestException('title is required.');
     }
+    if (input.title.trim().length > WORK_ORDER_TITLE_MAX_LENGTH) {
+      throw new BadRequestException(
+        `title must be ${WORK_ORDER_TITLE_MAX_LENGTH} characters or fewer.`,
+      );
+    }
     const notes =
-      typeof input.notes === 'string' && input.notes.trim() ? input.notes.trim() : null;
+      typeof input.notes === 'string' && input.notes.trim()
+        ? input.notes.trim()
+        : null;
+    if (notes && notes.length > WORK_ORDER_NOTES_MAX_LENGTH) {
+      throw new BadRequestException(
+        `notes must be ${WORK_ORDER_NOTES_MAX_LENGTH} characters or fewer.`,
+      );
+    }
     const assignedAdminId =
       input.assignedAdminId != null ? Number(input.assignedAdminId) : null;
     if (assignedAdminId != null && !Number.isInteger(assignedAdminId)) {
@@ -300,7 +348,12 @@ export class WorkOrdersService {
         targetType: 'work_order',
         targetId: created.id,
         targetSummary: `Work order #${created.id} for Ticket #${ticketId}`,
-        metadata: { ticketId, assignedOffice: ticket.assignedOffice, hasDueDate: dueDate !== null, assignedAdminId },
+        metadata: {
+          ticketId,
+          assignedOffice: ticket.assignedOffice,
+          hasDueDate: dueDate !== null,
+          assignedAdminId,
+        },
       });
       return created;
     });
@@ -329,12 +382,17 @@ export class WorkOrdersService {
       });
     }
 
-    return row as WorkOrderRow;
+    return row;
   }
 
   async update(
     id: number,
-    input: { title: unknown; notes: unknown; assignedAdminId: unknown; dueDate: unknown },
+    input: {
+      title: unknown;
+      notes: unknown;
+      assignedAdminId: unknown;
+      dueDate: unknown;
+    },
     admin: AdminSession,
   ): Promise<WorkOrderRow> {
     const [existing] = await this.db
@@ -342,23 +400,40 @@ export class WorkOrdersService {
       .from(workOrders)
       .where(eq(workOrders.id, id));
     if (!existing) throw new NotFoundException('Work order not found.');
-    assertOfficeAccess(admin, existing.assigned_office as 'MEO' | 'MDRRMO');
+    assertOfficeAccess(admin, existing.assigned_office);
 
-    const patch: Partial<typeof workOrders.$inferInsert> = { updatedAt: new Date() };
+    const patch: Partial<typeof workOrders.$inferInsert> = {
+      updatedAt: new Date(),
+    };
     const changedFields: string[] = [];
     if (input.title !== undefined) {
       if (typeof input.title !== 'string' || !input.title.trim()) {
         throw new BadRequestException('title cannot be empty.');
       }
+      if (input.title.trim().length > WORK_ORDER_TITLE_MAX_LENGTH) {
+        throw new BadRequestException(
+          `title must be ${WORK_ORDER_TITLE_MAX_LENGTH} characters or fewer.`,
+        );
+      }
       patch.title = input.title.trim();
       changedFields.push('title');
     }
     if (input.notes !== undefined) {
-      patch.notes = typeof input.notes === 'string' && input.notes.trim() ? input.notes.trim() : null;
+      const notes =
+        typeof input.notes === 'string' && input.notes.trim()
+          ? input.notes.trim()
+          : null;
+      if (notes && notes.length > WORK_ORDER_NOTES_MAX_LENGTH) {
+        throw new BadRequestException(
+          `notes must be ${WORK_ORDER_NOTES_MAX_LENGTH} characters or fewer.`,
+        );
+      }
+      patch.notes = notes;
       changedFields.push('notes');
     }
     if (input.assignedAdminId !== undefined) {
-      const assignedAdminId = input.assignedAdminId != null ? Number(input.assignedAdminId) : null;
+      const assignedAdminId =
+        input.assignedAdminId != null ? Number(input.assignedAdminId) : null;
       if (assignedAdminId != null && !Number.isInteger(assignedAdminId)) {
         throw new BadRequestException('assignedAdminId must be an integer.');
       }
@@ -368,7 +443,10 @@ export class WorkOrdersService {
       // assignee is always validated against the work order's one, fixed
       // office.
       if (assignedAdminId != null) {
-        await this.assertValidAssignee(assignedAdminId, existing.assigned_office as 'MEO' | 'MDRRMO');
+        await this.assertValidAssignee(
+          assignedAdminId,
+          existing.assigned_office,
+        );
       }
       patch.assignedAdminId = assignedAdminId;
       changedFields.push('assignedAdminId');
@@ -399,14 +477,19 @@ export class WorkOrdersService {
         metadata: {
           changedFields,
           ...(changedFields.includes('assignedAdminId')
-            ? { assignedAdminId: { from: existing.assigned_admin_id, to: patch.assignedAdminId } }
+            ? {
+                assignedAdminId: {
+                  from: existing.assigned_admin_id,
+                  to: patch.assignedAdminId,
+                },
+              }
             : {}),
         },
       });
       return updated;
     });
 
-    return row as WorkOrderRow;
+    return row;
   }
 
   async setStatus(
@@ -426,7 +509,7 @@ export class WorkOrdersService {
       .from(workOrders)
       .where(eq(workOrders.id, id));
     if (!existing) throw new NotFoundException('Work order not found.');
-    assertOfficeAccess(admin, existing.assigned_office as 'MEO' | 'MDRRMO');
+    assertOfficeAccess(admin, existing.assigned_office);
 
     const completedAt = nextStatus === 'completed' ? new Date() : null;
 
@@ -452,7 +535,7 @@ export class WorkOrdersService {
       return updated;
     });
 
-    return row as WorkOrderRow;
+    return row;
   }
 
   // "This week" = the last 7 days, matching the existing dashboard KPI
@@ -464,26 +547,29 @@ export class WorkOrdersService {
   async getOfficePerformanceCounts(
     office?: 'MEO' | 'MDRRMO',
   ): Promise<WorkOrderPerformanceCounts> {
-    const officeFilter = office ? eq(workOrders.assignedOffice, office) : undefined;
+    const officeFilter = office
+      ? eq(workOrders.assignedOffice, office)
+      : undefined;
     const countWhere = (...conditions: SQL[]) =>
       this.db
         .select({ count: dsql<number>`count(*)::int` })
         .from(workOrders)
         .where(and(officeFilter, ...conditions));
 
-    const [[pending], [inProgress], [overdue], [completedThisWeek]] = await Promise.all([
-      countWhere(eq(workOrders.status, 'pending')),
-      countWhere(eq(workOrders.status, 'in_progress')),
-      countWhere(
-        isNotNull(workOrders.dueDate),
-        lt(workOrders.dueDate, new Date()),
-        dsql`${workOrders.status} NOT IN ('completed', 'cancelled')`,
-      ),
-      countWhere(
-        eq(workOrders.status, 'completed'),
-        dsql`${workOrders.completedAt} >= now() - interval '7 days'`,
-      ),
-    ]);
+    const [[pending], [inProgress], [overdue], [completedThisWeek]] =
+      await Promise.all([
+        countWhere(eq(workOrders.status, 'pending')),
+        countWhere(eq(workOrders.status, 'in_progress')),
+        countWhere(
+          isNotNull(workOrders.dueDate),
+          lt(workOrders.dueDate, new Date()),
+          dsql`${workOrders.status} NOT IN ('completed', 'cancelled')`,
+        ),
+        countWhere(
+          eq(workOrders.status, 'completed'),
+          dsql`${workOrders.completedAt} >= now() - interval '7 days'`,
+        ),
+      ]);
 
     return {
       pendingWorkOrders: pending?.count ?? 0,
@@ -501,7 +587,9 @@ export class WorkOrdersService {
     office?: 'MEO' | 'MDRRMO',
     limit = 5,
   ): Promise<WorkOrderNeedsAttention> {
-    const officeFilter = office ? eq(workOrders.assignedOffice, office) : undefined;
+    const officeFilter = office
+      ? eq(workOrders.assignedOffice, office)
+      : undefined;
     const now = new Date();
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
@@ -509,47 +597,55 @@ export class WorkOrdersService {
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const openStatus = inArray(workOrders.status, OPEN_WORK_ORDER_STATUSES);
 
-    const [overdueWorkOrders, dueTodayWorkOrders, highUrgencyRows] = await Promise.all([
-      this.db
-        .select(SAFE_COLUMNS)
-        .from(workOrders)
-        .where(and(officeFilter, isNotNull(workOrders.dueDate), lt(workOrders.dueDate, now), openStatus))
-        .orderBy(workOrders.dueDate)
-        .limit(limit),
-      this.db
-        .select(SAFE_COLUMNS)
-        .from(workOrders)
-        .where(
-          and(
-            officeFilter,
-            isNotNull(workOrders.dueDate),
-            gte(workOrders.dueDate, todayStart),
-            lt(workOrders.dueDate, tomorrowStart),
-            openStatus,
-          ),
-        )
-        .orderBy(workOrders.dueDate)
-        .limit(limit),
-      this.db
-        .select({
-          id: tickets.id,
-          category: tickets.category,
-          assigned_office: tickets.assignedOffice,
-          urgency_level: tickets.urgencyLevel,
-          priority_score: tickets.priorityScore,
-        })
-        .from(workOrders)
-        .innerJoin(tickets, eq(workOrders.ticketId, tickets.id))
-        .where(
-          and(
-            officeFilter,
-            openStatus,
-            eq(tickets.urgencyLevel, 'HIGH'),
-            inArray(tickets.status, ACTIVE_TICKET_STATUSES),
-          ),
-        )
-        .orderBy(desc(tickets.priorityScore)),
-    ]);
+    const [overdueWorkOrders, dueTodayWorkOrders, highUrgencyRows] =
+      await Promise.all([
+        this.db
+          .select(SAFE_COLUMNS)
+          .from(workOrders)
+          .where(
+            and(
+              officeFilter,
+              isNotNull(workOrders.dueDate),
+              lt(workOrders.dueDate, now),
+              openStatus,
+            ),
+          )
+          .orderBy(workOrders.dueDate)
+          .limit(limit),
+        this.db
+          .select(SAFE_COLUMNS)
+          .from(workOrders)
+          .where(
+            and(
+              officeFilter,
+              isNotNull(workOrders.dueDate),
+              gte(workOrders.dueDate, todayStart),
+              lt(workOrders.dueDate, tomorrowStart),
+              openStatus,
+            ),
+          )
+          .orderBy(workOrders.dueDate)
+          .limit(limit),
+        this.db
+          .select({
+            id: tickets.id,
+            category: tickets.category,
+            assigned_office: tickets.assignedOffice,
+            urgency_level: tickets.urgencyLevel,
+            priority_score: tickets.priorityScore,
+          })
+          .from(workOrders)
+          .innerJoin(tickets, eq(workOrders.ticketId, tickets.id))
+          .where(
+            and(
+              officeFilter,
+              openStatus,
+              eq(tickets.urgencyLevel, 'HIGH'),
+              inArray(tickets.status, ACTIVE_TICKET_STATUSES),
+            ),
+          )
+          .orderBy(desc(tickets.priorityScore)),
+      ]);
 
     // A ticket can have more than one open work order, so the join above can
     // repeat a ticket id — dedupe in application code rather than reaching
@@ -564,8 +660,8 @@ export class WorkOrdersService {
     }
 
     return {
-      overdueWorkOrders: overdueWorkOrders as WorkOrderRow[],
-      dueTodayWorkOrders: dueTodayWorkOrders as WorkOrderRow[],
+      overdueWorkOrders: overdueWorkOrders,
+      dueTodayWorkOrders: dueTodayWorkOrders,
       highUrgencyTicketsWithOpenWork,
     };
   }
@@ -576,7 +672,9 @@ export class WorkOrdersService {
     filters: WorkOrderFilters & { dateFrom?: Date; dateTo?: Date } = {},
   ): Promise<WorkOrderExportRow[]> {
     const conditions = [
-      filters.office ? eq(workOrders.assignedOffice, filters.office) : undefined,
+      filters.office
+        ? eq(workOrders.assignedOffice, filters.office)
+        : undefined,
       filters.status ? eq(workOrders.status, filters.status) : undefined,
       filters.assignedAdminId
         ? eq(workOrders.assignedAdminId, filters.assignedAdminId)
@@ -588,7 +686,9 @@ export class WorkOrdersService {
             dsql`${workOrders.status} NOT IN ('completed', 'cancelled')`,
           )
         : undefined,
-      filters.dateFrom ? gte(workOrders.createdAt, filters.dateFrom) : undefined,
+      filters.dateFrom
+        ? gte(workOrders.createdAt, filters.dateFrom)
+        : undefined,
       filters.dateTo ? lte(workOrders.createdAt, filters.dateTo) : undefined,
     ].filter((c) => c !== undefined);
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -599,7 +699,9 @@ export class WorkOrdersService {
         ticket_id: workOrders.ticketId,
         title: workOrders.title,
         assigned_office: workOrders.assignedOffice,
-        assigned_admin_name: dsql<string | null>`CASE WHEN ${admins.id} IS NULL THEN NULL ELSE ${admins.firstName} || ' ' || ${admins.lastName} END`,
+        assigned_admin_name: dsql<
+          string | null
+        >`CASE WHEN ${admins.id} IS NULL THEN NULL ELSE ${admins.firstName} || ' ' || ${admins.lastName} END`,
         assigned_admin_email: admins.email,
         status: workOrders.status,
         due_date: workOrders.dueDate,
@@ -613,6 +715,6 @@ export class WorkOrdersService {
       .orderBy(desc(workOrders.createdAt))
       .limit(5000);
 
-    return rows as WorkOrderExportRow[];
+    return rows;
   }
 }

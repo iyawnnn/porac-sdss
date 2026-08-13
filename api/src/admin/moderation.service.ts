@@ -6,9 +6,12 @@ import {
 } from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
-import { CATEGORIES } from '../contracts/schemas';
+import { CATEGORIES, MODERATION_NOTE_MAX_LENGTH } from '../contracts/schemas';
 import type { AdminSession } from '../auth/session.service';
-import { resolveOfficeScope, assertOfficeAccess } from '../common/authz/admin-scope';
+import {
+  resolveOfficeScope,
+  assertOfficeAccess,
+} from '../common/authz/admin-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminAuditService } from './admin-audit.service';
 import {
@@ -92,7 +95,9 @@ export class ModerationService {
     admin: Pick<AdminSession, 'role' | 'office'>,
   ): ModerationFilters {
     const requestedOffice =
-      query.office === 'all' || query.office === 'MEO' || query.office === 'MDRRMO'
+      query.office === 'all' ||
+      query.office === 'MEO' ||
+      query.office === 'MDRRMO'
         ? query.office
         : undefined;
     const office = resolveOfficeScope(admin, requestedOffice);
@@ -255,6 +260,11 @@ export class ModerationService {
   ): Promise<{ status: string }> {
     const sql = this.pg;
     const trimmedNote = note?.trim() || undefined;
+    if (trimmedNote && trimmedNote.length > MODERATION_NOTE_MAX_LENGTH) {
+      throw new BadRequestException(
+        `note must be ${MODERATION_NOTE_MAX_LENGTH} characters or fewer.`,
+      );
+    }
 
     const [report] = await sql<{ assigned_office: 'MEO' | 'MDRRMO' }[]>`
       SELECT t.assigned_office FROM reports r

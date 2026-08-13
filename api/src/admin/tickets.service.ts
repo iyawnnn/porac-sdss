@@ -16,8 +16,14 @@ import {
 } from '../common/utils/scoring';
 import type { UrgencyLevel } from '../domain/urgency';
 import type { AdminSession } from '../auth/session.service';
-import { resolveOfficeScope, assertOfficeAccess } from '../common/authz/admin-scope';
-import { CATEGORIES } from '../contracts/schemas';
+import {
+  resolveOfficeScope,
+  assertOfficeAccess,
+} from '../common/authz/admin-scope';
+import {
+  CATEGORIES,
+  TICKET_RESOLUTION_NOTES_MAX_LENGTH,
+} from '../contracts/schemas';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EMAIL_SERVICE, type EmailService } from '../citizens/email.service';
 import type { Env } from '../config/env';
@@ -215,7 +221,9 @@ export class TicketsService {
       'office' | 'urgency' | 'category' | 'barangayId' | 'search' | 'disputed'
     > {
     const requestedOffice =
-      query.office === 'all' || query.office === 'MEO' || query.office === 'MDRRMO'
+      query.office === 'all' ||
+      query.office === 'MEO' ||
+      query.office === 'MDRRMO'
         ? query.office
         : undefined;
     const office = resolveOfficeScope(admin, requestedOffice);
@@ -401,7 +409,10 @@ export class TicketsService {
     `;
   }
 
-  async getTicketDetail(id: number, admin: Pick<AdminSession, 'role' | 'office'>) {
+  async getTicketDetail(
+    id: number,
+    admin: Pick<AdminSession, 'role' | 'office'>,
+  ) {
     const sql = this.pg;
     const [ticket] = await sql<TicketDetail[]>`
       SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, ST_AsGeoJSON(b.geom) AS barangay_geojson,
@@ -498,7 +509,11 @@ export class TicketsService {
   ): Promise<{ status: TicketStatus }> {
     const sql = this.pg;
     const [ticket] = await sql<
-      { status: TicketStatus; assigned_office: 'MEO' | 'MDRRMO'; category: string }[]
+      {
+        status: TicketStatus;
+        assigned_office: 'MEO' | 'MDRRMO';
+        category: string;
+      }[]
     >`
       SELECT status, assigned_office, category FROM tickets WHERE id = ${ticketId}
     `;
@@ -516,6 +531,14 @@ export class TicketsService {
     let resolutionNotes: string | null = null;
     if (nextStatus === 'Resolved') {
       resolutionNotes = notes?.trim() || null;
+      if (
+        resolutionNotes &&
+        resolutionNotes.length > TICKET_RESOLUTION_NOTES_MAX_LENGTH
+      ) {
+        throw new BadRequestException(
+          `resolution notes must be ${TICKET_RESOLUTION_NOTES_MAX_LENGTH} characters or fewer.`,
+        );
+      }
       if (imageBuffer)
         resolutionImageUrl = await this.media.uploadImage(imageBuffer);
     }
@@ -577,7 +600,10 @@ export class TicketsService {
       // warrant an email (the rest stay in-app-only), per PLAN.md's
       // notification-system design decision.
       return nextStatus === 'Resolved' || nextStatus === 'Rejected'
-        ? citizenRows.map((row) => ({ email: row.email, reportId: row.report_id }))
+        ? citizenRows.map((row) => ({
+            email: row.email,
+            reportId: row.report_id,
+          }))
         : [];
     });
 
@@ -613,7 +639,9 @@ export class TicketsService {
     toOffice: 'MEO' | 'MDRRMO',
   ): Promise<{ assignedOffice: 'MEO' | 'MDRRMO' }> {
     const sql = this.pg;
-    const [ticket] = await sql<{ assigned_office: 'MEO' | 'MDRRMO'; category: string }[]>`
+    const [ticket] = await sql<
+      { assigned_office: 'MEO' | 'MDRRMO'; category: string }[]
+    >`
       SELECT assigned_office, category FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');

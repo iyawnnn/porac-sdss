@@ -34,7 +34,10 @@ describe('OUTSIDE_MUNICIPALITY_MESSAGE', () => {
 // (that syntax was confirmed directly against the dev database during
 // implementation, not re-verified here).
 describe('duplicate-merge query wiring (Issue #4)', () => {
-  const reportsServiceSource = readFileSync(join(__dirname, 'reports.service.ts'), 'utf8');
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
 
   it('imports the shared duplicate-merge window constant', () => {
     expect(reportsServiceSource).toMatch(
@@ -42,14 +45,18 @@ describe('duplicate-merge query wiring (Issue #4)', () => {
     );
   });
 
-  it("uses make_interval with the named constant, not a hardcoded interval literal", () => {
-    expect(reportsServiceSource).toMatch(/make_interval\(days => \$\{DUPLICATE_MERGE_WINDOW_DAYS\}\)/);
+  it('uses make_interval with the named constant, not a hardcoded interval literal', () => {
+    expect(reportsServiceSource).toMatch(
+      /make_interval\(days => \$\{DUPLICATE_MERGE_WINDOW_DAYS\}\)/,
+    );
     expect(reportsServiceSource).not.toMatch(/interval\s*'7 days'/);
     expect(reportsServiceSource).not.toMatch(/interval\s*"7 days"/);
   });
 
   it('retains the strict greater-than boundary against created_at', () => {
-    expect(reportsServiceSource).toMatch(/created_at > now\(\) - make_interval/);
+    expect(reportsServiceSource).toMatch(
+      /created_at > now\(\) - make_interval/,
+    );
   });
 
   it('retains the active-status filter alongside the temporal cutoff', () => {
@@ -64,10 +71,15 @@ describe('duplicate-merge query wiring (Issue #4)', () => {
 // happens via `tx`, not a separate post-commit call) is asserted on the
 // source text instead.
 describe('notification wiring stays inside the submit transaction', () => {
-  const reportsServiceSource = readFileSync(join(__dirname, 'reports.service.ts'), 'utf8');
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
 
   it('uses createInTx (not the standalone create()) for the new-ticket, merge, and dispute paths', () => {
-    const matches = reportsServiceSource.match(/this\.notifications\.createInTx\(tx,/g);
+    const matches = reportsServiceSource.match(
+      /this\.notifications\.createInTx\(tx,/g,
+    );
     expect(matches).toHaveLength(4);
   });
 
@@ -92,13 +104,18 @@ describe('new-report admin notification wiring', () => {
     expect(reportsServiceSource).toMatch(
       /category\} report in \$\{barangay\.name\}[\s\S]*?Ticket #\$\{ticket\.id\}, Report #\$\{report\.id\}/,
     );
-    expect(reportsServiceSource).toMatch(/href: `\/admin\/tickets\/\$\{ticket\.id\}`/);
+    expect(reportsServiceSource).toMatch(
+      /href: `\/admin\/tickets\/\$\{ticket\.id\}`/,
+    );
   });
 
   it('keeps the admin new-report notification out of the duplicate-merge branch', () => {
     const mergeBranch = reportsServiceSource.slice(
       reportsServiceSource.indexOf('if (existing) {'),
-      reportsServiceSource.indexOf('\n      const urgency = computeUrgency', reportsServiceSource.indexOf('if (existing) {')),
+      reportsServiceSource.indexOf(
+        '\n      const urgency = computeUrgency',
+        reportsServiceSource.indexOf('if (existing) {'),
+      ),
     );
     expect(mergeBranch).toContain("type: 'report_merged'");
     expect(mergeBranch).not.toContain("type: 'new_citizen_report'");
@@ -121,7 +138,8 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
 
   function methodBody(name: string): string {
     const start = reportsServiceSource.indexOf(`async ${name}(`);
-    if (start === -1) throw new Error(`method ${name} not found in reports.service.ts`);
+    if (start === -1)
+      throw new Error(`method ${name} not found in reports.service.ts`);
     const nextMethodMarkers = ['\n  async ', '\n}'];
     const ends = nextMethodMarkers
       .map((marker) => reportsServiceSource.indexOf(marker, start + 1))
@@ -160,12 +178,9 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
     'work_orders',
   ];
 
-  it.each(CITIZEN_UNSAFE_COLUMNS)(
-    'getMyReports never selects %s',
-    (column) => {
-      expect(getMyReports).not.toContain(column);
-    },
-  );
+  it.each(CITIZEN_UNSAFE_COLUMNS)('getMyReports never selects %s', (column) => {
+    expect(getMyReports).not.toContain(column);
+  });
 
   it.each(CITIZEN_UNSAFE_COLUMNS)(
     'getMyReportDetail never selects %s',
@@ -174,26 +189,36 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
     },
   );
 
-  const EXPECTED_ROW_FIELDS = ['t.assigned_office', 't.member_count', 'r.moderation_status'];
+  const EXPECTED_ROW_FIELDS = [
+    't.assigned_office',
+    't.member_count',
+    'r.moderation_status',
+  ];
 
-  it.each(EXPECTED_ROW_FIELDS)('getMyReports selects %s for the list view', (field) => {
-    expect(getMyReports).toContain(field);
-  });
-
-  it.each([...EXPECTED_ROW_FIELDS, 'r.moderated_at', 't.resolution_notes', 't.resolution_image_url'])(
-    'getMyReportDetail selects %s',
+  it.each(EXPECTED_ROW_FIELDS)(
+    'getMyReports selects %s for the list view',
     (field) => {
-      expect(getMyReportDetail).toContain(field);
+      expect(getMyReports).toContain(field);
     },
   );
 
-  it('both queries derive is_merged from this report being later than the ticket\'s earliest report, not a stored column', () => {
-    const isMergedPattern = /r\.id != \(SELECT MIN\(id\) FROM reports WHERE ticket_id = r\.ticket_id\) AS is_merged/;
+  it.each([
+    ...EXPECTED_ROW_FIELDS,
+    'r.moderated_at',
+    't.resolution_notes',
+    't.resolution_image_url',
+  ])('getMyReportDetail selects %s', (field) => {
+    expect(getMyReportDetail).toContain(field);
+  });
+
+  it("both queries derive is_merged from this report being later than the ticket's earliest report, not a stored column", () => {
+    const isMergedPattern =
+      /r\.id != \(SELECT MIN\(id\) FROM reports WHERE ticket_id = r\.ticket_id\) AS is_merged/;
     expect(getMyReports).toMatch(isMergedPattern);
     expect(getMyReportDetail).toMatch(isMergedPattern);
   });
 
-  it('getMyReportDetail exposes disputed_at and resolution_confirmed_at so the UI can hide the feedback prompt once already resolved-feedback\'d', () => {
+  it("getMyReportDetail exposes disputed_at and resolution_confirmed_at so the UI can hide the feedback prompt once already resolved-feedback'd", () => {
     expect(getMyReportDetail).toContain('t.disputed_at');
     expect(getMyReportDetail).toContain('t.resolution_confirmed_at');
   });
@@ -212,7 +237,8 @@ describe('disputeReport (citizen resolution-feedback loop)', () => {
 
   function methodBody(name: string): string {
     const start = reportsServiceSource.indexOf(`async ${name}(`);
-    if (start === -1) throw new Error(`method ${name} not found in reports.service.ts`);
+    if (start === -1)
+      throw new Error(`method ${name} not found in reports.service.ts`);
     const nextMethodMarkers = ['\n  async ', '\n}'];
     const ends = nextMethodMarkers
       .map((marker) => reportsServiceSource.indexOf(marker, start + 1))
@@ -236,18 +262,37 @@ describe('disputeReport (citizen resolution-feedback loop)', () => {
 
   it('rejects a duplicate active dispute both before and via the race-safe UPDATE guard', () => {
     expect(disputeReport).toMatch(/if \(row\.disputed_at\)/);
-    expect(disputeReport).toMatch(/WHERE id = \$\{row\.ticket_id\} AND disputed_at IS NULL/);
+    expect(disputeReport).toMatch(
+      /WHERE id = \$\{row\.ticket_id\} AND disputed_at IS NULL/,
+    );
   });
 
   it('never touches urgency_score, priority_score, priority_index, or urgency_band', () => {
-    for (const column of ['urgency_score', 'priority_score', 'priority_index', 'urgency_band']) {
+    for (const column of [
+      'urgency_score',
+      'priority_score',
+      'priority_index',
+      'urgency_band',
+    ]) {
       expect(disputeReport).not.toContain(column);
     }
   });
 
   it('does not roll ticket.status back — only sets disputed_at/dispute_reason', () => {
-    expect(disputeReport).toMatch(/SET disputed_at = now\(\), dispute_reason = \$\{trimmedReason\}/);
+    expect(disputeReport).toMatch(
+      /SET disputed_at = now\(\), dispute_reason = \$\{trimmedReason\}/,
+    );
     expect(disputeReport).not.toMatch(/SET\s+status\s*=/);
+  });
+
+  it('rejects a reason over TICKET_DISPUTE_REASON_MAX_LENGTH via the named constant, not a bare literal', () => {
+    expect(reportsServiceSource).toMatch(
+      /import\s*{\s*TICKET_DISPUTE_REASON_MAX_LENGTH\s*}\s*from\s*['"]\.\.\/contracts\/schemas['"]/,
+    );
+    expect(disputeReport).toMatch(
+      /trimmedReason\.length > TICKET_DISPUTE_REASON_MAX_LENGTH/,
+    );
+    expect(disputeReport).not.toMatch(/trimmedReason\.length > 1000/);
   });
 
   it('creates an office-targeted admin notification linking to the admin ticket detail, inside the same transaction', () => {
@@ -255,7 +300,9 @@ describe('disputeReport (citizen resolution-feedback loop)', () => {
     expect(disputeReport).toMatch(
       /recipientType: 'admin',[\s\S]*?recipientOffice: row\.assigned_office,[\s\S]*?type: 'ticket_disputed'/,
     );
-    expect(disputeReport).toMatch(/href: `\/admin\/tickets\/\$\{row\.ticket_id\}`/);
+    expect(disputeReport).toMatch(
+      /href: `\/admin\/tickets\/\$\{row\.ticket_id\}`/,
+    );
   });
 });
 
@@ -272,7 +319,8 @@ describe('confirmResolution (citizen resolution-feedback loop, positive path)', 
 
   function methodBody(name: string): string {
     const start = reportsServiceSource.indexOf(`async ${name}(`);
-    if (start === -1) throw new Error(`method ${name} not found in reports.service.ts`);
+    if (start === -1)
+      throw new Error(`method ${name} not found in reports.service.ts`);
     const nextMethodMarkers = ['\n  async ', '\n}'];
     const ends = nextMethodMarkers
       .map((marker) => reportsServiceSource.indexOf(marker, start + 1))
@@ -291,7 +339,9 @@ describe('confirmResolution (citizen resolution-feedback loop, positive path)', 
 
   it('only allows confirmation on resolved tickets', () => {
     expect(confirmResolution).toMatch(/row\.status !== 'Resolved'/);
-    expect(confirmResolution).toContain('Only resolved tickets can be confirmed.');
+    expect(confirmResolution).toContain(
+      'Only resolved tickets can be confirmed.',
+    );
   });
 
   it('rejects confirmation when the ticket is already disputed', () => {
@@ -306,7 +356,12 @@ describe('confirmResolution (citizen resolution-feedback loop, positive path)', 
   });
 
   it('never touches urgency_score, priority_score, priority_index, or urgency_band', () => {
-    for (const column of ['urgency_score', 'priority_score', 'priority_index', 'urgency_band']) {
+    for (const column of [
+      'urgency_score',
+      'priority_score',
+      'priority_index',
+      'urgency_band',
+    ]) {
       expect(confirmResolution).not.toContain(column);
     }
   });
