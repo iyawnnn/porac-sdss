@@ -2,6 +2,6 @@
 
 import { CitizenErrorState } from "@/components/features/citizen/dashboard/CitizenErrorState";
 
-export default function MyReportsError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  return <CitizenErrorState backHref="/dashboard" backLabel="Back to Dashboard" reset={reset} title="Couldn't load your reports" />;
+export default function MyReportsError({ unstable_retry }: { error: Error & { digest?: string }; unstable_retry: () => void }) {
+  return <CitizenErrorState backHref="/dashboard" backLabel="Back to Dashboard" unstable_retry={unstable_retry} title="Couldn't load your reports" />;
 }
