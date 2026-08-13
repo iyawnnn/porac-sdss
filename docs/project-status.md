@@ -254,6 +254,16 @@ Natural companion to R1 (failed-login throttling) — R1 already computes the fa
 - Never logs the password, any part of it, its length, the session token, or any cookie value — only the same `{adminId, adminName, email, role, office}` actor snapshot every other action type already uses.
 - Verified against `auth.service.spec.ts` (failed-against-existing-admin, successful login, no-password-material, and nonexistent-email-not-audited cases) and `admin-audit.service.spec.ts` (`logBestEffort` success and swallow-on-error), plus `e2e/admin-activity-log.spec.ts`/`e2e/admin-password.spec.ts` (not the full suite).
 
+### Citizen Cross-Account Report Access Regression Test (R8) — **completed**
+
+`ReportsService.getMyReportDetail`'s single-clause ownership check (`WHERE r.id = ... AND r.citizen_id = ...`) was correct in code but had no regression test — a future refactor that split "fetch by id" from "compare owner" could pass the existing suite while introducing an existence oracle.
+
+- One new test in `e2e/citizen-reports.spec.ts` (`Cross-account access` describe block): a fresh citizen B requests citizen A's (citizen1's) seeded report id and a guaranteed-nonexistent id, asserting **both status and body** are identical between the two — the property that actually proves there's no existence oracle, not just "B didn't get A's data."
+- **Zero new report submissions.** Reuses citizen1's existing seeded report via the already-present `fetchMyReports` helper; skips cleanly (`test.skip()`, naming `seed:diverse-reports`) if none exists, matching the file's established pattern used 3× elsewhere.
+- Citizen B is a fresh signup (same inline UI-signup pattern already used twice in this file) — signups aren't rate-limited the way report submissions are, and a zero-report account is exactly what the test needs.
+- `ReportsService`/`reports.controller.ts` untouched — this is a test-only change locking in already-correct behavior.
+- Verified against `pnpm exec playwright test e2e/citizen-reports.spec.ts -- --workers=1` (not the full suite).
+
 ---
 
 ## 4. Current Queue
@@ -276,7 +286,6 @@ Admin SSR error boundary (R10) shipped — see §3.
 
 Detail and rationale in [`testing.md`](testing.md) §9. None of these blocks other work; all are recorded so they aren't lost:
 
-- **Citizen cross-account access regression test (R8) — pending.** The ownership check is correct in code but has no E2E asserting citizen A cannot read citizen B's report.
 - **Per-run database isolation — pending.** The single change that would unlock parallel workers and remove most of the suite's constraints. Also the largest.
 - **Wider fixture sharing — pending.** `admin-tickets.spec.ts` creates 7 of the suite's ~16 reports; applying the shared-`beforeAll` pattern where a pristine ticket isn't needed would push full runs further from the 20/hour IP limit without touching the rate limiter.
 - **Playwright in CI — pending**, and correctly gated behind database isolation. CI today runs API build, API unit tests, root lint, and root build — no browser tests.

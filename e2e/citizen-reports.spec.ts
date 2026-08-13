@@ -202,3 +202,58 @@ test.describe("Notification click-through", () => {
     await expect(page.getByText("Report submitted", { exact: false }).first()).toBeVisible();
   });
 });
+
+test.describe("Cross-account access", () => {
+  test("citizen B cannot read citizen A's report, and the rejection is indistinguishable from a nonexistent report id", async ({ page, browser }: { page: Page; browser: Browser }) => {
+    await loginCitizen(page);
+    const reports = await fetchMyReports(page);
+    test.skip(reports.length === 0, "citizen1 has no seeded reports — run `pnpm --prefix api seed:diverse-reports` first");
+    const reportAId = reports[0].id;
+
+    // Fresh citizen B, in a separate browser context — zero reports, adds
+    // nothing to the report-creation budget (docs/testing.md §6). A second
+    // context (same pattern as the admin-quarantine test above) is required
+    // here, not the "empty-state"/"notification click-through" tests' inline
+    // single-page signup: those start from an unauthenticated page, but this
+    // page is already logged in as citizen1, and proxy.ts redirects an
+    // already-authenticated citizen away from /signup back to /dashboard.
+    const bContext = await browser.newContext();
+    const bPage = await bContext.newPage();
+    const email = `e2e-crossaccount-${Date.now()}@porac.ph`;
+    await bPage.goto("/signup");
+    await bPage.getByLabel("First name").fill("Cross");
+    await bPage.getByLabel("Last name").fill("Account");
+    await bPage.getByLabel("Email").fill(email);
+    await bPage.getByLabel("Password", { exact: true }).fill("PoracDemo2026!");
+    await bPage.getByRole("button", { name: "Create Account" }).click();
+    await expect(bPage).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+
+    const nonexistentId = reportAId + 999_000; // guaranteed past any real id
+
+    const [ownedResult, nonexistentResult] = await bPage.evaluate(
+      async ([ownedId, missingId]) => {
+        const [ownedRes, missingRes] = await Promise.all([
+          fetch(`/api/reports/mine/${ownedId}`),
+          fetch(`/api/reports/mine/${missingId}`),
+        ]);
+        return [
+          { status: ownedRes.status, body: await ownedRes.json() },
+          { status: missingRes.status, body: await missingRes.json() },
+        ];
+      },
+      [reportAId, nonexistentId],
+    );
+
+    // Citizen B must not receive citizen A's data...
+    expect(ownedResult.status).not.toBe(200);
+    // ...and the rejection must be indistinguishable — same status AND same
+    // body — from a nonexistent id. This is the property that proves there
+    // is no existence oracle: "not 200" alone would still pass if a future
+    // refactor leaked existence through a different status or body shape
+    // between the two cases.
+    expect(ownedResult.status).toBe(nonexistentResult.status);
+    expect(ownedResult.body).toEqual(nonexistentResult.body);
+
+    await bContext.close();
+  });
+});

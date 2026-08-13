@@ -196,7 +196,6 @@ Not scheduled. Recorded so the reasoning is not re-derived.
 
 - **Per-run database isolation** — a schema per run, or a transaction rolled back per test. This is the change that would unlock parallel workers and remove most of §8 at once. It is also by far the largest item here, which is why the suite still runs serially.
 - **Wider fixture sharing.** `admin-tickets.spec.ts` creates 7 of the suite's 16 reports. Applying `admin-work-orders.spec.ts`'s `beforeAll` shared-ticket pattern to the tests that do not need a pristine ticket would cut report creation substantially and push the full suite further from the hourly limit — without touching the rate limiter.
-- **A regression test for citizen cross-account access.** The ownership check is correct in code but has no E2E asserting citizen A cannot read citizen B's report (tracked as R8 in [`security-hardening-plan.md`](security-hardening-plan.md)).
 - **Playwright in CI** — needs an ephemeral PostGIS database plus a started API. Worth doing only after database isolation lands; otherwise CI inherits every constraint in §8.
 - **Security-control assertions** for whatever ships from the hardening plan — a login-throttle test, and header assertions once headers exist.
 
