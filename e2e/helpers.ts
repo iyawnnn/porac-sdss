@@ -45,14 +45,15 @@ async function submitWithRetry(
   }
 }
 
-// app/admin/ has no error.tsx boundary (unlike app/(citizen)/, which has
-// six), so an unhandled throw in app/admin/layout.tsx's unguarded
-// getAdminSessionFromApi() call replaces the whole page — login form
-// included — with Next's built-in "This page couldn't load" screen. That
-// throw is the same dev-only ECONNREFUSED blip lib/api-client.ts already
-// documents and retries for; when it outlasts those ~300ms of retries, a
-// spec that navigated at that moment fails on a missing element rather than
-// on anything it was actually testing.
+// app/error.tsx and app/admin/error.tsx now catch the throw this used to be
+// the only mitigation for (an unhandled throw in app/admin/layout.tsx's
+// unguarded getAdminSessionFromApi() call, from the same dev-only
+// ECONNREFUSED blip lib/api-client.ts already documents and retries for).
+// This helper stays as defense-in-depth: it also absorbs mid-run connection
+// churn between navigations, which a mount-time error boundary doesn't
+// cover, and a spec that navigated at exactly the wrong moment would
+// otherwise fail on a missing element rather than on anything it was
+// actually testing.
 //
 // Reloading is exactly what that screen's own Reload button does, and it
 // only fires while that screen is showing — a genuine 401/403/404, a wrong

@@ -46,7 +46,7 @@ Recorded so this ground is not re-audited later.
 | ID | Area | Risk | Current control | Sev | Like. | Recommended action | Right-sized scope | Files | Test needed |
 |---|---|---|---|---|---|---|---|---|---|
 | **R1** | Auth | Online password guessing against a known admin email. Admin address format is published in README §G. | bcrypt cost; generic error message. **No attempt counter, no backoff, no lockout.** | High | Medium | Per-account failed-attempt throttling with a temporary cooldown. Count **failures only**, reset on success. | Reuse the existing Postgres rate-limit pattern. No new service, no MFA. ~1 migration + ~40 lines. | `api/src/auth/auth.service.ts`, `api/src/domain/ratelimit.service.ts`, one migration, `docs/database.md`, `docs/security.md` | API test: N failures → cooldown; success resets. Must not break E2E (see §4.2) |
-| **R2** | Transport | No security response headers. Admin console is framable by any origin → clickjacking against destructive controls. | None. | Medium | Medium | Add `headers()` to `next.config.ts`: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`. **Defer CSP** to R7. | ~12 lines of config, no runtime code, no new dependency. | `next.config.ts` | E2E: assert the four headers on an admin route |
+| **R2** | Transport | Admin console clickjacking — **done.** | `headers()` in `next.config.ts` applies `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), camera=(), microphone=()` to every route. CSP deliberately deferred to R7. | Medium | Medium | Shipped — see [`security.md`](security.md) §9. | ~20 lines of config, no runtime code, no new dependency. | `next.config.ts` | `e2e/smoke.spec.ts`: asserts the four headers on `/admin/login` and `/login` |
 | **R3** | Validation | Unbounded free-text lets an authenticated user write arbitrarily large strings: `work_orders.title`/`notes`, `tickets.resolution_notes`, `tickets.dispute_reason`, moderation `note`. | Type and non-empty checks, `.trim()`. **No maximum length.** | Medium | Low | Add `.max()` bounds matching `reportSchema`'s existing style. | A handful of guard lines in existing validation blocks. No schema change needed. | `work-orders.service.ts`, `tickets.service.ts`, `reports.service.ts`, `moderation.controller.ts` | Unit test: over-length input → 400 |
 | **R4** | Auth audit | Login events — successful or failed — are not audited. A compromised admin account leaves no authentication trail. | `admin_audit_events` covers mutations only. | Medium | Low | Add an `admin_login` / `admin_login_failed` audit action. Natural companion to R1, which already computes the signal. | One new action type on the existing table. No new table, no new endpoint. | `api/src/auth/auth.service.ts`, `admin-audit.service.ts`, `docs/database.md` | API test: failed then successful login both produce rows |
 | **R5** | Rate limiting | `app.set('trust proxy', 1)` is correct for exactly one hop (the Next rewrite). Behind an additional CDN or load balancer the hop count changes, and a forged `X-Forwarded-For` could then spoof the client IP — defeating the IP-keyed report and password-reset limits. | Correct today; fragile under a deployment topology that does not exist yet. | Medium | Low *(today)* | **Defer to deployment.** Re-derive the trust depth once hosting is chosen, and record it in the runbook. Do not guess now. | Zero code now. One config line plus a runbook note later. | `api/src/main.ts`, future runbook | Deployment smoke check that the observed client IP is real |
@@ -54,7 +54,7 @@ Recorded so this ground is not re-audited later.
 | **R7** | Transport | No Content-Security-Policy. | None. | Low | Low | Add CSP **in `Report-Only` mode first**, after R2. Leaflet tiles, Cloudinary images, and Next's inline styles all need allowances, so a blocking CSP shipped blind will break the map. | Deliberately a separate, later task from R2 — this is the part that breaks things. | `next.config.ts` | Manual: map, report form, and image rendering still work |
 | **R8** | Testing | No E2E asserts that citizen A cannot read citizen B's report. The control is correct in code but has no regression test. | Single-clause ownership check (§2). | Low | Low | Add one API-level test to an existing citizen spec. | ~15 lines in an existing file. No new fixture strategy. | `e2e/citizen-reports.spec.ts` | Is the test |
 | **R9** | Availability | The API binds `0.0.0.0`, so it is reachable independently of the Next proxy. Locally harmless; in production the API must not be publicly exposed. | None — appropriate for local dev. | Medium *(prod only)* | N/A today | **Defer to deployment.** Network-level concern, resolved by the hosting topology, not by app code. | Zero code. A runbook requirement. | `api/src/main.ts`, future runbook | Deployment check |
-| **R10** | Resilience | Admin SSR error boundary — **pending, not implemented.** A transient Next → NestJS failure replaces the admin app, including the login form, with the framework error screen. | Test-side mitigation only (`settleAdminPage`). | Medium | Medium | Already tracked in [`project-status.md`](project-status.md) §4.2. Availability/UX rather than a confidentiality or integrity issue, so it sits outside this plan's ordering — but it is **not done**. | Small; see the roadmap entry. | `app/error.tsx`, `app/admin/error.tsx` | E2E with the API stopped |
+| **R10** | Resilience | Admin SSR error boundary — **done.** A transient Next → NestJS failure no longer replaces the admin app, including the login form, with the framework error screen. | `app/error.tsx` (root, catches layout throws) and `app/admin/error.tsx` (page-level, parity with the citizen side), both using `unstable_retry()`. `settleAdminPage` stays as defense-in-depth. | Medium | Medium | Shipped — see [`project-status.md`](project-status.md) §3. | Small; see the roadmap entry. | `app/error.tsx`, `app/admin/error.tsx` | Manual: API stopped, then restarted, retry recovers without reload |
 
 ---
 
@@ -65,7 +65,7 @@ Recorded so this ground is not re-audited later.
 | | | |
 |---|---|---|
 | **R1** | Failed-login throttling | The one gap a security reviewer will find first |
-| **R2** | Four security headers | Best value-to-effort ratio in the entire plan |
+| **R2** | Four security headers | Done — see [`security.md`](security.md) §9 |
 | **R3** | Free-text length bounds | Cheap, and prevents a whole class of nuisance |
 | **R4** | Login audit events | Natural companion to R1; the signal is already computed |
 
@@ -77,7 +77,7 @@ All four are small, self-contained, and carry no deployment dependency. R1 and R
 |---|---|---|
 | **R8** | Citizen cross-account access test | Control is already correct; this locks it in |
 | **R7** | CSP, `Report-Only` first | Do only after R2, and expect iteration |
-| **R10** | Admin SSR error boundary | Tracked on the roadmap; still pending |
+| **R10** | Admin SSR error boundary | Done — see §3 of `project-status.md` |
 
 ### Phase 3 — after a hosting decision
 

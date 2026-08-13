@@ -233,7 +233,6 @@ Stated plainly. None of the following is implemented. For an assessed, prioritiz
 
 ### 8.1 Pending
 
-- **Admin SSR error boundary — pending, not implemented.** `app/admin/layout.tsx` and `app/admin/login/page.tsx` call the session helper unguarded, and it *throws* (rather than returning `null`) when the Next → NestJS hop fails at the socket level. With no error boundary in the tree, that throw replaces the entire admin app — including the login form an admin would use to recover — with the framework's built-in error screen. The only mitigation today is test-side. Tracked in [`project-status.md`](project-status.md) §4.2. **Not done.**
 - **Monitoring and alerting** — none. No error tracking, no uptime checks, no alert routing.
 - **Backup verification** — no tested restore procedure.
 - **Load and performance validation** — no load testing has been performed.
@@ -255,3 +254,9 @@ Two constraints that must survive future changes:
 
 - **No test-only security bypass, ever.** Rate limits, guards, and scoping behave identically under test. When the E2E suite trips a limit, the suite changes — not the control.
 - **Any new endpoint must use the scope helpers.** An `/admin/*` route that forgets `resolveOfficeScope` or `assertOfficeAccess` is a cross-office data leak, not a UI bug.
+
+---
+
+## 9. Transport
+
+`next.config.ts`'s `headers()` applies four static response headers to every route (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), camera=(), microphone=()`) — closing the clickjacking gap against destructive single-click admin controls (status advance, office reassignment, deactivation). The permissions denied are ones the app never calls (verified against the app source; the report form's pin comes from EXIF GPS or a manual map click, never `navigator.geolocation`). Set on the Next.js side only, since it serves the HTML — the API returns JSON to a same-origin proxy and needs no `helmet`. **No Content-Security-Policy yet** — deliberately staged separately in `Report-Only` mode first, since a blocking CSP would break Leaflet tiles, Cloudinary images, and Next's inline styles if shipped blind.

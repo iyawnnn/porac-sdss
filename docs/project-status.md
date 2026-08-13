@@ -197,6 +197,26 @@ A read-only recap of how a resolved report was closed, on the existing citizen r
 - Reuses `ReportImage` (citizen-safe image with broken-image fallback) for the photo — no new image-handling component.
 - Dispute/confirm endpoints, ticket status behavior, and the `ResolutionFeedback` action flow are unchanged.
 
+### Root and Admin SSR/API Error Boundaries (R10) — **completed**
+
+`app/error.tsx` (new) and `app/admin/error.tsx` (new) — a transient Next → NestJS socket failure in `getAdminSessionFromApi()`/`getCitizenSessionFromApi()` (`lib/api-client.ts`, after its bounded retries) no longer replaces the whole admin or citizen app with Next's unbranded default error screen.
+
+- `app/error.tsx` is the boundary that actually catches admin/citizen **layout** throws — `error.js` does not wrap the `layout.js` above it in the same segment, so `app/admin/error.tsx` alone cannot catch a throw from `app/admin/layout.tsx`. Neutral copy for both audiences, no session read, no API call.
+- `app/admin/error.tsx` is the admin page-level boundary, parity with the six existing `app/(citizen)/**/error.tsx` boundaries. Not a wrapper around `CitizenErrorState` — that component hard-codes `reset`, is citizen-scoped, and is untouched here.
+- Both use `unstable_retry()`, this build's recovering prop (re-fetches and re-renders the boundary's children), not `reset()` (clears state without re-fetching). The citizen boundaries still use `reset` — fixing that is a separate, already-tracked issue (#12/#45), not part of this change.
+- `settleAdminPage` (`e2e/helpers.ts`) is unchanged and stays as defense-in-depth for mid-run connection churn between navigations; its comment now reflects that the boundary exists.
+- No change to `lib/api-client.ts` retry counts or throw behavior — the throw was correct, the missing boundary was the bug.
+
+### Baseline HTTP Security Response Headers (R2) — **completed**
+
+`next.config.ts`'s `headers()` applies four static headers to every route: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), camera=(), microphone=()` — closing the clickjacking gap against destructive single-click admin controls (status advance, office reassignment, deactivation).
+
+- Set on the Next.js side only — the API returns JSON to a same-origin proxy, so no `helmet` dependency was added there.
+- The `Permissions-Policy` denies are ones the app provably never calls: grepped the full app source for `navigator.geolocation`/`getUserMedia` and found neither. The report form's pin comes from EXIF GPS on the uploaded photo or a manual Leaflet marker click, never the browser geolocation API.
+- Content-Security-Policy is deliberately **not** part of this change (R7, staged separately in `Report-Only` mode first — a blocking CSP shipped blind would break Leaflet tiles and Cloudinary images).
+- `rewrites()` (the `/api/*` proxy) and API behavior are unchanged — `headers()` is a sibling config key.
+- Regression test: `e2e/smoke.spec.ts` asserts all four headers on `/admin/login` and `/login`.
+
 ---
 
 ## 4. Current Queue
@@ -208,7 +228,6 @@ All pending work. **None of it is a new product feature** — this is hardening,
 Assessed and prioritized in [`security-hardening-plan.md`](security-hardening-plan.md), which carries severity, likelihood, right-sized scope, and the required test for each. Summarized here so this file stays the single status view:
 
 - **Failed-login throttling (R1, High) — pending.** Only bcrypt cost and a generic error message protect admin login today; there is no attempt counter, backoff, or cooldown. The admin email convention is published in `README.md` §G, so an attacker needs no username discovery. **The recommended next implementation task.**
-- **HTTP security response headers (R2, Medium) — pending.** Neither `next.config.ts` nor the API bootstrap sets any, so the admin console is framable by any origin.
 - **Free-text length bounds (R3, Medium) — pending.** Report submission is bounded by Zod; work-order title/notes, resolution notes, dispute reason, and the moderation note have type and non-empty checks but no maximum length.
 - **Login audit events (R4, Medium) — pending.** `admin_audit_events` covers mutations but not authentication events.
 - **Content-Security-Policy (R7, Low) — pending**, and deliberately staged after R2 in `Report-Only` mode first, since a blocking CSP shipped blind would break Leaflet and Cloudinary.
@@ -217,7 +236,7 @@ Deployment-topology items (proxy trust depth, API network exposure, TLS/HSTS, cr
 
 ### 4.2 Reliability — pending
 
-- **Admin SSR error boundary — PENDING, not implemented.** Recorded so it isn't rediscovered from scratch; no app code has been written for it. `app/admin/layout.tsx` and `app/admin/login/page.tsx` both call `getAdminSessionFromApi()` unguarded. That helper returns `null` on a 401 but *throws* when the Next → NestJS hop fails at the socket level (`lib/api-client.ts`, after its bounded retries). There is no `app/admin/error.tsx`, no `app/error.tsx`, and no `global-error.tsx`, so such a throw replaces the entire admin app — including the login form an admin would use to recover — with Next's built-in error screen. `app/(citizen)/layout.tsx` has the same shape. Two things to check before implementing: (1) per this build's own docs (`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md`), `error.js` does **not** wrap the `layout.js` in its own segment, so an `app/admin/error.tsx` alone would not catch a throw originating in `app/admin/layout.tsx`; (2) the seven existing `app/(citizen)/**/error.tsx` boundaries pass `reset`, which the same docs describe as re-rendering *without* re-fetching and therefore unable to recover a Server Component error — `unstable_retry` is the recovering prop in this Next version. Today the only mitigation is test-side: `settleAdminPage` in `e2e/helpers.ts` reloads when that error screen appears. That helper stays regardless (it also absorbs mid-run connection churn), but it is not a substitute for a real boundary.
+Admin SSR error boundary (R10) shipped — see §3.
 
 ### 4.3 Testing — pending
 
