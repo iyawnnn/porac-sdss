@@ -56,9 +56,10 @@ export class CronController {
     return { ok: true };
   }
 
-  // Prunes rate_limit_events / password_reset_rate_limit_events rows older
-  // than the 30-day retention window — see RateLimitService for why that's
-  // safe (both tables' checks only ever look back 24 hours at most).
+  // Prunes rate_limit_events / password_reset_rate_limit_events /
+  // admin_login_rate_limit_events rows older than the 30-day retention
+  // window — see RateLimitService for why that's safe (every table's checks
+  // only ever look back 24 hours at most).
   @Post('cleanup-rate-limit-events')
   cleanupRateLimitEvents() {
     return this.rateLimit.cleanupOldEvents();

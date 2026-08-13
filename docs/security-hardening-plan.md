@@ -45,7 +45,7 @@ Recorded so this ground is not re-audited later.
 
 | ID | Area | Risk | Current control | Sev | Like. | Recommended action | Right-sized scope | Files | Test needed |
 |---|---|---|---|---|---|---|---|---|---|
-| **R1** | Auth | Online password guessing against a known admin email. Admin address format is published in README §G. | bcrypt cost; generic error message. **No attempt counter, no backoff, no lockout.** | High | Medium | Per-account failed-attempt throttling with a temporary cooldown. Count **failures only**, reset on success. | Reuse the existing Postgres rate-limit pattern. No new service, no MFA. ~1 migration + ~40 lines. | `api/src/auth/auth.service.ts`, `api/src/domain/ratelimit.service.ts`, one migration, `docs/database.md`, `docs/security.md` | API test: N failures → cooldown; success resets. Must not break E2E (see §4.2) |
+| **R1** | Auth | Online password guessing against a known admin email — **done.** | Per-account failed-attempt throttling (`admin_login_rate_limit_events`, 10 failures/15 min, keyed on normalized email, never IP). Counts failures only; a successful login resets it outright. Throttled response identical to a normal wrong-password rejection. | High | Medium | Shipped — see [`security.md`](security.md) §5.2. | ~1 migration + ~40 lines, reusing the existing `RateLimitService` pattern. No new service, no MFA. | `api/src/auth/auth.service.ts`, `api/src/domain/ratelimit.service.ts`, `api/drizzle/0024_admin_login_throttle.sql`, `docs/database.md`, `docs/security.md` | `api/src/auth/auth.service.spec.ts`, `api/src/domain/ratelimit.service.spec.ts`; confirmed `e2e/admin-password.spec.ts`/`e2e/admin-rbac.spec.ts` unaffected |
 | **R2** | Transport | Admin console clickjacking — **done.** | `headers()` in `next.config.ts` applies `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), camera=(), microphone=()` to every route. CSP deliberately deferred to R7. | Medium | Medium | Shipped — see [`security.md`](security.md) §9. | ~20 lines of config, no runtime code, no new dependency. | `next.config.ts` | `e2e/smoke.spec.ts`: asserts the four headers on `/admin/login` and `/login` |
 | **R3** | Validation | Unbounded free-text lets an authenticated user write arbitrarily large strings: `work_orders.title`/`notes`, `tickets.resolution_notes`, `tickets.dispute_reason`, moderation `note`. | Type and non-empty checks, `.trim()`. **No maximum length.** | Medium | Low | Add `.max()` bounds matching `reportSchema`'s existing style. | A handful of guard lines in existing validation blocks. No schema change needed. | `work-orders.service.ts`, `tickets.service.ts`, `reports.service.ts`, `moderation.controller.ts` | Unit test: over-length input → 400 |
 | **R4** | Auth audit | Login events — successful or failed — are not audited. A compromised admin account leaves no authentication trail. | `admin_audit_events` covers mutations only. | Medium | Low | Add an `admin_login` / `admin_login_failed` audit action. Natural companion to R1, which already computes the signal. | One new action type on the existing table. No new table, no new endpoint. | `api/src/auth/auth.service.ts`, `admin-audit.service.ts`, `docs/database.md` | API test: failed then successful login both produce rows |
@@ -64,7 +64,7 @@ Recorded so this ground is not re-audited later.
 
 | | | |
 |---|---|---|
-| **R1** | Failed-login throttling | The one gap a security reviewer will find first |
+| **R1** | Failed-login throttling | Done — see [`security.md`](security.md) §5.2 |
 | **R2** | Four security headers | Done — see [`security.md`](security.md) §9 |
 | **R3** | Free-text length bounds | Cheap, and prevents a whole class of nuisance |
 | **R4** | Login audit events | Natural companion to R1; the signal is already computed |
@@ -145,7 +145,9 @@ The application-layer database posture is already sound (§2): parameterized que
 
 ## 6. Next recommended implementation task
 
-### Failed-login throttling for admin accounts (R1), with login audit events (R4)
+**Update: R1 (failed-login throttling) shipped — see [`security.md`](security.md) §5.2 and §3 of [`project-status.md`](project-status.md).** Item 1 in the implementation prompt below is done; item 2 (R4, login audit events) was deliberately left out of that change and remains the next recommended task on its own. The rest of this section is kept for that remaining scope and for historical context on how R1 was implemented.
+
+### Failed-login throttling for admin accounts (R1, done), with login audit events (R4, still pending)
 
 **Why this first.** It is the only High-severity item in the table, and the one a reviewer or panel is most likely to probe. The attack needs no username discovery — README §G publishes the `meo@porac.gov.ph` / `mdrrmo@porac.gov.ph` pattern, and a deployed instance would use the same convention. Today, nothing but bcrypt's cost stands between an attacker and unlimited guesses against a known address. Every other finding is Medium or lower, deferred to deployment, or already correct.
 

@@ -155,7 +155,15 @@ The spatial limit specifically targets the same-pothole-reported-repeatedly patt
 
 Events are recorded **inside the same transaction** as the report insert, so only submissions that actually succeed count against the limit.
 
-### 5.2 Password reset
+### 5.2 Admin login
+
+| Limit | Value | Key |
+|---|---|---|
+| Failed attempts | **10 within 15 minutes** | normalized account email — never IP |
+
+Counts **failed attempts only** — a successful login deletes that email's failure rows outright, rather than waiting for them to age out of the window. Keyed on email, not IP, because an IP-based total-login limit would break the E2E suite, which authenticates from one IP nearly 200 times per run (§5.6). The throttled response is the exact same generic `Invalid email or password` `401` as a normal wrong-password rejection — no distinct status, message, or header — and a failure is recorded for every rejection reason (nonexistent email, deactivated admin, wrong password), never only for real/active accounts, so the throttle itself can't become a second enumeration side-channel alongside §2.4's generic error. Checked before the admins table is even queried, so continued attempts during an active cooldown never extend it — it clears ~15 minutes after the failure that tripped it.
+
+### 5.3 Password reset
 
 | Limit | Value | Key |
 |---|---|---|
@@ -164,15 +172,15 @@ Events are recorded **inside the same transaction** as the report insert, so onl
 
 Both must pass. Crucially, an attempt is recorded **for every request, including emails with no account** — otherwise the enumeration-resistant identical response would let an attacker probe many addresses without ever consuming the email limit.
 
-### 5.3 OAuth
+### 5.4 OAuth
 
 **10 requests/minute per IP** on OAuth start/callback (`OAuthRateLimitGuard`). This one is **in-memory, not Postgres-backed** — a deliberate, marked tradeoff: OAuth abuse doesn't need to survive a restart the way report spam does. It assumes a single instance; see §8.
 
-### 5.4 Retention
+### 5.5 Retention
 
-`POST /cron/cleanup-rate-limit-events` prunes both rate-limit tables past a 30-day window. Safe because the longest window any live check consults is 24 hours.
+`POST /cron/cleanup-rate-limit-events` prunes all three rate-limit tables past a 30-day window. Safe because the longest window any live check consults is 24 hours.
 
-### 5.5 The E2E caveat
+### 5.6 The E2E caveat
 
 A full Playwright run posts roughly 16 real reports and will exhaust the 20/hour IP backstop if repeated within the hour. **This is the control working correctly.** There is deliberately **no test-only bypass, env flag, or relaxed limit** — the documented workaround is targeted spec runs. See [`README.md`](../README.md) §I.
 
@@ -241,7 +249,6 @@ Stated plainly. None of the following is implemented. For an assessed, prioritiz
 
 ### 8.2 Accepted limitations
 
-- **No failed-login lockout or backoff.** Login is protected by enumeration-resistant messaging and bcrypt's cost, but there is no per-account attempt counter or progressive delay. Online password guessing against a *known* email is currently rate-limited only by bcrypt's own cost. This is the most significant gap in §2.
 - **The OAuth rate limiter is in-memory** and therefore per-process. It assumes a single instance and resets on restart — marked as a known ceiling in the code. The report and password-reset limiters do not share this weakness.
 - **Ticket escalation fires once per ticket, ever.** Re-escalation after a stall recurs is a deliberate non-goal for now.
 - **No per-request CSRF token.** Defense rests on `sameSite=lax` cookies plus the same-origin `/api/*` rewrite. Adequate for the current shape; worth revisiting if a cross-origin client is ever added.

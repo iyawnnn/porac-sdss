@@ -128,6 +128,7 @@ pnpm --prefix api migrate:admin-status              # admins.is_active (account 
 pnpm --prefix api migrate:work-orders               # work_orders table — FKs tickets(id) and admins(id), so it must follow both
 pnpm --prefix api migrate:ticket-disputes           # tickets.disputed_at/dispute_reason (citizen dispute loop)
 pnpm --prefix api migrate:ticket-resolution-confirmation  # tickets.resolution_confirmed_at (persistent Confirm Fixed)
+pnpm --prefix api migrate:admin-login-throttle      # admin_login_rate_limit_events (per-account failed-login throttling)
 pnpm --prefix api seed:users                        # citizen demo accounts (Section G) — idempotent, safe to rerun
 pnpm --prefix api seed:admin -- meo@porac.gov.ph PoracDemo2026! MEO supervisor      # admin demo account (Section G)
 pnpm --prefix api seed:admin -- mdrrmo@porac.gov.ph PoracDemo2026! MDRRMO supervisor # second admin demo account
