@@ -54,7 +54,7 @@ Recorded so this ground is not re-audited later.
 | **R7** | Transport | No Content-Security-Policy. | None. | Low | Low | Add CSP **in `Report-Only` mode first**, after R2. Leaflet tiles, Cloudinary images, and Next's inline styles all need allowances, so a blocking CSP shipped blind will break the map. | Deliberately a separate, later task from R2 — this is the part that breaks things. | `next.config.ts` | Manual: map, report form, and image rendering still work |
 | **R8** | Testing | No E2E asserts that citizen A cannot read citizen B's report. The control is correct in code but has no regression test. | Single-clause ownership check (§2). | Low | Low | Add one API-level test to an existing citizen spec. | ~15 lines in an existing file. No new fixture strategy. | `e2e/citizen-reports.spec.ts` | Is the test |
 | **R9** | Availability | The API binds `0.0.0.0`, so it is reachable independently of the Next proxy. Locally harmless; in production the API must not be publicly exposed. | None — appropriate for local dev. | Medium *(prod only)* | N/A today | **Defer to deployment.** Network-level concern, resolved by the hosting topology, not by app code. | Zero code. A runbook requirement. | `api/src/main.ts`, future runbook | Deployment check |
-| **R10** | Resilience | Admin SSR error boundary — **pending, not implemented.** A transient Next → NestJS failure replaces the admin app, including the login form, with the framework error screen. | Test-side mitigation only (`settleAdminPage`). | Medium | Medium | Already tracked in [`project-status.md`](project-status.md) §4.2. Availability/UX rather than a confidentiality or integrity issue, so it sits outside this plan's ordering — but it is **not done**. | Small; see the roadmap entry. | `app/error.tsx`, `app/admin/error.tsx` | E2E with the API stopped |
+| **R10** | Resilience | Admin SSR error boundary — **done.** A transient Next → NestJS failure no longer replaces the admin app, including the login form, with the framework error screen. | `app/error.tsx` (root, catches layout throws) and `app/admin/error.tsx` (page-level, parity with the citizen side), both using `unstable_retry()`. `settleAdminPage` stays as defense-in-depth. | Medium | Medium | Shipped — see [`project-status.md`](project-status.md) §3. | Small; see the roadmap entry. | `app/error.tsx`, `app/admin/error.tsx` | Manual: API stopped, then restarted, retry recovers without reload |
 
 ---
 
@@ -77,7 +77,7 @@ All four are small, self-contained, and carry no deployment dependency. R1 and R
 |---|---|---|
 | **R8** | Citizen cross-account access test | Control is already correct; this locks it in |
 | **R7** | CSP, `Report-Only` first | Do only after R2, and expect iteration |
-| **R10** | Admin SSR error boundary | Tracked on the roadmap; still pending |
+| **R10** | Admin SSR error boundary | Done — see §3 of `project-status.md` |
 
 ### Phase 3 — after a hosting decision
 

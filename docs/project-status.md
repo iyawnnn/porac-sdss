@@ -197,6 +197,16 @@ A read-only recap of how a resolved report was closed, on the existing citizen r
 - Reuses `ReportImage` (citizen-safe image with broken-image fallback) for the photo — no new image-handling component.
 - Dispute/confirm endpoints, ticket status behavior, and the `ResolutionFeedback` action flow are unchanged.
 
+### Root and Admin SSR/API Error Boundaries (R10) — **completed**
+
+`app/error.tsx` (new) and `app/admin/error.tsx` (new) — a transient Next → NestJS socket failure in `getAdminSessionFromApi()`/`getCitizenSessionFromApi()` (`lib/api-client.ts`, after its bounded retries) no longer replaces the whole admin or citizen app with Next's unbranded default error screen.
+
+- `app/error.tsx` is the boundary that actually catches admin/citizen **layout** throws — `error.js` does not wrap the `layout.js` above it in the same segment, so `app/admin/error.tsx` alone cannot catch a throw from `app/admin/layout.tsx`. Neutral copy for both audiences, no session read, no API call.
+- `app/admin/error.tsx` is the admin page-level boundary, parity with the six existing `app/(citizen)/**/error.tsx` boundaries. Not a wrapper around `CitizenErrorState` — that component hard-codes `reset`, is citizen-scoped, and is untouched here.
+- Both use `unstable_retry()`, this build's recovering prop (re-fetches and re-renders the boundary's children), not `reset()` (clears state without re-fetching). The citizen boundaries still use `reset` — fixing that is a separate, already-tracked issue (#12/#45), not part of this change.
+- `settleAdminPage` (`e2e/helpers.ts`) is unchanged and stays as defense-in-depth for mid-run connection churn between navigations; its comment now reflects that the boundary exists.
+- No change to `lib/api-client.ts` retry counts or throw behavior — the throw was correct, the missing boundary was the bug.
+
 ---
 
 ## 4. Current Queue
@@ -217,7 +227,7 @@ Deployment-topology items (proxy trust depth, API network exposure, TLS/HSTS, cr
 
 ### 4.2 Reliability — pending
 
-- **Admin SSR error boundary — PENDING, not implemented.** Recorded so it isn't rediscovered from scratch; no app code has been written for it. `app/admin/layout.tsx` and `app/admin/login/page.tsx` both call `getAdminSessionFromApi()` unguarded. That helper returns `null` on a 401 but *throws* when the Next → NestJS hop fails at the socket level (`lib/api-client.ts`, after its bounded retries). There is no `app/admin/error.tsx`, no `app/error.tsx`, and no `global-error.tsx`, so such a throw replaces the entire admin app — including the login form an admin would use to recover — with Next's built-in error screen. `app/(citizen)/layout.tsx` has the same shape. Two things to check before implementing: (1) per this build's own docs (`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md`), `error.js` does **not** wrap the `layout.js` in its own segment, so an `app/admin/error.tsx` alone would not catch a throw originating in `app/admin/layout.tsx`; (2) the seven existing `app/(citizen)/**/error.tsx` boundaries pass `reset`, which the same docs describe as re-rendering *without* re-fetching and therefore unable to recover a Server Component error — `unstable_retry` is the recovering prop in this Next version. Today the only mitigation is test-side: `settleAdminPage` in `e2e/helpers.ts` reloads when that error screen appears. That helper stays regardless (it also absorbs mid-run connection churn), but it is not a substitute for a real boundary.
+Admin SSR error boundary (R10) shipped — see §3.
 
 ### 4.3 Testing — pending
 

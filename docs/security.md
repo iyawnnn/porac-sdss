@@ -233,7 +233,6 @@ Stated plainly. None of the following is implemented. For an assessed, prioritiz
 
 ### 8.1 Pending
 
-- **Admin SSR error boundary — pending, not implemented.** `app/admin/layout.tsx` and `app/admin/login/page.tsx` call the session helper unguarded, and it *throws* (rather than returning `null`) when the Next → NestJS hop fails at the socket level. With no error boundary in the tree, that throw replaces the entire admin app — including the login form an admin would use to recover — with the framework's built-in error screen. The only mitigation today is test-side. Tracked in [`project-status.md`](project-status.md) §4.2. **Not done.**
 - **Monitoring and alerting** — none. No error tracking, no uptime checks, no alert routing.
 - **Backup verification** — no tested restore procedure.
 - **Load and performance validation** — no load testing has been performed.
