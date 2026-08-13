@@ -249,6 +249,10 @@ Enforced on the server, every time, from the session — never from a query para
 
 Two independent auth systems; two independent sets of API routes. No citizen-facing surface exposes work orders, work-order notes, internal moderation notes, or another citizen's reports. This is a standing product rule, not merely current state.
 
+### 5.4 SSR/API resilience
+
+A transient Next → NestJS connection failure during server rendering (e.g. an API restart) no longer replaces the whole admin or citizen app with the framework's default error screen. `app/error.tsx` catches the failure at the root, above both the admin and citizen layouts; `app/admin/error.tsx` gives admin pages the same page-level recovery the six citizen `error.tsx` boundaries already had. Both retry via re-fetching rather than a plain reset, so a working "Try Again" click actually recovers the page once the API is back.
+
 ---
 
 ## 6. Not included / pending
@@ -257,7 +261,6 @@ Separated from everything above because none of it is implemented.
 
 **Pending hardening** (see [`project-status.md`](project-status.md) §4):
 
-- **Admin SSR error boundary — pending, not implemented.** A transient failure of the Next → NestJS hop during server rendering currently replaces the admin app, including the login form, with the framework's built-in error screen. The only mitigation today is test-side. This is **not** done.
 - Monitoring and alerting — not started.
 - Backup verification — not started.
 - Load and performance validation — not started.

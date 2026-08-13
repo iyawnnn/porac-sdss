@@ -277,7 +277,6 @@ The four rules that define who sees what. Enforcement details are in [`security.
 
 Not implemented. Listed so no one plans a workflow around them.
 
-- **Admin SSR error boundary — pending.** If the connection between the web app and the API drops briefly, the admin interface can be replaced by a generic browser error page, including the login screen. Tracked in [`security-hardening-plan.md`](security-hardening-plan.md) and [`project-status.md`](project-status.md) §4.2. **Not fixed.**
 - **Login attempt throttling and security headers — pending.** See [`security-hardening-plan.md`](security-hardening-plan.md).
 - **No citizen-facing work-order visibility**, not even a summary. Deliberate, and would need an explicit product decision.
 - **No elevation-based map filter** — elevation is display-only.
