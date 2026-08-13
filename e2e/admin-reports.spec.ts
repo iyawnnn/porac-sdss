@@ -241,6 +241,31 @@ test("work order CSV export never includes a notes column", async ({ page, reque
   expect(header.map((h) => h.toLowerCase())).not.toContain("notes");
 });
 
+test("work order CSV export never leaks a note body, even though the column itself is absent", async ({ page, request }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  const cookies = await page.context().cookies();
+  const headers = sessionCookieHeader(cookies);
+
+  // Reuse an existing ticket rather than creating a new report — this test
+  // only cares about the work order's notes field, not which ticket it's
+  // attached to, so any ticket works. Zero reports created (docs/testing.md §6).
+  const ticketsRes = await request.get("/api/admin/tickets?status=all&limit=1", { headers });
+  const { tickets } = await ticketsRes.json();
+  test.skip(tickets.length === 0, "no tickets exist — run `pnpm --prefix api seed:diverse-reports` first");
+  const ticketId = tickets[0].id;
+
+  const sentinel = `SECRET-CSV-NOTE-${Date.now()}`;
+  const createRes = await request.post("/api/admin/work-orders", {
+    headers: { ...headers, "content-type": "application/json" },
+    data: { ticketId, title: `E2E CSV note-leak check ${Date.now()}`, notes: sentinel, assignedAdminId: null, dueDate: null },
+  });
+  expect(createRes.ok()).toBe(true);
+
+  const csvRes = await request.get("/api/admin/reports/work-orders.csv?status=all", { headers });
+  expect(csvRes.ok()).toBe(true);
+  expect(await csvRes.text()).not.toContain(sentinel);
+});
+
 test("invalid export query params fail safely, not with a crash", async ({ page, request }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   const cookies = await page.context().cookies();
