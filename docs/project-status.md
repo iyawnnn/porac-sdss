@@ -217,6 +217,20 @@ A read-only recap of how a resolved report was closed, on the existing citizen r
 - `rewrites()` (the `/api/*` proxy) and API behavior are unchanged — `headers()` is a sibling config key.
 - Regression test: `e2e/smoke.spec.ts` asserts all four headers on `/admin/login` and `/login`.
 
+### Failed-Login Throttling for Admin Login (R1) — **completed**
+
+Per-account failed-login throttling, closing the highest-severity gap in the hardening plan — an attacker who knows one admin address (`README.md` §G publishes the convention) could previously make unlimited password guesses, slowed only by bcrypt's cost.
+
+- New table `admin_login_rate_limit_events` (migration `0024_admin_login_throttle.sql`, `pnpm --prefix api migrate:admin-login-throttle`) — not a reuse of `rate_limit_events` (raw-PG-only, `geom NOT NULL`, wrong identity shape) or `password_reset_rate_limit_events` (same column shape, but a different security domain already in active use by citizen forgot-password requests; mixing rows would corrupt both tables' counts). See `docs/database.md` §D/§G for the full reasoning.
+- Three new `RateLimitService` methods: `checkAdminLoginRateLimit`/`recordAdminLoginFailure` follow the existing check-then-record pattern; `resetAdminLoginFailures` is new territory for this service — it actively deletes an email's failure rows on a successful login, rather than only letting a window expire, which is what acceptance criterion #2 ("a successful login resets the counter") requires.
+- **Keyed on normalized account email, never IP** — an IP-based total-login limit would break the E2E suite, which authenticates from one IP nearly 200 times per run (`docs/testing.md` §6). 10 failures within 15 minutes throttles further attempts against that email.
+- `AuthService.adminLogin` checks the throttle *before* querying the `admins` table or running bcrypt, so a throttled request never records a further failure of its own — the cooldown is bounded to ~15 minutes after the failure that tripped it, not indefinitely extendable by continued attempts during the cooldown.
+- The throttled response is the exact same `UnauthorizedException('Invalid email or password')` as every other rejection reason (nonexistent email, deactivated admin, wrong password) — no distinct status, message, or header. A failure is recorded for all of those reasons uniformly, never only for real/active accounts, so the throttle itself can't become a second enumeration side-channel.
+- `POST /cron/cleanup-rate-limit-events` now prunes this table too, same 30-day retention.
+- `AuthModule` provides `RateLimitService` directly rather than importing `DomainModule` — `DomainModule` imports `NotificationsModule`, which imports `AuthModule`, so importing `DomainModule` from `AuthModule` would create a circular module dependency. `RateLimitService` only needs the globally-provided `PG` client, so a standalone provider resolves fine.
+- No MFA, CAPTCHA, permanent lockout, IP-based total-login limiting, citizen-side login throttling, or test-only bypass — all explicitly out of scope. `citizenLogin`/`citizenSignup` untouched.
+- Verified against `e2e/admin-password.spec.ts` and `e2e/admin-rbac.spec.ts` (not the full suite, per `docs/testing.md` §6) — no regression.
+
 ---
 
 ## 4. Current Queue
@@ -227,9 +241,8 @@ All pending work. **None of it is a new product feature** — this is hardening,
 
 Assessed and prioritized in [`security-hardening-plan.md`](security-hardening-plan.md), which carries severity, likelihood, right-sized scope, and the required test for each. Summarized here so this file stays the single status view:
 
-- **Failed-login throttling (R1, High) — pending.** Only bcrypt cost and a generic error message protect admin login today; there is no attempt counter, backoff, or cooldown. The admin email convention is published in `README.md` §G, so an attacker needs no username discovery. **The recommended next implementation task.**
 - **Free-text length bounds (R3, Medium) — pending.** Report submission is bounded by Zod; work-order title/notes, resolution notes, dispute reason, and the moderation note have type and non-empty checks but no maximum length.
-- **Login audit events (R4, Medium) — pending.** `admin_audit_events` covers mutations but not authentication events.
+- **Login audit events (R4, Medium) — pending.** `admin_audit_events` covers mutations but not authentication events. **The recommended next implementation task**, now that R1 (which computes the same failure signal) has shipped.
 - **Content-Security-Policy (R7, Low) — pending**, and deliberately staged after R2 in `Report-Only` mode first, since a blocking CSP shipped blind would break Leaflet and Cloudinary.
 
 Deployment-topology items (proxy trust depth, API network exposure, TLS/HSTS, credential rotation) are in §4.4, not here — they cannot be resolved before a hosting platform exists.

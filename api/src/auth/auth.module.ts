@@ -10,6 +10,7 @@ import { OAuthRateLimitGuard } from '../common/guards/oauth-rate-limit.guard';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { CitizenSessionGuard } from '../common/guards/citizen-session.guard';
 import { RecentReauthGuard } from '../common/guards/recent-reauth.guard';
+import { RateLimitService } from '../domain/ratelimit.service';
 
 @Module({
   controllers: [AuthController, OAuthController],
@@ -23,6 +24,12 @@ import { RecentReauthGuard } from '../common/guards/recent-reauth.guard';
     AdminSessionGuard,
     CitizenSessionGuard,
     RecentReauthGuard,
+    // Provided directly rather than via DomainModule — DomainModule imports
+    // NotificationsModule, which imports AuthModule, so importing
+    // DomainModule here creates a circular module dependency. RateLimitService
+    // only needs the globally-provided PG client (DbModule is @Global()), so
+    // this standalone provider resolves fine without pulling in that cycle.
+    RateLimitService,
   ],
   // SessionService and the guards are consumed by other feature modules
   // (AdminModule, ReportsModule, CronModule in later phases; RecentReauthGuard

@@ -79,6 +79,7 @@ pnpm --prefix api migrate:admin-status              # admins.is_active (account 
 pnpm --prefix api migrate:work-orders               # work_orders — FKs tickets(id) and admins(id), so it follows both
 pnpm --prefix api migrate:ticket-disputes           # tickets.disputed_at/dispute_reason
 pnpm --prefix api migrate:ticket-resolution-confirmation  # tickets.resolution_confirmed_at
+pnpm --prefix api migrate:admin-login-throttle      # admin_login_rate_limit_events (per-account failed-login throttling)
 pnpm --prefix api verify:config                     # print computed elev_min/elev_max etc.
 pnpm --prefix api verify:city-boundary              # confirm city_boundary_osm is populated with valid geometry
 pnpm --prefix api seed:admin -- <email> <password> <MEO|MDRRMO|-> <officer|supervisor|system_admin>  # use '-' for office with system_admin
