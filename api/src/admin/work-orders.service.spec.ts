@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { WorkOrdersService } from './work-orders.service';
 import type { AdminAuditService } from './admin-audit.service';
@@ -58,7 +62,11 @@ function chain(rowOrRows: Record<string, unknown> | Record<string, unknown>[]) {
 }
 
 function makeDb() {
-  const db: Record<string, unknown> = { select: jest.fn(), insert: jest.fn(), update: jest.fn() };
+  const db: Record<string, unknown> = {
+    select: jest.fn(),
+    insert: jest.fn(),
+    update: jest.fn(),
+  };
   db.transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(db));
   return db as unknown as PostgresJsDatabase & {
     select: jest.Mock;
@@ -104,21 +112,31 @@ describe('WorkOrdersService.parseQuery office scoping', () => {
 
   it('clamps an officer to their own office regardless of the query param', () => {
     expect(service.parseQuery({}, MEO_OFFICER).office).toBe('MEO');
-    expect(service.parseQuery({ office: 'MDRRMO' }, MEO_OFFICER).office).toBe('MEO');
-    expect(service.parseQuery({ office: 'all' }, MEO_OFFICER).office).toBe('MEO');
+    expect(service.parseQuery({ office: 'MDRRMO' }, MEO_OFFICER).office).toBe(
+      'MEO',
+    );
+    expect(service.parseQuery({ office: 'all' }, MEO_OFFICER).office).toBe(
+      'MEO',
+    );
   });
 
   it('clamps a supervisor to their own office regardless of the query param', () => {
-    expect(service.parseQuery({ office: 'MEO' }, MDRRMO_SUPERVISOR).office).toBe('MDRRMO');
+    expect(
+      service.parseQuery({ office: 'MEO' }, MDRRMO_SUPERVISOR).office,
+    ).toBe('MDRRMO');
   });
 
   it('defaults a system admin to city-wide (no office filter)', () => {
     expect(service.parseQuery({}, SYSTEM_ADMIN).office).toBeUndefined();
-    expect(service.parseQuery({ office: 'all' }, SYSTEM_ADMIN).office).toBeUndefined();
+    expect(
+      service.parseQuery({ office: 'all' }, SYSTEM_ADMIN).office,
+    ).toBeUndefined();
   });
 
   it('lets a system admin request a specific office', () => {
-    expect(service.parseQuery({ office: 'MDRRMO' }, SYSTEM_ADMIN).office).toBe('MDRRMO');
+    expect(service.parseQuery({ office: 'MDRRMO' }, SYSTEM_ADMIN).office).toBe(
+      'MDRRMO',
+    );
   });
 });
 
@@ -128,16 +146,27 @@ describe('WorkOrdersService.parseQuery "My Assignments" (assignedAdminId=me)', (
   const service = new WorkOrdersService(db, notifications, audit);
 
   it('resolves "me" to the caller\'s own adminId, not a client-supplied id', () => {
-    expect(service.parseQuery({ assignedAdminId: 'me' }, MEO_OFFICER).assignedAdminId).toBe(1);
-    expect(service.parseQuery({ assignedAdminId: 'me' }, MDRRMO_SUPERVISOR).assignedAdminId).toBe(2);
+    expect(
+      service.parseQuery({ assignedAdminId: 'me' }, MEO_OFFICER)
+        .assignedAdminId,
+    ).toBe(1);
+    expect(
+      service.parseQuery({ assignedAdminId: 'me' }, MDRRMO_SUPERVISOR)
+        .assignedAdminId,
+    ).toBe(2);
   });
 
   it('resolves "me" for a system admin to their own adminId too, not city-wide/unfiltered', () => {
-    expect(service.parseQuery({ assignedAdminId: 'me' }, SYSTEM_ADMIN).assignedAdminId).toBe(3);
+    expect(
+      service.parseQuery({ assignedAdminId: 'me' }, SYSTEM_ADMIN)
+        .assignedAdminId,
+    ).toBe(3);
   });
 
   it('still accepts a raw numeric assignedAdminId (unrelated existing behavior, unchanged)', () => {
-    expect(service.parseQuery({ assignedAdminId: '7' }, MEO_OFFICER).assignedAdminId).toBe(7);
+    expect(
+      service.parseQuery({ assignedAdminId: '7' }, MEO_OFFICER).assignedAdminId,
+    ).toBe(7);
   });
 
   it('leaves assignedAdminId undefined when absent', () => {
@@ -149,7 +178,12 @@ describe('WorkOrdersService.parseQuery "My Assignments" (assignedAdminId=me)', (
       { assignedAdminId: 'me', status: 'in_progress', overdue: 'true' },
       MEO_OFFICER,
     );
-    expect(filters).toMatchObject({ office: 'MEO', assignedAdminId: 1, status: 'in_progress', overdue: true });
+    expect(filters).toMatchObject({
+      office: 'MEO',
+      assignedAdminId: 1,
+      status: 'in_progress',
+      overdue: true,
+    });
   });
 });
 
@@ -159,7 +193,35 @@ describe('WorkOrdersService.create', () => {
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
     await expect(
-      service.create({ ticketId: 5, title: '', notes: null, assignedAdminId: null, dueDate: null }, MEO_OFFICER),
+      service.create(
+        {
+          ticketId: 5,
+          title: '',
+          notes: null,
+          assignedAdminId: null,
+          dueDate: null,
+        },
+        MEO_OFFICER,
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it('rejects a title over WORK_ORDER_TITLE_MAX_LENGTH before touching the database', async () => {
+    const db = makeDb();
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+    await expect(
+      service.create(
+        {
+          ticketId: 5,
+          title: 'x'.repeat(201),
+          notes: null,
+          assignedAdminId: null,
+          dueDate: null,
+        },
+        MEO_OFFICER,
+      ),
     ).rejects.toThrow(BadRequestException);
     expect(db.select).not.toHaveBeenCalled();
   });
@@ -169,7 +231,16 @@ describe('WorkOrdersService.create', () => {
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
     await expect(
-      service.create({ ticketId: 'not-a-number', title: 'Fix it', notes: null, assignedAdminId: null, dueDate: null }, MEO_OFFICER),
+      service.create(
+        {
+          ticketId: 'not-a-number',
+          title: 'Fix it',
+          notes: null,
+          assignedAdminId: null,
+          dueDate: null,
+        },
+        MEO_OFFICER,
+      ),
     ).rejects.toThrow(BadRequestException);
     expect(db.select).not.toHaveBeenCalled();
   });
@@ -180,42 +251,73 @@ describe('WorkOrdersService.create', () => {
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
     await expect(
-      service.create({ ticketId: 5, title: 'Fix it', notes: null, assignedAdminId: null, dueDate: null }, MEO_OFFICER),
+      service.create(
+        {
+          ticketId: 5,
+          title: 'Fix it',
+          notes: null,
+          assignedAdminId: null,
+          dueDate: null,
+        },
+        MEO_OFFICER,
+      ),
     ).rejects.toThrow(ForbiddenException);
   });
 
   it('allows a system admin to create a work order for any office and logs the audit event', async () => {
     const db = makeDb();
     db.select.mockReturnValueOnce(chain({ assignedOffice: 'MDRRMO' }));
-    db.insert.mockReturnValueOnce(chain(workOrderRow({ assigned_office: 'MDRRMO' })));
+    db.insert.mockReturnValueOnce(
+      chain(workOrderRow({ assigned_office: 'MDRRMO' })),
+    );
     const { audit, notifications, logInTx, notifyCreate } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
     const result = await service.create(
-      { ticketId: 5, title: 'Fix it', notes: 'progress note', assignedAdminId: null, dueDate: null },
+      {
+        ticketId: 5,
+        title: 'Fix it',
+        notes: 'progress note',
+        assignedAdminId: null,
+        dueDate: null,
+      },
       SYSTEM_ADMIN,
     );
     expect(result.assigned_office).toBe('MDRRMO');
     expect(logInTx).toHaveBeenCalledWith(
       db,
-      expect.objectContaining({ actionType: 'work_order_created', targetType: 'work_order' }),
+      expect.objectContaining({
+        actionType: 'work_order_created',
+        targetType: 'work_order',
+      }),
     );
     // Office-wide notification (no assignedAdminId) rather than a targeted one.
     expect(notifyCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ recipientOffice: 'MDRRMO', type: 'work_order_created' }),
+      expect.objectContaining({
+        recipientOffice: 'MDRRMO',
+        type: 'work_order_created',
+      }),
     );
   });
 
-  it('accepts a valid assignedAdminId (active, belongs to the ticket\'s office)', async () => {
+  it("accepts a valid assignedAdminId (active, belongs to the ticket's office)", async () => {
     const db = makeDb();
     db.select
       .mockReturnValueOnce(chain({ assignedOffice: 'MEO' })) // ticket lookup
       .mockReturnValueOnce(chain({ office: 'MEO', isActive: true })); // assignee lookup
-    db.insert.mockReturnValueOnce(chain(workOrderRow({ assigned_admin_id: 7 })));
+    db.insert.mockReturnValueOnce(
+      chain(workOrderRow({ assigned_admin_id: 7 })),
+    );
     const { audit, notifications, notifyCreate } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 
     const result = await service.create(
-      { ticketId: 5, title: 'Fix it', notes: null, assignedAdminId: 7, dueDate: null },
+      {
+        ticketId: 5,
+        title: 'Fix it',
+        notes: null,
+        assignedAdminId: 7,
+        dueDate: null,
+      },
       MEO_OFFICER,
     );
     expect(result.assigned_admin_id).toBe(7);
@@ -234,7 +336,16 @@ describe('WorkOrdersService.create', () => {
     const service = new WorkOrdersService(db, notifications, audit);
 
     await expect(
-      service.create({ ticketId: 5, title: 'Fix it', notes: null, assignedAdminId: 7, dueDate: null }, MEO_OFFICER),
+      service.create(
+        {
+          ticketId: 5,
+          title: 'Fix it',
+          notes: null,
+          assignedAdminId: 7,
+          dueDate: null,
+        },
+        MEO_OFFICER,
+      ),
     ).rejects.toThrow(BadRequestException);
     expect(db.insert).not.toHaveBeenCalled();
   });
@@ -248,8 +359,37 @@ describe('WorkOrdersService.create', () => {
     const service = new WorkOrdersService(db, notifications, audit);
 
     await expect(
-      service.create({ ticketId: 5, title: 'Fix it', notes: null, assignedAdminId: 7, dueDate: null }, MEO_OFFICER),
+      service.create(
+        {
+          ticketId: 5,
+          title: 'Fix it',
+          notes: null,
+          assignedAdminId: 7,
+          dueDate: null,
+        },
+        MEO_OFFICER,
+      ),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects notes over WORK_ORDER_NOTES_MAX_LENGTH', async () => {
+    const db = makeDb();
+    db.select.mockReturnValueOnce(chain({ assignedOffice: 'MEO' }));
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+    await expect(
+      service.create(
+        {
+          ticketId: 5,
+          title: 'Fix it',
+          notes: 'x'.repeat(2001),
+          assignedAdminId: null,
+          dueDate: null,
+        },
+        MEO_OFFICER,
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(db.insert).not.toHaveBeenCalled();
   });
 
   it('rejects a nonexistent assignedAdminId', async () => {
@@ -261,7 +401,16 @@ describe('WorkOrdersService.create', () => {
     const service = new WorkOrdersService(db, notifications, audit);
 
     await expect(
-      service.create({ ticketId: 5, title: 'Fix it', notes: null, assignedAdminId: 999, dueDate: null }, MEO_OFFICER),
+      service.create(
+        {
+          ticketId: 5,
+          title: 'Fix it',
+          notes: null,
+          assignedAdminId: 999,
+          dueDate: null,
+        },
+        MEO_OFFICER,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 });
@@ -269,10 +418,14 @@ describe('WorkOrdersService.create', () => {
 describe('WorkOrdersService cross-office access to single-resource endpoints', () => {
   it('get() blocks an MDRRMO supervisor from reading a MEO work order', async () => {
     const db = makeDb();
-    db.select.mockReturnValueOnce(chain(workOrderRow({ assigned_office: 'MEO' })));
+    db.select.mockReturnValueOnce(
+      chain(workOrderRow({ assigned_office: 'MEO' })),
+    );
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
-    await expect(service.get(10, MDRRMO_SUPERVISOR)).rejects.toThrow(ForbiddenException);
+    await expect(service.get(10, MDRRMO_SUPERVISOR)).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   it('get() throws NotFoundException for a missing work order', async () => {
@@ -280,7 +433,9 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
     db.select.mockReturnValueOnce(chain([]));
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
-    await expect(service.get(999, SYSTEM_ADMIN)).rejects.toThrow(NotFoundException);
+    await expect(service.get(999, SYSTEM_ADMIN)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('setStatus() rejects an unknown status value', async () => {
@@ -288,21 +443,29 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
     db.select.mockReturnValueOnce(chain(workOrderRow()));
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
-    await expect(service.setStatus(10, 'not-a-status', MEO_OFFICER)).rejects.toThrow(BadRequestException);
+    await expect(
+      service.setStatus(10, 'not-a-status', MEO_OFFICER),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it('setStatus() blocks a MDRRMO admin from updating a MEO work order', async () => {
     const db = makeDb();
-    db.select.mockReturnValueOnce(chain(workOrderRow({ assigned_office: 'MEO' })));
+    db.select.mockReturnValueOnce(
+      chain(workOrderRow({ assigned_office: 'MEO' })),
+    );
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
-    await expect(service.setStatus(10, 'completed', MDRRMO_SUPERVISOR)).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.setStatus(10, 'completed', MDRRMO_SUPERVISOR),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('setStatus() sets completed_at when transitioning to completed and logs work_order_completed', async () => {
     const db = makeDb();
     db.select.mockReturnValueOnce(chain(workOrderRow()));
-    db.update.mockReturnValueOnce(chain(workOrderRow({ status: 'completed', completed_at: new Date() })));
+    db.update.mockReturnValueOnce(
+      chain(workOrderRow({ status: 'completed', completed_at: new Date() })),
+    );
     const { audit, notifications, logInTx } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
     const result = await service.setStatus(10, 'completed', MEO_OFFICER);
@@ -316,28 +479,48 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
   it('update() never writes note bodies into audit metadata, only changed field names', async () => {
     const db = makeDb();
     db.select.mockReturnValueOnce(chain(workOrderRow()));
-    db.update.mockReturnValueOnce(chain(workOrderRow({ notes: 'sensitive progress detail' })));
+    db.update.mockReturnValueOnce(
+      chain(workOrderRow({ notes: 'sensitive progress detail' })),
+    );
     const { audit, notifications, logInTx } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
-    await service.update(10, { title: undefined, notes: 'sensitive progress detail', assignedAdminId: undefined, dueDate: undefined }, MEO_OFFICER);
+    await service.update(
+      10,
+      {
+        title: undefined,
+        notes: 'sensitive progress detail',
+        assignedAdminId: undefined,
+        dueDate: undefined,
+      },
+      MEO_OFFICER,
+    );
     expect(logInTx).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ metadata: { changedFields: ['notes'] } }),
     );
     const loggedMetadata = logInTx.mock.calls[0][1].metadata;
-    expect(JSON.stringify(loggedMetadata)).not.toContain('sensitive progress detail');
+    expect(JSON.stringify(loggedMetadata)).not.toContain(
+      'sensitive progress detail',
+    );
   });
 
   it('update() changes the due date and logs only the field name, never the value, in audit metadata', async () => {
     const db = makeDb();
     db.select.mockReturnValueOnce(chain(workOrderRow()));
-    db.update.mockReturnValueOnce(chain(workOrderRow({ due_date: new Date('2026-03-01T00:00:00Z') })));
+    db.update.mockReturnValueOnce(
+      chain(workOrderRow({ due_date: new Date('2026-03-01T00:00:00Z') })),
+    );
     const { audit, notifications, logInTx } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 
     const result = await service.update(
       10,
-      { title: undefined, notes: undefined, assignedAdminId: undefined, dueDate: '2026-03-01' },
+      {
+        title: undefined,
+        notes: undefined,
+        assignedAdminId: undefined,
+        dueDate: '2026-03-01',
+      },
       MEO_OFFICER,
     );
     expect(result.due_date).toEqual(new Date('2026-03-01T00:00:00Z'));
@@ -349,14 +532,21 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
 
   it('update() clears the due date back to null when given an empty dueDate', async () => {
     const db = makeDb();
-    db.select.mockReturnValueOnce(chain(workOrderRow({ due_date: new Date('2026-03-01T00:00:00Z') })));
+    db.select.mockReturnValueOnce(
+      chain(workOrderRow({ due_date: new Date('2026-03-01T00:00:00Z') })),
+    );
     db.update.mockReturnValueOnce(chain(workOrderRow({ due_date: null })));
     const { audit, notifications, logInTx } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 
     const result = await service.update(
       10,
-      { title: undefined, notes: undefined, assignedAdminId: undefined, dueDate: null },
+      {
+        title: undefined,
+        notes: undefined,
+        assignedAdminId: undefined,
+        dueDate: null,
+      },
       MEO_OFFICER,
     );
     expect(result.due_date).toBeNull();
@@ -373,7 +563,16 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
     const service = new WorkOrdersService(db, notifications, audit);
 
     await expect(
-      service.update(10, { title: undefined, notes: undefined, assignedAdminId: undefined, dueDate: 'not-a-date' }, MEO_OFFICER),
+      service.update(
+        10,
+        {
+          title: undefined,
+          notes: undefined,
+          assignedAdminId: undefined,
+          dueDate: 'not-a-date',
+        },
+        MEO_OFFICER,
+      ),
     ).rejects.toThrow(BadRequestException);
     expect(db.update).not.toHaveBeenCalled();
   });
@@ -381,22 +580,36 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
   it('update() accepts a valid assignedAdminId and logs its from/to in audit metadata', async () => {
     const db = makeDb();
     db.select
-      .mockReturnValueOnce(chain(workOrderRow({ assigned_office: 'MEO', assigned_admin_id: null })))
+      .mockReturnValueOnce(
+        chain(
+          workOrderRow({ assigned_office: 'MEO', assigned_admin_id: null }),
+        ),
+      )
       .mockReturnValueOnce(chain({ office: 'MEO', isActive: true }));
-    db.update.mockReturnValueOnce(chain(workOrderRow({ assigned_admin_id: 7 })));
+    db.update.mockReturnValueOnce(
+      chain(workOrderRow({ assigned_admin_id: 7 })),
+    );
     const { audit, notifications, logInTx } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 
     const result = await service.update(
       10,
-      { title: undefined, notes: undefined, assignedAdminId: 7, dueDate: undefined },
+      {
+        title: undefined,
+        notes: undefined,
+        assignedAdminId: 7,
+        dueDate: undefined,
+      },
       MEO_OFFICER,
     );
     expect(result.assigned_admin_id).toBe(7);
     expect(logInTx).toHaveBeenCalledWith(
       db,
       expect.objectContaining({
-        metadata: { changedFields: ['assignedAdminId'], assignedAdminId: { from: null, to: 7 } },
+        metadata: {
+          changedFields: ['assignedAdminId'],
+          assignedAdminId: { from: null, to: 7 },
+        },
       }),
     );
   });
@@ -410,7 +623,16 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
     const service = new WorkOrdersService(db, notifications, audit);
 
     await expect(
-      service.update(10, { title: undefined, notes: undefined, assignedAdminId: 7, dueDate: undefined }, MEO_OFFICER),
+      service.update(
+        10,
+        {
+          title: undefined,
+          notes: undefined,
+          assignedAdminId: 7,
+          dueDate: undefined,
+        },
+        MEO_OFFICER,
+      ),
     ).rejects.toThrow(BadRequestException);
     expect(db.update).not.toHaveBeenCalled();
   });
@@ -424,20 +646,38 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
     const service = new WorkOrdersService(db, notifications, audit);
 
     await expect(
-      service.update(10, { title: undefined, notes: undefined, assignedAdminId: 7, dueDate: undefined }, MEO_OFFICER),
+      service.update(
+        10,
+        {
+          title: undefined,
+          notes: undefined,
+          assignedAdminId: 7,
+          dueDate: undefined,
+        },
+        MEO_OFFICER,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
   it('update() allows clearing assignedAdminId back to null (unassigned / office-wide) without validation', async () => {
     const db = makeDb();
-    db.select.mockReturnValueOnce(chain(workOrderRow({ assigned_office: 'MEO', assigned_admin_id: 7 })));
-    db.update.mockReturnValueOnce(chain(workOrderRow({ assigned_admin_id: null })));
+    db.select.mockReturnValueOnce(
+      chain(workOrderRow({ assigned_office: 'MEO', assigned_admin_id: 7 })),
+    );
+    db.update.mockReturnValueOnce(
+      chain(workOrderRow({ assigned_admin_id: null })),
+    );
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 
     const result = await service.update(
       10,
-      { title: undefined, notes: undefined, assignedAdminId: null, dueDate: undefined },
+      {
+        title: undefined,
+        notes: undefined,
+        assignedAdminId: null,
+        dueDate: undefined,
+      },
       MEO_OFFICER,
     );
     expect(result.assigned_admin_id).toBeNull();
@@ -502,13 +742,35 @@ describe('WorkOrdersService.getNeedsAttention', () => {
   it('maps the three independent queries to overdue/dueToday/highUrgency and dedupes repeated tickets', async () => {
     const db = makeDb();
     db.select
-      .mockReturnValueOnce(chain([workOrderRow({ id: 1, due_date: new Date('2020-01-01') })]))
-      .mockReturnValueOnce(chain([workOrderRow({ id: 2, due_date: new Date() })]))
+      .mockReturnValueOnce(
+        chain([workOrderRow({ id: 1, due_date: new Date('2020-01-01') })]),
+      )
+      .mockReturnValueOnce(
+        chain([workOrderRow({ id: 2, due_date: new Date() })]),
+      )
       .mockReturnValueOnce(
         chain([
-          { id: 100, category: 'Flooding', assigned_office: 'MEO', urgency_level: 'HIGH', priority_score: 90 },
-          { id: 100, category: 'Flooding', assigned_office: 'MEO', urgency_level: 'HIGH', priority_score: 90 },
-          { id: 101, category: 'Drainage', assigned_office: 'MEO', urgency_level: 'HIGH', priority_score: 80 },
+          {
+            id: 100,
+            category: 'Flooding',
+            assigned_office: 'MEO',
+            urgency_level: 'HIGH',
+            priority_score: 90,
+          },
+          {
+            id: 100,
+            category: 'Flooding',
+            assigned_office: 'MEO',
+            urgency_level: 'HIGH',
+            priority_score: 90,
+          },
+          {
+            id: 101,
+            category: 'Drainage',
+            assigned_office: 'MEO',
+            urgency_level: 'HIGH',
+            priority_score: 80,
+          },
         ]),
       );
     const { audit, notifications } = makeDeps();
@@ -518,7 +780,9 @@ describe('WorkOrdersService.getNeedsAttention', () => {
 
     expect(result.overdueWorkOrders.map((w) => w.id)).toEqual([1]);
     expect(result.dueTodayWorkOrders.map((w) => w.id)).toEqual([2]);
-    expect(result.highUrgencyTicketsWithOpenWork.map((t) => t.id)).toEqual([100, 101]);
+    expect(result.highUrgencyTicketsWithOpenWork.map((t) => t.id)).toEqual([
+      100, 101,
+    ]);
     expect(db.select).toHaveBeenCalledTimes(3);
   });
 
@@ -575,7 +839,9 @@ describe('WorkOrdersService.getWorkOrdersForExport', () => {
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 
-    await expect(service.getWorkOrdersForExport({ office: 'MDRRMO' })).resolves.toEqual([]);
+    await expect(
+      service.getWorkOrdersForExport({ office: 'MDRRMO' }),
+    ).resolves.toEqual([]);
   });
 
   it('defaults to no filters when called with no arguments', async () => {

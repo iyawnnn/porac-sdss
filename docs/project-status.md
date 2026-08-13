@@ -231,6 +231,17 @@ Per-account failed-login throttling, closing the highest-severity gap in the har
 - No MFA, CAPTCHA, permanent lockout, IP-based total-login limiting, citizen-side login throttling, or test-only bypass — all explicitly out of scope. `citizenLogin`/`citizenSignup` untouched.
 - Verified against `e2e/admin-password.spec.ts` and `e2e/admin-rbac.spec.ts` (not the full suite, per `docs/testing.md` §6) — no regression.
 
+### Free-Text Length Bounds (R3) — **completed**
+
+Five admin-side/dispute free-text fields had type and non-empty checks but no maximum length: `work_orders.title`/`notes`, `tickets.resolution_notes`, `tickets.dispute_reason`, and the moderation `note`. Report submission was already bounded by Zod; these were not.
+
+- Five named constants in `api/src/contracts/schemas.ts`: `WORK_ORDER_TITLE_MAX_LENGTH` (200), `WORK_ORDER_NOTES_MAX_LENGTH` (2000), `TICKET_RESOLUTION_NOTES_MAX_LENGTH` (2000), `TICKET_DISPUTE_REASON_MAX_LENGTH` (1000), `MODERATION_NOTE_MAX_LENGTH` (1000) — kept separate from `reportSchema`'s own inline `.max()` values even where the numbers match, since those fields sit in services with no Zod parsing.
+- Each guard is a plain `if (...) throw new BadRequestException(...)` added in the method that already validated that field — `WorkOrdersService.create`/`update`, `TicketsService.advanceStatus`, `ReportsService.disputeReport`, `ModerationService.moderateReport` — no validation moved to a new layer.
+- `disputeReport` already enforced 1000 characters; that check was converted from a bare `1000` literal to the named constant, not new logic.
+- No truncation anywhere — over-length input is rejected with 400, matching the pattern each method's existing checks already used.
+- No database migration, no `varchar` column change, no new validation library.
+- One unit test per field: real-invocation tests in `work-orders.service.spec.ts`, `tickets.service.spec.ts`, and `moderation.service.spec.ts`; a source-text regression guard in `reports.service.spec.ts` (that file has no DB test harness, matching its existing test style for `disputeReport`).
+
 ---
 
 ## 4. Current Queue
@@ -241,7 +252,6 @@ All pending work. **None of it is a new product feature** — this is hardening,
 
 Assessed and prioritized in [`security-hardening-plan.md`](security-hardening-plan.md), which carries severity, likelihood, right-sized scope, and the required test for each. Summarized here so this file stays the single status view:
 
-- **Free-text length bounds (R3, Medium) — pending.** Report submission is bounded by Zod; work-order title/notes, resolution notes, dispute reason, and the moderation note have type and non-empty checks but no maximum length.
 - **Login audit events (R4, Medium) — pending.** `admin_audit_events` covers mutations but not authentication events. **The recommended next implementation task**, now that R1 (which computes the same failure signal) has shipped.
 - **Content-Security-Policy (R7, Low) — pending**, and deliberately staged after R2 in `Report-Only` mode first, since a blocking CSP shipped blind would break Leaflet and Cloudinary.
 

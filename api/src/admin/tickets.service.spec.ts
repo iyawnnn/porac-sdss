@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { TicketsService } from './tickets.service';
 import type { Sql } from 'postgres';
 import type { ConfigService } from '@nestjs/config';
@@ -40,18 +40,16 @@ describe('parseTicketQuery category filter', () => {
   it.each(['Flooding', 'Pothole', 'Other'])(
     'accepts a known category %s',
     (category) => {
-      expect(
-        service.parseTicketQuery({ category }, MEO_OFFICER).category,
-      ).toBe(category);
+      expect(service.parseTicketQuery({ category }, MEO_OFFICER).category).toBe(
+        category,
+      );
     },
   );
 
   it('rejects an unknown category', () => {
     expect(
-      service.parseTicketQuery(
-        { category: 'Not A Real Category' },
-        MEO_OFFICER,
-      ).category,
+      service.parseTicketQuery({ category: 'Not A Real Category' }, MEO_OFFICER)
+        .category,
     ).toBeUndefined();
   });
 
@@ -89,9 +87,7 @@ describe('parseTicketQuery office scoping', () => {
   });
 
   it('defaults a system admin to city-wide (no office filter)', () => {
-    expect(
-      service.parseTicketQuery({}, SYSTEM_ADMIN).office,
-    ).toBeUndefined();
+    expect(service.parseTicketQuery({}, SYSTEM_ADMIN).office).toBeUndefined();
     expect(
       service.parseTicketQuery({ office: 'all' }, SYSTEM_ADMIN).office,
     ).toBeUndefined();
@@ -117,7 +113,9 @@ describe('parseTicketQuery disputed filter', () => {
   );
 
   it('parses disputed=true', () => {
-    expect(service.parseTicketQuery({ disputed: 'true' }, MEO_OFFICER).disputed).toBe(true);
+    expect(
+      service.parseTicketQuery({ disputed: 'true' }, MEO_OFFICER).disputed,
+    ).toBe(true);
   });
 
   it('defaults to undefined (unfiltered) when absent, matching the overdue-boolean convention', () => {
@@ -125,7 +123,9 @@ describe('parseTicketQuery disputed filter', () => {
   });
 
   it('treats any non-"true" value as unfiltered', () => {
-    expect(service.parseTicketQuery({ disputed: 'false' }, MEO_OFFICER).disputed).toBeUndefined();
+    expect(
+      service.parseTicketQuery({ disputed: 'false' }, MEO_OFFICER).disputed,
+    ).toBeUndefined();
   });
 });
 
@@ -150,16 +150,16 @@ describe('cross-office access to single-resource ticket endpoints', () => {
     );
   }
 
-  it('rejects ticket detail for an officer viewing another office\'s ticket', async () => {
+  it("rejects ticket detail for an officer viewing another office's ticket", async () => {
     const service = makeService([
       [{ id: 1, assigned_office: 'MDRRMO' }], // ticket lookup
     ]);
-    await expect(
-      service.getTicketDetail(1, MEO_OFFICER),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(service.getTicketDetail(1, MEO_OFFICER)).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
-  it('allows ticket detail for an officer viewing their own office\'s ticket', async () => {
+  it("allows ticket detail for an officer viewing their own office's ticket", async () => {
     const service = makeService([
       [{ id: 1, assigned_office: 'MEO' }], // ticket lookup
       [], // reports
@@ -170,7 +170,7 @@ describe('cross-office access to single-resource ticket endpoints', () => {
     expect(detail?.ticket.assigned_office).toBe('MEO');
   });
 
-  it('allows a system admin to view any office\'s ticket detail', async () => {
+  it("allows a system admin to view any office's ticket detail", async () => {
     const service = makeService([
       [{ id: 1, assigned_office: 'MDRRMO' }],
       [],
@@ -181,16 +181,35 @@ describe('cross-office access to single-resource ticket endpoints', () => {
     expect(detail?.ticket.assigned_office).toBe('MDRRMO');
   });
 
-  it('rejects a status advance on another office\'s ticket', async () => {
+  it("rejects a status advance on another office's ticket", async () => {
     const service = makeService([
       [{ status: 'Reported', assigned_office: 'MDRRMO' }], // ticket lookup
     ]);
     await expect(
-      service.advanceStatus(1, MEO_OFFICER as AdminSession, undefined, undefined),
+      service.advanceStatus(
+        1,
+        MEO_OFFICER as AdminSession,
+        undefined,
+        undefined,
+      ),
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('rejects reassigning a ticket that is not the acting admin\'s own office', async () => {
+  it('rejects resolution notes over TICKET_RESOLUTION_NOTES_MAX_LENGTH', async () => {
+    const service = makeService([
+      [{ status: 'In Progress', assigned_office: 'MEO', category: 'Flooding' }], // ticket lookup
+    ]);
+    await expect(
+      service.advanceStatus(
+        1,
+        MEO_OFFICER as AdminSession,
+        'x'.repeat(2001),
+        undefined,
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("rejects reassigning a ticket that is not the acting admin's own office", async () => {
     const service = makeService([
       [{ assigned_office: 'MDRRMO' }], // ticket lookup
     ]);
@@ -214,9 +233,11 @@ describe('admin audit logging for ticket mutations', () => {
         },
       };
     }) as unknown as Sql;
-    (sql as unknown as { begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown> }).begin = (
-      cb,
-    ) => cb(sql);
+    (
+      sql as unknown as {
+        begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
+      }
+    ).begin = (cb) => cb(sql);
     const logInPgTx = jest.fn().mockResolvedValue(undefined);
     const audit = { logInPgTx } as unknown as AdminAuditService;
     const service = new TicketsService(
@@ -239,7 +260,12 @@ describe('admin audit logging for ticket mutations', () => {
       [], // citizenRows (no notification recipients)
     ]);
 
-    await service.advanceStatus(7, MEO_OFFICER as AdminSession, undefined, undefined);
+    await service.advanceStatus(
+      7,
+      MEO_OFFICER as AdminSession,
+      undefined,
+      undefined,
+    );
 
     expect(logInPgTx).toHaveBeenCalledTimes(1);
     const [, input] = logInPgTx.mock.calls[0];
@@ -309,7 +335,9 @@ describe('TicketsService.getTicketsForExport', () => {
 
   it('returns an empty array when nothing matches, rather than throwing', async () => {
     const service = makeService([]);
-    await expect(service.getTicketsForExport({ office: 'MDRRMO' })).resolves.toEqual([]);
+    await expect(
+      service.getTicketsForExport({ office: 'MDRRMO' }),
+    ).resolves.toEqual([]);
   });
 
   it('defaults to no filters when called with no arguments', async () => {
@@ -330,7 +358,9 @@ describe('getTicketsForAdmin disputed filter wiring', () => {
   );
 
   it('selects disputed_at and narrows on it only when the filter is set', () => {
-    expect(ticketsServiceSource).toMatch(/SELECT t\.id, t\.category,[\s\S]*?t\.disputed_at,/);
+    expect(ticketsServiceSource).toMatch(
+      /SELECT t\.id, t\.category,[\s\S]*?t\.disputed_at,/,
+    );
     expect(ticketsServiceSource).toMatch(
       /AND \(\$\{filters\.disputed \? true : null\}::boolean IS NULL OR t\.disputed_at IS NOT NULL\)/,
     );
@@ -338,15 +368,24 @@ describe('getTicketsForAdmin disputed filter wiring', () => {
 
   it('places the disputed filter alongside (not before) the office-scoping WHERE clause', () => {
     const selectIdx = ticketsServiceSource.indexOf('SELECT t.id, t.category,');
-    const officeClauseIdx = ticketsServiceSource.indexOf('t.assigned_office = ${filters.office ?? null}::office)', selectIdx);
-    const disputedClauseIdx = ticketsServiceSource.indexOf('t.disputed_at IS NOT NULL)', selectIdx);
+    const officeClauseIdx = ticketsServiceSource.indexOf(
+      't.assigned_office = ${filters.office ?? null}::office)',
+      selectIdx,
+    );
+    const disputedClauseIdx = ticketsServiceSource.indexOf(
+      't.disputed_at IS NOT NULL)',
+      selectIdx,
+    );
     expect(officeClauseIdx).toBeGreaterThan(-1);
     expect(disputedClauseIdx).toBeGreaterThan(officeClauseIdx);
   });
 
   it('getTicketDetail exposes disputed_at and dispute_reason for the admin Ticket Detail page', () => {
     const detailStart = ticketsServiceSource.indexOf('async getTicketDetail(');
-    const detailSelect = ticketsServiceSource.slice(detailStart, ticketsServiceSource.indexOf('FROM tickets t', detailStart));
+    const detailSelect = ticketsServiceSource.slice(
+      detailStart,
+      ticketsServiceSource.indexOf('FROM tickets t', detailStart),
+    );
     expect(detailSelect).toContain('t.disputed_at');
     expect(detailSelect).toContain('t.dispute_reason');
   });
