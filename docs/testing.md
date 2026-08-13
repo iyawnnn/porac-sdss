@@ -103,6 +103,8 @@ Some files create **one** disposable ticket in `beforeAll` and share it across t
 
 This is safe **only** under `--workers=1`, and each site carries a comment saying so. Those tests need *a* ticket to attach uniquely-titled work orders to, not a pristine one. Sharing also directly reduces report creation, which matters for §6.
 
+`admin-reports.spec.ts`'s work-order CSV note-leak test goes one step further: rather than creating a disposable ticket at all, it queries whichever ticket already exists (`GET /api/admin/tickets?status=all&limit=1`) and attaches a sentinel-noted work order to that. It doesn't need a pristine or office-specific ticket — any ticket works, since the assertion is purely "the note text does not appear in the CSV" — so it adds zero reports rather than merely reducing them.
+
 ### Transient-failure helpers
 
 `e2e/helpers.ts` contains two recovery mechanisms. Both are narrowly scoped so they cannot mask a real regression:

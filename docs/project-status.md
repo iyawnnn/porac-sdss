@@ -264,6 +264,16 @@ Natural companion to R1 (failed-login throttling) — R1 already computes the fa
 - `ReportsService`/`reports.controller.ts` untouched — this is a test-only change locking in already-correct behavior.
 - Verified against `pnpm exec playwright test e2e/citizen-reports.spec.ts -- --workers=1` (not the full suite).
 
+### CSV Export Office-Scoping and Note-Leak Regression Tests — **completed**
+
+`ReportsService.ticketsCsv`/`workOrdersCsv` deliberately reuse `TicketsService.parseTicketQuery`/`WorkOrdersService.parseQuery` — the same `resolveOfficeScope` clamp the list endpoints use — so an export can never see more than its caller's own list view, and the work-order export excludes `notes` at the query level rather than filtering after selection. Both properties were correct in code but under-tested.
+
+- Auditing `e2e/admin-reports.spec.ts` found 4 of this work's 5 required behaviors **already covered**: MEO/MDRRMO ticket CSVs contain only their own office's rows, a doctored `?office=MDRRMO` on an MEO session's export still returns only MEO rows, and the work-order CSV header never includes a `notes` column — all asserted via parsed CSV rows and column-index lookup, not substring matching.
+- The one real gap: the existing "no notes column" test only checked the **header row**. One new test closes it — creates a work order with a sentinel note string (same technique as `admin-work-orders.spec.ts`'s citizen-leak test), exports the CSV, and asserts the sentinel appears nowhere in the raw response body, proving no note body leaks even in a data row.
+- **Zero new reports.** The new test reuses whichever ticket already exists (`GET /api/admin/tickets?status=all&limit=1`) rather than creating a disposable one — it doesn't need a pristine or office-specific ticket, only *a* ticket to attach the sentinel-noted work order to.
+- `api/src/admin/reports.service.ts` untouched — this is a test-only change locking in already-correct behavior.
+- Verified against `pnpm exec playwright test e2e/admin-reports.spec.ts -- --workers=1` (not the full suite).
+
 ---
 
 ## 4. Current Queue
