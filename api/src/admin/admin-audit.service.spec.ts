@@ -67,6 +67,43 @@ describe('AdminAuditService.logInTx', () => {
   });
 });
 
+describe('AdminAuditService.logBestEffort', () => {
+  it('inserts one row via the plain (non-transactional) db client, same shape as logInTx', async () => {
+    const values = jest.fn().mockReturnValue(Promise.resolve());
+    const insert = jest.fn().mockReturnValue({ values });
+    const db = { insert } as unknown as PostgresJsDatabase;
+    const service = new AdminAuditService(db);
+
+    await service.logBestEffort(
+      baseInput({ actionType: 'admin_login', targetType: 'admin', targetId: 5 }),
+    );
+
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorAdminId: ACTOR.adminId,
+        actionType: 'admin_login',
+        targetType: 'admin',
+        targetId: 5,
+      }),
+    );
+  });
+
+  it('swallows an insert failure instead of rejecting, so a broken audit write never blocks the caller', async () => {
+    const insert = jest.fn().mockReturnValue({
+      values: () => {
+        throw new Error('db is down');
+      },
+    });
+    const db = { insert } as unknown as PostgresJsDatabase;
+    const service = new AdminAuditService(db);
+
+    await expect(
+      service.logBestEffort(baseInput({ actionType: 'admin_login_failed', targetType: 'admin' })),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe('AdminAuditService.parseFilters', () => {
   const service = new AdminAuditService({} as PostgresJsDatabase);
 

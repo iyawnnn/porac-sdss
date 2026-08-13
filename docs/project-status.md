@@ -242,6 +242,18 @@ Five admin-side/dispute free-text fields had type and non-empty checks but no ma
 - No database migration, no `varchar` column change, no new validation library.
 - One unit test per field: real-invocation tests in `work-orders.service.spec.ts`, `tickets.service.spec.ts`, and `moderation.service.spec.ts`; a source-text regression guard in `reports.service.spec.ts` (that file has no DB test harness, matching its existing test style for `disputeReport`).
 
+### Admin Login Audit Events (R4) — **completed**
+
+Natural companion to R1 (failed-login throttling) — R1 already computes the failure signal this needed. `admin_audit_events` previously covered every admin mutation but not authentication itself, so a compromised admin account left no login trail.
+
+- Two new action types on the **existing** `admin_audit_events` table: `admin_login` (successful login) and `admin_login_failed` (failed attempt against an **existing** admin account — wrong password or deactivated). No new table, no new endpoint, no new page; the Activity Log page picks them up automatically via the existing `ACTION_TYPES` allowlist.
+- **Nonexistent-email failed attempts are deliberately not audited.** `admin_audit_events.actor_admin_id`/`target_id` are `NOT NULL`, and there is no admin row to attribute an actor to in that case — inventing a synthetic id was rejected as the same schema-shape hack already disallowed for export audit logging. Skipping the write also avoids an internal side channel: a distinguishable audit path for "email doesn't exist" vs. "email exists but wrong password" would undermine the enumeration resistance `adminLogin` already provides, even though it never reaches the HTTP response.
+- **Best-effort, not transactional** — the one exception to every other `admin_audit_events` write. `AdminAuditService.logBestEffort` (new method, reuses the already-injected Drizzle client) catches and logs insert failures rather than rethrowing, since a login has no accompanying state-change transaction to be atomic with, and a broken audit insert must never block a legitimate admin login.
+- `AdminAuditService` is now provided directly in `AuthModule`'s own `providers`, mirroring exactly how `RateLimitService` is already provided there — `AdminModule` imports `AuthModule`, so importing `AdminModule` back would be circular.
+- Zero changes to `RateLimitService` call order, the throttle logic, or the generic `'Invalid email or password'` message/timing from R1 — the audit calls are additions only, inserted around the existing control flow.
+- Never logs the password, any part of it, its length, the session token, or any cookie value — only the same `{adminId, adminName, email, role, office}` actor snapshot every other action type already uses.
+- Verified against `auth.service.spec.ts` (failed-against-existing-admin, successful login, no-password-material, and nonexistent-email-not-audited cases) and `admin-audit.service.spec.ts` (`logBestEffort` success and swallow-on-error), plus `e2e/admin-activity-log.spec.ts`/`e2e/admin-password.spec.ts` (not the full suite).
+
 ---
 
 ## 4. Current Queue
@@ -252,7 +264,6 @@ All pending work. **None of it is a new product feature** — this is hardening,
 
 Assessed and prioritized in [`security-hardening-plan.md`](security-hardening-plan.md), which carries severity, likelihood, right-sized scope, and the required test for each. Summarized here so this file stays the single status view:
 
-- **Login audit events (R4, Medium) — pending.** `admin_audit_events` covers mutations but not authentication events. **The recommended next implementation task**, now that R1 (which computes the same failure signal) has shipped.
 - **Content-Security-Policy (R7, Low) — pending**, and deliberately staged after R2 in `Report-Only` mode first, since a blocking CSP shipped blind would break Leaflet and Cloudinary.
 
 Deployment-topology items (proxy trust depth, API network exposure, TLS/HSTS, credential rotation) are in §4.4, not here — they cannot be resolved before a hosting platform exists.

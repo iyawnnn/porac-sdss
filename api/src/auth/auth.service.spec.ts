@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { SessionService } from './session.service';
 import { RateLimitService } from '../domain/ratelimit.service';
+import type { AdminAuditService } from '../admin/admin-audit.service';
 
 function chain(result: unknown) {
   const obj: Record<string, unknown> = {};
@@ -37,6 +38,15 @@ function makeRateLimit(
   } as unknown as RateLimitService;
 }
 
+function makeAdminAudit(
+  overrides: Partial<AdminAuditService> = {},
+): AdminAuditService {
+  return {
+    logBestEffort: jest.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as unknown as AdminAuditService;
+}
+
 describe('AuthService — existing password flows stay intact', () => {
   it('logs an admin in with a matching password (admin auth is untouched by OAuth work)', async () => {
     const passwordHash = await bcrypt.hash('correct-horse', 10);
@@ -56,7 +66,12 @@ describe('AuthService — existing password flows stay intact', () => {
     );
     const db = { select } as unknown as PostgresJsDatabase;
     const rateLimit = makeRateLimit();
-    const service = new AuthService(db, makeSessions(), rateLimit);
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
 
     const { token, office } = await service.adminLogin(
       'admin@example.com',
@@ -90,7 +105,12 @@ describe('AuthService — existing password flows stay intact', () => {
     );
     const db = { select } as unknown as PostgresJsDatabase;
     const rateLimit = makeRateLimit();
-    const service = new AuthService(db, makeSessions(), rateLimit);
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
 
     await expect(
       service.adminLogin('admin@example.com', 'correct-horse'),
@@ -116,7 +136,12 @@ describe('AuthService — existing password flows stay intact', () => {
       ]),
     );
     const db = { select } as unknown as PostgresJsDatabase;
-    const service = new AuthService(db, makeSessions(), makeRateLimit());
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      makeAdminAudit(),
+    );
 
     const { token } = await service.citizenLogin(
       'citizen@example.com',
@@ -138,7 +163,12 @@ describe('AuthService — existing password flows stay intact', () => {
       ]),
     );
     const db = { select } as unknown as PostgresJsDatabase;
-    const service = new AuthService(db, makeSessions(), makeRateLimit());
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      makeAdminAudit(),
+    );
 
     await expect(
       service.citizenLogin('oauth-only@example.com', 'whatever'),
@@ -161,7 +191,12 @@ describe('AuthService — existing password flows stay intact', () => {
       }),
     });
     const db = { select, insert } as unknown as PostgresJsDatabase;
-    const service = new AuthService(db, makeSessions(), makeRateLimit());
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      makeAdminAudit(),
+    );
 
     const { token } = await service.citizenSignup(
       'new@example.com',
@@ -183,7 +218,12 @@ describe('AuthService.adminLogin — failed-login throttling (R1)', () => {
         reason: 'Too many failed login attempts.',
       }),
     });
-    const service = new AuthService(db, makeSessions(), rateLimit);
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
 
     await expect(
       service.adminLogin('meo@porac.gov.ph', 'anything'),
@@ -214,6 +254,7 @@ describe('AuthService.adminLogin — failed-login throttling (R1)', () => {
       normalDb,
       makeSessions(),
       makeRateLimit(),
+      makeAdminAudit(),
     );
 
     const throttledDb = { select: jest.fn() } as unknown as PostgresJsDatabase;
@@ -225,6 +266,7 @@ describe('AuthService.adminLogin — failed-login throttling (R1)', () => {
           .fn()
           .mockResolvedValue({ allowed: false }),
       }),
+      makeAdminAudit(),
     );
 
     let normalMessage = '';
@@ -248,7 +290,12 @@ describe('AuthService.adminLogin — failed-login throttling (R1)', () => {
     const select = jest.fn().mockReturnValueOnce(chain([])); // no such admin
     const db = { select } as unknown as PostgresJsDatabase;
     const rateLimit = makeRateLimit();
-    const service = new AuthService(db, makeSessions(), rateLimit);
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
 
     await expect(
       service.adminLogin('  MEO@Porac.gov.ph  ', 'whatever'),
@@ -260,5 +307,131 @@ describe('AuthService.adminLogin — failed-login throttling (R1)', () => {
     expect(rateLimit.recordAdminLoginFailure).toHaveBeenCalledWith(
       'meo@porac.gov.ph',
     );
+  });
+});
+
+describe('AuthService.adminLogin — login audit events (R4)', () => {
+  it('writes admin_login_failed for a wrong password against an existing admin', async () => {
+    const passwordHash = await bcrypt.hash('correct-horse', 10);
+    const select = jest.fn().mockReturnValueOnce(
+      chain([
+        {
+          id: 1,
+          email: 'admin@example.com',
+          passwordHash,
+          firstName: 'Ad',
+          lastName: 'Min',
+          office: 'MEO',
+          role: 'officer',
+          isActive: true,
+        },
+      ]),
+    );
+    const db = { select } as unknown as PostgresJsDatabase;
+    const adminAudit = makeAdminAudit();
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      adminAudit,
+    );
+
+    await expect(
+      service.adminLogin('admin@example.com', 'wrong-password'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(adminAudit.logBestEffort).toHaveBeenCalledTimes(1);
+    const [input] = (adminAudit.logBestEffort as jest.Mock).mock.calls[0];
+    expect(input.actionType).toBe('admin_login_failed');
+    expect(input.targetType).toBe('admin');
+    expect(input.targetId).toBe(1);
+    expect(input.actor.adminId).toBe(1);
+  });
+
+  it('writes admin_login for a successful login', async () => {
+    const passwordHash = await bcrypt.hash('correct-horse', 10);
+    const select = jest.fn().mockReturnValueOnce(
+      chain([
+        {
+          id: 1,
+          email: 'admin@example.com',
+          passwordHash,
+          firstName: 'Ad',
+          lastName: 'Min',
+          office: 'MEO',
+          role: 'officer',
+          isActive: true,
+        },
+      ]),
+    );
+    const db = { select } as unknown as PostgresJsDatabase;
+    const adminAudit = makeAdminAudit();
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      adminAudit,
+    );
+
+    await service.adminLogin('admin@example.com', 'correct-horse');
+
+    expect(adminAudit.logBestEffort).toHaveBeenCalledTimes(1);
+    const [input] = (adminAudit.logBestEffort as jest.Mock).mock.calls[0];
+    expect(input.actionType).toBe('admin_login');
+    expect(input.targetType).toBe('admin');
+    expect(input.targetId).toBe(1);
+  });
+
+  it('never includes the password, any part of it, or its length in the stored audit input', async () => {
+    const password = 'correct-horse-battery-staple';
+    const passwordHash = await bcrypt.hash(password, 10);
+    const select = jest.fn().mockReturnValueOnce(
+      chain([
+        {
+          id: 1,
+          email: 'admin@example.com',
+          passwordHash,
+          firstName: 'Ad',
+          lastName: 'Min',
+          office: 'MEO',
+          role: 'officer',
+          isActive: true,
+        },
+      ]),
+    );
+    const db = { select } as unknown as PostgresJsDatabase;
+    const adminAudit = makeAdminAudit();
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      adminAudit,
+    );
+
+    await service.adminLogin('admin@example.com', password);
+
+    const [input] = (adminAudit.logBestEffort as jest.Mock).mock.calls[0];
+    const serialized = JSON.stringify(input);
+    expect(serialized).not.toContain(password);
+    expect(serialized).not.toContain(passwordHash);
+    expect(serialized).not.toMatch(/length/i);
+  });
+
+  it('does not write any audit event for a nonexistent email — no admin row to attribute an actor to', async () => {
+    const select = jest.fn().mockReturnValueOnce(chain([])); // no such admin
+    const db = { select } as unknown as PostgresJsDatabase;
+    const adminAudit = makeAdminAudit();
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      adminAudit,
+    );
+
+    await expect(
+      service.adminLogin('nobody@example.com', 'whatever'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(adminAudit.logBestEffort).not.toHaveBeenCalled();
   });
 });

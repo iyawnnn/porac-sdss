@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, desc, eq, gte, lte, sql as dsql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { TransactionSql } from 'postgres';
@@ -7,10 +7,10 @@ import { adminAuditEvents } from '../db/schema';
 import type { AdminRole } from './admins.service';
 
 // One append-only row per administrative action — System Administrator
-// visible only (see AdminAuditController). Deliberately does not cover
-// admin login success/failure: that would mean threading this service into
-// AuthService (a different module's unauthenticated-request code path),
-// which is more surface area than "keep it minimal" warrants for this pass.
+// visible only (see AdminAuditController). Also covers admin login
+// success/failure (admin_login/admin_login_failed) via logBestEffort below —
+// see AuthService.adminLogin for the write sites and the nonexistent-email
+// decision.
 export type AdminAuditActionType =
   | 'admin_created'
   | 'admin_role_updated'
@@ -18,6 +18,8 @@ export type AdminAuditActionType =
   | 'admin_password_reset'
   | 'admin_deactivated'
   | 'admin_reactivated'
+  | 'admin_login'
+  | 'admin_login_failed'
   | 'ticket_status_advanced'
   | 'ticket_reassigned'
   | 'report_moderated'
@@ -88,6 +90,8 @@ const ACTION_TYPES: AdminAuditActionType[] = [
   'admin_password_reset',
   'admin_deactivated',
   'admin_reactivated',
+  'admin_login',
+  'admin_login_failed',
   'ticket_status_advanced',
   'ticket_reassigned',
   'report_moderated',
@@ -131,6 +135,8 @@ function values(input: LogAdminAuditInput) {
 
 @Injectable()
 export class AdminAuditService {
+  private readonly logger = new Logger(AdminAuditService.name);
+
   constructor(@Inject(DB) private readonly db: PostgresJsDatabase) {}
 
   // For call sites already inside a raw-PG transaction (sql.begin) —
@@ -161,6 +167,20 @@ export class AdminAuditService {
   // a Drizzle transaction instead of a raw-PG one (admins.service.ts).
   async logInTx(tx: PostgresJsDatabase, input: LogAdminAuditInput): Promise<void> {
     await tx.insert(adminAuditEvents).values(values(input));
+  }
+
+  // Login has no accompanying mutation transaction to join — unlike every
+  // logInTx/logInPgTx call site above, there is no state change here for
+  // this write to be atomic with. Deliberately best-effort: errors are
+  // caught and logged, never rethrown, so a broken audit insert can never
+  // block a legitimate admin login. Used only by AuthService.adminLogin for
+  // admin_login/admin_login_failed.
+  async logBestEffort(input: LogAdminAuditInput): Promise<void> {
+    try {
+      await this.db.insert(adminAuditEvents).values(values(input));
+    } catch (err) {
+      this.logger.error('Failed to write login audit event', err as Error);
+    }
   }
 
   parseFilters(query: Record<string, string | undefined>): AdminAuditFilters {

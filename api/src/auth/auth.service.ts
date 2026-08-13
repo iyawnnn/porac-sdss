@@ -13,6 +13,7 @@ import { admins, citizens } from '../db/schema';
 import { SessionService } from './session.service';
 import { RateLimitService } from '../domain/ratelimit.service';
 import { normalizeEmail } from '../common/utils/normalize-email';
+import { AdminAuditService } from '../admin/admin-audit.service';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +21,7 @@ export class AuthService {
     @Inject(DB) private readonly db: PostgresJsDatabase,
     private readonly sessions: SessionService,
     private readonly rateLimit: RateLimitService,
+    private readonly adminAudit: AdminAuditService,
   ) {}
 
   async adminLogin(
@@ -61,6 +63,30 @@ export class AuthService {
       !(await bcrypt.compare(password, admin.passwordHash))
     ) {
       await this.rateLimit.recordAdminLoginFailure(normalized);
+      if (admin) {
+        await this.adminAudit.logBestEffort({
+          actor: {
+            adminId: admin.id,
+            adminName: `${admin.firstName} ${admin.lastName}`,
+            email: admin.email,
+            role: admin.role,
+            office: admin.office,
+          },
+          actionType: 'admin_login_failed',
+          targetType: 'admin',
+          targetId: admin.id,
+          targetSummary: `Failed login attempt for ${admin.email}`,
+        });
+      }
+      // Nonexistent email: no admin row to attribute an actor to, and
+      // actor_admin_id/target_id are NOT NULL on admin_audit_events — a
+      // fabricated id was rejected as the same schema-shape hack disallowed
+      // for export audit logging. Skipping the write also avoids creating an
+      // internal side channel: a distinguishable audit path for "email
+      // doesn't exist" vs "email exists but wrong password" would undermine
+      // the enumeration resistance this endpoint already provides, even
+      // though it never reaches the HTTP response. Only failed attempts
+      // against an existing admin are in scope (Issue #49).
       throw new UnauthorizedException('Invalid email or password');
     }
 
@@ -72,6 +98,20 @@ export class AuthService {
       adminName: `${admin.firstName} ${admin.lastName}`,
       office: admin.office,
       role: admin.role,
+    });
+
+    await this.adminAudit.logBestEffort({
+      actor: {
+        adminId: admin.id,
+        adminName: `${admin.firstName} ${admin.lastName}`,
+        email: admin.email,
+        role: admin.role,
+        office: admin.office,
+      },
+      actionType: 'admin_login',
+      targetType: 'admin',
+      targetId: admin.id,
+      targetSummary: `${admin.firstName} ${admin.lastName} logged in`,
     });
 
     return { token, office: admin.office };
