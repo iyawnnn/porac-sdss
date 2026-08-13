@@ -11,6 +11,7 @@ import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { CitizenSessionGuard } from '../common/guards/citizen-session.guard';
 import { RecentReauthGuard } from '../common/guards/recent-reauth.guard';
 import { RateLimitService } from '../domain/ratelimit.service';
+import { AdminAuditService } from '../admin/admin-audit.service';
 
 @Module({
   controllers: [AuthController, OAuthController],
@@ -30,6 +31,12 @@ import { RateLimitService } from '../domain/ratelimit.service';
     // only needs the globally-provided PG client (DbModule is @Global()), so
     // this standalone provider resolves fine without pulling in that cycle.
     RateLimitService,
+    // Same reasoning as RateLimitService above: AdminModule imports
+    // AuthModule, so importing AdminModule back here would be circular.
+    // AdminAuditService only needs the globally-provided DB client, so a
+    // standalone provider resolves fine. Used by AuthService.adminLogin for
+    // admin_login/admin_login_failed (Issue #49).
+    AdminAuditService,
   ],
   // SessionService and the guards are consumed by other feature modules
   // (AdminModule, ReportsModule, CronModule in later phases; RecentReauthGuard

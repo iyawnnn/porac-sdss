@@ -190,13 +190,15 @@ A full Playwright run posts roughly 16 real reports and will exhaust the 20/hour
 
 ### 6.1 `admin_audit_events`
 
-An append-only trail of administrative actions: account create / role change / deactivate / reactivate, ticket status changes and reassignments, report moderation, and work-order create / update / status change.
+An append-only trail of administrative actions: account create / role change / deactivate / reactivate, ticket status changes and reassignments, report moderation, work-order create / update / status change, and admin login/failed-login (`admin_login` / `admin_login_failed`).
 
 Three properties that matter:
 
-- **Transactional, not best-effort.** Written via `AdminAuditService.logInTx` / `logInPgTx` in the same transaction as the state change — a failed audit insert rolls back the whole action. The trail is treated as load-bearing.
+- **Transactional for mutations, best-effort for login events.** Every mutation action type is written via `AdminAuditService.logInTx` / `logInPgTx` in the same transaction as the state change — a failed audit insert rolls back the whole action, and the trail is treated as load-bearing. `admin_login` / `admin_login_failed` are the one exception: written via `AdminAuditService.logBestEffort`, outside any transaction, because a login has no accompanying state-change transaction to join. Errors are caught and logged (never rethrown), so a broken audit insert can never block a legitimate admin login.
 - **Actor snapshot at write time.** `actor_name` / `actor_role` / `actor_office` are copied in, so history reads correctly even after the admin row is later edited.
-- **Field names, never contents.** Updates log *which* fields changed — e.g. `notes`, `dueDate`, `assignedAdminId` with `{from, to}` ids — never note bodies.
+- **Field names, never contents.** Updates log *which* fields changed — e.g. `notes`, `dueDate`, `assignedAdminId` with `{from, to}` ids — never note bodies. Login events never record the password, any part of it, its length, the session token, or any cookie value.
+
+A failed login against a **nonexistent email** is deliberately **not** audited: there is no admin row to attribute an `actor_admin_id` to (that column is `NOT NULL`), and inventing a synthetic id was rejected as the same schema-shape hack disallowed for export audit logging (§6.3). Only failed attempts against an existing admin account are recorded. See `AuthService.adminLogin` for the exact decision and reasoning.
 
 Visible only to System Administrators, via `/admin/activity-log` behind `SystemAdminGuard`. Covered by `e2e/admin-activity-log.spec.ts` and asserted for work orders in `e2e/admin-work-orders.spec.ts`.
 
