@@ -27,6 +27,17 @@ test.beforeAll(async () => {
   await generateExifImage({ outputPath: outsidePoracFixture, lat: 14.5, lng: 120.0 });
 });
 
+test("baseline security response headers are present on an admin and a citizen page", async ({ page }) => {
+  for (const path of ["/admin/login", "/login"]) {
+    const response = await page.goto(path);
+    const headers = response?.headers() ?? {};
+    expect(headers["x-frame-options"]).toBe("DENY");
+    expect(headers["x-content-type-options"]).toBe("nosniff");
+    expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+    expect(headers["permissions-policy"]).toBe("geolocation=(), camera=(), microphone=()");
+  }
+});
+
 test("MEO admin can open the Porac map without runtime failures", async ({ page }) => {
   const failures: string[] = [];
   page.on("pageerror", error => failures.push(`pageerror: ${error.message}`));
