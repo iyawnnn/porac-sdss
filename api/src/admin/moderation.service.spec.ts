@@ -10,7 +10,10 @@ import type {
   CreateNotificationInput,
   NotificationsService,
 } from '../notifications/notifications.service';
-import type { AdminAuditService, LogAdminAuditInput } from './admin-audit.service';
+import type {
+  AdminAuditService,
+  LogAdminAuditInput,
+} from './admin-audit.service';
 
 const MEO_ADMIN = {
   adminId: 1,
@@ -45,7 +48,10 @@ function makeNotificationsMock() {
 }
 
 function makeAuditMock() {
-  const logInPgTx = jest.fn<Promise<void>, [TransactionSql, LogAdminAuditInput]>();
+  const logInPgTx = jest.fn<
+    Promise<void>,
+    [TransactionSql, LogAdminAuditInput]
+  >();
   const audit = { logInPgTx } as unknown as AdminAuditService;
   return { audit, logInPgTx };
 }
@@ -82,7 +88,11 @@ function makeFakeSql(responses: unknown[][]) {
 
 describe('parseModerationQuery', () => {
   const { sql } = makeFakeSql([]);
-  const service = new ModerationService(sql, {} as NotificationsService, {} as AdminAuditService);
+  const service = new ModerationService(
+    sql,
+    {} as NotificationsService,
+    {} as AdminAuditService,
+  );
 
   it('defaults status to pending when absent', () => {
     expect(service.parseModerationQuery({}, MEO_ADMIN).status).toBe('pending');
@@ -109,17 +119,17 @@ describe('parseModerationQuery', () => {
     ).toBe('pending');
   });
 
-  it('defaults office to the admin\'s own office when no query param given', () => {
+  it("defaults office to the admin's own office when no query param given", () => {
     expect(service.parseModerationQuery({}, MEO_ADMIN).office).toBe('MEO');
   });
 
-  it('clamps office to the admin\'s own office even when office=all is requested', () => {
+  it("clamps office to the admin's own office even when office=all is requested", () => {
     expect(
       service.parseModerationQuery({ office: 'all' }, MEO_ADMIN).office,
     ).toBe('MEO');
   });
 
-  it('clamps office to the admin\'s own office even when a different office is requested', () => {
+  it("clamps office to the admin's own office even when a different office is requested", () => {
     expect(
       service.parseModerationQuery({ office: 'MDRRMO' }, MEO_ADMIN).office,
     ).toBe('MEO');
@@ -164,8 +174,7 @@ describe('parseModerationQuery', () => {
 
   it('accepts a known category', () => {
     expect(
-      service.parseModerationQuery({ category: 'Pothole' }, MEO_ADMIN)
-        .category,
+      service.parseModerationQuery({ category: 'Pothole' }, MEO_ADMIN).category,
     ).toBe('Pothole');
   });
 
@@ -186,9 +195,7 @@ describe('parseModerationQuery', () => {
   });
 
   it('clamps page to a minimum of 1', () => {
-    expect(service.parseModerationQuery({ page: '0' }, MEO_ADMIN).page).toBe(
-      1,
-    );
+    expect(service.parseModerationQuery({ page: '0' }, MEO_ADMIN).page).toBe(1);
     expect(service.parseModerationQuery({ page: '-5' }, MEO_ADMIN).page).toBe(
       1,
     );
@@ -208,7 +215,11 @@ describe('getModerationQueue pagination', () => {
       { id: 2, total_count: 42 },
     ];
     const { sql } = makeFakeSql([rows]);
-    const service = new ModerationService(sql, {} as NotificationsService, {} as AdminAuditService);
+    const service = new ModerationService(
+      sql,
+      {} as NotificationsService,
+      {} as AdminAuditService,
+    );
 
     const result = await service.getModerationQueue({ page: 1, limit: 10 });
 
@@ -221,7 +232,11 @@ describe('getModerationQueue pagination', () => {
 
   it('reports total 0 and totalPages 1 when nothing matches', async () => {
     const { sql } = makeFakeSql([[]]);
-    const service = new ModerationService(sql, {} as NotificationsService, {} as AdminAuditService);
+    const service = new ModerationService(
+      sql,
+      {} as NotificationsService,
+      {} as AdminAuditService,
+    );
 
     const result = await service.getModerationQueue({ page: 1, limit: 10 });
 
@@ -267,6 +282,24 @@ describe('moderateReport transitions', () => {
     expect(calls).toHaveLength(1); // only the office lookup, no UPDATE
     expect(createInTx).not.toHaveBeenCalled();
     expect(logInPgTx).not.toHaveBeenCalled();
+  });
+
+  it('rejects a note over MODERATION_NOTE_MAX_LENGTH before touching the database', async () => {
+    const { sql, calls } = makeFakeSql([]);
+    const { notifications } = makeNotificationsMock();
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
+
+    await expect(
+      service.moderateReport(
+        1,
+        'quarantine',
+        MEO_ADMIN,
+        undefined,
+        'x'.repeat(1001),
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(calls).toHaveLength(0);
   });
 
   it('quarantine with a note flags the ticket and notifies the citizen', async () => {
@@ -382,7 +415,7 @@ describe('moderateReport transitions', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  it('rejects moderation of another office\'s report for a non-system-admin', async () => {
+  it("rejects moderation of another office's report for a non-system-admin", async () => {
     const { sql } = makeFakeSql([
       [{ assigned_office: 'MDRRMO' }], // report -> ticket office lookup
     ]);

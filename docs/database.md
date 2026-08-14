@@ -173,6 +173,14 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 - **Ownership:** Application, raw-PG-only (no geometry).
 - **Cleanup:** Same `POST /cron/cleanup-rate-limit-events` call prunes this table too (30-day cutoff) — both tables' checks only ever query 1-hour windows, so the same wide margin applies here even more comfortably than for `rate_limit_events` above.
 
+### `admin_login_rate_limit_events`
+- **Purpose:** Per-account failed-login throttling for admin login (R1) — keyed on the normalized account email only, never IP (an IP-based total-login limit would break the E2E suite, which authenticates from one IP nearly 200 times per run). 10 failures within 15 minutes throttles further attempts against that email. Only failed attempts are recorded; a successful login deletes that email's rows outright rather than waiting for them to age out — the one table in this app whose rate limiting actively resets rather than only expiring.
+- **Reads/writes:** `RateLimitService.checkAdminLoginRateLimit`/`recordAdminLoginFailure`/`resetAdminLoginFailures`, called from `AuthService.adminLogin`. A failure is recorded for every rejection reason — nonexistent email, deactivated admin, wrong password — never only for real/active accounts, so the throttle itself can't become an enumeration side-channel (mirrors `recordPasswordResetAttempt`'s identical choice).
+- **Why separate from `password_reset_rate_limit_events`** even though the column shape is identical: that table is a different security domain already in active use by citizen forgot-password requests (its own email/IP limits). Mixing admin-login-failure rows into it would corrupt those counts and conflate two unrelated actor types — the same category of mistake `rate_limit_events`/`password_reset_rate_limit_events` staying separate already guards against, just one level over.
+- **Expected empty?** Normal on a fresh DB, and in steady state — it only holds rows for accounts currently mid-throttle or between failures and their next success.
+- **Ownership:** Application, raw-PG-only style access (Drizzle-declared for schema documentation, but always queried via the raw `Sql` client, same as `password_reset_rate_limit_events`).
+- **Cleanup:** Same `POST /cron/cleanup-rate-limit-events` call prunes this table too (30-day cutoff) — its own check only ever queries a 15-minute window, so the margin here is wider still than either sibling table's.
+
 ### `verifications`
 - **Purpose:** **Not email/account verification.** This is planned/future schema for a citizen "upvote a ticket" signal — one row per (ticket, citizen) attesting "I also see this problem," intended as a possible future input to the urgency formula's Cluster Density factor (per `PLAN.md`'s explicit "keep and formalize" note). The feature that would write to this table has never been built.
 - **Reads/writes:** None — no service, controller, or test touches it. It exists in `schema.ts` only.
@@ -186,9 +194,9 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 ## E. System/admin security tables
 
 ### `admin_audit_events`
-- **Purpose:** Append-only trail for administrative actions — account create/role change/deactivate/reactivate, ticket status/reassignment, report moderation, work order create/update/status change. System-Administrator-visible only. `actor_*` columns are a snapshot at write time (name/role/office can change later on the `admins` row itself), so history reads correctly even after the actor is edited.
+- **Purpose:** Append-only trail for administrative actions — account create/role change/deactivate/reactivate, ticket status/reassignment, report moderation, work order create/update/status change, and admin login/failed-login (`admin_login`/`admin_login_failed`). System-Administrator-visible only. `actor_*` columns are a snapshot at write time (name/role/office can change later on the `admins` row itself), so history reads correctly even after the actor is edited.
 - **Reads:** Activity Log page (`GET /admin/activity-log`, System Admin only).
-- **Writes:** `AdminAuditService.logInTx`/`logInPgTx`, called from every admin-management/ticket/moderation write path that changes state — the write is transactional with the state change itself (a failed audit insert rolls back the whole action; this trail is treated as load-bearing, not best-effort).
+- **Writes:** `AdminAuditService.logInTx`/`logInPgTx`, called from every admin-management/ticket/moderation write path that changes state — the write is transactional with the state change itself (a failed audit insert rolls back the whole action; this trail is treated as load-bearing, not best-effort). **Exception:** `admin_login`/`admin_login_failed` are written via `AdminAuditService.logBestEffort` from `AuthService.adminLogin`, outside any transaction and best-effort (errors are caught and logged, never rethrown) — login has no accompanying state-change transaction to join, and a broken audit insert must never block a legitimate login. A failed login against a nonexistent email is not audited at all: `actor_admin_id` is `NOT NULL` and there is no admin row to attribute one to.
 - **Expected empty?** No once any admin action has been taken; normal to be empty on a completely fresh DB.
 - **Ownership:** Application (Drizzle).
 - **Relation to `citizen_audit_events`:** Intentionally separate — see §G.
@@ -215,6 +223,7 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 ## G. Cross-table design notes
 
 - **`rate_limit_events` vs. `password_reset_rate_limit_events`** — keep separate; driven by a real `NOT NULL geom` constraint difference, not duplication. See §D.
+- **`password_reset_rate_limit_events` vs. `admin_login_rate_limit_events`** — identical column shape, kept separate anyway: different security domains (citizen forgot-password vs. admin login) with independent limits and independent actor types. Merging them would let one domain's attempts count against the other's threshold. See §D.
 - **`admin_audit_events` vs. `citizen_audit_events`** — keep separate; different actor types, different event vocabularies, different audiences (System-Administrator-only vs. citizen-self-service), each independently documenting the same "actor snapshot at write time" pattern for its own reasons.
 - **`admins`' security/session/status columns vs. `citizens`' security/session columns** — parallel by design, not accidentally duplicated; each principal type owns its own copy so one type's auth model can evolve (e.g. admin deactivation) without silently changing the other's.
 - **`config` vs. weather/telemetry state** — currently share one table; see §C's design note. Not split in this pass.

@@ -148,6 +148,26 @@ export const passwordResetRateLimitEvents = pgTable(
   },
 );
 
+// Per-account failed-login throttling for admin login (R1). Keyed by
+// normalized email only, never IP — see RateLimitService.checkAdminLoginRateLimit.
+// Deliberately its own table rather than reusing passwordResetRateLimitEvents
+// even though the shape is identical: that table is a different security
+// domain already in active use by citizen forgot-password requests, and
+// mixing rows would corrupt both tables' counts and conflate two unrelated
+// actor types. Rows are deleted on a successful login (reset), not just
+// aged out — the one place this app's rate limiting actively resets a
+// counter rather than only letting it expire.
+export const adminLoginRateLimitEvents = pgTable(
+  'admin_login_rate_limit_events',
+  {
+    id: serial('id').primaryKey(),
+    emailNormalized: text('email_normalized').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
 export const tickets = pgTable('tickets', {
   id: serial('id').primaryKey(),
   category: text('category').notNull(),
@@ -196,7 +216,9 @@ export const tickets = pgTable('tickets', {
   // service rejects confirming an already-disputed ticket), but there's no
   // DB constraint enforcing that since both are independent workflow
   // signals, never a scoring input.
-  resolutionConfirmedAt: timestamp('resolution_confirmed_at', { withTimezone: true }),
+  resolutionConfirmedAt: timestamp('resolution_confirmed_at', {
+    withTimezone: true,
+  }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

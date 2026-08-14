@@ -21,6 +21,7 @@ import { haversineMeters } from '../common/utils/distance';
 import { DUPLICATE_MERGE_WINDOW_DAYS } from '../common/utils/duplicate-detection';
 import { computeUrgency } from '../domain/urgency';
 import type { ReportInput } from '../contracts/schemas';
+import { TICKET_DISPUTE_REASON_MAX_LENGTH } from '../contracts/schemas';
 import type { CitizenSession } from '../auth/session.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -351,7 +352,9 @@ export class ReportsService {
         // — a merge is one event from each of their perspectives, atomic
         // with the merge itself. Each links to that citizen's own report on
         // this ticket, not the report that just triggered the merge.
-        const citizenRows = await tx<{ citizen_id: number; report_id: number }[]>`
+        const citizenRows = await tx<
+          { citizen_id: number; report_id: number }[]
+        >`
           SELECT DISTINCT ON (citizen_id) citizen_id, id AS report_id
           FROM reports WHERE ticket_id = ${existing.id}
           ORDER BY citizen_id, id ASC
@@ -511,13 +514,21 @@ export class ReportsService {
     if (!trimmedReason) {
       throw new BadRequestException('A short reason is required.');
     }
-    if (trimmedReason.length > 1000) {
-      throw new BadRequestException('Reason must be 1000 characters or fewer.');
+    if (trimmedReason.length > TICKET_DISPUTE_REASON_MAX_LENGTH) {
+      throw new BadRequestException(
+        `Reason must be ${TICKET_DISPUTE_REASON_MAX_LENGTH} characters or fewer.`,
+      );
     }
 
     const sql = this.pg;
     const [row] = await sql<
-      { ticket_id: number; status: string; assigned_office: 'MEO' | 'MDRRMO'; disputed_at: string | null; title: string }[]
+      {
+        ticket_id: number;
+        status: string;
+        assigned_office: 'MEO' | 'MDRRMO';
+        disputed_at: string | null;
+        title: string;
+      }[]
     >`
       SELECT t.id AS ticket_id, t.status, t.assigned_office, t.disputed_at,
         (SELECT r2.title FROM reports r2 WHERE r2.ticket_id = t.id ORDER BY r2.created_at ASC, r2.id ASC LIMIT 1) AS title
@@ -531,7 +542,9 @@ export class ReportsService {
       throw new BadRequestException('Only resolved tickets can be disputed.');
     }
     if (row.disputed_at) {
-      throw new BadRequestException('This report has already been flagged as unresolved.');
+      throw new BadRequestException(
+        'This report has already been flagged as unresolved.',
+      );
     }
 
     return sql.begin(async (tx) => {
@@ -547,7 +560,9 @@ export class ReportsService {
         RETURNING disputed_at
       `;
       if (!updated) {
-        throw new BadRequestException('This report has already been flagged as unresolved.');
+        throw new BadRequestException(
+          'This report has already been flagged as unresolved.',
+        );
       }
 
       await this.notifications.createInTx(tx, {
@@ -577,7 +592,12 @@ export class ReportsService {
   ): Promise<ConfirmResolutionResult> {
     const sql = this.pg;
     const [row] = await sql<
-      { ticket_id: number; status: string; disputed_at: string | null; resolution_confirmed_at: string | null }[]
+      {
+        ticket_id: number;
+        status: string;
+        disputed_at: string | null;
+        resolution_confirmed_at: string | null;
+      }[]
     >`
       SELECT t.id AS ticket_id, t.status, t.disputed_at, t.resolution_confirmed_at
       FROM reports r
@@ -590,10 +610,14 @@ export class ReportsService {
       throw new BadRequestException('Only resolved tickets can be confirmed.');
     }
     if (row.disputed_at) {
-      throw new BadRequestException('This report has already been flagged as unresolved.');
+      throw new BadRequestException(
+        'This report has already been flagged as unresolved.',
+      );
     }
     if (row.resolution_confirmed_at) {
-      throw new BadRequestException('This report has already been confirmed as fixed.');
+      throw new BadRequestException(
+        'This report has already been confirmed as fixed.',
+      );
     }
 
     const [updated] = await sql<{ resolution_confirmed_at: string }[]>`
@@ -603,10 +627,15 @@ export class ReportsService {
       RETURNING resolution_confirmed_at
     `;
     if (!updated) {
-      throw new BadRequestException('This report has already been confirmed as fixed.');
+      throw new BadRequestException(
+        'This report has already been confirmed as fixed.',
+      );
     }
 
-    return { ticket_id: row.ticket_id, resolution_confirmed_at: updated.resolution_confirmed_at };
+    return {
+      ticket_id: row.ticket_id,
+      resolution_confirmed_at: updated.resolution_confirmed_at,
+    };
   }
 
   async getPublicHazardMapData(citizenId: number) {

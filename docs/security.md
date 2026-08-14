@@ -155,7 +155,15 @@ The spatial limit specifically targets the same-pothole-reported-repeatedly patt
 
 Events are recorded **inside the same transaction** as the report insert, so only submissions that actually succeed count against the limit.
 
-### 5.2 Password reset
+### 5.2 Admin login
+
+| Limit | Value | Key |
+|---|---|---|
+| Failed attempts | **10 within 15 minutes** | normalized account email — never IP |
+
+Counts **failed attempts only** — a successful login deletes that email's failure rows outright, rather than waiting for them to age out of the window. Keyed on email, not IP, because an IP-based total-login limit would break the E2E suite, which authenticates from one IP nearly 200 times per run (§5.6). The throttled response is the exact same generic `Invalid email or password` `401` as a normal wrong-password rejection — no distinct status, message, or header — and a failure is recorded for every rejection reason (nonexistent email, deactivated admin, wrong password), never only for real/active accounts, so the throttle itself can't become a second enumeration side-channel alongside §2.4's generic error. Checked before the admins table is even queried, so continued attempts during an active cooldown never extend it — it clears ~15 minutes after the failure that tripped it.
+
+### 5.3 Password reset
 
 | Limit | Value | Key |
 |---|---|---|
@@ -164,15 +172,15 @@ Events are recorded **inside the same transaction** as the report insert, so onl
 
 Both must pass. Crucially, an attempt is recorded **for every request, including emails with no account** — otherwise the enumeration-resistant identical response would let an attacker probe many addresses without ever consuming the email limit.
 
-### 5.3 OAuth
+### 5.4 OAuth
 
 **10 requests/minute per IP** on OAuth start/callback (`OAuthRateLimitGuard`). This one is **in-memory, not Postgres-backed** — a deliberate, marked tradeoff: OAuth abuse doesn't need to survive a restart the way report spam does. It assumes a single instance; see §8.
 
-### 5.4 Retention
+### 5.5 Retention
 
-`POST /cron/cleanup-rate-limit-events` prunes both rate-limit tables past a 30-day window. Safe because the longest window any live check consults is 24 hours.
+`POST /cron/cleanup-rate-limit-events` prunes all three rate-limit tables past a 30-day window. Safe because the longest window any live check consults is 24 hours.
 
-### 5.5 The E2E caveat
+### 5.6 The E2E caveat
 
 A full Playwright run posts roughly 16 real reports and will exhaust the 20/hour IP backstop if repeated within the hour. **This is the control working correctly.** There is deliberately **no test-only bypass, env flag, or relaxed limit** — the documented workaround is targeted spec runs. See [`README.md`](../README.md) §I.
 
@@ -182,13 +190,15 @@ A full Playwright run posts roughly 16 real reports and will exhaust the 20/hour
 
 ### 6.1 `admin_audit_events`
 
-An append-only trail of administrative actions: account create / role change / deactivate / reactivate, ticket status changes and reassignments, report moderation, and work-order create / update / status change.
+An append-only trail of administrative actions: account create / role change / deactivate / reactivate, ticket status changes and reassignments, report moderation, work-order create / update / status change, and admin login/failed-login (`admin_login` / `admin_login_failed`).
 
 Three properties that matter:
 
-- **Transactional, not best-effort.** Written via `AdminAuditService.logInTx` / `logInPgTx` in the same transaction as the state change — a failed audit insert rolls back the whole action. The trail is treated as load-bearing.
+- **Transactional for mutations, best-effort for login events.** Every mutation action type is written via `AdminAuditService.logInTx` / `logInPgTx` in the same transaction as the state change — a failed audit insert rolls back the whole action, and the trail is treated as load-bearing. `admin_login` / `admin_login_failed` are the one exception: written via `AdminAuditService.logBestEffort`, outside any transaction, because a login has no accompanying state-change transaction to join. Errors are caught and logged (never rethrown), so a broken audit insert can never block a legitimate admin login.
 - **Actor snapshot at write time.** `actor_name` / `actor_role` / `actor_office` are copied in, so history reads correctly even after the admin row is later edited.
-- **Field names, never contents.** Updates log *which* fields changed — e.g. `notes`, `dueDate`, `assignedAdminId` with `{from, to}` ids — never note bodies.
+- **Field names, never contents.** Updates log *which* fields changed — e.g. `notes`, `dueDate`, `assignedAdminId` with `{from, to}` ids — never note bodies. Login events never record the password, any part of it, its length, the session token, or any cookie value.
+
+A failed login against a **nonexistent email** is deliberately **not** audited: there is no admin row to attribute an `actor_admin_id` to (that column is `NOT NULL`), and inventing a synthetic id was rejected as the same schema-shape hack disallowed for export audit logging (§6.3). Only failed attempts against an existing admin account are recorded. See `AuthService.adminLogin` for the exact decision and reasoning.
 
 Visible only to System Administrators, via `/admin/activity-log` behind `SystemAdminGuard`. Covered by `e2e/admin-activity-log.spec.ts` and asserted for work orders in `e2e/admin-work-orders.spec.ts`.
 
@@ -241,7 +251,6 @@ Stated plainly. None of the following is implemented. For an assessed, prioritiz
 
 ### 8.2 Accepted limitations
 
-- **No failed-login lockout or backoff.** Login is protected by enumeration-resistant messaging and bcrypt's cost, but there is no per-account attempt counter or progressive delay. Online password guessing against a *known* email is currently rate-limited only by bcrypt's own cost. This is the most significant gap in §2.
 - **The OAuth rate limiter is in-memory** and therefore per-process. It assumes a single instance and resets on restart — marked as a known ceiling in the code. The report and password-reset limiters do not share this weakness.
 - **Ticket escalation fires once per ticket, ever.** Re-escalation after a stall recurs is a deliberate non-goal for now.
 - **No per-request CSRF token.** Defense rests on `sameSite=lax` cookies plus the same-origin `/api/*` rewrite. Adequate for the current shape; worth revisiting if a cross-origin client is ever added.

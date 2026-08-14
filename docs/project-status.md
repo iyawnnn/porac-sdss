@@ -217,6 +217,86 @@ A read-only recap of how a resolved report was closed, on the existing citizen r
 - `rewrites()` (the `/api/*` proxy) and API behavior are unchanged — `headers()` is a sibling config key.
 - Regression test: `e2e/smoke.spec.ts` asserts all four headers on `/admin/login` and `/login`.
 
+### Failed-Login Throttling for Admin Login (R1) — **completed**
+
+Per-account failed-login throttling, closing the highest-severity gap in the hardening plan — an attacker who knows one admin address (`README.md` §G publishes the convention) could previously make unlimited password guesses, slowed only by bcrypt's cost.
+
+- New table `admin_login_rate_limit_events` (migration `0024_admin_login_throttle.sql`, `pnpm --prefix api migrate:admin-login-throttle`) — not a reuse of `rate_limit_events` (raw-PG-only, `geom NOT NULL`, wrong identity shape) or `password_reset_rate_limit_events` (same column shape, but a different security domain already in active use by citizen forgot-password requests; mixing rows would corrupt both tables' counts). See `docs/database.md` §D/§G for the full reasoning.
+- Three new `RateLimitService` methods: `checkAdminLoginRateLimit`/`recordAdminLoginFailure` follow the existing check-then-record pattern; `resetAdminLoginFailures` is new territory for this service — it actively deletes an email's failure rows on a successful login, rather than only letting a window expire, which is what acceptance criterion #2 ("a successful login resets the counter") requires.
+- **Keyed on normalized account email, never IP** — an IP-based total-login limit would break the E2E suite, which authenticates from one IP nearly 200 times per run (`docs/testing.md` §6). 10 failures within 15 minutes throttles further attempts against that email.
+- `AuthService.adminLogin` checks the throttle *before* querying the `admins` table or running bcrypt, so a throttled request never records a further failure of its own — the cooldown is bounded to ~15 minutes after the failure that tripped it, not indefinitely extendable by continued attempts during the cooldown.
+- The throttled response is the exact same `UnauthorizedException('Invalid email or password')` as every other rejection reason (nonexistent email, deactivated admin, wrong password) — no distinct status, message, or header. A failure is recorded for all of those reasons uniformly, never only for real/active accounts, so the throttle itself can't become a second enumeration side-channel.
+- `POST /cron/cleanup-rate-limit-events` now prunes this table too, same 30-day retention.
+- `AuthModule` provides `RateLimitService` directly rather than importing `DomainModule` — `DomainModule` imports `NotificationsModule`, which imports `AuthModule`, so importing `DomainModule` from `AuthModule` would create a circular module dependency. `RateLimitService` only needs the globally-provided `PG` client, so a standalone provider resolves fine.
+- No MFA, CAPTCHA, permanent lockout, IP-based total-login limiting, citizen-side login throttling, or test-only bypass — all explicitly out of scope. `citizenLogin`/`citizenSignup` untouched.
+- Verified against `e2e/admin-password.spec.ts` and `e2e/admin-rbac.spec.ts` (not the full suite, per `docs/testing.md` §6) — no regression.
+
+### Free-Text Length Bounds (R3) — **completed**
+
+Five admin-side/dispute free-text fields had type and non-empty checks but no maximum length: `work_orders.title`/`notes`, `tickets.resolution_notes`, `tickets.dispute_reason`, and the moderation `note`. Report submission was already bounded by Zod; these were not.
+
+- Five named constants in `api/src/contracts/schemas.ts`: `WORK_ORDER_TITLE_MAX_LENGTH` (200), `WORK_ORDER_NOTES_MAX_LENGTH` (2000), `TICKET_RESOLUTION_NOTES_MAX_LENGTH` (2000), `TICKET_DISPUTE_REASON_MAX_LENGTH` (1000), `MODERATION_NOTE_MAX_LENGTH` (1000) — kept separate from `reportSchema`'s own inline `.max()` values even where the numbers match, since those fields sit in services with no Zod parsing.
+- Each guard is a plain `if (...) throw new BadRequestException(...)` added in the method that already validated that field — `WorkOrdersService.create`/`update`, `TicketsService.advanceStatus`, `ReportsService.disputeReport`, `ModerationService.moderateReport` — no validation moved to a new layer.
+- `disputeReport` already enforced 1000 characters; that check was converted from a bare `1000` literal to the named constant, not new logic.
+- No truncation anywhere — over-length input is rejected with 400, matching the pattern each method's existing checks already used.
+- No database migration, no `varchar` column change, no new validation library.
+- One unit test per field: real-invocation tests in `work-orders.service.spec.ts`, `tickets.service.spec.ts`, and `moderation.service.spec.ts`; a source-text regression guard in `reports.service.spec.ts` (that file has no DB test harness, matching its existing test style for `disputeReport`).
+
+### Admin Login Audit Events (R4) — **completed**
+
+Natural companion to R1 (failed-login throttling) — R1 already computes the failure signal this needed. `admin_audit_events` previously covered every admin mutation but not authentication itself, so a compromised admin account left no login trail.
+
+- Two new action types on the **existing** `admin_audit_events` table: `admin_login` (successful login) and `admin_login_failed` (failed attempt against an **existing** admin account — wrong password or deactivated). No new table, no new endpoint, no new page; the Activity Log page picks them up automatically via the existing `ACTION_TYPES` allowlist.
+- **Nonexistent-email failed attempts are deliberately not audited.** `admin_audit_events.actor_admin_id`/`target_id` are `NOT NULL`, and there is no admin row to attribute an actor to in that case — inventing a synthetic id was rejected as the same schema-shape hack already disallowed for export audit logging. Skipping the write also avoids an internal side channel: a distinguishable audit path for "email doesn't exist" vs. "email exists but wrong password" would undermine the enumeration resistance `adminLogin` already provides, even though it never reaches the HTTP response.
+- **Best-effort, not transactional** — the one exception to every other `admin_audit_events` write. `AdminAuditService.logBestEffort` (new method, reuses the already-injected Drizzle client) catches and logs insert failures rather than rethrowing, since a login has no accompanying state-change transaction to be atomic with, and a broken audit insert must never block a legitimate admin login.
+- `AdminAuditService` is now provided directly in `AuthModule`'s own `providers`, mirroring exactly how `RateLimitService` is already provided there — `AdminModule` imports `AuthModule`, so importing `AdminModule` back would be circular.
+- Zero changes to `RateLimitService` call order, the throttle logic, or the generic `'Invalid email or password'` message/timing from R1 — the audit calls are additions only, inserted around the existing control flow.
+- Never logs the password, any part of it, its length, the session token, or any cookie value — only the same `{adminId, adminName, email, role, office}` actor snapshot every other action type already uses.
+- Verified against `auth.service.spec.ts` (failed-against-existing-admin, successful login, no-password-material, and nonexistent-email-not-audited cases) and `admin-audit.service.spec.ts` (`logBestEffort` success and swallow-on-error), plus `e2e/admin-activity-log.spec.ts`/`e2e/admin-password.spec.ts` (not the full suite).
+
+### Citizen Cross-Account Report Access Regression Test (R8) — **completed**
+
+`ReportsService.getMyReportDetail`'s single-clause ownership check (`WHERE r.id = ... AND r.citizen_id = ...`) was correct in code but had no regression test — a future refactor that split "fetch by id" from "compare owner" could pass the existing suite while introducing an existence oracle.
+
+- One new test in `e2e/citizen-reports.spec.ts` (`Cross-account access` describe block): a fresh citizen B requests citizen A's (citizen1's) seeded report id and a guaranteed-nonexistent id, asserting **both status and body** are identical between the two — the property that actually proves there's no existence oracle, not just "B didn't get A's data."
+- **Zero new report submissions.** Reuses citizen1's existing seeded report via the already-present `fetchMyReports` helper; skips cleanly (`test.skip()`, naming `seed:diverse-reports`) if none exists, matching the file's established pattern used 3× elsewhere.
+- Citizen B is a fresh signup (same inline UI-signup pattern already used twice in this file) — signups aren't rate-limited the way report submissions are, and a zero-report account is exactly what the test needs.
+- `ReportsService`/`reports.controller.ts` untouched — this is a test-only change locking in already-correct behavior.
+- Verified against `pnpm exec playwright test e2e/citizen-reports.spec.ts -- --workers=1` (not the full suite).
+
+### CSV Export Office-Scoping and Note-Leak Regression Tests — **completed**
+
+`ReportsService.ticketsCsv`/`workOrdersCsv` deliberately reuse `TicketsService.parseTicketQuery`/`WorkOrdersService.parseQuery` — the same `resolveOfficeScope` clamp the list endpoints use — so an export can never see more than its caller's own list view, and the work-order export excludes `notes` at the query level rather than filtering after selection. Both properties were correct in code but under-tested.
+
+- Auditing `e2e/admin-reports.spec.ts` found 4 of this work's 5 required behaviors **already covered**: MEO/MDRRMO ticket CSVs contain only their own office's rows, a doctored `?office=MDRRMO` on an MEO session's export still returns only MEO rows, and the work-order CSV header never includes a `notes` column — all asserted via parsed CSV rows and column-index lookup, not substring matching.
+- The one real gap: the existing "no notes column" test only checked the **header row**. One new test closes it — creates a work order with a sentinel note string (same technique as `admin-work-orders.spec.ts`'s citizen-leak test), exports the CSV, and asserts the sentinel appears nowhere in the raw response body, proving no note body leaks even in a data row.
+- **Zero new reports.** The new test reuses whichever ticket already exists (`GET /api/admin/tickets?status=all&limit=1`) rather than creating a disposable one — it doesn't need a pristine or office-specific ticket, only *a* ticket to attach the sentinel-noted work order to.
+- `api/src/admin/reports.service.ts` untouched — this is a test-only change locking in already-correct behavior.
+- Verified against `pnpm exec playwright test e2e/admin-reports.spec.ts -- --workers=1` (not the full suite).
+
+### Work-Order Office-Scoping Test Gaps Closed — **completed**
+
+`e2e/admin-work-orders.spec.ts` already covered most office-scoping paths (read/update/status 403 both directions, list clamping, citizen 401, assignee-picker scoping, notes non-leak). Three paths, all backed by already-correct code, had zero test coverage.
+
+- **MDRRMO → MEO work-order creation → 403.** The mirror of the existing MEO → MDRRMO creation-rejection test — enforcement was previously proven one-way only for the create path.
+- **Cross-office `assignedAdminId` → 400, creates nothing.** `WorkOrdersService`'s `assertValidAssignee` (shared by `create`/`update`) validates the assignee is active and belongs to the *work order's* office — untested until now. Confirmed via both the status code and a follow-up list query (`GET /api/admin/work-orders?ticketId=...`) proving no row with the test's title exists.
+- **Deactivated `assignedAdminId` → 400, creates nothing.** Same shared validation, same collapsed 400/message as the cross-office case — confirmed the same way, using a same-office throwaway admin so "inactive" is the isolated cause. One throwaway admin created via the raw API (`POST /api/admin/admins` + `.../deactivate`), `e2e`-prefixed so `cleanup:e2e-admins` removes it automatically.
+- **Zero new tickets or reports.** All three tests reuse the existing `sharedMeoTicketId`/`sharedMdrrmoTicketId` fixtures from this file's `beforeAll`.
+- `api/src/admin/work-orders.service.ts` untouched — the validation was already correct; these three tests close the coverage gap, they don't fix a bug.
+- Verified against `pnpm exec playwright test e2e/admin-work-orders.spec.ts -- --workers=1` (not the full suite).
+
+### Ticket Reassignment Security Tests Added — **completed**
+
+Reassignment is not System-Administrator-only: `TicketsController.reassign` sits behind `AdminSessionGuard` alone, and `TicketsService.reassignOffice` checks `assertOfficeAccess` against the ticket's *current* office, not role — so an office admin who holds a ticket can hand it to the other office. It's a one-way move (the origin office loses access afterward). This was already documented correctly (`docs/user-flows.md` §2.6/§4.2) but `e2e/admin-tickets.spec.ts` only ever exercised reassignment as System Administrator, so nothing pinned the office-admin path.
+
+- **MEO admin reassigns their own MEO ticket to MDRRMO → succeeds.**
+- **After reassignment, that same MEO session gets 403 on the ticket and it is absent from their list** — the one-way lockout.
+- **MEO admin attempting to reassign a ticket that's now MDRRMO's → 403** — they never had access to reassign it from there.
+- **The reassignment writes an `admin_audit_events` row naming the acting admin (by id) and an `office_reassignments` row** — verified via `GET /admin/tickets/:id`'s `reassignments` array and `GET /admin/activity-log` as System Administrator.
+- All four tests share one throwaway ticket via `describe.serial` and a `beforeAll` — one report added to the suite's budget (see [`testing.md`](testing.md) §6).
+- `api/src/admin/tickets.controller.ts`/`tickets.service.ts` untouched — this pins existing, already-correct behavior; it does not change the reassignment permission model.
+- Verified against `pnpm exec playwright test e2e/admin-tickets.spec.ts -- --workers=1` (not the full suite).
+
 ---
 
 ## 4. Current Queue
@@ -227,9 +307,6 @@ All pending work. **None of it is a new product feature** — this is hardening,
 
 Assessed and prioritized in [`security-hardening-plan.md`](security-hardening-plan.md), which carries severity, likelihood, right-sized scope, and the required test for each. Summarized here so this file stays the single status view:
 
-- **Failed-login throttling (R1, High) — pending.** Only bcrypt cost and a generic error message protect admin login today; there is no attempt counter, backoff, or cooldown. The admin email convention is published in `README.md` §G, so an attacker needs no username discovery. **The recommended next implementation task.**
-- **Free-text length bounds (R3, Medium) — pending.** Report submission is bounded by Zod; work-order title/notes, resolution notes, dispute reason, and the moderation note have type and non-empty checks but no maximum length.
-- **Login audit events (R4, Medium) — pending.** `admin_audit_events` covers mutations but not authentication events.
 - **Content-Security-Policy (R7, Low) — pending**, and deliberately staged after R2 in `Report-Only` mode first, since a blocking CSP shipped blind would break Leaflet and Cloudinary.
 
 Deployment-topology items (proxy trust depth, API network exposure, TLS/HSTS, credential rotation) are in §4.4, not here — they cannot be resolved before a hosting platform exists.
@@ -242,11 +319,10 @@ Admin SSR error boundary (R10) shipped — see §3.
 
 Detail and rationale in [`testing.md`](testing.md) §9. None of these blocks other work; all are recorded so they aren't lost:
 
-- **Citizen cross-account access regression test (R8) — pending.** The ownership check is correct in code but has no E2E asserting citizen A cannot read citizen B's report.
 - **Per-run database isolation — pending.** The single change that would unlock parallel workers and remove most of the suite's constraints. Also the largest.
-- **Wider fixture sharing — pending.** `admin-tickets.spec.ts` creates 7 of the suite's ~16 reports; applying the shared-`beforeAll` pattern where a pristine ticket isn't needed would push full runs further from the 20/hour IP limit without touching the rate limiter.
+- **Wider fixture sharing — pending.** `admin-tickets.spec.ts` creates 8 of the suite's ~17 reports; applying the shared-`beforeAll` pattern where a pristine ticket isn't needed would push full runs further from the 20/hour IP limit without touching the rate limiter.
 - **Playwright in CI — pending**, and correctly gated behind database isolation. CI today runs API build, API unit tests, root lint, and root build — no browser tests.
-- **Security-control tests — pending**, to be written alongside whatever ships from §4.1.
+- **Security-control tests — pending**, to be written alongside whatever ships from §4.1. Ticket-reassignment coverage already shipped — see §3.
 
 ### 4.4 Deployment readiness — pending
 
