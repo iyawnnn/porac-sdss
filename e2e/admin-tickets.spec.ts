@@ -368,6 +368,82 @@ test("system admin can reassign a ticket's office through the UI, and office sco
   await meoContext.close();
 });
 
+// Reassignment is NOT system-admin-only: TicketsController.reassign sits
+// behind AdminSessionGuard alone, and TicketsService.reassignOffice checks
+// assertOfficeAccess against the ticket's CURRENT office, not role — so any
+// office admin who has a ticket can hand it to the other office. It's a
+// one-way move (the origin office loses access afterwards). This is
+// documented intended behavior (docs/user-flows.md §2.6/§4.2), not a gap to
+// close — these four tests pin it down rather than restrict it, sharing one
+// disposable ticket across all four via describe.serial since each test
+// depends on the previous one's mutation.
+test.describe.serial("MEO-initiated reassignment security", () => {
+  let ticketId: number;
+
+  test.beforeAll(async ({ browser }) => {
+    const citizenContext = await browser.newContext();
+    const citizenPage = await citizenContext.newPage();
+    await signupCitizen(citizenPage, "reassign-sec");
+    ({ ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`));
+    await citizenContext.close();
+  });
+
+  test("MEO admin reassigns their own MEO ticket to MDRRMO", async ({ page, request }) => {
+    await loginAs(page, E2E_MEO_ADMIN);
+    const headers = { ...sessionCookieHeader(await page.context().cookies()), "content-type": "application/json" };
+
+    const res = await request.post(`/api/admin/tickets/${ticketId}/reassign`, { headers, data: { toOffice: "MDRRMO" } });
+    expect(res.ok()).toBe(true);
+    expect((await res.json()).assignedOffice).toBe("MDRRMO");
+  });
+
+  test("after reassignment, the original MEO session is locked out of the ticket", async ({ page, request }) => {
+    await loginAs(page, E2E_MEO_ADMIN);
+    const headers = sessionCookieHeader(await page.context().cookies());
+
+    const detailRes = await request.get(`/api/admin/tickets/${ticketId}`, { headers });
+    expect(detailRes.status()).toBe(403);
+
+    const listRes = await request.get("/api/admin/tickets?office=MEO&status=all&limit=50", { headers });
+    const listBody = await listRes.json();
+    expect(listBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(false);
+  });
+
+  test("MEO admin cannot reassign a ticket that is now MDRRMO's", async ({ page, request }) => {
+    await loginAs(page, E2E_MEO_ADMIN);
+    const headers = { ...sessionCookieHeader(await page.context().cookies()), "content-type": "application/json" };
+
+    // Attempted direction doesn't matter — assertOfficeAccess rejects on the
+    // ticket's current office (MDRRMO) before the target office is considered.
+    const res = await request.post(`/api/admin/tickets/${ticketId}/reassign`, { headers, data: { toOffice: "MEO" } });
+    expect(res.status()).toBe(403);
+  });
+
+  test("the reassignment left correct office_reassignments and admin_audit_events rows", async ({ page, request }) => {
+    await loginAs(page, E2E_SYSTEM_ADMIN);
+    const headers = sessionCookieHeader(await page.context().cookies());
+
+    const detail = await (await request.get(`/api/admin/tickets/${ticketId}`, { headers })).json();
+    const reassignment = detail.reassignments.find(
+      (r: { from_office: string; to_office: string }) => r.from_office === "MEO" && r.to_office === "MDRRMO",
+    );
+    expect(reassignment).toBeTruthy();
+    expect(reassignment.admin_name).toBe(`${E2E_MEO_ADMIN.firstName} ${E2E_MEO_ADMIN.lastName}`);
+
+    const directory = await (await request.get("/api/admin/admins/directory?office=MEO", { headers })).json();
+    const meoAdmin = directory.find((a: { email: string }) => a.email === E2E_MEO_ADMIN.email);
+    expect(meoAdmin).toBeTruthy();
+
+    const audit = await (
+      await request.get("/api/admin/activity-log?actionType=ticket_reassigned&targetType=ticket&limit=25", { headers })
+    ).json();
+    const event = audit.events.find((e: { target_id: number }) => e.target_id === ticketId);
+    expect(event).toBeTruthy();
+    expect(event.actor_admin_id).toBe(meoAdmin.id);
+    expect(event.metadata).toMatchObject({ from: "MEO", to: "MDRRMO" });
+  });
+});
+
 // --- 8. Category and barangay filters -----------------------------------------
 
 test("category filter narrows the queue to only that category", async ({ page, request }) => {

@@ -110,6 +110,19 @@ async function setDateInput(locator: import("@playwright/test").Locator, value: 
   }, value);
 }
 
+// On Ticket Detail, the "New work order" dialog's Assigned admin trigger
+// sits above a Leaflet map (TicketLocationMap.tsx) whose leaflet-interactive
+// <path> elements can intermittently intercept a plain .click() at that
+// screen coordinate, even after the page has reached network idle. Opening
+// the Radix Select via focus + a keyboard Enter (the same activation this
+// combobox already supports for real keyboard users) never does pointer
+// hit-testing at all, so it can't be intercepted by an unrelated element.
+async function openAssigneePicker(dialog: import("@playwright/test").Locator): Promise<void> {
+  const trigger = dialog.getByLabel("Assigned admin");
+  await trigger.focus();
+  await trigger.press("Enter");
+}
+
 async function createWorkOrderAsSystemAdmin(browser: Browser, ticketId: number, title: string): Promise<{ id: number; assigned_office: string }> {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -200,6 +213,67 @@ test("MEO office admin cannot create a work order on an MDRRMO ticket (server-si
     data: { ticketId: sharedMdrrmoTicketId, title: "Should be blocked", notes: null, assignedAdminId: null, dueDate: null },
   });
   expect(res.status()).toBe(403);
+});
+
+test("MDRRMO office admin cannot create a work order on a MEO ticket (server-side rejection)", async ({ page, request }) => {
+  await loginAs(page, E2E_MDRRMO_ADMIN);
+  const cookies = await page.context().cookies();
+  const res = await request.post("/api/admin/work-orders", {
+    headers: { ...sessionCookieHeader(cookies), "content-type": "application/json" },
+    data: { ticketId: sharedMeoTicketId, title: "Should be blocked", notes: null, assignedAdminId: null, dueDate: null },
+  });
+  expect(res.status()).toBe(403);
+});
+
+test("assigning an admin from the other office is rejected with 400 and creates nothing", async ({ page, request }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  const cookies = await page.context().cookies();
+  const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
+
+  const directoryRes = await request.get("/api/admin/admins/directory?office=MDRRMO", { headers });
+  const [mdrrmoAdmin] = await directoryRes.json();
+
+  const title = `E2E cross-office assignee ${Date.now()}`;
+  const res = await request.post("/api/admin/work-orders", {
+    headers,
+    data: { ticketId: sharedMeoTicketId, title, notes: null, assignedAdminId: mdrrmoAdmin.id, dueDate: null },
+  });
+  expect(res.status()).toBe(400);
+
+  const listRes = await request.get(`/api/admin/work-orders?ticketId=${sharedMeoTicketId}&status=all&limit=50`, { headers });
+  const listBody = await listRes.json();
+  expect(listBody.workOrders.some((w: { title: string }) => w.title === title)).toBe(false);
+});
+
+test("assigning a deactivated admin is rejected with 400 and creates nothing", async ({ page, request }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  const cookies = await page.context().cookies();
+  const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
+
+  // Same-office (MEO, matching sharedMeoTicketId) throwaway admin, so
+  // "inactive" is the sole rejection reason — isolated from the cross-office
+  // case above. e2e-prefixed email so cleanup:e2e-admins (global setup)
+  // removes it automatically; no manual cleanup needed.
+  const email = `e2e-inactive-wo-${Date.now()}@porac.gov.ph`;
+  const createAdminRes = await request.post("/api/admin/admins", {
+    headers,
+    data: { email, password: "longenoughpassword", firstName: "Inactive", lastName: "Assignee", role: "officer", office: "MEO" },
+  });
+  expect(createAdminRes.ok()).toBe(true);
+  const inactiveAdmin = await createAdminRes.json();
+  const deactivateRes = await request.post(`/api/admin/admins/${inactiveAdmin.id}/deactivate`, { headers });
+  expect(deactivateRes.ok()).toBe(true);
+
+  const title = `E2E inactive assignee ${Date.now()}`;
+  const res = await request.post("/api/admin/work-orders", {
+    headers,
+    data: { ticketId: sharedMeoTicketId, title, notes: null, assignedAdminId: inactiveAdmin.id, dueDate: null },
+  });
+  expect(res.status()).toBe(400);
+
+  const listRes = await request.get(`/api/admin/work-orders?ticketId=${sharedMeoTicketId}&status=all&limit=50`, { headers });
+  const listBody = await listRes.json();
+  expect(listBody.workOrders.some((w: { title: string }) => w.title === title)).toBe(false);
 });
 
 test("MEO office admin cannot read, update, or change the status of an MDRRMO work order", async ({ page, request, browser }) => {
@@ -302,11 +376,15 @@ test("mobile viewport renders the work orders card list, not the desktop table",
 test("the assigned admin picker appears in the create work order dialog with an Unassigned option", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
+  // See the comment on the MDRRMO assignee-picker test below — Ticket
+  // Detail's Leaflet map needs to settle before the dialog opens, or its
+  // interactive polygon can intercept a click meant for the dialog.
+  await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "New Work Order" }).click();
   const dialog = page.getByRole("dialog", { name: "New work order" });
   await expect(dialog.getByLabel("Assigned admin")).toBeVisible();
-  await dialog.getByLabel("Assigned admin").click();
+  await openAssigneePicker(dialog);
   await expect(page.getByRole("option", { name: "Unassigned / Office-wide" })).toBeVisible();
 });
 
@@ -328,10 +406,18 @@ test("MDRRMO office admin's assignee picker only offers MDRRMO admins", async ({
   // ticket instead, so nothing shared is mutated.
   await loginAs(page, E2E_MDRRMO_ADMIN);
   await page.goto(`/admin/tickets/${sharedMdrrmoTicketId}`);
+  // Ticket Detail renders a Leaflet map (barangay boundary polygon + pulsing
+  // urgency marker, TicketLocationMap.tsx) whose leaflet-interactive <path>
+  // elements sit underneath the dialog. Waiting for network idle alone isn't
+  // enough to stop them intermittently intercepting a pointer click on the
+  // assignee trigger, so that click goes through openAssigneePicker (focus +
+  // keyboard Enter, which activates the trigger without any pointer
+  // hit-testing at all — see its definition above).
+  await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "New Work Order" }).click();
   const dialog = page.getByRole("dialog", { name: "New work order" });
-  await dialog.getByLabel("Assigned admin").click();
+  await openAssigneePicker(dialog);
   await expect(page.getByRole("option", { name: "MDRRMO Supervisor" })).toBeVisible();
   await expect(page.getByRole("option", { name: "MEO Supervisor" })).toHaveCount(0);
 });
@@ -539,11 +625,15 @@ test("enabling My Assignments filters the list to only the current admin's assig
   const mineTitle = `E2E my-assignments mine ${Date.now()}`;
   const notMineTitle = `E2E my-assignments other ${Date.now()}`;
   await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
+  // See the comment on the MDRRMO assignee-picker test above — Ticket
+  // Detail's Leaflet map needs to settle before the dialog opens, or its
+  // interactive polygon can intercept a click meant for the dialog.
+  await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "New Work Order" }).click();
   let dialog = page.getByRole("dialog", { name: "New work order" });
   await dialog.getByLabel("Title").fill(mineTitle);
-  await dialog.getByLabel("Assigned admin").click();
+  await openAssigneePicker(dialog);
   await page.getByRole("option", { name: "MEO Supervisor" }).click();
   await dialog.getByRole("button", { name: "Create work order" }).click();
   await expect(dialog).toHaveCount(0);
@@ -573,6 +663,10 @@ test("clearing My Assignments restores the broader work order list", async ({ pa
   await loginAs(page, E2E_MEO_ADMIN);
   const title = `E2E my-assignments clear ${Date.now()}`;
   await page.goto(`/admin/tickets/${sharedMeoTicketId}`);
+  // See the comment on the MDRRMO assignee-picker test above — Ticket
+  // Detail's Leaflet map needs to settle before the dialog opens, or its
+  // interactive polygon can intercept a click meant for the dialog.
+  await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "New Work Order" }).click();
   const dialog = page.getByRole("dialog", { name: "New work order" });
