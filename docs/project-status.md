@@ -274,6 +274,29 @@ Natural companion to R1 (failed-login throttling) — R1 already computes the fa
 - `api/src/admin/reports.service.ts` untouched — this is a test-only change locking in already-correct behavior.
 - Verified against `pnpm exec playwright test e2e/admin-reports.spec.ts -- --workers=1` (not the full suite).
 
+### Work-Order Office-Scoping Test Gaps Closed — **completed**
+
+`e2e/admin-work-orders.spec.ts` already covered most office-scoping paths (read/update/status 403 both directions, list clamping, citizen 401, assignee-picker scoping, notes non-leak). Three paths, all backed by already-correct code, had zero test coverage.
+
+- **MDRRMO → MEO work-order creation → 403.** The mirror of the existing MEO → MDRRMO creation-rejection test — enforcement was previously proven one-way only for the create path.
+- **Cross-office `assignedAdminId` → 400, creates nothing.** `WorkOrdersService`'s `assertValidAssignee` (shared by `create`/`update`) validates the assignee is active and belongs to the *work order's* office — untested until now. Confirmed via both the status code and a follow-up list query (`GET /api/admin/work-orders?ticketId=...`) proving no row with the test's title exists.
+- **Deactivated `assignedAdminId` → 400, creates nothing.** Same shared validation, same collapsed 400/message as the cross-office case — confirmed the same way, using a same-office throwaway admin so "inactive" is the isolated cause. One throwaway admin created via the raw API (`POST /api/admin/admins` + `.../deactivate`), `e2e`-prefixed so `cleanup:e2e-admins` removes it automatically.
+- **Zero new tickets or reports.** All three tests reuse the existing `sharedMeoTicketId`/`sharedMdrrmoTicketId` fixtures from this file's `beforeAll`.
+- `api/src/admin/work-orders.service.ts` untouched — the validation was already correct; these three tests close the coverage gap, they don't fix a bug.
+- Verified against `pnpm exec playwright test e2e/admin-work-orders.spec.ts -- --workers=1` (not the full suite).
+
+### Ticket Reassignment Security Tests Added — **completed**
+
+Reassignment is not System-Administrator-only: `TicketsController.reassign` sits behind `AdminSessionGuard` alone, and `TicketsService.reassignOffice` checks `assertOfficeAccess` against the ticket's *current* office, not role — so an office admin who holds a ticket can hand it to the other office. It's a one-way move (the origin office loses access afterward). This was already documented correctly (`docs/user-flows.md` §2.6/§4.2) but `e2e/admin-tickets.spec.ts` only ever exercised reassignment as System Administrator, so nothing pinned the office-admin path.
+
+- **MEO admin reassigns their own MEO ticket to MDRRMO → succeeds.**
+- **After reassignment, that same MEO session gets 403 on the ticket and it is absent from their list** — the one-way lockout.
+- **MEO admin attempting to reassign a ticket that's now MDRRMO's → 403** — they never had access to reassign it from there.
+- **The reassignment writes an `admin_audit_events` row naming the acting admin (by id) and an `office_reassignments` row** — verified via `GET /admin/tickets/:id`'s `reassignments` array and `GET /admin/activity-log` as System Administrator.
+- All four tests share one throwaway ticket via `describe.serial` and a `beforeAll` — one report added to the suite's budget (see [`testing.md`](testing.md) §6).
+- `api/src/admin/tickets.controller.ts`/`tickets.service.ts` untouched — this pins existing, already-correct behavior; it does not change the reassignment permission model.
+- Verified against `pnpm exec playwright test e2e/admin-tickets.spec.ts -- --workers=1` (not the full suite).
+
 ---
 
 ## 4. Current Queue
@@ -297,9 +320,9 @@ Admin SSR error boundary (R10) shipped — see §3.
 Detail and rationale in [`testing.md`](testing.md) §9. None of these blocks other work; all are recorded so they aren't lost:
 
 - **Per-run database isolation — pending.** The single change that would unlock parallel workers and remove most of the suite's constraints. Also the largest.
-- **Wider fixture sharing — pending.** `admin-tickets.spec.ts` creates 7 of the suite's ~16 reports; applying the shared-`beforeAll` pattern where a pristine ticket isn't needed would push full runs further from the 20/hour IP limit without touching the rate limiter.
+- **Wider fixture sharing — pending.** `admin-tickets.spec.ts` creates 8 of the suite's ~17 reports; applying the shared-`beforeAll` pattern where a pristine ticket isn't needed would push full runs further from the 20/hour IP limit without touching the rate limiter.
 - **Playwright in CI — pending**, and correctly gated behind database isolation. CI today runs API build, API unit tests, root lint, and root build — no browser tests.
-- **Security-control tests — pending**, to be written alongside whatever ships from §4.1.
+- **Security-control tests — pending**, to be written alongside whatever ships from §4.1. Ticket-reassignment coverage already shipped — see §3.
 
 ### 4.4 Deployment readiness — pending
 
