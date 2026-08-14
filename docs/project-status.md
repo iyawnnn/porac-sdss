@@ -320,7 +320,7 @@ Admin SSR error boundary (R10) shipped — see §3.
 Detail and rationale in [`testing.md`](testing.md) §9. None of these blocks other work; all are recorded so they aren't lost:
 
 - **Per-run database isolation — pending.** The single change that would unlock parallel workers and remove most of the suite's constraints. Also the largest.
-- **Wider fixture sharing — pending.** `admin-tickets.spec.ts` creates 8 of the suite's ~17 reports; applying the shared-`beforeAll` pattern where a pristine ticket isn't needed would push full runs further from the 20/hour IP limit without touching the rate limiter.
+- **Wider fixture sharing — done for the read-only slice.** `admin-tickets.spec.ts`'s three purely-read tests (queue→detail nav, Ticket Detail read-only sections, mobile card list) now share one `sharedReadOnlyTicketId` fixture, cutting that file from 8 to 6 report-creating call sites and the full-suite total from ~17 to ~15 (see [`testing.md`](testing.md) §5–§6). Its remaining 5 call sites all mutate status, office, or resolution one-way and correctly stay isolated — no further reduction is possible there without database isolation.
 - **Playwright in CI — pending**, and correctly gated behind database isolation. CI today runs API build, API unit tests, root lint, and root build — no browser tests.
 - **Security-control tests — pending**, to be written alongside whatever ships from §4.1. Ticket-reassignment coverage already shipped — see §3.
 

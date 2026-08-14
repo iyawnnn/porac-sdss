@@ -62,6 +62,23 @@ async function signupCitizen(page: Page, label: string): Promise<{ email: string
   return { email, password };
 }
 
+// Shared by three tests that only read a ticket — queue→detail navigation,
+// Ticket Detail's read-only sections, and the mobile card list — none of
+// which advance status, reassign office, resolve, or dispute, or assert on
+// any particular status/office value, so a shared ticket can't leak state
+// between them. Safe only under this file's mandatory --workers=1 (no
+// per-test DB isolation), same reasoning as admin-work-orders.spec.ts's
+// sharedMeoTicketId and this file's own resolvedFixture below.
+let sharedReadOnlyTicketId: number;
+
+test.beforeAll(async ({ browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "shared-readonly");
+  ({ ticketId: sharedReadOnlyTicketId } = await createThrowawayReport(citizenPage, `shared-readonly-${Date.now()}`));
+  await citizenContext.close();
+});
+
 // --- 1. Ticket Queue baseline ---------------------------------------------
 
 test("authenticated admin can open the Ticket Queue and see its content", async ({ page }) => {
@@ -207,12 +224,8 @@ test("system admin sees an office picker exposing a city-wide view", async ({ pa
 
 // --- 4. Queue to Detail navigation ------------------------------------------
 
-test("clicking a ticket from the queue opens its detail page and back link returns to the queue", async ({ page, browser }) => {
-  const citizenContext = await browser.newContext();
-  const citizenPage = await citizenContext.newPage();
-  await signupCitizen(citizenPage, "queue-nav");
-  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
-  await citizenContext.close();
+test("clicking a ticket from the queue opens its detail page and back link returns to the queue", async ({ page }) => {
+  const ticketId = sharedReadOnlyTicketId;
 
   await loginAs(page, E2E_MEO_ADMIN);
   // Search-filtered to this disposable ticket specifically — the queue's
@@ -241,12 +254,8 @@ test("clicking a ticket from the queue opens its detail page and back link retur
 
 // --- 5. Ticket Detail read-only surface --------------------------------------
 
-test("Ticket Detail shows status, office, urgency, evidence, and location sections", async ({ page, browser }) => {
-  const citizenContext = await browser.newContext();
-  const citizenPage = await citizenContext.newPage();
-  await signupCitizen(citizenPage, "detail-sections");
-  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
-  await citizenContext.close();
+test("Ticket Detail shows status, office, urgency, evidence, and location sections", async ({ page }) => {
+  const ticketId = sharedReadOnlyTicketId;
 
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto(`/admin/tickets/${ticketId}`);
@@ -536,12 +545,8 @@ test("sort control reorders tickets by urgency", async ({ page }) => {
 
 // --- 10. Mobile ticket queue rendering -----------------------------------------
 
-test("mobile viewport renders the ticket queue card list, not the desktop table, and a card link works", async ({ page, browser }) => {
-  const citizenContext = await browser.newContext();
-  const citizenPage = await citizenContext.newPage();
-  await signupCitizen(citizenPage, "mobile-card");
-  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
-  await citizenContext.close();
+test("mobile viewport renders the ticket queue card list, not the desktop table, and a card link works", async ({ page }) => {
+  const ticketId = sharedReadOnlyTicketId;
 
   await page.setViewportSize({ width: 390, height: 844 });
   await loginAs(page, E2E_MEO_ADMIN);
