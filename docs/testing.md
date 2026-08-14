@@ -103,11 +103,24 @@ Some files create **one** disposable ticket in `beforeAll` and share it across t
 
 This is safe **only** under `--workers=1`, and each site carries a comment saying so. Those tests need *a* ticket to attach uniquely-titled work orders to, not a pristine one. Sharing also directly reduces report creation, which matters for §6.
 
+`admin-tickets.spec.ts` has its own such fixture, `sharedReadOnlyTicketId`, created once in a file-level `beforeAll` and reused by the three tests that only read a ticket — queue→detail navigation, Ticket Detail's read-only sections, and the mobile card list. None of the three assert on a specific status or office value, so a shared ticket can't leak state between them; the remaining call sites in that file all mutate status, office, or resolution and correctly keep their own disposable ticket (see the decision rule below).
+
 `admin-reports.spec.ts`'s work-order CSV note-leak test goes one step further: rather than creating a disposable ticket at all, it queries whichever ticket already exists (`GET /api/admin/tickets?status=all&limit=1`) and attaches a sentinel-noted work order to that. It doesn't need a pristine or office-specific ticket — any ticket works, since the assertion is purely "the note text does not appear in the CSV" — so it adds zero reports rather than merely reducing them.
 
 `admin-work-orders.spec.ts`'s three cross-office/assignee-validation gap tests (MDRRMO→MEO creation, cross-office `assignedAdminId`, deactivated `assignedAdminId`) reuse `sharedMeoTicketId`/`sharedMdrrmoTicketId` the same way — no new tickets or reports. The deactivated-assignee test does create one throwaway admin via the raw API (`POST /api/admin/admins` + `.../deactivate`), following `admin-management.spec.ts`'s create-then-deactivate pattern with the same `e2e-`-prefixed email convention `cleanup:e2e-admins` already relies on.
 
 `admin-tickets.spec.ts`'s `describe.serial("MEO-initiated reassignment security")` block (4 tests) creates one throwaway ticket in its own `beforeAll` and shares it across all four — the first test moves it MEO→MDRRMO, so the "reassign a ticket you don't own" test needs no second ticket. One report total for the whole block.
+
+### Decision rule: which fixture pattern to use
+
+| Your test... | Use |
+|---|---|
+| mutates ticket status, office, or resolution | its own disposable ticket |
+| only reads, or attaches uniquely-named child records | a file-level shared fixture, created once in `beforeAll` |
+| needs to observe another test's outcome | explicit module state (e.g. `resolvedFixture`), commented, and only valid under `--workers=1` |
+| needs no ticket at all | create none |
+
+This is the rule the patterns above already follow — stated explicitly so a new spec doesn't have to re-derive it from precedent. `createThrowawayReport` (`admin-tickets.spec.ts`) and `createDisposableTicket` (`admin-work-orders.spec.ts`) are near-duplicate helpers with different call shapes (one takes an existing citizen `Page`, the other creates its own); they are deliberately left unconsolidated for now rather than risk obscuring the per-file comments that explain why sharing is safe in each.
 
 ### Transient-failure helpers
 
@@ -120,11 +133,11 @@ This is safe **only** under `--workers=1`, and each site carries a comment sayin
 
 ## 6. The rate-limit caveat
 
-**A full suite run posts roughly 17 real reports.** They come from four specs:
+**A full suite run posts roughly 15 real reports.** They come from four specs:
 
 | Spec | Reports |
 |---|---|
-| `admin-tickets.spec.ts` | 8 |
+| `admin-tickets.spec.ts` | 6 |
 | `citizen-dispute.spec.ts` | 6 |
 | `admin-work-orders.spec.ts` | 2 (in `beforeAll`) |
 | `citizen-reports.spec.ts` | 1 |
@@ -201,7 +214,7 @@ Neither creates reports, so both are safe to repeat freely.
 Not scheduled. Recorded so the reasoning is not re-derived.
 
 - **Per-run database isolation** — a schema per run, or a transaction rolled back per test. This is the change that would unlock parallel workers and remove most of §8 at once. It is also by far the largest item here, which is why the suite still runs serially.
-- **Wider fixture sharing.** `admin-tickets.spec.ts` creates 7 of the suite's 16 reports. Applying `admin-work-orders.spec.ts`'s `beforeAll` shared-ticket pattern to the tests that do not need a pristine ticket would cut report creation substantially and push the full suite further from the hourly limit — without touching the rate limiter.
+- **Wider fixture sharing — done for the read-only slice.** `admin-tickets.spec.ts` went from 8 report-creating call sites to 6 by sharing one `sharedReadOnlyTicketId` fixture across its three purely-read tests (§5). The remaining 5 call sites (dispute, status advancement, office reassignment, the reassignment-security `describe.serial` block, and admin-UI resolution) each mutate the ticket in a one-way, non-revertible way and correctly stay isolated — no further reduction is possible here without database isolation.
 - **Playwright in CI** — needs an ephemeral PostGIS database plus a started API. Worth doing only after database isolation lands; otherwise CI inherits every constraint in §8.
 - **Security-control assertions** for whatever ships from the hardening plan — a login-throttle test, and header assertions once headers exist.
 
@@ -216,5 +229,5 @@ A short checklist, derived from what the existing specs do:
 3. If you need a ticket, create a disposable one with jittered coordinates. Do not select "the first ticket."
 4. If several tests in the file can share one ticket, create it once in `beforeAll` and comment why sharing is safe.
 5. Prefer asserting on roles and accessible names over CSS selectors.
-6. Count how many reports your spec adds to the suite's ~16 (§6) and keep it as low as the test allows.
+6. Count how many reports your spec adds to the suite's ~15 (§6) and keep it as low as the test allows — use the decision rule in §5 to pick disposable-per-test, shared-per-file, or no ticket at all.
 7. Never weaken or bypass a security control to make a test pass.
