@@ -46,6 +46,39 @@ describe('computeUrgency', () => {
   });
 });
 
+// Phase 6 manuscript-alignment regression guard: nothing previously pinned
+// the exact 1/3 + 1/3 + 1/3 weighting — the tests above only assert
+// invariants (range, level/band agreement) that would still pass even if
+// the weights drifted (e.g. 0.5/0.25/0.25) as long as monotonicity held.
+describe('computeUrgency weighting (equal thirds, manuscript-required)', () => {
+  it('urgencyScore is the unweighted mean of the three factors', () => {
+    const u = computeUrgency({ elevationM: 20, elevMin: 0, elevMax: 100, memberCount: 4, rain1hMm: 12 });
+    const mean = (u.elevationFactor + u.precipitationFactor + u.clusterFactor) / 3;
+    expect(u.urgencyScore).toBeCloseTo(mean, 10);
+  });
+
+  it('changing only one factor moves urgencyScore by exactly a third of that factor\'s delta', () => {
+    const base = computeUrgency({ elevationM: 50, elevMin: 0, elevMax: 100, memberCount: 1, rain1hMm: 0 });
+    const moreRain = computeUrgency({ elevationM: 50, elevMin: 0, elevMax: 100, memberCount: 1, rain1hMm: 30 });
+    const precipitationDelta = moreRain.precipitationFactor - base.precipitationFactor;
+    expect(moreRain.urgencyScore - base.urgencyScore).toBeCloseTo(precipitationDelta / 3, 10);
+  });
+
+  it('citizen-reported severity is not an input to computeUrgency', () => {
+    // Structural guard: computeUrgency's parameter type has no severity
+    // field, so this only compiles because severity is genuinely absent.
+    const params: Parameters<typeof computeUrgency>[0] = {
+      elevationM: 10,
+      elevMin: 0,
+      elevMax: 100,
+      memberCount: 2,
+      rain1hMm: 5,
+    };
+    expect('citizen_severity' in params).toBe(false);
+    expect('severity' in params).toBe(false);
+  });
+});
+
 describe('clusterFactor (cluster-density normalization, Issue #3)', () => {
   const base = { elevationM: 50, elevMin: 0, elevMax: 100, rain1hMm: 0 };
 

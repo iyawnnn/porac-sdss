@@ -44,7 +44,7 @@ At `/report`. The form enforces an order deliberately: **evidence first, then lo
    - *No GPS in the photo* → prompt to place the pin manually on the map.
    - *GPS outside Porac* → "Photo GPS location is outside Porac municipality bounds."
 3. **Confirm or place the pin.** Moving the pin more than 100 m from the photo's GPS shows a warning that the submission will be flagged for review. **It does not block submission** — the citizen can still file it.
-4. **Choose a category** (11 options) and **a severity** — Low, Medium, High, or Critical. This is the citizen's own judgement of how bad it is.
+4. **Choose a category** (12 options) and **a severity** — Low, Medium, High, or Critical. This is the citizen's own judgement of how bad it is.
 5. **Submit.**
 
 Behind the scenes the server recomputes everything it will not take on trust: which barangay the point falls in, the elevation from the DEM, and the integrity flags. It also decides whether this report is a new ticket or joins an existing one (§1.3).

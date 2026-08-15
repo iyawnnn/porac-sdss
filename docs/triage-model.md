@@ -231,7 +231,7 @@ Stated plainly. None of these is a defect to fix casually; several are inherent 
 
 One reading, taken at the municipality centroid, applied identically to every ticket. Because `precipitationFactor` is the same for all tickets at any instant, it **shifts every score up or down uniformly and never changes their relative ordering**.
 
-Practically: rainfall can push the whole queue across the Critical threshold during a storm — which is useful and intended — but it can never tell you *which* of two tickets is more rain-exposed. Any claim that the system scores per-location rainfall exposure would be inaccurate. Fixing it would need a gridded precipitation source, which OpenWeatherMap's free tier does not provide at intra-municipal resolution.
+Practically: rainfall can push the whole queue across the High threshold during a storm — which is useful and intended — but it can never tell you *which* of two tickets is more rain-exposed. Any claim that the system scores per-location rainfall exposure would be inaccurate. Fixing it would need a gridded precipitation source, which OpenWeatherMap's free tier does not provide at intra-municipal resolution.
 
 ### 10.2 Elevation is static and absolute
 

@@ -182,7 +182,7 @@ Both must pass. Crucially, an attempt is recorded **for every request, including
 
 ### 5.6 The E2E caveat
 
-A full Playwright run posts roughly 16 real reports and will exhaust the 20/hour IP backstop if repeated within the hour. **This is the control working correctly.** There is deliberately **no test-only bypass, env flag, or relaxed limit** — the documented workaround is targeted spec runs. See [`README.md`](../README.md) §I.
+A full Playwright run posts roughly 17 real reports and will exhaust the 20/hour IP backstop if repeated within the hour. **This is the control working correctly.** There is deliberately **no test-only bypass, env flag, or relaxed limit** — the documented workaround is targeted spec runs. See [`README.md`](../README.md) §I.
 
 ---
 
