@@ -141,4 +141,17 @@ export class TicketsController {
     await this.tickets.logReferral(id, admin, agency, note);
     return { ok: true };
   }
+
+  @Post(':id/reject')
+  async reject(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+    @Body('reason') reason: unknown,
+  ) {
+    if (typeof reason !== 'string') {
+      throw new BadRequestException('reason is required');
+    }
+    const result = await this.tickets.rejectTicket(id, admin, reason);
+    return { ok: true, ...result };
+  }
 }

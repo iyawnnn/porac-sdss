@@ -120,6 +120,8 @@ One button advances the status: **Reported → Under Review → In Progress → 
 
 The final step is different. "Advance to Resolved" opens a dialog that asks for **completion notes** and accepts a **resolution photo**. That photo and those notes are what the citizen later sees in their Case Closure Summary, so they are written for a public audience, not as internal shorthand. After Resolved there is no further transition.
 
+**Rejecting a ticket** (Phase 4 workflow completeness) is a separate action, not a step on this ladder — it's offered next to the status tracker while the ticket is still `Reported`, `Under Review`, or `In Progress`, and requires a reason. Maria (the citizen) is told why, both in-app and by email where mail delivery is configured. Once rejected, the ticket is terminal — same as Resolved — and the reject action disappears.
+
 ### 2.4 Work orders
 
 Work orders track the field work needed to close a ticket. A ticket can have several.

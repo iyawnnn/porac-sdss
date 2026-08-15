@@ -729,3 +729,25 @@ test("logging a referral persists and appears in the ticket timeline", async ({ 
   await page.getByRole("tab", { name: "Timeline" }).click();
   await expect(page.getByText(/Referral recorded — MENRO: E2E referral note/)).toBeVisible();
 });
+
+// --- 9. Reject (Phase 4 workflow completeness) --------------------------------
+
+test("rejecting a fresh ticket sets it to Rejected, shows the status tracker's rejected state, and hides the reject action afterward", async ({ page, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "reject");
+  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
+
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  await expect(page.getByRole("button", { name: "Reject Ticket" })).toBeDisabled();
+  await page.getByLabel("Rejection reason", { exact: true }).fill("Outside city limits.");
+  await page.getByRole("button", { name: "Reject Ticket" }).click();
+
+  await expect(page.getByRole("button", { name: "Rejecting..." })).toHaveCount(0);
+  await expect(page.getByText("This ticket was rejected.", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Rejection reason", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reject Ticket" })).toHaveCount(0);
+});
