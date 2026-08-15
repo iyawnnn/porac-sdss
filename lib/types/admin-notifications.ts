@@ -26,6 +26,8 @@ export interface NotificationListResponse {
 export const ADMIN_NOTIFICATION_TYPES = [
   "new_citizen_report",
   "ticket_critical",
+  "ticket_escalation",
+  "ticket_disputed",
   "work_order_assigned",
   "work_order_created",
 ] as const;
@@ -34,6 +36,8 @@ export type AdminNotificationType = (typeof ADMIN_NOTIFICATION_TYPES)[number];
 export const ADMIN_NOTIFICATION_TYPE_LABELS: Record<AdminNotificationType, string> = {
   new_citizen_report: "New Citizen Report",
   ticket_critical: "Ticket Urgency Became High",
+  ticket_escalation: "Ticket Needs Review",
+  ticket_disputed: "Citizen Disputed Resolution",
   work_order_assigned: "Work Order Assigned",
   work_order_created: "Work Order Created",
 };

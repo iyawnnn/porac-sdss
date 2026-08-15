@@ -37,6 +37,7 @@ interface QueryState {
   status: string;
   category: string;
   barangayId: string;
+  urgency: string;
   sort: TicketSort;
   search: string;
   disputed: boolean;
@@ -56,6 +57,7 @@ function initialQueryState(query: Record<string, string | undefined>, sessionOff
       ? (query.status as string)
       : "active";
   const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "";
+  const urgency = query.urgency === "Low" || query.urgency === "Medium" || query.urgency === "High" ? query.urgency : "";
   const sort: TicketSort = query.sort === "priority_asc" || query.sort === "newest" ? query.sort : "priority_desc";
   const limit = (PAGE_LIMITS as readonly number[]).includes(Number(query.limit)) ? Number(query.limit) : 15;
 
@@ -64,6 +66,7 @@ function initialQueryState(query: Record<string, string | undefined>, sessionOff
     status,
     category,
     barangayId: query.barangayId ?? "",
+    urgency,
     sort,
     search: query.search ?? "",
     disputed: query.disputed === "true",
@@ -81,6 +84,7 @@ function buildParams(state: QueryState): URLSearchParams {
   params.set("page", String(state.page));
   if (state.category) params.set("category", state.category);
   if (state.barangayId) params.set("barangayId", state.barangayId);
+  if (state.urgency) params.set("urgency", state.urgency);
   if (state.search) params.set("search", state.search);
   if (state.disputed) params.set("disputed", "true");
   return params;
@@ -186,7 +190,7 @@ export function TicketsWorkspace({
 
   function resetFilters() {
     setSearchInput("");
-    setQuery({ office: sessionOffice ?? "all", status: "active", category: "", barangayId: "", sort: "priority_desc", search: "", disputed: false, page: 1, limit: query.limit });
+    setQuery({ office: sessionOffice ?? "all", status: "active", category: "", barangayId: "", urgency: "", sort: "priority_desc", search: "", disputed: false, page: 1, limit: query.limit });
   }
 
   function retry() {
@@ -198,6 +202,7 @@ export function TicketsWorkspace({
     query.status !== "active" ||
     query.category !== "" ||
     query.barangayId !== "" ||
+    query.urgency !== "" ||
     query.search !== "" ||
     query.disputed ||
     query.sort !== "priority_desc";
@@ -300,6 +305,15 @@ export function TicketsWorkspace({
                   {b.name}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+          <Select onValueChange={(v) => updateFilter({ urgency: v === "all" ? "" : v })} value={query.urgency || "all"}>
+            <SelectTrigger aria-label="Hazard Urgency"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All urgency bands</SelectItem>
+              <SelectItem value="Low">Low</SelectItem>
+              <SelectItem value="Medium">Medium</SelectItem>
+              <SelectItem value="High">High</SelectItem>
             </SelectContent>
           </Select>
           <Select onValueChange={(v) => updateFilter({ sort: v as TicketSort })} value={query.sort}>

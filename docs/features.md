@@ -79,7 +79,7 @@ A dispute never rolls the ticket status backwards and never feeds any score. Onl
 
 ### 2.5 Map and notifications
 
-- **Citizen map** (`/map`) — city-wide ticket pins with the municipal boundary overlay. Requires a citizen session (it is city-wide, not anonymous-public).
+- **Citizen map** (`/map`) — city-wide ticket pins with the municipal boundary overlay. Requires a citizen session (it is city-wide, not anonymous-public). Shows all active tickets (`Reported`, `Under Review`, `In Progress`) — `Resolved`/`Rejected` tickets are terminal and excluded; this matches the same 3-status "active" definition used by the admin map, dashboards, and every ticket-list query (Phase 5 fixed a prior omission where `Under Review` tickets were briefly invisible on this map).
 - **Notifications** — a bell with click-through to the relevant report. Citizen-facing types include `report_received`, `report_merged`, `report_quarantined`, `report_flagged_duplicate`, and the status-progression types (`ticket_under_review`, `ticket_in_progress`, `ticket_resolved`).
 
 ---

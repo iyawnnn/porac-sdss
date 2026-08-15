@@ -66,6 +66,29 @@ describe('duplicate-merge query wiring (Issue #4)', () => {
   });
 });
 
+// Same rationale as the block above (no DB test harness) — regression guard
+// for Phase 5's fix: the public hazard map's active-ticket query previously
+// omitted 'Under Review' from its status filter while every other "active"
+// query site in the codebase (including the block above) used all three.
+describe('public hazard map active-status filter (Phase 5)', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+
+  it('includes Under Review alongside Reported and In Progress', () => {
+    expect(reportsServiceSource).toMatch(
+      /t\.status IN \('Reported', 'Under Review', 'In Progress'\)/,
+    );
+  });
+
+  it('does not use the old two-status filter anywhere', () => {
+    expect(reportsServiceSource).not.toMatch(
+      /status IN \('Reported', 'In Progress'\)/,
+    );
+  });
+});
+
 // Same rationale as the block above — no DB test harness to mock this
 // transaction end-to-end, so the atomicity guarantee (notification insert
 // happens via `tx`, not a separate post-commit call) is asserted on the
