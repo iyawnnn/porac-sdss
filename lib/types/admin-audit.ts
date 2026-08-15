@@ -7,6 +7,7 @@ export type AdminAuditActionType =
   | "admin_password_reset"
   | "ticket_status_advanced"
   | "ticket_reassigned"
+  | "ticket_referral_noted"
   | "report_moderated"
   | "work_order_created"
   | "work_order_updated"

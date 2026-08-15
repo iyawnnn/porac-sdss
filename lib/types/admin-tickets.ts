@@ -59,6 +59,9 @@ export interface TicketDetail {
   updated_at: string;
   disputed_at: string | null;
   dispute_reason: string | null;
+  // Pure function of category, computed server-side at read time — never
+  // stored. False means this category is a referral/coordination concern.
+  direct_responsibility: boolean;
 }
 
 export interface TicketReport {
@@ -89,6 +92,16 @@ export interface TicketReassignmentRow {
   to_office: string;
   admin_name: string | null;
   reassigned_at: string;
+}
+
+// Historical record only — a referral being recorded does not mean it is
+// still unresolved. Never render this as a live "pending" badge; render it
+// as a dated history entry ("Referral recorded — ...").
+export interface TicketReferralRow {
+  agency: string;
+  note: string | null;
+  admin_name: string;
+  referred_at: string;
 }
 
 export interface TicketPriorityContext {

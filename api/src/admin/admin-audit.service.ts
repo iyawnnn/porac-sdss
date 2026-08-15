@@ -22,6 +22,7 @@ export type AdminAuditActionType =
   | 'admin_login_failed'
   | 'ticket_status_advanced'
   | 'ticket_reassigned'
+  | 'ticket_referral_noted'
   | 'report_moderated'
   | 'work_order_created'
   | 'work_order_updated'
@@ -94,6 +95,7 @@ const ACTION_TYPES: AdminAuditActionType[] = [
   'admin_login_failed',
   'ticket_status_advanced',
   'ticket_reassigned',
+  'ticket_referral_noted',
   'report_moderated',
   'work_order_created',
   'work_order_updated',
