@@ -37,8 +37,17 @@ describe('parseTicketQuery category filter', () => {
     {} as AdminAuditService,
   );
 
+  it.each(['Localized Flooding', 'Pothole / Road Surface Damage', 'Other Minor Infrastructure Hazard'])(
+    'accepts a known current category %s',
+    (category) => {
+      expect(service.parseTicketQuery({ category }, MEO_OFFICER).category).toBe(
+        category,
+      );
+    },
+  );
+
   it.each(['Flooding', 'Pothole', 'Other'])(
-    'accepts a known category %s',
+    'still accepts a legacy category %s, so historical tickets stay filterable',
     (category) => {
       expect(service.parseTicketQuery({ category }, MEO_OFFICER).category).toBe(
         category,

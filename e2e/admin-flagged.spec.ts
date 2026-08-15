@@ -68,12 +68,12 @@ test("category filter narrows results and Reset filters clears back to defaults"
   await gotoFlagged(page);
 
   await page.getByLabel("Category").click();
-  await page.getByRole("option", { name: "Flooding", exact: true }).click();
-  await expect(page).toHaveURL(/category=Flooding/);
+  await page.getByRole("option", { name: "Localized Flooding", exact: true }).click();
+  await expect(page).toHaveURL(/category=Localized(%20|\+)Flooding/);
 
   await expect(page.getByRole("button", { name: "Reset filters" })).toBeVisible();
   await page.getByRole("button", { name: "Reset filters" }).click();
-  await expect(page).not.toHaveURL(/category=Flooding/);
+  await expect(page).not.toHaveURL(/category=Localized(%20|\+)Flooding/);
   await expect(page.getByRole("button", { name: "Reset filters" })).toHaveCount(0);
 });
 
@@ -101,7 +101,7 @@ test("a backend failure shows the error card with a working retry", async ({ pag
   // desktop instance is first in DOM order at this viewport) — .first()
   // picks the visible one and avoids a strict-mode ambiguity.
   await page.getByLabel("Category").click();
-  await page.getByRole("option", { name: "Pothole", exact: true }).click();
+  await page.getByRole("option", { name: "Pothole / Road Surface Damage", exact: true }).click();
 
   await expect(page.getByText("Couldn't refresh flagged reports").first()).toBeVisible();
   expect(intercepted).toBe(true);

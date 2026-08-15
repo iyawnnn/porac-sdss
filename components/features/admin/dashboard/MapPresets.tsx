@@ -16,15 +16,15 @@ interface MapPreset {
 // with a fixed, known-good value per office. Do not add a preset here for a
 // filter that doesn't already exist and apply on the map.
 const MEO_PRESETS: MapPreset[] = [
-  { label: "Drainage Issues", icon: Droplets, params: { category: "Clogged Drain" } },
-  { label: "Potholes & Road Damage", icon: MapPin, params: { category: "Pothole" } },
-  { label: "Illegal Dumping", icon: Trash2, params: { category: "Illegal Dumping" } },
+  { label: "Drainage Issues", icon: Droplets, params: { category: "Drainage / Culvert / Manhole Issue" } },
+  { label: "Potholes & Road Damage", icon: MapPin, params: { category: "Pothole / Road Surface Damage" } },
+  { label: "Illegal Dumping", icon: Trash2, params: { category: "Illegal Dumping Affecting Drainage or Road" } },
   { label: "High-Urgency Open Work", icon: AlertTriangle, params: { urgency: "High" } },
 ];
 
 const MDRRMO_PRESETS: MapPreset[] = [
-  { label: "Flooding Reports", icon: Droplets, params: { category: "Flooding" } },
-  { label: "Fallen Trees", icon: TreeDeciduous, params: { category: "Fallen Tree" } },
+  { label: "Flooding Reports", icon: Droplets, params: { category: "Localized Flooding" } },
+  { label: "Fallen Trees", icon: TreeDeciduous, params: { category: "Fallen Tree / Storm-Related Obstruction" } },
   { label: "High-Urgency Reports", icon: Flame, params: { urgency: "High" } },
 ];
 

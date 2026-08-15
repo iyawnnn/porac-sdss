@@ -27,10 +27,11 @@ async function signupCitizen(page: Page, label: string): Promise<{ email: string
 // first for this office" (the shared-state hazard: earlier specs create,
 // resolve, and reassign tickets, so a live top-of-list query can point at a
 // different ticket — or one mid-mutation — by the time a later test reads
-// it). Pothole always routes to MEO (api/src/common/utils/office.ts); the
-// ~±550m jitter mirrors admin-tickets.spec.ts's createThrowawayReport,
-// comfortably clear of the 25m dedup merge radius so this never silently
-// merges into another fixture's ticket.
+// it). "Pothole / Road Surface Damage" always routes to MEO
+// (api/src/common/utils/office.ts); the ~±550m jitter mirrors
+// admin-tickets.spec.ts's createThrowawayReport, comfortably clear of the
+// 25m dedup merge radius so this never silently merges into another
+// fixture's ticket.
 async function createDisposableTicket(browser: Browser, label: string): Promise<number> {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -39,7 +40,7 @@ async function createDisposableTicket(browser: Browser, label: string): Promise<
   const res = await page.request.post("/api/reports", {
     multipart: {
       title: `E2E work-orders ${label} ${Date.now()}`,
-      category: "Pothole",
+      category: "Pothole / Road Surface Damage",
       citizen_severity: "Low",
       lat: String(15.0711 + jitter()),
       lng: String(120.5401 + jitter()),
@@ -57,7 +58,8 @@ async function createDisposableTicket(browser: Browser, label: string): Promise<
 }
 
 // For MDRRMO-context tests: creates a disposable ticket (always MEO via
-// Pothole routing) and reassigns it to MDRRMO as system admin. Since the
+// Pothole / Road Surface Damage routing) and reassigns it to MDRRMO as
+// system admin. Since the
 // ticket is test-owned and disposable, no afterAll restore is needed —
 // unlike borrowing a shared seeded ticket, leaving it reassigned affects
 // nothing else in the suite.

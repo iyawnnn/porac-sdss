@@ -167,7 +167,7 @@ test.describe("Notification click-through", () => {
     const submitRes = await page.request.post("/api/reports", {
       multipart: {
         title: "E2E notification click-through check",
-        category: "Pothole",
+        category: "Pothole / Road Surface Damage",
         citizen_severity: "Low",
         lat: String(15.0711 + jitter()),
         lng: String(120.5401 + jitter()),

@@ -14,9 +14,9 @@ function sessionCookieHeader(cookies: { name: string; value: string }[]): Record
 // Creates a brand-new, disposable ticket via the same POST /api/reports
 // multipart flow citizen-dispute.spec.ts already established — used instead
 // of mutating a shared seeded ticket wherever the mutation (status advance)
-// has no revert endpoint to restore it with afterwards. "Pothole" always
-// routes to MEO (api/src/common/utils/office.ts), so E2E_MEO_ADMIN can act
-// on it without any additional reassignment.
+// has no revert endpoint to restore it with afterwards. "Pothole / Road
+// Surface Damage" always routes to MEO (api/src/common/utils/office.ts), so
+// E2E_MEO_ADMIN can act on it without any additional reassignment.
 async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Promise<{ reportId: number; ticketId: number }> {
   // Pothole's dedup merge radius is 25m (api/src/common/utils/radius.ts) —
   // a fixed lat/lng would silently merge into whatever other fixture (e.g.
@@ -29,7 +29,7 @@ async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Pr
   const res = await citizenPage.request.post("/api/reports", {
     multipart: {
       title,
-      category: "Pothole",
+      category: "Pothole / Road Surface Damage",
       citizen_severity: "Low",
       lat: String(15.0711 + jitter()),
       lng: String(120.5401 + jitter()),
@@ -463,13 +463,14 @@ test("category filter narrows the queue to only that category", async ({ page, r
   test.skip(body.tickets.length === 0, "no MEO tickets seeded — run `pnpm --prefix api seed:diverse-reports` first");
   const targetCategory = body.tickets[0].category as string;
 
-  await page.goto("/admin/tickets?status=all");
+  // Filter directly via URL rather than the category dropdown — the
+  // dropdown only renders current (non-legacy) categories as clickable
+  // options (Phase 3 category follow-up), but the underlying filter must
+  // still accept a legacy category value reached via a bookmarked/shared
+  // link (ALL_TICKET_CATEGORIES whitelist), and most seeded fixture data
+  // still carries legacy category strings.
+  await page.goto(`/admin/tickets?status=all&category=${encodeURIComponent(targetCategory)}`);
   await page.waitForLoadState("networkidle");
-  const filtered = page.waitForResponse((r) => r.url().includes("/api/admin/tickets?") && r.url().includes(`category=${encodeURIComponent(targetCategory)}`));
-  await page.getByLabel("Category", { exact: true }).click();
-  await page.getByRole("option", { name: targetCategory, exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`[?&]category=${encodeURIComponent(targetCategory)}(&|$)`));
-  await filtered;
 
   const rows = page.getByRole("row").filter({ hasText: "View ticket" });
   await expect(rows.first()).toBeVisible();
@@ -664,15 +665,16 @@ test("the citizen's Case Closure Summary reflects a ticket resolved through the 
 
 // --- 8. Referral (Phase 3 manuscript alignment) --------------------------------
 
-// "Leaking Pipe" is a Referral-classified category that still routes to MEO
-// custody (api/src/common/utils/office.ts) — same reasoning as Pothole above,
-// but exercises the non-direct-responsibility path instead.
+// "Leaking Pipe / Water Supply Concern" is a Referral-classified category
+// that still routes to MEO custody (api/src/common/utils/office.ts) — same
+// reasoning as Pothole above, but exercises the non-direct-responsibility
+// path instead.
 async function createReferralReport(citizenPage: Page, titleSuffix: string): Promise<{ ticketId: number }> {
   const jitter = () => (Math.random() - 0.5) * 0.01;
   const res = await citizenPage.request.post("/api/reports", {
     multipart: {
       title: `E2E referral ${titleSuffix}`,
-      category: "Leaking Pipe",
+      category: "Leaking Pipe / Water Supply Concern",
       citizen_severity: "Low",
       lat: String(15.0711 + jitter()),
       lng: String(120.5401 + jitter()),

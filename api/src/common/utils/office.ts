@@ -16,23 +16,48 @@ export interface CategoryRouting {
 }
 
 const ROUTING_BY_CATEGORY: Record<string, CategoryRouting> = {
+  // Manuscript-aligned category strings (Phase 3 follow-up) — what new
+  // tickets are created with.
+  'Pothole / Road Surface Damage': { office: 'MEO', directResponsibility: true },
+  'Uneven Sidewalk': { office: 'MEO', directResponsibility: true },
+  'Drainage / Culvert / Manhole Issue': { office: 'MEO', directResponsibility: true },
+  'Streetlight Out': { office: 'MEO', directResponsibility: true },
+  'Localized Flooding': { office: 'MDRRMO', directResponsibility: true },
+  'Landslide / Slope Failure': { office: 'MDRRMO', directResponsibility: true },
+  'Lahar / Debris-Flow Threat': { office: 'MDRRMO', directResponsibility: true },
+  'Fallen Tree / Storm-Related Obstruction': { office: 'MDRRMO', directResponsibility: true },
+  // Solid waste enforcement — referral/coordination concern.
+  'Illegal Dumping Affecting Drainage or Road': { office: 'MEO', directResponsibility: false },
+  // Barangay-level clearing — referral/coordination concern.
+  'Overgrown Vegetation Obstructing Road or Signage': { office: 'MEO', directResponsibility: false },
+  // Public water supply system — referral/coordination concern, not a
+  // direct MEO repair responsibility.
+  'Leaking Pipe / Water Supply Concern': { office: 'MEO', directResponsibility: false },
+  // MEO intake/manual-review only — never automatically owned by MEO.
+  'Other Minor Infrastructure Hazard': { office: 'MEO', directResponsibility: false },
+
+  // Legacy category strings — no longer offered for new submissions
+  // (api/src/contracts/schemas.ts's CATEGORIES), but historical tickets
+  // still carry them and must keep routing/displaying sensibly. Each
+  // legacy value's directResponsibility matches its new-category semantic
+  // equivalent (see LEGACY_CATEGORIES' doc comment in schemas.ts).
   Flooding: { office: 'MDRRMO', directResponsibility: true },
-  // "Drainage structure defect" is MEO-scope, not a disaster-response
-  // concern — moved from MDRRMO.
   'Clogged Drain': { office: 'MEO', directResponsibility: true },
   'Fallen Tree': { office: 'MDRRMO', directResponsibility: true },
   Pothole: { office: 'MEO', directResponsibility: true },
-  'Uneven Sidewalk': { office: 'MEO', directResponsibility: true },
-  'Streetlight Out': { office: 'MEO', directResponsibility: true },
-  // Public water supply system — referral/coordination concern, not a
-  // direct MEO repair responsibility.
   'Leaking Pipe': { office: 'MEO', directResponsibility: false },
-  // Solid waste enforcement — referral/coordination concern.
   'Uncollected Garbage': { office: 'MEO', directResponsibility: false },
   'Illegal Dumping': { office: 'MEO', directResponsibility: false },
-  // Barangay-level clearing — referral/coordination concern.
   'Overgrown Vegetation': { office: 'MEO', directResponsibility: false },
-  Other: { office: 'MEO', directResponsibility: true },
+  // Aligned to false to match its new equivalent, "Other Minor
+  // Infrastructure Hazard" — a generic "Other" report was never truly a
+  // confirmed direct MEO responsibility, just triaged there by default.
+  Other: { office: 'MEO', directResponsibility: false },
+  // Stray/non-canonical value found in seed data, never a validated
+  // category — routed as the closest manuscript-aligned equivalent
+  // (Landslide / Slope Failure) instead of falling through to the generic
+  // unknown-category default, per the Phase 3 follow-up audit.
+  'Soil Erosion': { office: 'MDRRMO', directResponsibility: true },
 };
 
 // Unknown/unrecognized category strings (typos, stale seed data, a future

@@ -33,7 +33,7 @@ test("Ticket Queue export href updates when a filter changes", async ({ page }) 
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/tickets");
   await page.getByLabel("Category", { exact: true }).click();
-  await page.getByRole("option", { name: "Pothole" }).click();
+  await page.getByRole("option", { name: "Pothole / Road Surface Damage" }).click();
 
   const exportLink = page.getByRole("link", { name: "Export CSV" });
   await expect(exportLink).toHaveAttribute("href", /category=Pothole/);
@@ -116,7 +116,7 @@ test("ticket export URL on the reports page includes the selected filters", asyn
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/reports");
   await page.getByLabel("Ticket category", { exact: true }).click();
-  await page.getByRole("option", { name: "Pothole" }).click();
+  await page.getByRole("option", { name: "Pothole / Road Surface Damage" }).click();
   await page.getByLabel("Ticket urgency", { exact: true }).click();
   await page.getByRole("option", { name: "High", exact: true }).click();
 
