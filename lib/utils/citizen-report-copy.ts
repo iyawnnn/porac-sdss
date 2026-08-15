@@ -28,6 +28,9 @@ const STATUS_COPY: Record<string, { subtitle: string; update: string }> = {
     subtitle: "This report has been resolved",
     update: "Your report has been marked resolved by city staff.",
   },
+  // Softer "not accepted" wording is deliberate and confined to this
+  // explanatory prose — the canonical lifecycle status shown on status
+  // badges/pills (StatusPill, timeline nodes) always remains "Rejected".
   Rejected: {
     subtitle: "This report was not accepted",
     update: "This report was reviewed and was not accepted for action.",
