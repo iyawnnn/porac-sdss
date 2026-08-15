@@ -23,7 +23,10 @@ import {
 import {
   CATEGORIES,
   TICKET_RESOLUTION_NOTES_MAX_LENGTH,
+  REFERRAL_AGENCY_MAX_LENGTH,
+  REFERRAL_NOTE_MAX_LENGTH,
 } from '../contracts/schemas';
+import { categoryRouting } from '../common/utils/office';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EMAIL_SERVICE, type EmailService } from '../citizens/email.service';
 import type { Env } from '../config/env';
@@ -137,6 +140,11 @@ export interface TicketDetail {
   resolution_notes: string | null;
   disputed_at: string | null;
   dispute_reason: string | null;
+  // Pure function of category (api/src/common/utils/office.ts), computed at
+  // read time — never stored. True means this office owns fixing it; false
+  // means it's a referral/coordination concern this office merely holds
+  // custody of for triage. See CategoryRouting.
+  direct_responsibility: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -167,6 +175,18 @@ export interface TicketReassignmentRow {
   to_office: string;
   admin_name: string | null;
   reassigned_at: string;
+}
+
+// Historical record only — never treated as live "currently pending
+// referral" state. See docs/triage-model.md and the Phase 3 plan for why:
+// an audit-event log can't cheaply answer "is this still unresolved"
+// without also tracking a resolution event, which this codebase does not
+// have. Display this as "Referral recorded", never as a current-state badge.
+export interface TicketReferralRow {
+  agency: string;
+  note: string | null;
+  admin_name: string;
+  referred_at: string;
 }
 
 export interface TicketPriorityContext {
@@ -444,8 +464,23 @@ export class TicketsService {
       SELECT from_office, to_office, admin_name, reassigned_at
       FROM office_reassignments WHERE ticket_id = ${id} ORDER BY reassigned_at
     `;
+    const referralEvents = await sql<
+      { metadata: { agency: string; note: string | null }; actor_name: string; created_at: string }[]
+    >`
+      SELECT metadata, actor_name, created_at FROM admin_audit_events
+      WHERE target_type = 'ticket' AND target_id = ${id} AND action_type = 'ticket_referral_noted'
+      ORDER BY created_at
+    `;
+    const referrals: TicketReferralRow[] = referralEvents.map((e) => ({
+      agency: e.metadata.agency,
+      note: e.metadata.note,
+      admin_name: e.actor_name,
+      referred_at: e.created_at,
+    }));
 
-    return { ticket, reports, history, reassignments };
+    ticket.direct_responsibility = categoryRouting(ticket.category).directResponsibility;
+
+    return { ticket, reports, history, reassignments, referrals };
   }
 
   // Live re-derivation of the same inputs RecomputeService uses for this one
@@ -675,5 +710,58 @@ export class TicketsService {
     });
 
     return { assignedOffice: toOffice };
+  }
+
+  // Documents that a ticket was referred to an external agency (solid waste
+  // enforcement, water/electric utility, MENRO, DPWH, barangay clearing,
+  // etc.) — never mutates the ticket row itself. This is history, not a
+  // status: assigned_office/status are governed entirely by their own rules,
+  // unaffected by a referral. See TicketReferralRow for why the read side
+  // must never be treated as live "currently pending" state.
+  async logReferral(
+    ticketId: number,
+    admin: AdminSession,
+    agency: string,
+    note: string | undefined,
+  ): Promise<void> {
+    if (!agency.trim()) {
+      throw new BadRequestException('Agency is required');
+    }
+    if (agency.length > REFERRAL_AGENCY_MAX_LENGTH) {
+      throw new BadRequestException(
+        `Agency must be at most ${REFERRAL_AGENCY_MAX_LENGTH} characters`,
+      );
+    }
+    if (note && note.length > REFERRAL_NOTE_MAX_LENGTH) {
+      throw new BadRequestException(
+        `Note must be at most ${REFERRAL_NOTE_MAX_LENGTH} characters`,
+      );
+    }
+
+    const sql = this.pg;
+    const [ticket] = await sql<
+      { assigned_office: 'MEO' | 'MDRRMO'; category: string }[]
+    >`
+      SELECT assigned_office, category FROM tickets WHERE id = ${ticketId}
+    `;
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    assertOfficeAccess(admin, ticket.assigned_office);
+
+    await sql.begin(async (tx) => {
+      await this.audit.logInPgTx(tx, {
+        actor: {
+          adminId: admin.adminId,
+          adminName: admin.adminName,
+          email: admin.email,
+          role: admin.role,
+          office: admin.office,
+        },
+        actionType: 'ticket_referral_noted',
+        targetType: 'ticket',
+        targetId: ticketId,
+        targetSummary: `Ticket #${ticketId} (${ticket.category})`,
+        metadata: { agency, note: note ?? null },
+      });
+    });
   }
 }

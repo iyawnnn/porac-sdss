@@ -87,7 +87,9 @@ MEO handles the built-environment backlog.
 
 ### 2.1 Categories that reach MEO
 
-Pothole, Uneven Sidewalk, Streetlight Out, Leaking Pipe, Uncollected Garbage, Illegal Dumping, Overgrown Vegetation, and Other. Routing is automatic by category — nobody assigns tickets manually on arrival.
+Clogged Drain, Pothole, Uneven Sidewalk, Streetlight Out, and Other are **MEO's direct responsibility** — routing is automatic by category, nobody assigns tickets manually on arrival.
+
+Leaking Pipe, Uncollected Garbage, Illegal Dumping, and Overgrown Vegetation also land in MEO's queue by default (MDRRMO is never a sensible custody office for these), but are flagged **Referral** — coordination concerns for an external agency (water/electric utility, solid-waste enforcement, barangay-level clearing), not direct MEO repair work. Ticket Detail shows a "Referral — coordinate externally" badge and a "Log Referral" action for these; logging a referral records the agency/target and a note as a permanent, dated history entry — it is documentation, not a live "pending" status, and doesn't change the ticket's office or lifecycle status.
 
 ### 2.2 A working session
 
@@ -152,7 +154,7 @@ MDRRMO handles hazard and disaster-risk incidents. **The interface is identical 
 
 ### 3.1 Categories that reach MDRRMO
 
-Three: **Flooding, Clogged Drain, Fallen Tree.** A smaller set than MEO's, but the categories most tied to weather and terrain — which is why the urgency model matters more here in practice.
+Two, both direct responsibility: **Flooding, Fallen Tree.** A smaller set than MEO's, but the categories most tied to weather and terrain — which is why the urgency model matters more here in practice. (Clogged Drain routes to MEO — a drainage structure defect is built-environment maintenance, not a disaster-response concern, even though it can contribute to flooding.)
 
 ### 3.2 Where the emphasis differs
 

@@ -661,3 +661,69 @@ test("the citizen's Case Closure Summary reflects a ticket resolved through the 
   await expect(page.getByRole("button", { name: "Confirm Fixed" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Report Still Not Fixed" })).toBeVisible();
 });
+
+// --- 8. Referral (Phase 3 manuscript alignment) --------------------------------
+
+// "Leaking Pipe" is a Referral-classified category that still routes to MEO
+// custody (api/src/common/utils/office.ts) — same reasoning as Pothole above,
+// but exercises the non-direct-responsibility path instead.
+async function createReferralReport(citizenPage: Page, titleSuffix: string): Promise<{ ticketId: number }> {
+  const jitter = () => (Math.random() - 0.5) * 0.01;
+  const res = await citizenPage.request.post("/api/reports", {
+    multipart: {
+      title: `E2E referral ${titleSuffix}`,
+      category: "Leaking Pipe",
+      citizen_severity: "Low",
+      lat: String(15.0711 + jitter()),
+      lng: String(120.5401 + jitter()),
+      image: {
+        name: "01_poblacion.jpg",
+        mimeType: "image/jpeg",
+        buffer: readFileSync("public/uploads/reports/01_poblacion.jpg"),
+      },
+    },
+  });
+  if (!res.ok()) {
+    const bodyText = await res.text().catch((e) => `<failed to read body: ${e}>`);
+    throw new Error(`createReferralReport: POST /api/reports failed — status ${res.status()} ${res.statusText()}\nbody: ${bodyText}`);
+  }
+  return (await res.json()) as { ticketId: number };
+}
+
+test("a Referral-classified ticket shows the badge and Log Referral action; a Direct-responsibility ticket shows neither", async ({ page, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "referral");
+  const { ticketId: referralTicketId } = await createReferralReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
+
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto(`/admin/tickets/${referralTicketId}`);
+  await expect(page.getByText("Referral — coordinate externally", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Referral agency", { exact: true })).toBeVisible();
+
+  // A Direct-responsibility ticket (Pothole) shows neither.
+  await page.goto(`/admin/tickets/${sharedReadOnlyTicketId}`);
+  await expect(page.getByText("Referral — coordinate externally", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Referral agency", { exact: true })).toHaveCount(0);
+});
+
+test("logging a referral persists and appears in the ticket timeline", async ({ page, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "referral-log");
+  const { ticketId } = await createReferralReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
+
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  await page.getByLabel("Referral agency", { exact: true }).click();
+  await page.getByRole("option", { name: "MENRO", exact: true }).click();
+  await page.getByLabel("Referral note", { exact: true }).fill("E2E referral note");
+  await page.getByRole("button", { name: "Log Referral" }).click();
+
+  await expect(page.getByRole("button", { name: "Recording..." })).toHaveCount(0);
+  await page.getByRole("tab", { name: "Timeline" }).click();
+  await expect(page.getByText(/Referral recorded — MENRO: E2E referral note/)).toBeVisible();
+});

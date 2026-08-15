@@ -27,6 +27,8 @@ export const WORK_ORDER_NOTES_MAX_LENGTH = 2000;
 export const TICKET_RESOLUTION_NOTES_MAX_LENGTH = 2000;
 export const TICKET_DISPUTE_REASON_MAX_LENGTH = 1000;
 export const MODERATION_NOTE_MAX_LENGTH = 1000;
+export const REFERRAL_AGENCY_MAX_LENGTH = 200;
+export const REFERRAL_NOTE_MAX_LENGTH = 1000;
 
 export const reportSchema = z.object({
   title: z.string().min(1).max(200),

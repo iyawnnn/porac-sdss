@@ -124,4 +124,21 @@ export class TicketsController {
     const result = await this.tickets.reassignOffice(id, admin, toOffice);
     return { ok: true, assignedOffice: result.assignedOffice };
   }
+
+  @Post(':id/refer')
+  async refer(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+    @Body('agency') agency: unknown,
+    @Body('note') note: unknown,
+  ) {
+    if (typeof agency !== 'string') {
+      throw new BadRequestException('agency is required');
+    }
+    if (note !== undefined && typeof note !== 'string') {
+      throw new BadRequestException('note must be a string');
+    }
+    await this.tickets.logReferral(id, admin, agency, note);
+    return { ok: true };
+  }
 }

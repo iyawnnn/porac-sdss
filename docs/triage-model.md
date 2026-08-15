@@ -187,7 +187,7 @@ Engineering assessment only — no academic rewriting.
 - **Elevation** is genuine DEM-derived topographical exposure, inverse-normalized city-wide, server-computed and never client-trusted.
 - **Spatial clustering** is real: PostGIS radius-based deduplication feeding a saturating log curve.
 - **Rainfall** is real telemetry, capped at a defensible published threshold (PAGASA 30 mm/h).
-- **Category-based office routing** works as described.
+- **Category-based office routing** works as described, and now also classifies each category as the assigned office's direct responsibility or a Referral/coordination concern (Phase 3 of the manuscript-alignment work) — see [`features.md`](features.md) §1 for the routing table and [`database.md`](database.md)'s `tickets.category`/`assigned_office` notes.
 
 ### Partially aligned — state carefully
 

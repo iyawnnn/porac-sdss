@@ -8,6 +8,7 @@ import type {
   TicketReport,
   TicketStatusHistoryRow,
   TicketReassignmentRow,
+  TicketReferralRow,
   TicketPriorityContext,
 } from "@/lib/types/admin-tickets";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
@@ -22,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AssignmentPanel } from "@/components/features/admin/tickets/AssignmentPanel";
+import { ReferralPanel } from "@/components/features/admin/tickets/ReferralPanel";
 import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersPanel";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
 import { HorizontalStatusTracker } from "@/components/features/admin/tickets/HorizontalStatusTracker";
@@ -53,6 +55,7 @@ interface TicketDetailResponse {
   reports: TicketReport[];
   history: TicketStatusHistoryRow[];
   reassignments: TicketReassignmentRow[];
+  referrals: TicketReferralRow[];
 }
 
 async function TicketDetailData({ ticketId, from }: { ticketId: number; from: string | undefined }) {
@@ -84,7 +87,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
   }
   if (!data) notFound();
 
-  const { ticket, reports, history, reassignments } = data;
+  const { ticket, reports, history, reassignments, referrals } = data;
 
   // Only trust a same-origin queue URL forwarded from the ticket list —
   // never redirect off /admin/tickets based on an arbitrary query param.
@@ -166,10 +169,24 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
         <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
           <Card>
             <CardContent className="p-4">
-              <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Assignment</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Assignment</p>
+                <Badge className={ticket.direct_responsibility ? "bg-line-100 text-ink-700" : "bg-amber-50 text-amber-800 border border-amber-200"} variant="outline">
+                  {ticket.direct_responsibility ? "Direct responsibility" : "Referral — coordinate externally"}
+                </Badge>
+              </div>
               <AssignmentPanel currentOffice={ticket.assigned_office} ticketId={ticket.id} />
             </CardContent>
           </Card>
+
+          {!ticket.direct_responsibility && (
+            <Card>
+              <CardContent className="p-4">
+                <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Referral</p>
+                <ReferralPanel ticketId={ticket.id} />
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardContent className="p-4">
@@ -188,7 +205,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
                   <ScoringTab priorityContext={priorityContext} ticket={ticket} urgencyBadge={urgencyBadge} />
                 </TabsContent>
                 <TabsContent className="pt-4" value="timeline">
-                  <TimelineTab createdAt={ticket.created_at} history={history} reassignments={reassignments} />
+                  <TimelineTab createdAt={ticket.created_at} history={history} reassignments={reassignments} referrals={referrals} />
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -404,15 +421,18 @@ function TimelineTab({
   createdAt,
   history,
   reassignments,
+  referrals,
 }: {
   createdAt: string;
   history: TicketStatusHistoryRow[];
   reassignments: TicketReassignmentRow[];
+  referrals: TicketReferralRow[];
 }) {
   const entries: TimelineEntry[] = [
     { key: "created", timestamp: createdAt, description: "Ticket created (Reported)", actor: null },
     ...history.map((h, i) => ({ key: `status-${i}`, timestamp: h.changed_at, description: `Status changed to ${h.status}`, actor: h.admin_name })),
     ...reassignments.map((r, i) => ({ key: `reassign-${i}`, timestamp: r.reassigned_at, description: `Reassigned from ${r.from_office} to ${r.to_office}`, actor: r.admin_name })),
+    ...referrals.map((r, i) => ({ key: `referral-${i}`, timestamp: r.referred_at, description: `Referral recorded — ${r.agency}${r.note ? `: ${r.note}` : ""}`, actor: r.admin_name })),
   ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   return (
