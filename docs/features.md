@@ -201,7 +201,7 @@ Merging increments `member_count` and recomputes the ticket centroid — which i
 urgency_score = ⅓ × elevationFactor + ⅓ × precipitationFactor + ⅓ × clusterFactor
 ```
 
-banded **Low / Medium / Critical** at 0.4 / 0.7.
+banded **Low / Medium / High** at 0.4 / 0.7.
 
 - **Elevation** — inverse-normalized against city-wide min/max computed once at DEM seed time. Lower ground scores higher.
 - **Precipitation** — real `rain["1h"]` millimetres from OpenWeatherMap, capped at the PAGASA 30mm/h torrential threshold, cached ~10 minutes in the database so it survives restarts.
@@ -239,8 +239,6 @@ Four distinct concepts that are easy to conflate. The authoritative definitions 
 | **Urgency** | Computed | The environmental hazard score (§4.4). `priority_score` and `urgency_level` are the *same* value rescaled 0–100 and re-banded — an urgency representation, labeled "Urgency" in the UI despite the column name. |
 | **Priority** | Computed, different formula | `priority_index` — citizen severity + ticket age + barangay density. Workflow urgency (how soon staff should act), not environmental hazard. Powers the Priority breakdown card and the map heatmap. |
 | **Dispute** | Citizen action | A workflow signal on a resolved ticket. Not a score, not a status. |
-
-**Known discrepancy, not a bug:** `urgency_band` (thresholds 0.4/0.7) and `urgency_level` (thresholds 0.5/0.8) can disagree at the boundary — a ticket at 0.45 is band `Medium` but level `LOW`. Reconciling the two threshold sets is an open decision.
 
 ### 5.2 Office scoping
 
