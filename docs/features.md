@@ -116,7 +116,7 @@ Covered by `e2e/admin-tickets.spec.ts` (~21 tests).
 ### 3.3 Ticket Detail (`/admin/tickets/[id]`)
 
 - **Header** — ticket ID, assigned office, status pill, urgency badge.
-- **Status tracker** — a single "Advance to *next*" control walking `Reported → Under Review → In Progress → Resolved`. The final step opens a **resolve dialog** requiring completion notes and accepting a resolution photo; once set, a "Before & after resolution" card renders. There is no further transition after `Resolved`.
+- **Status tracker** — a single "Advance to *next*" control walking `Reported → Under Review → In Progress → Resolved`. The final step opens a **resolve dialog** requiring completion notes and accepting a resolution photo; once set, a "Before & after resolution" card renders. There is no further transition after `Resolved` through this control. A fifth status, `Rejected`, exists in the schema and constants but has no reachable transition today — see `docs/project-status.md` §5.
 - **Assignment panel** — reassign to the other office, audited. Available to **any admin who can access the ticket**, not System Administrators only: the endpoint uses `assertOfficeAccess` against the ticket's *current* office, and `AssignmentPanel.tsx` carries no role gate. For an office admin this is a one-way hand-off — after reassigning, the ticket belongs to the other office and they can no longer open it. System Administrators can move a ticket in either direction.
 - **Urgency decomposition** — the three factors with their explicit ⅓ weights and per-factor contributions, not just a final number.
 - **Priority breakdown** — the separate workflow-priority formula (§6.1).
