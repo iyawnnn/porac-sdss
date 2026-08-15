@@ -24,6 +24,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AssignmentPanel } from "@/components/features/admin/tickets/AssignmentPanel";
 import { ReferralPanel } from "@/components/features/admin/tickets/ReferralPanel";
+import { RejectTicketPanel } from "@/components/features/admin/tickets/RejectTicketPanel";
 import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersPanel";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
 import { HorizontalStatusTracker } from "@/components/features/admin/tickets/HorizontalStatusTracker";
@@ -184,6 +185,15 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
               <CardContent className="p-4">
                 <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Referral</p>
                 <ReferralPanel ticketId={ticket.id} />
+              </CardContent>
+            </Card>
+          )}
+
+          {ACTIVE_STATUSES.includes(ticket.status) && (
+            <Card>
+              <CardContent className="p-4">
+                <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Reject</p>
+                <RejectTicketPanel ticketId={ticket.id} />
               </CardContent>
             </Card>
           )}

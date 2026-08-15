@@ -15,7 +15,11 @@ export interface EmailService {
   sendOAuthOnlyNotice(email: string): Promise<void>;
   sendPasswordResetConfirmation(email: string): Promise<void>;
   sendReportResolved(email: string, reportUrl: string): Promise<void>;
-  sendReportRejected(email: string, reportUrl: string): Promise<void>;
+  sendReportRejected(
+    email: string,
+    reportUrl: string,
+    reason?: string,
+  ): Promise<void>;
 }
 
 function maskEmail(email: string): string {
@@ -57,8 +61,11 @@ export class ConsoleEmailService implements EmailService {
     return Promise.resolve();
   }
 
-  sendReportRejected(email: string): Promise<void> {
-    this.log('report rejected email sent', email);
+  sendReportRejected(email: string, _reportUrl?: string, reason?: string): Promise<void> {
+    this.log(
+      reason ? 'report rejected email sent (with reason)' : 'report rejected email sent',
+      email,
+    );
     return Promise.resolve();
   }
 }

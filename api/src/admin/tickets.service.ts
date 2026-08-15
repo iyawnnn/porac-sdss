@@ -25,6 +25,7 @@ import {
   TICKET_RESOLUTION_NOTES_MAX_LENGTH,
   REFERRAL_AGENCY_MAX_LENGTH,
   REFERRAL_NOTE_MAX_LENGTH,
+  TICKET_REJECTION_REASON_MAX_LENGTH,
 } from '../contracts/schemas';
 import { categoryRouting } from '../common/utils/office';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -194,10 +195,19 @@ export interface TicketPriorityContext {
   rain1hMm: number;
 }
 
+// Same 3-status "active" set used throughout the codebase (dashboard,
+// escalation, recompute, etc.) — a ticket outside this set is already
+// terminal (Resolved or Rejected) and cannot be rejected again.
+const ACTIVE_TICKET_STATUSES: TicketStatus[] = [
+  'Reported',
+  'Under Review',
+  'In Progress',
+];
+
 // No entry for 'Reported' (the ladder's start, never a transition target)
-// or 'Rejected' (NEXT_STATUS has no transition that produces it — this
-// codebase has no ticket-rejection call site yet; wire one here if that
-// feature is added later).
+// or 'Rejected' (NEXT_STATUS has no transition that produces it — rejection
+// is a separate terminal outcome reached via rejectTicket, which builds its
+// own notification directly since it needs to interpolate a reason).
 const STATUS_NOTIFICATION: Partial<
   Record<TicketStatus, { type: string; title: string; message: string }>
 > = {
@@ -631,10 +641,12 @@ export class TicketsService {
         });
       }
 
-      // Email is selective, not one-per-status — only Resolved/Rejected
-      // warrant an email (the rest stay in-app-only), per PLAN.md's
-      // notification-system design decision.
-      return nextStatus === 'Resolved' || nextStatus === 'Rejected'
+      // Email is selective, not one-per-status — only Resolved warrants an
+      // email through this ladder (the rest stay in-app-only), per PLAN.md's
+      // notification-system design decision. Rejected is a separate terminal
+      // outcome reached via rejectTicket below, never via this ladder — see
+      // that method for its own (also selective) email send.
+      return nextStatus === 'Resolved'
         ? citizenRows.map((row) => ({
             email: row.email,
             reportId: row.report_id,
@@ -653,11 +665,7 @@ export class TicketsService {
       for (const recipient of emailRecipients) {
         try {
           const reportUrl = `${webOrigin}/dashboard/reports/${recipient.reportId}`;
-          if (nextStatus === 'Resolved') {
-            await this.email.sendReportResolved(recipient.email, reportUrl);
-          } else {
-            await this.email.sendReportRejected(recipient.email, reportUrl);
-          }
+          await this.email.sendReportResolved(recipient.email, reportUrl);
         } catch {
           // Never let an email failure surface to the caller — the status
           // change and in-app notification already committed.
@@ -763,5 +771,114 @@ export class TicketsService {
         metadata: { agency, note: note ?? null },
       });
     });
+  }
+
+  // A separate terminal outcome, not a NEXT_STATUS ladder entry — reachable
+  // from any active status, unlike the linear Reported -> ... -> Resolved
+  // progression advanceStatus enforces. The reason is required (mirrors
+  // disputeReport's exact validation shape) and is stored only in this
+  // action's own admin_audit_events row (metadata.reason) — never a ticket
+  // column, matching how logReferral above documents its agency/note.
+  async rejectTicket(
+    ticketId: number,
+    admin: AdminSession,
+    reason: string,
+  ): Promise<{ status: 'Rejected' }> {
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) {
+      throw new BadRequestException('A reason is required.');
+    }
+    if (trimmedReason.length > TICKET_REJECTION_REASON_MAX_LENGTH) {
+      throw new BadRequestException(
+        `Reason must be ${TICKET_REJECTION_REASON_MAX_LENGTH} characters or fewer.`,
+      );
+    }
+
+    const sql = this.pg;
+    const [ticket] = await sql<
+      {
+        status: TicketStatus;
+        assigned_office: 'MEO' | 'MDRRMO';
+        category: string;
+      }[]
+    >`
+      SELECT status, assigned_office, category FROM tickets WHERE id = ${ticketId}
+    `;
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    assertOfficeAccess(admin, ticket.assigned_office);
+
+    if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) {
+      throw new BadRequestException(
+        `Ticket is already ${ticket.status} and cannot be rejected.`,
+      );
+    }
+
+    const emailRecipients = await sql.begin(async (tx) => {
+      await tx`UPDATE tickets SET status = 'Rejected', updated_at = now() WHERE id = ${ticketId}`;
+      await tx`
+        INSERT INTO status_history (ticket_id, status, admin_id, admin_name, changed_at)
+        VALUES (${ticketId}, 'Rejected', ${admin.adminId}, ${admin.adminName}, now())
+      `;
+      await this.audit.logInPgTx(tx, {
+        actor: {
+          adminId: admin.adminId,
+          adminName: admin.adminName,
+          email: admin.email,
+          role: admin.role,
+          office: admin.office,
+        },
+        actionType: 'ticket_rejected',
+        targetType: 'ticket',
+        targetId: ticketId,
+        targetSummary: `Ticket #${ticketId} (${ticket.category})`,
+        metadata: { from: ticket.status, to: 'Rejected', reason: trimmedReason },
+      });
+
+      const citizenRows = await tx<
+        { citizen_id: number; report_id: number; email: string }[]
+      >`
+        SELECT DISTINCT ON (r.citizen_id) r.citizen_id, r.id AS report_id, c.email
+        FROM reports r
+        JOIN citizens c ON c.id = r.citizen_id
+        WHERE r.ticket_id = ${ticketId}
+        ORDER BY r.citizen_id, r.id ASC
+      `;
+      for (const row of citizenRows) {
+        await this.notifications.createInTx(tx, {
+          recipientType: 'citizen',
+          recipientId: row.citizen_id,
+          type: 'ticket_rejected',
+          title: 'Report not accepted',
+          message: `Your report was not accepted: ${trimmedReason}`,
+          href: `/dashboard/reports/${row.report_id}`,
+          entityType: 'ticket',
+          entityId: ticketId,
+        });
+      }
+
+      return citizenRows.map((row) => ({
+        email: row.email,
+        reportId: row.report_id,
+      }));
+    });
+
+    if (emailRecipients.length > 0) {
+      const webOrigin = this.config.get('WEB_ORIGIN', { infer: true });
+      for (const recipient of emailRecipients) {
+        try {
+          const reportUrl = `${webOrigin}/dashboard/reports/${recipient.reportId}`;
+          await this.email.sendReportRejected(
+            recipient.email,
+            reportUrl,
+            trimmedReason,
+          );
+        } catch {
+          // Never let an email failure surface to the caller — the status
+          // change and in-app notification already committed.
+        }
+      }
+    }
+
+    return { status: 'Rejected' };
   }
 }

@@ -4,6 +4,18 @@
 // external stylesheets unpredictably.
 const BRAND_COLOR = '#2563eb';
 
+// Only needed where a template interpolates admin/citizen-authored free
+// text (currently just the rejection reason) — every other template only
+// interpolates URLs/numbers we generate ourselves.
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function layout(bodyHtml: string): string {
   return `<!doctype html>
 <html>
@@ -116,12 +128,13 @@ export function reportResolvedEmailHtml(reportUrl: string): string {
   `);
 }
 
-export function reportRejectedEmailHtml(reportUrl: string): string {
+export function reportRejectedEmailHtml(reportUrl: string, reason?: string): string {
   return layout(`
     <h1 style="margin:0 0 16px;font-size:18px;color:#111827;">Your report was not accepted</h1>
     <p style="margin:0 0 20px;">
       The report you submitted was reviewed and could not be acted on by the assigned office.
     </p>
+    ${reason ? `<p style="margin:0 0 20px;padding:12px 16px;background-color:#f9fafb;border-radius:6px;color:#374151;">${escapeHtml(reason)}</p>` : ''}
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
       <tr>
         <td style="border-radius:6px;background-color:${BRAND_COLOR};">
