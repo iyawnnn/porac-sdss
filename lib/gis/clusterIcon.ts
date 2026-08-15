@@ -8,7 +8,7 @@ import { getUrgencyBandStyle } from "@/lib/utils/ui/urgency";
 const WEIGHT_BY_HEX: Record<string, number> = {
   [getUrgencyBandStyle("Low").hex]: 0,
   [getUrgencyBandStyle("Medium").hex]: 0.5,
-  [getUrgencyBandStyle("Critical").hex]: 1,
+  [getUrgencyBandStyle("High").hex]: 1,
 };
 
 function markerWeight(marker: L.Marker): number {
@@ -27,9 +27,9 @@ export function clusterIcon(cluster: L.MarkerCluster) {
   const avgWeight = children.reduce((sum, marker) => sum + markerWeight(marker), 0) / count;
 
   const size = count < 10 ? 34 : count < 50 ? 44 : 56;
-  const band = avgWeight >= 0.75 ? "Critical" : avgWeight >= 0.35 ? "Medium" : "Low";
+  const band = avgWeight >= 0.75 ? "High" : avgWeight >= 0.35 ? "Medium" : "Low";
   const hex = getUrgencyBandStyle(band).hex;
-  const glow = band === "Critical" ? `0 0 14px 3px ${hex}80, ` : "";
+  const glow = band === "High" ? `0 0 14px 3px ${hex}80, ` : "";
 
   return L.divIcon({
     className: "",

@@ -52,7 +52,7 @@ function initialFilterState(query: Record<string, string | undefined>, sessionOf
     ticketStatus:
       query.status === "all" || (TICKET_STATUSES as string[]).includes(query.status ?? "") ? (query.status as string) : "all",
     ticketCategory: (TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "",
-    ticketUrgency: ["Low", "Medium", "Critical"].includes(query.urgency ?? "") ? (query.urgency as string) : "",
+    ticketUrgency: ["Low", "Medium", "High"].includes(query.urgency ?? "") ? (query.urgency as string) : "",
     workOrderStatus: (WORK_ORDER_STATUSES as string[]).includes(query.workOrderStatus ?? "") ? (query.workOrderStatus as string) : "all",
     assignedAdminId: query.assignedAdminId ?? "",
   };
@@ -265,7 +265,7 @@ export function ReportsWorkspace({
                   <SelectItem value="all">All urgency bands</SelectItem>
                   <SelectItem value="Low">Low</SelectItem>
                   <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="Critical">Critical</SelectItem>
+                  <SelectItem value="High">High</SelectItem>
                 </SelectContent>
               </Select>
             </div>

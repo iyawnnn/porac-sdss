@@ -3,10 +3,10 @@ import { computeUrgency, urgencyLevelFromScore } from './urgency';
 describe('urgencyLevelFromScore', () => {
   it('has deterministic thresholds', () => {
     expect(urgencyLevelFromScore(100)).toBe('HIGH');
-    expect(urgencyLevelFromScore(80)).toBe('HIGH');
-    expect(urgencyLevelFromScore(79)).toBe('MEDIUM');
-    expect(urgencyLevelFromScore(50)).toBe('MEDIUM');
-    expect(urgencyLevelFromScore(49)).toBe('LOW');
+    expect(urgencyLevelFromScore(70)).toBe('HIGH');
+    expect(urgencyLevelFromScore(69)).toBe('MEDIUM');
+    expect(urgencyLevelFromScore(40)).toBe('MEDIUM');
+    expect(urgencyLevelFromScore(39)).toBe('LOW');
     expect(urgencyLevelFromScore(0)).toBe('LOW');
   });
 });
@@ -28,6 +28,18 @@ describe('computeUrgency', () => {
           expect(u.priorityScore).toBeLessThanOrEqual(100);
           expect(u.environmentalUrgencyScore).toBeGreaterThanOrEqual(0);
           expect(u.environmentalUrgencyScore).toBeLessThanOrEqual(100);
+        }
+      }
+    }
+  });
+
+  it('urgencyBand is always the Title-Case restatement of urgencyLevel — the two can never disagree', () => {
+    const LEVEL_TO_BAND = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' } as const;
+    for (const elevationM of [0, 25, 50, 75, 100]) {
+      for (const memberCount of [0, 1, 5, 20]) {
+        for (const rain1hMm of [0, 15, 30]) {
+          const u = computeUrgency({ elevationM, elevMin: 0, elevMax: 100, memberCount, rain1hMm });
+          expect(u.urgencyBand).toBe(LEVEL_TO_BAND[u.urgencyLevel]);
         }
       }
     }

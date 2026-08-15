@@ -4,7 +4,7 @@ import { TICKET_CATEGORIES, TICKET_STATUSES } from "@/lib/types/admin-ticket-con
 import MapClientLoader from "@/components/features/admin/map/MapClientLoader";
 import type { MapFilterState } from "@/components/features/admin/map/MapFilterBar";
 
-const URGENCY_BANDS = ["Low", "Medium", "Critical"];
+const URGENCY_BANDS = ["Low", "Medium", "High"];
 type MapLayer = "pins" | "heatmap";
 
 interface MapSearchParams {

@@ -233,7 +233,7 @@ export class TicketsService {
       TICKET_STATUSES.includes(query.status as TicketStatus)
         ? (query.status as AdminTicketFilters['status'])
         : 'active';
-    const urgency = ['Low', 'Medium', 'Critical'].includes(query.urgency ?? '')
+    const urgency = ['Low', 'Medium', 'High'].includes(query.urgency ?? '')
       ? query.urgency
       : undefined;
     const category = (CATEGORIES as readonly string[]).includes(
