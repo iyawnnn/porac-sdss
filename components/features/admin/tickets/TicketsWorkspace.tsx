@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Activity, AlertTriangle, DownloadIcon, Gauge, MapPin, SearchIcon, SearchXIcon, Ticket as TicketIcon, type LucideIcon } from "lucide-react";
 import type { AdminTicketRow, PaginatedTickets } from "@/lib/types/admin-tickets";
-import { TICKET_STATUSES, TICKET_CATEGORIES, PAGE_LIMITS, type TicketSort } from "@/lib/types/admin-ticket-constants";
+import { TICKET_STATUSES, TICKET_CATEGORIES, ALL_TICKET_CATEGORIES, PAGE_LIMITS, type TicketSort } from "@/lib/types/admin-ticket-constants";
 import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { priorityScoreBandClass } from "@/lib/utils/ui/priority";
 import { relativeAge } from "@/lib/utils/ui/time";
@@ -55,7 +55,7 @@ function initialQueryState(query: Record<string, string | undefined>, sessionOff
     (TICKET_STATUSES as string[]).includes(query.status ?? "")
       ? (query.status as string)
       : "active";
-  const category = (TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "";
+  const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "";
   const sort: TicketSort = query.sort === "priority_asc" || query.sort === "newest" ? query.sort : "priority_desc";
   const limit = (PAGE_LIMITS as readonly number[]).includes(Number(query.limit)) ? Number(query.limit) : 15;
 
@@ -235,7 +235,7 @@ export function TicketsWorkspace({
         <KpiCard icon={TicketIcon} label="Total Tickets" tint="bg-slate-100 text-slate-600" value={data.total.toLocaleString()} />
         <KpiCard icon={Activity} label="Active Tickets" tint="bg-blue-50 text-blue-600" value={activeCount.toLocaleString()} />
         <KpiCard icon={AlertTriangle} label="High Urgency" tint="bg-red-50 text-red-600" value={highPriorityCount.toLocaleString()} />
-        <KpiCard icon={Gauge} label="Avg. Urgency Score" tint="bg-amber-50 text-amber-600" value={avgUrgencyScore === null ? "—" : String(avgUrgencyScore)} />
+        <KpiCard icon={Gauge} label="Avg. Hazard Urgency" tint="bg-amber-50 text-amber-600" value={avgUrgencyScore === null ? "—" : String(avgUrgencyScore)} />
         <KpiCard icon={MapPin} label="Active Barangays" tint="bg-emerald-50 text-emerald-600" value={activeBarangayCount.toLocaleString()} />
       </div>
 
@@ -329,8 +329,8 @@ export function TicketsWorkspace({
                 <TableHead className={HEAD_CLASS}>Category</TableHead>
                 <TableHead className={HEAD_CLASS}>Barangay</TableHead>
                 <TableHead className={`${HEAD_CLASS} text-center`}>Members</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Urgency Score</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Urgency</TableHead>
+                <TableHead className={`${HEAD_CLASS} text-center`}>Hazard Urgency Score</TableHead>
+                <TableHead className={`${HEAD_CLASS} text-center`}>Hazard Urgency Level</TableHead>
                 <TableHead className={`${HEAD_CLASS} text-center`}>Office</TableHead>
                 <TableHead className={`${HEAD_CLASS} text-center`}>Status</TableHead>
                 <TableHead className={`${HEAD_CLASS} text-center`}>Created</TableHead>

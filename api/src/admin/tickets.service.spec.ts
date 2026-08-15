@@ -37,8 +37,17 @@ describe('parseTicketQuery category filter', () => {
     {} as AdminAuditService,
   );
 
+  it.each(['Localized Flooding', 'Pothole / Road Surface Damage', 'Other Minor Infrastructure Hazard'])(
+    'accepts a known current category %s',
+    (category) => {
+      expect(service.parseTicketQuery({ category }, MEO_OFFICER).category).toBe(
+        category,
+      );
+    },
+  );
+
   it.each(['Flooding', 'Pothole', 'Other'])(
-    'accepts a known category %s',
+    'still accepts a legacy category %s, so historical tickets stay filterable',
     (category) => {
       expect(service.parseTicketQuery({ category }, MEO_OFFICER).category).toBe(
         category,
@@ -181,6 +190,46 @@ describe('cross-office access to single-resource ticket endpoints', () => {
     expect(detail?.ticket.assigned_office).toBe('MDRRMO');
   });
 
+  it('computes direct_responsibility from category per the manuscript-aligned routing table', async () => {
+    const direct = await makeService([
+      [{ id: 1, assigned_office: 'MEO', category: 'Pothole' }],
+      [],
+      [],
+      [],
+      [],
+    ]).getTicketDetail(1, MEO_OFFICER);
+    expect(direct?.ticket.direct_responsibility).toBe(true);
+
+    const referral = await makeService([
+      [{ id: 2, assigned_office: 'MEO', category: 'Leaking Pipe' }],
+      [],
+      [],
+      [],
+      [],
+    ]).getTicketDetail(2, MEO_OFFICER);
+    expect(referral?.ticket.direct_responsibility).toBe(false);
+  });
+
+  it('maps referral audit events into the referrals array, never as live state', async () => {
+    const service = makeService([
+      [{ id: 3, assigned_office: 'MEO', category: 'Uncollected Garbage' }], // ticket lookup
+      [], // reports
+      [], // status_history
+      [], // office_reassignments
+      [
+        {
+          metadata: { agency: 'MENRO', note: 'Called 8/15' },
+          actor_name: 'Jane Doe',
+          created_at: '2026-08-15T00:00:00.000Z',
+        },
+      ], // referral audit events
+    ]);
+    const detail = await service.getTicketDetail(3, MEO_OFFICER);
+    expect(detail?.referrals).toEqual([
+      { agency: 'MENRO', note: 'Called 8/15', admin_name: 'Jane Doe', referred_at: '2026-08-15T00:00:00.000Z' },
+    ]);
+  });
+
   it("rejects a status advance on another office's ticket", async () => {
     const service = makeService([
       [{ status: 'Reported', assigned_office: 'MDRRMO' }], // ticket lookup
@@ -290,6 +339,50 @@ describe('admin audit logging for ticket mutations', () => {
     expect(input.targetId).toBe(9);
     expect(input.metadata).toEqual({ from: 'MEO', to: 'MDRRMO' });
   });
+
+  it('logs ticket_referral_noted without mutating the ticket row', async () => {
+    const { service, logInPgTx } = makeService([
+      [{ assigned_office: 'MEO', category: 'Leaking Pipe' }], // ticket lookup
+    ]);
+
+    await service.logReferral(9, MEO_OFFICER as AdminSession, 'Water utility provider', 'Contacted 8/15');
+
+    expect(logInPgTx).toHaveBeenCalledTimes(1);
+    const [, input] = logInPgTx.mock.calls[0];
+    expect(input.actionType).toBe('ticket_referral_noted');
+    expect(input.targetId).toBe(9);
+    expect(input.metadata).toEqual({ agency: 'Water utility provider', note: 'Contacted 8/15' });
+  });
+
+  it('rejects logReferral on another office\'s ticket', async () => {
+    const { service } = makeService([
+      [{ assigned_office: 'MDRRMO', category: 'Leaking Pipe' }], // ticket lookup
+    ]);
+
+    await expect(
+      service.logReferral(9, MEO_OFFICER as AdminSession, 'MENRO', undefined),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('rejects an empty agency', async () => {
+    const { service } = makeService([
+      [{ assigned_office: 'MEO', category: 'Leaking Pipe' }], // ticket lookup
+    ]);
+
+    await expect(
+      service.logReferral(9, MEO_OFFICER as AdminSession, '   ', undefined),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects a note over REFERRAL_NOTE_MAX_LENGTH', async () => {
+    const { service } = makeService([
+      [{ assigned_office: 'MEO', category: 'Leaking Pipe' }], // ticket lookup
+    ]);
+
+    await expect(
+      service.logReferral(9, MEO_OFFICER as AdminSession, 'MENRO', 'x'.repeat(1001)),
+    ).rejects.toThrow(BadRequestException);
+  });
 });
 
 describe('TicketsService.getTicketsForExport', () => {
@@ -320,7 +413,7 @@ describe('TicketsService.getTicketsForExport', () => {
         assigned_office: 'MEO',
         category: 'Pothole',
         barangay_name: 'Poblacion',
-        urgency_band: 'Critical',
+        urgency_band: 'High',
         priority_score: 90,
         member_count: 2,
         created_at: '2026-01-01T00:00:00.000Z',

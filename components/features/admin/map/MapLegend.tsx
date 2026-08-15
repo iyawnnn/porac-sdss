@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import styles from "./MapLegend.module.css";
 
-const URGENCY_BANDS = ["Low", "Medium", "Critical"] as const;
+const URGENCY_BANDS = ["Low", "Medium", "High"] as const;
 
 function LegendBody() {
   return (
@@ -40,7 +40,7 @@ function LegendBody() {
               <span className="flex size-7 shrink-0 items-center justify-center"><span className="size-4 rounded-full border-2 border-white" style={{ boxShadow: `0 0 0 2px ${getUrgencyBandStyle(band).hex}` }} /></span>
               <span className="text-xs text-foreground">
                 {band}
-                {band === "Critical" ? " - pulses" : ""}
+                {band === "High" ? " - pulses" : ""}
               </span>
             </div>
           ))}

@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { DashboardSummary } from "@/app/admin/reports/page";
 import type { AdminDirectoryRow } from "@/lib/types/admin-directory";
-import { TICKET_CATEGORIES, TICKET_STATUSES } from "@/lib/types/admin-ticket-constants";
+import { TICKET_CATEGORIES, ALL_TICKET_CATEGORIES, TICKET_STATUSES } from "@/lib/types/admin-ticket-constants";
 import { WORK_ORDER_STATUSES, type WorkOrderStatus } from "@/lib/types/admin-work-orders";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,8 +51,8 @@ function initialFilterState(query: Record<string, string | undefined>, sessionOf
     dateTo: query.dateTo ?? "",
     ticketStatus:
       query.status === "all" || (TICKET_STATUSES as string[]).includes(query.status ?? "") ? (query.status as string) : "all",
-    ticketCategory: (TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "",
-    ticketUrgency: ["Low", "Medium", "Critical"].includes(query.urgency ?? "") ? (query.urgency as string) : "",
+    ticketCategory: (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "",
+    ticketUrgency: ["Low", "Medium", "High"].includes(query.urgency ?? "") ? (query.urgency as string) : "",
     workOrderStatus: (WORK_ORDER_STATUSES as string[]).includes(query.workOrderStatus ?? "") ? (query.workOrderStatus as string) : "all",
     assignedAdminId: query.assignedAdminId ?? "",
   };
@@ -265,7 +265,7 @@ export function ReportsWorkspace({
                   <SelectItem value="all">All urgency bands</SelectItem>
                   <SelectItem value="Low">Low</SelectItem>
                   <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="Critical">Critical</SelectItem>
+                  <SelectItem value="High">High</SelectItem>
                 </SelectContent>
               </Select>
             </div>

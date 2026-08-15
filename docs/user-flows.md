@@ -87,7 +87,11 @@ MEO handles the built-environment backlog.
 
 ### 2.1 Categories that reach MEO
 
-Pothole, Uneven Sidewalk, Streetlight Out, Leaking Pipe, Uncollected Garbage, Illegal Dumping, Overgrown Vegetation, and Other. Routing is automatic by category — nobody assigns tickets manually on arrival.
+A Phase 3 follow-up (manuscript alignment) replaced the citizen-selectable category list with a more explicit set. Pothole / Road Surface Damage, Uneven Sidewalk, Drainage / Culvert / Manhole Issue, and Streetlight Out are **MEO's direct responsibility** — routing is automatic by category, nobody assigns tickets manually on arrival. "Other Minor Infrastructure Hazard" also lands in MEO's queue but is intake/manual-review only, not automatically owned.
+
+Illegal Dumping Affecting Drainage or Road, Overgrown Vegetation Obstructing Road or Signage, and Leaking Pipe / Water Supply Concern also land in MEO's queue by default (MDRRMO is never a sensible custody office for these), but are flagged **Referral** — coordination concerns for an external agency (water/electric utility, solid-waste enforcement, barangay-level clearing), not direct MEO repair work. Ticket Detail shows a "Referral — coordinate externally" badge and a "Log Referral" action for these; logging a referral records the agency/target and a note as a permanent, dated history entry — it is documentation, not a live "pending" status, and doesn't change the ticket's office or lifecycle status.
+
+"Uncollected Garbage" is no longer offered on the citizen report form — routine solid-waste collection is outside direct MEO/MDRRMO responsibility unless it's affecting roads/drainage, which the Illegal Dumping category now covers. Historical tickets filed under the old category list (Pothole, Clogged Drain, Uncollected Garbage, etc.) remain fully readable, displayable, and filterable — see [`database.md`](database.md) for the exact legacy → current mapping.
 
 ### 2.2 A working session
 
@@ -152,7 +156,7 @@ MDRRMO handles hazard and disaster-risk incidents. **The interface is identical 
 
 ### 3.1 Categories that reach MDRRMO
 
-Three: **Flooding, Clogged Drain, Fallen Tree.** A smaller set than MEO's, but the categories most tied to weather and terrain — which is why the urgency model matters more here in practice.
+Four, all direct responsibility: **Localized Flooding, Landslide / Slope Failure, Lahar / Debris-Flow Threat, Fallen Tree / Storm-Related Obstruction.** A smaller set than MEO's, but the categories most tied to weather and terrain — which is why the urgency model matters more here in practice. (Drainage / Culvert / Manhole Issue routes to MEO — a drainage structure defect is built-environment maintenance, not a disaster-response concern, even though it can contribute to flooding. The old "Clogged Drain" legacy category routed the same way.)
 
 ### 3.2 Where the emphasis differs
 
@@ -233,13 +237,13 @@ Not restrictions the code enforces — operational guidance:
 
 A flooded road in Barangay Cangatba, during the rainy season.
 
-**1 — Maria reports it.** Standing at the edge of the water, she opens `/report`, photographs the flooded stretch, and the app reads the photo's GPS and confirms it is inside Porac. She picks **Flooding**, marks severity **High**, and submits.
+**1 — Maria reports it.** Standing at the edge of the water, she opens `/report`, photographs the flooded stretch, and the app reads the photo's GPS and confirms it is inside Porac. She picks **Localized Flooding**, marks severity **High**, and submits.
 
-**2 — The system processes it.** The server resolves the point to Cangatba, looks up the elevation from the DEM, checks the photo for integrity problems (none — fresh photo, GPS matches the pin), and searches for a nearby recent Flooding ticket. There is one, filed 40 minutes earlier by a neighbour. Maria's report **merges into it**, and the ticket's member count rises to 4.
+**2 — The system processes it.** The server resolves the point to Cangatba, looks up the elevation from the DEM, checks the photo for integrity problems (none — fresh photo, GPS matches the pin), and searches for a nearby recent Localized Flooding ticket. There is one, filed 40 minutes earlier by a neighbour. Maria's report **merges into it**, and the ticket's member count rises to 4.
 
-Maria's report page shows *"Merged with an existing issue — grouped with 3 other reports."* She gets a notification. Because Flooding routes to MDRRMO, the ticket sits in their queue.
+Maria's report page shows *"Merged with an existing issue — grouped with 3 other reports."* She gets a notification. Because Localized Flooding routes to MDRRMO, the ticket sits in their queue.
 
-**3 — Urgency is computed.** Low-lying ground, live rainfall near the torrential threshold, four reports clustered together — the ticket scores into the **Critical** band. Crossing into Critical fires a `ticket_critical` notification to MDRRMO.
+**3 — Urgency is computed.** Low-lying ground, live rainfall near the torrential threshold, four reports clustered together — the ticket scores into the **High** band. Crossing into High fires a `ticket_critical`-typed notification to MDRRMO.
 
 **4 — MDRRMO picks it up.** Ronald opens `/admin` at the start of his shift; the ticket is near the top of an urgency-sorted queue and appears under Needs Attention. On Ticket Detail he reads the four photos, checks the urgency breakdown (low elevation and heavy rain, not just a noisy cluster), and advances the status to **Under Review**, then **In Progress**. Maria gets a notification at each step.
 

@@ -9,8 +9,31 @@ export const DEFAULT_PAGE_LIMIT = 15;
 
 // Deliberate duplicate of api/src/contracts/schemas.ts's CATEGORIES — same
 // rationale as lib/municipality-config.ts's duplication (CLAUDE.md): a pure
-// frontend constant can't import across the lib/<->api DB boundary.
+// frontend constant can't import across the lib/<->api DB boundary. This is
+// the set new tickets get created with, and what admin filter dropdowns
+// render as clickable options.
 export const TICKET_CATEGORIES = [
+  "Pothole / Road Surface Damage",
+  "Uneven Sidewalk",
+  "Drainage / Culvert / Manhole Issue",
+  "Streetlight Out",
+  "Localized Flooding",
+  "Landslide / Slope Failure",
+  "Lahar / Debris-Flow Threat",
+  "Fallen Tree / Storm-Related Obstruction",
+  "Illegal Dumping Affecting Drainage or Road",
+  "Overgrown Vegetation Obstructing Road or Signage",
+  "Leaking Pipe / Water Supply Concern",
+  "Other Minor Infrastructure Hazard",
+] as const;
+export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
+
+// Pre-Phase-3-follow-up category strings, still valid on historical
+// tickets. Not rendered as dropdown options (a legacy category isn't
+// something you'd pick for a new ticket), but ALL_TICKET_CATEGORIES below
+// is used to validate a `?category=` query param so a deep link to a
+// legacy-categorized filter still works instead of silently resetting.
+export const LEGACY_TICKET_CATEGORIES = [
   "Flooding",
   "Clogged Drain",
   "Fallen Tree",
@@ -23,4 +46,4 @@ export const TICKET_CATEGORIES = [
   "Overgrown Vegetation",
   "Other",
 ] as const;
-export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
+export const ALL_TICKET_CATEGORIES = [...TICKET_CATEGORIES, ...LEGACY_TICKET_CATEGORIES] as const;

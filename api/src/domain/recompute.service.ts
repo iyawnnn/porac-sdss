@@ -74,7 +74,7 @@ export class RecomputeService {
     const priorityIndices: number[] = [];
     const priorityScores: number[] = [];
     const urgencyLevels: string[] = [];
-    const newlyCritical: { id: number; office: 'MEO' | 'MDRRMO' }[] = [];
+    const newlyHigh: { id: number; office: 'MEO' | 'MDRRMO' }[] = [];
 
     for (const ticket of tickets) {
       const urgency = computeUrgency({
@@ -103,9 +103,9 @@ export class RecomputeService {
 
       // Genuine old-vs-new state comparison, not a "have we already
       // notified" flag — naturally idempotent, since a ticket already at
-      // Critical compares Critical -> Critical and notifies nothing.
-      if (ticket.urgency_band !== 'Critical' && urgency.urgencyBand === 'Critical') {
-        newlyCritical.push({ id: ticket.id, office: ticket.assigned_office });
+      // High compares High -> High and notifies nothing.
+      if (ticket.urgency_band !== 'High' && urgency.urgencyBand === 'High') {
+        newlyHigh.push({ id: ticket.id, office: ticket.assigned_office });
       }
     }
 
@@ -137,13 +137,13 @@ export class RecomputeService {
         WHERE t.id = u.id
       `;
 
-      for (const ticket of newlyCritical) {
+      for (const ticket of newlyHigh) {
         await this.notifications.createInTx(tx, {
           recipientType: 'admin',
           recipientOffice: ticket.office,
           type: 'ticket_critical',
-          title: 'Ticket became critical',
-          message: `Ticket #${ticket.id} has crossed into the Critical urgency band.`,
+          title: 'Ticket urgency became high',
+          message: `Ticket #${ticket.id} has crossed into the High Hazard Urgency band.`,
           href: `/admin/tickets/${ticket.id}`,
           entityType: 'ticket',
           entityId: ticket.id,

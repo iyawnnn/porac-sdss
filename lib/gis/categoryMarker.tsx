@@ -5,6 +5,7 @@ import {
   Droplet,
   Droplets,
   LightbulbOff,
+  Mountain,
   Sprout,
   Trash,
   Trash2,
@@ -27,12 +28,27 @@ export interface CategoryMarkerSpec {
 }
 
 export const CATEGORY_MARKER_SPEC: Record<string, CategoryMarkerSpec> = {
+  // Manuscript-aligned category strings (Phase 3 follow-up).
+  "Pothole / Road Surface Damage": { icon: CircleDot, color: "#ea580c" },
+  "Drainage / Culvert / Manhole Issue": { icon: Droplets, color: "#0891b2" },
+  "Localized Flooding": { icon: Waves, color: "#2563eb" },
+  "Landslide / Slope Failure": { icon: Mountain, color: "#78350f" },
+  "Lahar / Debris-Flow Threat": { icon: Waves, color: "#9a3412" },
+  "Fallen Tree / Storm-Related Obstruction": { icon: TreePine, color: "#16a34a" },
+  "Illegal Dumping Affecting Drainage or Road": { icon: Trash2, color: "#7c3aed" },
+  "Overgrown Vegetation Obstructing Road or Signage": { icon: Sprout, color: "#65a30d" },
+  "Leaking Pipe / Water Supply Concern": { icon: Droplet, color: "#0d9488" },
+  "Other Minor Infrastructure Hazard": { icon: Wrench, color: "#64748b" },
+  // Unchanged names, shared by both the legacy and new category sets.
+  "Uneven Sidewalk": { icon: Construction, color: "#b45309" },
+  "Streetlight Out": { icon: LightbulbOff, color: "#eab308" },
+
+  // Legacy category strings — kept so historical tickets keep their
+  // original marker instead of falling back to the generic "Other" icon.
   Flooding: { icon: Waves, color: "#2563eb" },
   "Clogged Drain": { icon: Droplets, color: "#0891b2" },
   "Fallen Tree": { icon: TreePine, color: "#16a34a" },
   Pothole: { icon: CircleDot, color: "#ea580c" },
-  "Uneven Sidewalk": { icon: Construction, color: "#b45309" },
-  "Streetlight Out": { icon: LightbulbOff, color: "#eab308" },
   "Leaking Pipe": { icon: Droplet, color: "#0d9488" },
   "Uncollected Garbage": { icon: Trash, color: "#78716c" },
   "Illegal Dumping": { icon: Trash2, color: "#7c3aed" },
@@ -72,7 +88,7 @@ export function categoryMarkerIcon(category: string, band: string | null, option
   const diameter = selected ? 34 : 26;
   const ringWidth = selected ? 3 : 2;
   const iconSize = selected ? 16 : 13;
-  const pulseClass = band === "Critical" ? "ticket-pulse" : "";
+  const pulseClass = band === "High" ? "ticket-pulse" : "";
   const label = `${category}, ${band ?? "Low"} urgency`;
 
   const icon = L.divIcon({
@@ -100,7 +116,7 @@ export function categoryClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
   const children = cluster.getAllChildMarkers();
   const count = children.length;
   const bands = children.map((marker) => markerUrgency.get(marker) ?? null);
-  const dominantBand = bands.includes("Critical") ? "Critical" : bands.includes("Medium") ? "Medium" : "Low";
+  const dominantBand = bands.includes("High") ? "High" : bands.includes("Medium") ? "Medium" : "Low";
   const ringColor = getUrgencyBandStyle(dominantBand).hex;
 
   const size = count < 10 ? 32 : count < 50 ? 42 : 54;

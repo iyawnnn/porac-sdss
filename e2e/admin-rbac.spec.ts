@@ -75,7 +75,7 @@ test("system admin dashboard quick actions say All Tickets", async ({ page }) =>
   const quickActions = page.getByRole("region", { name: "Quick actions" });
   await expect(quickActions.getByRole("link", { name: "All Tickets" })).toHaveAttribute("href", "/admin/tickets");
   await expect(quickActions.getByRole("link", { name: "My Office Tickets" })).toHaveCount(0);
-  await expect(quickActions.getByRole("link", { name: "High Urgency Tickets" })).toHaveAttribute("href", "/admin/tickets?urgency=Critical");
+  await expect(quickActions.getByRole("link", { name: "High Urgency Tickets" })).toHaveAttribute("href", "/admin/tickets?urgency=High");
   await expect(quickActions.getByRole("link", { name: "Flagged Reports" })).toHaveAttribute("href", "/admin/flagged");
   await expect(quickActions.getByRole("link", { name: "GIS Map" })).toHaveAttribute("href", "/admin/map");
 });

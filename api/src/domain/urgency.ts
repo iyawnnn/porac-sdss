@@ -1,4 +1,4 @@
-export type UrgencyBand = 'Low' | 'Medium' | 'Critical';
+export type UrgencyBand = 'Low' | 'Medium' | 'High';
 export type UrgencyLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export interface UrgencyFactors {
@@ -17,8 +17,19 @@ export interface UrgencyFactors {
   urgencyLevel: UrgencyLevel;
 }
 
-const PRIORITY_HIGH_THRESHOLD = 80;
-const PRIORITY_MEDIUM_THRESHOLD = 50;
+// Manuscript-aligned Hazard Urgency Level thresholds: LOW 0-39, MEDIUM 40-69,
+// HIGH 70-100 on the 0-100 index. urgencyBand (below) derives from this same
+// function instead of its own independent cutoff, so the two label sets can
+// never disagree the way they used to (band said "Critical" above 0.7 on the
+// raw 0-1 score while level said "HIGH" only above 80 on the 0-100 index).
+const HAZARD_URGENCY_HIGH_THRESHOLD = 70;
+const HAZARD_URGENCY_MEDIUM_THRESHOLD = 40;
+
+const URGENCY_LEVEL_TO_BAND: Record<UrgencyLevel, UrgencyBand> = {
+  HIGH: 'High',
+  MEDIUM: 'Medium',
+  LOW: 'Low',
+};
 
 // PLAN.md §7: 10 members is the cluster-density saturation/reference
 // point. Logarithmic scaling means each additional duplicate report
@@ -31,8 +42,8 @@ const CLUSTER_SATURATION_MEMBERS = 10;
 // the triage engine (writes urgency_level to the DB) and the frontend badge
 // helper (re-derives it for display) so thresholds never drift apart.
 export function urgencyLevelFromScore(priorityScore: number): UrgencyLevel {
-  if (priorityScore >= PRIORITY_HIGH_THRESHOLD) return 'HIGH';
-  if (priorityScore >= PRIORITY_MEDIUM_THRESHOLD) return 'MEDIUM';
+  if (priorityScore >= HAZARD_URGENCY_HIGH_THRESHOLD) return 'HIGH';
+  if (priorityScore >= HAZARD_URGENCY_MEDIUM_THRESHOLD) return 'MEDIUM';
   return 'LOW';
 }
 
@@ -70,9 +81,6 @@ export function computeUrgency({
     (1 / 3) * precipitationFactor +
     (1 / 3) * clusterFactor;
 
-  const urgencyBand: UrgencyBand =
-    urgencyScore < 0.4 ? 'Low' : urgencyScore <= 0.7 ? 'Medium' : 'Critical';
-
   // Environmental urgency is elevation + precipitation only — cluster
   // density is a priority input, not a hazard-severity signal.
   const environmentalUrgencyScore = Math.round(
@@ -83,6 +91,11 @@ export function computeUrgency({
   // precipitation, cluster), expressed as one 0-100 number instead of three
   // separately-badged values.
   const priorityScore = Math.round(urgencyScore * 100);
+  const urgencyLevel = urgencyLevelFromScore(priorityScore);
+  // urgencyBand is a Title-Case restatement of urgencyLevel, not an
+  // independently-thresholded value — see the comment above
+  // HAZARD_URGENCY_HIGH_THRESHOLD.
+  const urgencyBand = URGENCY_LEVEL_TO_BAND[urgencyLevel];
 
   return {
     elevationFactor,
@@ -92,6 +105,6 @@ export function computeUrgency({
     urgencyBand,
     environmentalUrgencyScore,
     priorityScore,
-    urgencyLevel: urgencyLevelFromScore(priorityScore),
+    urgencyLevel,
   };
 }

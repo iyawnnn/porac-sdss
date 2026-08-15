@@ -172,10 +172,16 @@ describe('parseModerationQuery', () => {
     ).toBeUndefined();
   });
 
-  it('accepts a known category', () => {
+  it('accepts a known legacy category, so historical flagged reports stay filterable', () => {
     expect(
       service.parseModerationQuery({ category: 'Pothole' }, MEO_ADMIN).category,
     ).toBe('Pothole');
+  });
+
+  it('accepts a known current category', () => {
+    expect(
+      service.parseModerationQuery({ category: 'Pothole / Road Surface Damage' }, MEO_ADMIN).category,
+    ).toBe('Pothole / Road Surface Damage');
   });
 
   it('parses barangayId, search, from, to as provided', () => {

@@ -8,6 +8,7 @@ import type {
   TicketReport,
   TicketStatusHistoryRow,
   TicketReassignmentRow,
+  TicketReferralRow,
   TicketPriorityContext,
 } from "@/lib/types/admin-tickets";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
@@ -22,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AssignmentPanel } from "@/components/features/admin/tickets/AssignmentPanel";
+import { ReferralPanel } from "@/components/features/admin/tickets/ReferralPanel";
 import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersPanel";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
 import { HorizontalStatusTracker } from "@/components/features/admin/tickets/HorizontalStatusTracker";
@@ -53,6 +55,7 @@ interface TicketDetailResponse {
   reports: TicketReport[];
   history: TicketStatusHistoryRow[];
   reassignments: TicketReassignmentRow[];
+  referrals: TicketReferralRow[];
 }
 
 async function TicketDetailData({ ticketId, from }: { ticketId: number; from: string | undefined }) {
@@ -84,7 +87,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
   }
   if (!data) notFound();
 
-  const { ticket, reports, history, reassignments } = data;
+  const { ticket, reports, history, reassignments, referrals } = data;
 
   // Only trust a same-origin queue URL forwarded from the ticket list —
   // never redirect off /admin/tickets based on an arbitrary query param.
@@ -113,7 +116,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           </h1>
           <StatusPill size="lg" status={ticket.status} />
           <Badge className={urgencyBadge.className} variant="outline">
-            Urgency {ticket.priority_score ?? "—"} · {urgencyBadge.label}
+            Hazard Urgency {ticket.priority_score ?? "—"} · {urgencyBadge.label}
           </Badge>
           {ticket.disputed_at && (
             <Badge className="bg-red-50 text-red-700" variant="outline">
@@ -166,10 +169,24 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
         <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
           <Card>
             <CardContent className="p-4">
-              <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Assignment</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Assignment</p>
+                <Badge className={ticket.direct_responsibility ? "bg-line-100 text-ink-700" : "bg-amber-50 text-amber-800 border border-amber-200"} variant="outline">
+                  {ticket.direct_responsibility ? "Direct responsibility" : "Referral — coordinate externally"}
+                </Badge>
+              </div>
               <AssignmentPanel currentOffice={ticket.assigned_office} ticketId={ticket.id} />
             </CardContent>
           </Card>
+
+          {!ticket.direct_responsibility && (
+            <Card>
+              <CardContent className="p-4">
+                <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Referral</p>
+                <ReferralPanel ticketId={ticket.id} />
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardContent className="p-4">
@@ -188,7 +205,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
                   <ScoringTab priorityContext={priorityContext} ticket={ticket} urgencyBadge={urgencyBadge} />
                 </TabsContent>
                 <TabsContent className="pt-4" value="timeline">
-                  <TimelineTab createdAt={ticket.created_at} history={history} reassignments={reassignments} />
+                  <TimelineTab createdAt={ticket.created_at} history={history} reassignments={reassignments} referrals={referrals} />
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -322,7 +339,7 @@ function ScoringTab({
   return (
     <div className="space-y-5">
       <div>
-        <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Urgency (environmental hazard)</p>
+        <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Hazard Urgency</p>
         <p className="mt-0.5 text-xs text-ink-400">Elevation + live rainfall + report-cluster density — computed, not citizen-reported.</p>
         <div className="mt-3 flex items-baseline gap-2">
           <span className="font-mono text-2xl font-semibold tabular-nums text-ink-900">{ticket.priority_score ?? "—"}</span>
@@ -355,8 +372,8 @@ function ScoringTab({
 
       {priorityContext && (
         <div className="border-t border-line-100 pt-4">
-          <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Priority (workflow — how soon to act)</p>
-          <p className="mt-0.5 text-xs text-ink-400">Citizen severity + ticket age + barangay density — a separate signal from urgency above.</p>
+          <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Operational Priority Index (how soon to act)</p>
+          <p className="mt-0.5 text-xs text-ink-400">Citizen-reported severity + ticket age + barangay density — a separate signal from Hazard Urgency above.</p>
           <div className="mt-3 flex items-baseline gap-2">
             <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
               <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> · {priorityBandLabel(ticket.priority_index)}
@@ -372,7 +389,7 @@ function ScoringTab({
             </thead>
             <tbody className="font-mono">
               {[
-                { label: "Severity weight", factor: priorityContext.breakdown.severityFactor, contribution: priorityContext.breakdown.severityContribution, note: priorityContext.breakdown.severity },
+                { label: "Citizen-reported severity weight", factor: priorityContext.breakdown.severityFactor, contribution: priorityContext.breakdown.severityContribution, note: priorityContext.breakdown.severity },
                 { label: "Ticket age factor", factor: priorityContext.breakdown.ageFactor, contribution: priorityContext.breakdown.ageContribution, note: null },
                 { label: "Barangay active density", factor: priorityContext.breakdown.spatialFactor, contribution: priorityContext.breakdown.spatialContribution, note: null },
               ].map((row) => (
@@ -404,15 +421,18 @@ function TimelineTab({
   createdAt,
   history,
   reassignments,
+  referrals,
 }: {
   createdAt: string;
   history: TicketStatusHistoryRow[];
   reassignments: TicketReassignmentRow[];
+  referrals: TicketReferralRow[];
 }) {
   const entries: TimelineEntry[] = [
     { key: "created", timestamp: createdAt, description: "Ticket created (Reported)", actor: null },
     ...history.map((h, i) => ({ key: `status-${i}`, timestamp: h.changed_at, description: `Status changed to ${h.status}`, actor: h.admin_name })),
     ...reassignments.map((r, i) => ({ key: `reassign-${i}`, timestamp: r.reassigned_at, description: `Reassigned from ${r.from_office} to ${r.to_office}`, actor: r.admin_name })),
+    ...referrals.map((r, i) => ({ key: `referral-${i}`, timestamp: r.referred_at, description: `Referral recorded — ${r.agency}${r.note ? `: ${r.note}` : ""}`, actor: r.admin_name })),
   ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   return (

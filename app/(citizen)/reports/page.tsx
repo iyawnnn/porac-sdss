@@ -73,7 +73,7 @@ export default async function MyReportsPage() {
 
   const resolvedCount = reports.filter((r) => r.status === "Resolved").length;
   const activeCount = reports.filter((r) => r.status !== "Resolved" && r.status !== "Rejected").length;
-  const criticalCount = reports.filter((r) => r.urgency_band === "Critical").length;
+  const criticalCount = reports.filter((r) => r.urgency_band === "High").length;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
@@ -125,7 +125,7 @@ export default async function MyReportsPage() {
           ink="var(--color-status-resolved-ink)"
         />
         <StatTile
-          label="Critical"
+          label="High Urgency"
           value={criticalCount}
           caption="High-urgency"
           note="Live totals based on your submitted hazard reports."

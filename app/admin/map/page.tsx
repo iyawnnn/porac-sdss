@@ -1,10 +1,10 @@
 import { getAdminSessionFromApi } from "@/lib/api-client";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
-import { TICKET_CATEGORIES, TICKET_STATUSES } from "@/lib/types/admin-ticket-constants";
+import { TICKET_CATEGORIES, ALL_TICKET_CATEGORIES, TICKET_STATUSES } from "@/lib/types/admin-ticket-constants";
 import MapClientLoader from "@/components/features/admin/map/MapClientLoader";
 import type { MapFilterState } from "@/components/features/admin/map/MapFilterBar";
 
-const URGENCY_BANDS = ["Low", "Medium", "Critical"];
+const URGENCY_BANDS = ["Low", "Medium", "High"];
 type MapLayer = "pins" | "heatmap";
 
 interface MapSearchParams {
@@ -21,7 +21,7 @@ interface MapSearchParams {
 // shape (api/src/admin/tickets.service.ts) so an unknown/invalid query param
 // never reaches the client as a filter that silently matches nothing.
 function parseMapFilters(params: MapSearchParams): { filters: MapFilterState; layer: MapLayer } {
-  const category = (TICKET_CATEGORIES as readonly string[]).includes(params.category ?? "") ? (params.category as string) : "";
+  const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(params.category ?? "") ? (params.category as string) : "";
   const urgency = URGENCY_BANDS.includes(params.urgency ?? "") ? (params.urgency as string) : "";
   const status = (TICKET_STATUSES as readonly string[]).includes(params.status ?? "") ? (params.status as string) : "";
   const barangayName = params.barangayName?.trim() || "";

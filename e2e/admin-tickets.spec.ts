@@ -14,9 +14,9 @@ function sessionCookieHeader(cookies: { name: string; value: string }[]): Record
 // Creates a brand-new, disposable ticket via the same POST /api/reports
 // multipart flow citizen-dispute.spec.ts already established — used instead
 // of mutating a shared seeded ticket wherever the mutation (status advance)
-// has no revert endpoint to restore it with afterwards. "Pothole" always
-// routes to MEO (api/src/common/utils/office.ts), so E2E_MEO_ADMIN can act
-// on it without any additional reassignment.
+// has no revert endpoint to restore it with afterwards. "Pothole / Road
+// Surface Damage" always routes to MEO (api/src/common/utils/office.ts), so
+// E2E_MEO_ADMIN can act on it without any additional reassignment.
 async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Promise<{ reportId: number; ticketId: number }> {
   // Pothole's dedup merge radius is 25m (api/src/common/utils/radius.ts) —
   // a fixed lat/lng would silently merge into whatever other fixture (e.g.
@@ -29,7 +29,7 @@ async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Pr
   const res = await citizenPage.request.post("/api/reports", {
     multipart: {
       title,
-      category: "Pothole",
+      category: "Pothole / Road Surface Damage",
       citizen_severity: "Low",
       lat: String(15.0711 + jitter()),
       lng: String(120.5401 + jitter()),
@@ -265,8 +265,8 @@ test("Ticket Detail shows status, office, urgency, evidence, and location sectio
   await expect(page.getByLabel("Assigned office", { exact: true })).toBeVisible();
 
   // Urgency info (badge in the header + scoring tab).
-  await expect(page.getByText(/^Urgency \d/)).toBeVisible();
-  await expect(page.getByText("Urgency (environmental hazard)")).toBeVisible();
+  await expect(page.getByText(/^Hazard Urgency \d/)).toBeVisible();
+  await expect(page.getByText("Hazard Urgency", { exact: true })).toBeVisible();
 
   // Evidence / reports section.
   await expect(page.getByText(/^Evidence & reports \(\d+\)$/)).toBeVisible();
@@ -463,13 +463,14 @@ test("category filter narrows the queue to only that category", async ({ page, r
   test.skip(body.tickets.length === 0, "no MEO tickets seeded — run `pnpm --prefix api seed:diverse-reports` first");
   const targetCategory = body.tickets[0].category as string;
 
-  await page.goto("/admin/tickets?status=all");
+  // Filter directly via URL rather than the category dropdown — the
+  // dropdown only renders current (non-legacy) categories as clickable
+  // options (Phase 3 category follow-up), but the underlying filter must
+  // still accept a legacy category value reached via a bookmarked/shared
+  // link (ALL_TICKET_CATEGORIES whitelist), and most seeded fixture data
+  // still carries legacy category strings.
+  await page.goto(`/admin/tickets?status=all&category=${encodeURIComponent(targetCategory)}`);
   await page.waitForLoadState("networkidle");
-  const filtered = page.waitForResponse((r) => r.url().includes("/api/admin/tickets?") && r.url().includes(`category=${encodeURIComponent(targetCategory)}`));
-  await page.getByLabel("Category", { exact: true }).click();
-  await page.getByRole("option", { name: targetCategory, exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`[?&]category=${encodeURIComponent(targetCategory)}(&|$)`));
-  await filtered;
 
   const rows = page.getByRole("row").filter({ hasText: "View ticket" });
   await expect(rows.first()).toBeVisible();
@@ -660,4 +661,71 @@ test("the citizen's Case Closure Summary reflects a ticket resolved through the 
   // both feedback actions must still be offered.
   await expect(page.getByRole("button", { name: "Confirm Fixed" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Report Still Not Fixed" })).toBeVisible();
+});
+
+// --- 8. Referral (Phase 3 manuscript alignment) --------------------------------
+
+// "Leaking Pipe / Water Supply Concern" is a Referral-classified category
+// that still routes to MEO custody (api/src/common/utils/office.ts) — same
+// reasoning as Pothole above, but exercises the non-direct-responsibility
+// path instead.
+async function createReferralReport(citizenPage: Page, titleSuffix: string): Promise<{ ticketId: number }> {
+  const jitter = () => (Math.random() - 0.5) * 0.01;
+  const res = await citizenPage.request.post("/api/reports", {
+    multipart: {
+      title: `E2E referral ${titleSuffix}`,
+      category: "Leaking Pipe / Water Supply Concern",
+      citizen_severity: "Low",
+      lat: String(15.0711 + jitter()),
+      lng: String(120.5401 + jitter()),
+      image: {
+        name: "01_poblacion.jpg",
+        mimeType: "image/jpeg",
+        buffer: readFileSync("public/uploads/reports/01_poblacion.jpg"),
+      },
+    },
+  });
+  if (!res.ok()) {
+    const bodyText = await res.text().catch((e) => `<failed to read body: ${e}>`);
+    throw new Error(`createReferralReport: POST /api/reports failed — status ${res.status()} ${res.statusText()}\nbody: ${bodyText}`);
+  }
+  return (await res.json()) as { ticketId: number };
+}
+
+test("a Referral-classified ticket shows the badge and Log Referral action; a Direct-responsibility ticket shows neither", async ({ page, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "referral");
+  const { ticketId: referralTicketId } = await createReferralReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
+
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto(`/admin/tickets/${referralTicketId}`);
+  await expect(page.getByText("Referral — coordinate externally", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Referral agency", { exact: true })).toBeVisible();
+
+  // A Direct-responsibility ticket (Pothole) shows neither.
+  await page.goto(`/admin/tickets/${sharedReadOnlyTicketId}`);
+  await expect(page.getByText("Referral — coordinate externally", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Referral agency", { exact: true })).toHaveCount(0);
+});
+
+test("logging a referral persists and appears in the ticket timeline", async ({ page, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "referral-log");
+  const { ticketId } = await createReferralReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
+
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  await page.getByLabel("Referral agency", { exact: true }).click();
+  await page.getByRole("option", { name: "MENRO", exact: true }).click();
+  await page.getByLabel("Referral note", { exact: true }).fill("E2E referral note");
+  await page.getByRole("button", { name: "Log Referral" }).click();
+
+  await expect(page.getByRole("button", { name: "Recording..." })).toHaveCount(0);
+  await page.getByRole("tab", { name: "Timeline" }).click();
+  await expect(page.getByText(/Referral recorded — MENRO: E2E referral note/)).toBeVisible();
 });

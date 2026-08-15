@@ -35,7 +35,7 @@ async function submitAndResolveReport(
   const submitRes = await citizenPage.request.post("/api/reports", {
     multipart: {
       title: `E2E dispute check ${titleSuffix}`,
-      category: "Pothole",
+      category: "Pothole / Road Surface Damage",
       citizen_severity: "Low",
       lat: String(15.0711 + jitter()),
       lng: String(120.5401 + jitter()),
@@ -70,7 +70,7 @@ test.describe("Citizen resolution feedback", () => {
     const submitRes = await page.request.post("/api/reports", {
       multipart: {
         title: "E2E not-yet-resolved check",
-        category: "Pothole",
+        category: "Pothole / Road Surface Damage",
         citizen_severity: "Low",
         lat: "15.0711",
         lng: "120.5401",
@@ -161,7 +161,7 @@ test.describe("Case Closure Summary", () => {
     const submitRes = await page.request.post("/api/reports", {
       multipart: {
         title: "E2E summary not-yet-resolved check",
-        category: "Pothole",
+        category: "Pothole / Road Surface Damage",
         citizen_severity: "Low",
         lat: "15.0711",
         lng: "120.5401",
@@ -187,7 +187,7 @@ test.describe("Case Closure Summary", () => {
     const submitRes = await page.request.post("/api/reports", {
       multipart: {
         title: `E2E summary confirm ${citizen.email}`,
-        category: "Pothole",
+        category: "Pothole / Road Surface Damage",
         citizen_severity: "Low",
         lat: String(15.0711 + jitter()),
         lng: String(120.5401 + jitter()),

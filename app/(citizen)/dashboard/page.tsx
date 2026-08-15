@@ -21,7 +21,7 @@ export default async function DashboardPage() {
   const { barangays, tickets } = publicMap;
 
   const activeCount = reports.filter((r) => r.status !== "Resolved" && r.status !== "Rejected").length;
-  const citywideCriticalCount = tickets.filter((t) => t.urgency_band === "Critical").length;
+  const citywideCriticalCount = tickets.filter((t) => t.urgency_band === "High").length;
   const recentReports = reports.slice(0, 3);
   const firstName = session.citizenName.split(" ")[0];
 
@@ -76,10 +76,10 @@ export default async function DashboardPage() {
           ink="var(--color-status-resolved-ink)"
         />
         <StatTile
-          label="Citywide Critical"
+          label="Citywide High Urgency"
           value={citywideCriticalCount}
           caption="High-urgency hazards"
-          note="Critical-band tickets across all barangays."
+          note="High-band tickets across all barangays."
           tint="var(--color-urgency-critical-tint)"
           ink="var(--color-urgency-critical-ink)"
         />

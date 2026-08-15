@@ -33,7 +33,7 @@ export type AdminNotificationType = (typeof ADMIN_NOTIFICATION_TYPES)[number];
 
 export const ADMIN_NOTIFICATION_TYPE_LABELS: Record<AdminNotificationType, string> = {
   new_citizen_report: "New Citizen Report",
-  ticket_critical: "Ticket Became Critical",
+  ticket_critical: "Ticket Urgency Became High",
   work_order_assigned: "Work Order Assigned",
   work_order_created: "Work Order Created",
 };
