@@ -113,7 +113,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           </h1>
           <StatusPill size="lg" status={ticket.status} />
           <Badge className={urgencyBadge.className} variant="outline">
-            Urgency {ticket.priority_score ?? "—"} · {urgencyBadge.label}
+            Hazard Urgency {ticket.priority_score ?? "—"} · {urgencyBadge.label}
           </Badge>
           {ticket.disputed_at && (
             <Badge className="bg-red-50 text-red-700" variant="outline">
@@ -322,7 +322,7 @@ function ScoringTab({
   return (
     <div className="space-y-5">
       <div>
-        <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Urgency (environmental hazard)</p>
+        <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Hazard Urgency</p>
         <p className="mt-0.5 text-xs text-ink-400">Elevation + live rainfall + report-cluster density — computed, not citizen-reported.</p>
         <div className="mt-3 flex items-baseline gap-2">
           <span className="font-mono text-2xl font-semibold tabular-nums text-ink-900">{ticket.priority_score ?? "—"}</span>
@@ -355,8 +355,8 @@ function ScoringTab({
 
       {priorityContext && (
         <div className="border-t border-line-100 pt-4">
-          <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Priority (workflow — how soon to act)</p>
-          <p className="mt-0.5 text-xs text-ink-400">Citizen severity + ticket age + barangay density — a separate signal from urgency above.</p>
+          <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Operational Priority Index (how soon to act)</p>
+          <p className="mt-0.5 text-xs text-ink-400">Citizen-reported severity + ticket age + barangay density — a separate signal from Hazard Urgency above.</p>
           <div className="mt-3 flex items-baseline gap-2">
             <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
               <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> · {priorityBandLabel(ticket.priority_index)}
@@ -372,7 +372,7 @@ function ScoringTab({
             </thead>
             <tbody className="font-mono">
               {[
-                { label: "Severity weight", factor: priorityContext.breakdown.severityFactor, contribution: priorityContext.breakdown.severityContribution, note: priorityContext.breakdown.severity },
+                { label: "Citizen-reported severity weight", factor: priorityContext.breakdown.severityFactor, contribution: priorityContext.breakdown.severityContribution, note: priorityContext.breakdown.severity },
                 { label: "Ticket age factor", factor: priorityContext.breakdown.ageFactor, contribution: priorityContext.breakdown.ageContribution, note: null },
                 { label: "Barangay active density", factor: priorityContext.breakdown.spatialFactor, contribution: priorityContext.breakdown.spatialContribution, note: null },
               ].map((row) => (

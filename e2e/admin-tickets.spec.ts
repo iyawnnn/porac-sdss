@@ -265,8 +265,8 @@ test("Ticket Detail shows status, office, urgency, evidence, and location sectio
   await expect(page.getByLabel("Assigned office", { exact: true })).toBeVisible();
 
   // Urgency info (badge in the header + scoring tab).
-  await expect(page.getByText(/^Urgency \d/)).toBeVisible();
-  await expect(page.getByText("Urgency (environmental hazard)")).toBeVisible();
+  await expect(page.getByText(/^Hazard Urgency \d/)).toBeVisible();
+  await expect(page.getByText("Hazard Urgency", { exact: true })).toBeVisible();
 
   // Evidence / reports section.
   await expect(page.getByText(/^Evidence & reports \(\d+\)$/)).toBeVisible();
