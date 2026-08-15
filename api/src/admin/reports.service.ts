@@ -56,7 +56,7 @@ export class ReportsService {
       { header: 'Status', value: (r) => r.status },
       { header: 'Assigned Office', value: (r) => r.assigned_office },
       { header: 'Urgency Band', value: (r) => r.urgency_band },
-      { header: 'Priority Score', value: (r) => r.priority_score },
+      { header: 'Hazard Urgency Score', value: (r) => r.priority_score },
       { header: 'Category', value: (r) => r.category },
       { header: 'Barangay', value: (r) => r.barangay_name },
       { header: 'Report Count', value: (r) => r.member_count },

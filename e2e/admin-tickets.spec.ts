@@ -503,6 +503,26 @@ test("barangay filter narrows the queue to only that barangay", async ({ page, r
   }
 });
 
+test("Hazard Urgency deep-link filters the queue and survives an unrelated filter change (Phase 5)", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+
+  // Same URL shape as the dashboard's "High Urgency Tickets" quick action.
+  await page.goto("/admin/tickets?status=all&urgency=High");
+  await page.waitForLoadState("networkidle");
+
+  await expect(page.getByLabel("Hazard Urgency", { exact: true })).toHaveText("High");
+  await expect(page).toHaveURL(/[?&]urgency=High(&|$)/);
+
+  // An unrelated filter change must not silently drop the urgency filter.
+  const filtered = page.waitForResponse((r) => r.url().includes("/api/admin/tickets?") && r.url().includes("urgency=High"));
+  await page.getByLabel("Sort tickets", { exact: true }).click();
+  await page.getByRole("option", { name: "Newest first" }).click();
+  await filtered;
+
+  await expect(page).toHaveURL(/[?&]urgency=High(&|$)/);
+  await expect(page.getByLabel("Hazard Urgency", { exact: true })).toHaveText("High");
+});
+
 // --- 9. Pagination and sorting -------------------------------------------------
 
 test("pagination advances to the next page of results when enough tickets exist", async ({ page, request }) => {
@@ -728,4 +748,26 @@ test("logging a referral persists and appears in the ticket timeline", async ({ 
   await expect(page.getByRole("button", { name: "Recording..." })).toHaveCount(0);
   await page.getByRole("tab", { name: "Timeline" }).click();
   await expect(page.getByText(/Referral recorded — MENRO: E2E referral note/)).toBeVisible();
+});
+
+// --- 9. Reject (Phase 4 workflow completeness) --------------------------------
+
+test("rejecting a fresh ticket sets it to Rejected, shows the status tracker's rejected state, and hides the reject action afterward", async ({ page, browser }) => {
+  const citizenContext = await browser.newContext();
+  const citizenPage = await citizenContext.newPage();
+  await signupCitizen(citizenPage, "reject");
+  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+  await citizenContext.close();
+
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto(`/admin/tickets/${ticketId}`);
+
+  await expect(page.getByRole("button", { name: "Reject Ticket" })).toBeDisabled();
+  await page.getByLabel("Rejection reason", { exact: true }).fill("Outside city limits.");
+  await page.getByRole("button", { name: "Reject Ticket" }).click();
+
+  await expect(page.getByRole("button", { name: "Rejecting..." })).toHaveCount(0);
+  await expect(page.getByText("This ticket was rejected.", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Rejection reason", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reject Ticket" })).toHaveCount(0);
 });

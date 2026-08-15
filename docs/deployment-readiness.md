@@ -134,13 +134,13 @@ Until the API is deployed and reachable, this workflow runs on schedule and fail
 
 **Already implemented** — full detail in [`security.md`](security.md): separate admin/citizen JWT systems with audience separation; httpOnly/SameSite cookies with `secure` in production; server-side session invalidation via `session_valid_after`; admin deactivation that kills live sessions in the same write; six guards including office scoping enforced from the session rather than query parameters; three layers of Postgres-backed rate limiting; a transactional admin audit trail; and curated citizen DTOs that exclude internal content.
 
-**Pending before production** — tracked with severity and scope in [`security-hardening-plan.md`](security-hardening-plan.md):
+**Shipped** — tracked with severity and scope in [`security-hardening-plan.md`](security-hardening-plan.md); all five are done, not pending:
 
-- [ ] **Failed-login throttling (R1, High).** Currently only bcrypt cost and a generic error message protect admin login, and the admin email convention is published in this repo. **The recommended next implementation task.**
-- [ ] **HTTP security headers (R2, Medium).** Neither `next.config.ts` nor the API sets any; the admin console is framable by any origin.
-- [ ] **Free-text length bounds (R3, Medium).** Report submission is bounded; admin notes, resolution notes, and dispute reasons are not.
-- [ ] **Login audit events (R4, Medium).** Authentication events are not recorded.
-- [ ] **Admin SSR error boundary (R10) — pending, not implemented.** Not deployment-gated; it can and should be fixed independently of any hosting decision. A transient frontend→API failure currently replaces the admin app, login form included, with the framework error screen. Mitigated only in test code today.
+- [x] **Failed-login throttling (R1, High).** Per-account cooldown backed by `admin_login_rate_limit_events` — see [`security.md`](security.md) §5.2.
+- [x] **HTTP security headers (R2, Medium).** `next.config.ts` sets `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` — see [`security.md`](security.md) §9.
+- [x] **Free-text length bounds (R3, Medium).** Admin notes, resolution notes, dispute/rejection/referral reasons all carry length caps in `api/src/contracts/schemas.ts`, matching the pattern already used for report submission.
+- [x] **Login audit events (R4, Medium).** `admin_login`/`admin_login_failed` action types write to `admin_audit_events` — see [`security.md`](security.md) §6.
+- [x] **Admin SSR error boundary (R10).** `app/admin/error.tsx` — see §3/§4.2 of [`project-status.md`](project-status.md). Not deployment-gated; this shipped independently of any hosting decision.
 
 **Deployment-topology dependent — cannot be resolved before a platform is chosen:**
 
@@ -160,7 +160,7 @@ Full reference: [`testing.md`](testing.md).
 - [ ] Targeted E2E on anything the change touched, especially `admin-rbac.spec.ts` and `admin-password.spec.ts` for auth work — neither creates reports, so both are safe to repeat.
 - [ ] **One** full Playwright run before deploying: `pnpm exec playwright test -- --workers=1`.
 
-**Do not run the full suite back-to-back.** It posts ~16 real reports against a 20/hour per-IP backstop, so a second run within the hour fails with 429 on report creation. Wait out the hour or run targeted specs. **Do not add a test-only bypass** — that prohibition holds through deployment.
+**Do not run the full suite back-to-back.** It posts ~17 real reports against a 20/hour per-IP backstop, so a second run within the hour fails with 429 on report creation. Wait out the hour or run targeted specs. **Do not add a test-only bypass** — that prohibition holds through deployment.
 
 - [ ] Run against a staging database, never production (§4).
 - [ ] After deploying, manually verify the flows E2E cannot reach in production: a real password-reset email, Google OAuth against the production redirect URI, and one real photo upload to Cloudinary.
@@ -184,7 +184,7 @@ Full reference: [`testing.md`](testing.md).
 
 ## 10. Production readiness checklist
 
-Consolidated. Every box is unchecked; none of this work has been done.
+Consolidated. Checked boxes reflect application-level work already shipped (§7's R1–R4/R10); everything else — infrastructure, secrets, cron, and topology-dependent items — has not been done and needs an actual deployment target first.
 
 **Database**
 - [ ] PostGIS-enabled production database provisioned
@@ -216,11 +216,11 @@ Consolidated. Every box is unchecked; none of this work has been done.
 - [ ] Failure alerting decided
 
 **Security**
-- [ ] Failed-login throttling implemented (R1)
-- [ ] HTTP security headers added (R2)
-- [ ] Free-text length bounds added (R3)
-- [ ] Login audit events added (R4)
-- [ ] Admin SSR error boundary implemented (R10)
+- [x] Failed-login throttling implemented (R1)
+- [x] HTTP security headers added (R2)
+- [x] Free-text length bounds added (R3)
+- [x] Login audit events added (R4)
+- [x] Admin SSR error boundary implemented (R10)
 - [ ] `trust proxy` depth re-derived for the real topology
 - [ ] API not publicly reachable independently of the proxy
 - [ ] TLS/HSTS configured; `Secure` cookies confirmed live

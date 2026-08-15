@@ -87,7 +87,7 @@ describe('ReportsService.ticketsCsv', () => {
 
     const [header, row] = csv.trim().split('\r\n');
     expect(header).toBe(
-      'Ticket ID,Status,Assigned Office,Urgency Band,Priority Score,Category,Barangay,Report Count,Created At,Updated At',
+      'Ticket ID,Status,Assigned Office,Urgency Band,Hazard Urgency Score,Category,Barangay,Report Count,Created At,Updated At',
     );
     expect(row).toBe('42,Reported,MEO,High,87,Pothole,Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z');
   });

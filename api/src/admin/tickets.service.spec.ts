@@ -289,16 +289,18 @@ describe('admin audit logging for ticket mutations', () => {
     ).begin = (cb) => cb(sql);
     const logInPgTx = jest.fn().mockResolvedValue(undefined);
     const audit = { logInPgTx } as unknown as AdminAuditService;
+    const createInTx = jest.fn();
+    const sendReportRejected = jest.fn().mockResolvedValue(undefined);
     const service = new TicketsService(
       sql,
       {} as WeatherService,
       {} as MediaService,
-      { createInTx: jest.fn() } as unknown as NotificationsService,
-      {} as EmailService,
-      {} as ConfigService<Env, true>,
+      { createInTx } as unknown as NotificationsService,
+      { sendReportRejected } as unknown as EmailService,
+      { get: jest.fn().mockReturnValue('https://porac.example') } as unknown as ConfigService<Env, true>,
       audit,
     );
-    return { service, logInPgTx };
+    return { service, logInPgTx, createInTx, sendReportRejected };
   }
 
   it('logs ticket_status_advanced inside the same transaction as the status change', async () => {
@@ -381,6 +383,103 @@ describe('admin audit logging for ticket mutations', () => {
 
     await expect(
       service.logReferral(9, MEO_OFFICER as AdminSession, 'MENRO', 'x'.repeat(1001)),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects a Reported ticket: status Rejected, status_history + ticket_rejected audit + citizen notification + email, all with the reason', async () => {
+    const { service, logInPgTx, createInTx, sendReportRejected } = makeService([
+      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }], // ticket lookup
+      [{}], // UPDATE tickets
+      [{}], // INSERT status_history
+      [{ citizen_id: 1, report_id: 10, email: 'citizen@example.com' }], // citizenRows
+    ]);
+
+    const result = await service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Not within city limits.');
+
+    expect(result).toEqual({ status: 'Rejected' });
+
+    expect(logInPgTx).toHaveBeenCalledTimes(1);
+    const [, auditInput] = logInPgTx.mock.calls[0];
+    expect(auditInput.actionType).toBe('ticket_rejected');
+    expect(auditInput.targetType).toBe('ticket');
+    expect(auditInput.targetId).toBe(9);
+    expect(auditInput.metadata).toEqual({
+      from: 'Reported',
+      to: 'Rejected',
+      reason: 'Not within city limits.',
+    });
+
+    expect(createInTx).toHaveBeenCalledTimes(1);
+    const [, notificationInput] = createInTx.mock.calls[0];
+    expect(notificationInput.recipientType).toBe('citizen');
+    expect(notificationInput.recipientId).toBe(1);
+    expect(notificationInput.type).toBe('ticket_rejected');
+    expect(notificationInput.message).toContain('Not within city limits.');
+
+    expect(sendReportRejected).toHaveBeenCalledTimes(1);
+    expect(sendReportRejected).toHaveBeenCalledWith(
+      'citizen@example.com',
+      expect.stringContaining('/dashboard/reports/10'),
+      'Not within city limits.',
+    );
+  });
+
+  it.each(['Under Review', 'In Progress'])(
+    'allows rejecting a %s ticket (any active status, not just Reported)',
+    async (status) => {
+      const { service } = makeService([
+        [{ status, assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }],
+        [{}],
+        [{}],
+        [],
+      ]);
+      const result = await service.rejectTicket(9, MEO_OFFICER as AdminSession, 'No longer applicable.');
+      expect(result).toEqual({ status: 'Rejected' });
+    },
+  );
+
+  it('rejects rejecting a ticket on another office', async () => {
+    const { service } = makeService([
+      [{ status: 'Reported', assigned_office: 'MDRRMO', category: 'Localized Flooding' }],
+    ]);
+    await expect(
+      service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('rejects rejecting an already-Resolved ticket', async () => {
+    const { service } = makeService([
+      [{ status: 'Resolved', assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }],
+    ]);
+    await expect(
+      service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects rejecting an already-Rejected ticket (no double-reject)', async () => {
+    const { service } = makeService([
+      [{ status: 'Rejected', assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }],
+    ]);
+    await expect(
+      service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects an empty reason', async () => {
+    const { service } = makeService([
+      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }],
+    ]);
+    await expect(
+      service.rejectTicket(9, MEO_OFFICER as AdminSession, '   '),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects a reason over TICKET_REJECTION_REASON_MAX_LENGTH', async () => {
+    const { service } = makeService([
+      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }],
+    ]);
+    await expect(
+      service.rejectTicket(9, MEO_OFFICER as AdminSession, 'x'.repeat(1001)),
     ).rejects.toThrow(BadRequestException);
   });
 });
@@ -490,14 +589,22 @@ describe('ticket-status notification email selection', () => {
     'utf8',
   );
 
-  it('keeps email delivery post-commit and limited to resolved/rejected tickets', () => {
+  it('keeps advanceStatus email delivery post-commit and limited to resolved tickets', () => {
     expect(ticketsServiceSource).toMatch(
-      /return nextStatus === 'Resolved' \|\| nextStatus === 'Rejected'/,
+      /return nextStatus === 'Resolved'\s*\n\s*\? citizenRows/,
     );
     expect(ticketsServiceSource).toMatch(
       /const emailRecipients = await sql\.begin[\s\S]*?if \(emailRecipients\.length > 0\)/,
     );
     expect(ticketsServiceSource).toMatch(/this\.email\.sendReportResolved/);
+  });
+
+  it('sends the rejection email from rejectTicket, not advanceStatus', () => {
+    const advanceStatusBody = ticketsServiceSource.slice(
+      ticketsServiceSource.indexOf('async advanceStatus('),
+      ticketsServiceSource.indexOf('async reassignOffice('),
+    );
+    expect(advanceStatusBody).not.toMatch(/sendReportRejected/);
     expect(ticketsServiceSource).toMatch(/this\.email\.sendReportRejected/);
   });
 

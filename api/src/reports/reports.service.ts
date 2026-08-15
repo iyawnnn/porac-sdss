@@ -663,7 +663,7 @@ export class ReportsService {
           ORDER BY reports.id ASC
           LIMIT 1
         ) own ON true
-        WHERE t.status IN ('Reported', 'In Progress')
+        WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
           AND COALESCE(t.flagged, false) = false
         ORDER BY t.created_at DESC
       `,

@@ -106,11 +106,15 @@ export class ResendEmailService implements EmailService {
     );
   }
 
-  async sendReportRejected(email: string, reportUrl: string): Promise<void> {
+  async sendReportRejected(
+    email: string,
+    reportUrl: string,
+    reason?: string,
+  ): Promise<void> {
     await this.send(
       email,
       'Update on your report — PORAC-SDSS',
-      reportRejectedEmailHtml(reportUrl),
+      reportRejectedEmailHtml(reportUrl, reason),
     );
   }
 }

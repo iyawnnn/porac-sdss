@@ -127,20 +127,21 @@ This is the rule the patterns above already follow — stated explicitly so a ne
 `e2e/helpers.ts` contains two recovery mechanisms. Both are narrowly scoped so they cannot mask a real regression:
 
 - **`submitWithRetry`** — re-submits a login only when the specific transient connection error is visible on screen (25 s navigation budget, 3 attempts). A genuine credential or authorization failure renders different text and is never retried.
-- **`settleAdminPage`** — reloads when the framework's server-error screen appears, and only then. This exists because **the admin SSR error boundary is still pending** (see [`security-hardening-plan.md`](security-hardening-plan.md) R10 and [`project-status.md`](project-status.md) §4.2). It is a test-side mitigation for an unfixed application gap, not a substitute for the fix.
+- **`settleAdminPage`** — reloads when the framework's server-error screen appears, and only then. The admin SSR error boundary (`app/admin/error.tsx`, R10) has since shipped (see [`project-status.md`](project-status.md) §4.2) — this helper now stays purely as defense-in-depth for mid-run connection churn between navigations, not a mitigation for an unfixed gap.
 
 ---
 
 ## 6. The rate-limit caveat
 
-**A full suite run posts roughly 15 real reports.** They come from four specs:
+**A full suite run posts roughly 17 real reports.** They come from five specs:
 
 | Spec | Reports |
 |---|---|
-| `admin-tickets.spec.ts` | 6 |
+| `admin-tickets.spec.ts` | 7 |
 | `citizen-dispute.spec.ts` | 6 |
 | `admin-work-orders.spec.ts` | 2 (in `beforeAll`) |
 | `citizen-reports.spec.ts` | 1 |
+| `citizen-map.spec.ts` | 1 |
 
 `RateLimitService` (`api/src/domain/ratelimit.service.ts`) backstops report submission at **20 per hour per IP** (`IP_HOURLY_BACKSTOP`), and every request in a local run originates from `127.0.0.1`.
 

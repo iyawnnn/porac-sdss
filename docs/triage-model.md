@@ -36,7 +36,7 @@ Five distinct concepts. The first four are frequently conflated; the last is unr
 | **Severity** | `reports.citizen_severity` | **Citizen input** | Low / Medium / High / Critical, chosen by the reporter. Never computed. Validated by `SEVERITIES` in `api/src/contracts/schemas.ts`. |
 | **Urgency** | `urgency_score`, `urgency_band`, `priority_score`, `urgency_level`, and the three `*_factor` columns | **System-computed** | Environmental hazard. `priority_score` and `urgency_level` are *restatements of the same `urgency_score`*, not separate concepts — see §5. Labeled "Urgency" in the UI despite `priority_score`'s column name. |
 | **Priority** | `priority_index` | **System-computed, different formula** | Workflow priority (§4.2). Unrelated to `urgency_score` despite sharing the word. |
-| **Status** | `tickets.status` | **Admin workflow** | `Reported → Under Review → In Progress → Resolved`, plus `Rejected`. Not a score and never derived from one. `Rejected` exists in the enum and constants but has no transition path today — `NEXT_STATUS` (`api/src/admin/ticket-constants.ts`) only ever advances the first four; see `docs/project-status.md` §5 for the deferred rejection workflow. |
+| **Status** | `tickets.status` | **Admin workflow** | `Reported → Under Review → In Progress → Resolved`, plus `Rejected`. Not a score and never derived from one. `Reported`/`Under Review`/`In Progress`/`Resolved` advance via `NEXT_STATUS` (`api/src/admin/ticket-constants.ts`); `Rejected` is a separate terminal outcome reachable from any of the first three via `TicketsService.rejectTicket` (Phase 4 of the manuscript-alignment work), not a `NEXT_STATUS` entry — see `docs/features.md`'s Ticket Detail section. |
 | **Dispute** | `disputed_at`, `dispute_reason` | **Citizen action** | Feedback on a resolved ticket. Feeds no score, never rolls status back. |
 | **Work order status** | `work_orders.status` | **Admin workflow** | A fourth, independent track (`pending`/`in_progress`/`completed`/`cancelled`). Deliberately not coupled to ticket status or any score. |
 
@@ -231,7 +231,7 @@ Stated plainly. None of these is a defect to fix casually; several are inherent 
 
 One reading, taken at the municipality centroid, applied identically to every ticket. Because `precipitationFactor` is the same for all tickets at any instant, it **shifts every score up or down uniformly and never changes their relative ordering**.
 
-Practically: rainfall can push the whole queue across the Critical threshold during a storm — which is useful and intended — but it can never tell you *which* of two tickets is more rain-exposed. Any claim that the system scores per-location rainfall exposure would be inaccurate. Fixing it would need a gridded precipitation source, which OpenWeatherMap's free tier does not provide at intra-municipal resolution.
+Practically: rainfall can push the whole queue across the High threshold during a storm — which is useful and intended — but it can never tell you *which* of two tickets is more rain-exposed. Any claim that the system scores per-location rainfall exposure would be inaccurate. Fixing it would need a gridded precipitation source, which OpenWeatherMap's free tier does not provide at intra-municipal resolution.
 
 ### 10.2 Elevation is static and absolute
 

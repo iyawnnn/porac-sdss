@@ -202,4 +202,29 @@ describe('ResendEmailService.sendReportResolved / sendReportRejected', () => {
     expect(payload.to).toBe('citizen@example.com');
     expect(payload.html).toContain('http://localhost:3000/dashboard/reports/13');
   });
+
+  it('includes the rejection reason in the email body when one is given', async () => {
+    const service = new ResendEmailService(makeConfig());
+    await service.sendReportRejected(
+      'citizen@example.com',
+      'http://localhost:3000/dashboard/reports/13',
+      'Not within city limits.',
+    );
+
+    const [payload] = sendMock.mock.calls[0] as [{ html: string }];
+    expect(payload.html).toContain('Not within city limits.');
+  });
+
+  it('HTML-escapes the reason to prevent markup injection in the email body', async () => {
+    const service = new ResendEmailService(makeConfig());
+    await service.sendReportRejected(
+      'citizen@example.com',
+      'http://localhost:3000/dashboard/reports/13',
+      '<script>alert(1)</script>',
+    );
+
+    const [payload] = sendMock.mock.calls[0] as [{ html: string }];
+    expect(payload.html).not.toContain('<script>');
+    expect(payload.html).toContain('&lt;script&gt;');
+  });
 });

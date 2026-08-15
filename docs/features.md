@@ -79,7 +79,7 @@ A dispute never rolls the ticket status backwards and never feeds any score. Onl
 
 ### 2.5 Map and notifications
 
-- **Citizen map** (`/map`) — city-wide ticket pins with the municipal boundary overlay. Requires a citizen session (it is city-wide, not anonymous-public).
+- **Citizen map** (`/map`) — city-wide ticket pins with the municipal boundary overlay. Requires a citizen session (it is city-wide, not anonymous-public). Shows all active tickets (`Reported`, `Under Review`, `In Progress`) — `Resolved`/`Rejected` tickets are terminal and excluded; this matches the same 3-status "active" definition used by the admin map, dashboards, and every ticket-list query (Phase 5 fixed a prior omission where `Under Review` tickets were briefly invisible on this map).
 - **Notifications** — a bell with click-through to the relevant report. Citizen-facing types include `report_received`, `report_merged`, `report_quarantined`, `report_flagged_duplicate`, and the status-progression types (`ticket_under_review`, `ticket_in_progress`, `ticket_resolved`).
 
 ---
@@ -116,7 +116,8 @@ Covered by `e2e/admin-tickets.spec.ts` (~21 tests).
 ### 3.3 Ticket Detail (`/admin/tickets/[id]`)
 
 - **Header** — ticket ID, assigned office, status pill, urgency badge.
-- **Status tracker** — a single "Advance to *next*" control walking `Reported → Under Review → In Progress → Resolved`. The final step opens a **resolve dialog** requiring completion notes and accepting a resolution photo; once set, a "Before & after resolution" card renders. There is no further transition after `Resolved` through this control. A fifth status, `Rejected`, exists in the schema and constants but has no reachable transition today — see `docs/project-status.md` §5.
+- **Status tracker** — a single "Advance to *next*" control walking `Reported → Under Review → In Progress → Resolved`. The final step opens a **resolve dialog** requiring completion notes and accepting a resolution photo; once set, a "Before & after resolution" card renders. There is no further transition after `Resolved` through this control.
+- **Reject action** (Phase 4 workflow completeness) — a separate "Reject" panel, visible only while the ticket is `Reported`, `Under Review`, or `In Progress`, offered alongside the status tracker rather than as a step within it — rejection is an alternative terminal outcome, not the next rung of the ladder. Requires a reason (same required/trimmed/length-bounded validation as a citizen dispute reason); the reason is recorded in the `ticket_rejected` `admin_audit_events` row's metadata, **not** a new ticket column. Sets `status = 'Rejected'`, writes `status_history`, notifies the citizen in-app and by email (reason included in both) where an email provider is configured, and — once rejected — permanently hides the reject action and shows "This ticket was rejected." in the status tracker. `Resolved` and `Rejected` tickets cannot be rejected again (already terminal). See `docs/database.md`'s `admin_audit_events` section for exactly where the reason lives.
 - **Assignment panel** — reassign to the other office, audited. Available to **any admin who can access the ticket**, not System Administrators only: the endpoint uses `assertOfficeAccess` against the ticket's *current* office, and `AssignmentPanel.tsx` carries no role gate. For an office admin this is a one-way hand-off — after reassigning, the ticket belongs to the other office and they can no longer open it. System Administrators can move a ticket in either direction.
 - **Urgency decomposition** — the three factors with their explicit ⅓ weights and per-factor contributions, not just a final number.
 - **Priority breakdown** — the separate workflow-priority formula (§6.1).
@@ -200,7 +201,7 @@ Merging increments `member_count` and recomputes the ticket centroid — which i
 urgency_score = ⅓ × elevationFactor + ⅓ × precipitationFactor + ⅓ × clusterFactor
 ```
 
-banded **Low / Medium / Critical** at 0.4 / 0.7.
+banded **Low / Medium / High** at 0.4 / 0.7.
 
 - **Elevation** — inverse-normalized against city-wide min/max computed once at DEM seed time. Lower ground scores higher.
 - **Precipitation** — real `rain["1h"]` millimetres from OpenWeatherMap, capped at the PAGASA 30mm/h torrential threshold, cached ~10 minutes in the database so it survives restarts.
@@ -238,8 +239,6 @@ Four distinct concepts that are easy to conflate. The authoritative definitions 
 | **Urgency** | Computed | The environmental hazard score (§4.4). `priority_score` and `urgency_level` are the *same* value rescaled 0–100 and re-banded — an urgency representation, labeled "Urgency" in the UI despite the column name. |
 | **Priority** | Computed, different formula | `priority_index` — citizen severity + ticket age + barangay density. Workflow urgency (how soon staff should act), not environmental hazard. Powers the Priority breakdown card and the map heatmap. |
 | **Dispute** | Citizen action | A workflow signal on a resolved ticket. Not a score, not a status. |
-
-**Known discrepancy, not a bug:** `urgency_band` (thresholds 0.4/0.7) and `urgency_level` (thresholds 0.5/0.8) can disagree at the boundary — a ticket at 0.45 is band `Medium` but level `LOW`. Reconciling the two threshold sets is an open decision.
 
 ### 5.2 Office scoping
 
