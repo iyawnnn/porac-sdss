@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Ban, CheckCircle2, Copy, ImageOffIcon, SearchIcon, ShieldAlert, type LucideIcon } from "lucide-react";
 import type { ModerationQueueRow, ModerationStats, ModerationAction, PaginatedModeration } from "@/lib/types/admin-moderation";
 import { MODERATION_STATUSES, FLAG_TYPES } from "@/lib/types/admin-moderation";
-import { TICKET_CATEGORIES, PAGE_LIMITS, DEFAULT_PAGE_LIMIT } from "@/lib/types/admin-ticket-constants";
+import { TICKET_CATEGORIES, ALL_TICKET_CATEGORIES, PAGE_LIMITS, DEFAULT_PAGE_LIMIT } from "@/lib/types/admin-ticket-constants";
 import { computeRiskScore } from "@/lib/utils/flag-risk";
 import { flagEvidence, flagLabel, moderationStatusLabel, FLAG_TYPE_LABELS } from "./flagText";
 import { KpiBar } from "./KpiBar";
@@ -52,7 +52,7 @@ function initialQueryState(query: Record<string, string | undefined>, sessionOff
       : (sessionOffice ?? "all");
   const status =
     query.status === "all" || (MODERATION_STATUSES as string[]).includes(query.status ?? "") ? (query.status as string) : "pending";
-  const category = (TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "";
+  const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "";
   const flag = (FLAG_TYPES as string[]).includes(query.flag ?? "") ? (query.flag as string) : "";
   const limit = (PAGE_LIMITS as readonly number[]).includes(Number(query.limit)) ? Number(query.limit) : DEFAULT_PAGE_LIMIT;
 

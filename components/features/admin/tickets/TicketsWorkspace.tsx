@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Activity, AlertTriangle, DownloadIcon, Gauge, MapPin, SearchIcon, SearchXIcon, Ticket as TicketIcon, type LucideIcon } from "lucide-react";
 import type { AdminTicketRow, PaginatedTickets } from "@/lib/types/admin-tickets";
-import { TICKET_STATUSES, TICKET_CATEGORIES, PAGE_LIMITS, type TicketSort } from "@/lib/types/admin-ticket-constants";
+import { TICKET_STATUSES, TICKET_CATEGORIES, ALL_TICKET_CATEGORIES, PAGE_LIMITS, type TicketSort } from "@/lib/types/admin-ticket-constants";
 import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { priorityScoreBandClass } from "@/lib/utils/ui/priority";
 import { relativeAge } from "@/lib/utils/ui/time";
@@ -55,7 +55,7 @@ function initialQueryState(query: Record<string, string | undefined>, sessionOff
     (TICKET_STATUSES as string[]).includes(query.status ?? "")
       ? (query.status as string)
       : "active";
-  const category = (TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "";
+  const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "";
   const sort: TicketSort = query.sort === "priority_asc" || query.sort === "newest" ? query.sort : "priority_desc";
   const limit = (PAGE_LIMITS as readonly number[]).includes(Number(query.limit)) ? Number(query.limit) : 15;
 

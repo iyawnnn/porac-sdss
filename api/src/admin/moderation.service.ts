@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
-import { CATEGORIES, MODERATION_NOTE_MAX_LENGTH } from '../contracts/schemas';
+import { ALL_CATEGORIES, MODERATION_NOTE_MAX_LENGTH } from '../contracts/schemas';
 import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
@@ -106,7 +106,7 @@ export class ModerationService {
       (MODERATION_STATUSES as string[]).includes(query.status ?? '')
         ? (query.status as ModerationStatusFilter)
         : 'pending';
-    const category = (CATEGORIES as readonly string[]).includes(
+    const category = (ALL_CATEGORIES as readonly string[]).includes(
       query.category ?? '',
     )
       ? query.category

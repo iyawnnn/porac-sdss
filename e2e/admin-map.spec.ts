@@ -11,11 +11,11 @@ async function waitForMapReady(page: import("@playwright/test").Page) {
 
 test("map loads with query params applied and reflects them in the filter bar", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto("/admin/map?category=Pothole&urgency=High");
+  await page.goto("/admin/map?category=Pothole%20%2F%20Road%20Surface%20Damage&urgency=High");
   await waitForMapReady(page);
 
   await page.getByRole("button", { name: /^Filters/ }).click();
-  await expect(page.getByLabel("Category", { exact: true })).toHaveText("Pothole");
+  await expect(page.getByLabel("Category", { exact: true })).toHaveText("Pothole / Road Surface Damage");
   await expect(page.getByLabel("Urgency", { exact: true })).toHaveText("High");
 });
 
@@ -26,27 +26,27 @@ test("changing a map filter updates the URL", async ({ page }) => {
 
   await page.getByRole("button", { name: /^Filters/ }).click();
   await page.getByLabel("Category", { exact: true }).click();
-  await page.getByRole("option", { name: "Illegal Dumping" }).click();
+  await page.getByRole("option", { name: "Illegal Dumping Affecting Drainage or Road" }).click();
 
   await expect(page).toHaveURL(/[?&]category=Illegal(%20|\+)Dumping/);
 });
 
 test("refreshing the map page preserves selected filters", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto("/admin/map?category=Fallen%20Tree&status=Reported");
+  await page.goto("/admin/map?category=Fallen%20Tree%20%2F%20Storm-Related%20Obstruction&status=Reported");
   await waitForMapReady(page);
 
   await page.reload();
   await waitForMapReady(page);
 
   await page.getByRole("button", { name: /^Filters/ }).click();
-  await expect(page.getByLabel("Category", { exact: true })).toHaveText("Fallen Tree");
+  await expect(page.getByLabel("Category", { exact: true })).toHaveText("Fallen Tree / Storm-Related Obstruction");
   await expect(page.getByLabel("Status", { exact: true })).toHaveText("Reported");
 });
 
 test("clearing filters removes the query params from the URL", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto("/admin/map?category=Pothole&urgency=High");
+  await page.goto("/admin/map?category=Pothole%20%2F%20Road%20Surface%20Damage&urgency=High");
   await waitForMapReady(page);
 
   await page.getByRole("button", { name: /^Filters/ }).click();
@@ -170,7 +170,7 @@ test("clicking a map preset navigates to /admin/map with real query params that 
   await expect(page).toHaveURL(/\/admin\/map\?category=Illegal(%20|\+)Dumping/);
   await waitForMapReady(page);
   await page.getByRole("button", { name: /^Filters/ }).click();
-  await expect(page.getByLabel("Category", { exact: true })).toHaveText("Illegal Dumping");
+  await expect(page.getByLabel("Category", { exact: true })).toHaveText("Illegal Dumping Affecting Drainage or Road");
 });
 
 test("a system admin's office-specific preset carries an explicit office param, since their map defaults to city-wide", async ({ page }) => {

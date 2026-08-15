@@ -38,7 +38,27 @@ Two ORMs are in play (see `CLAUDE.md`'s Architecture section for the full ration
 - **Writes:** Ticket creation on first report in an area/category, merge (`member_count`/centroid recompute), status transitions (`StatusHistory` insert alongside), urgency recompute (on-demand, per CLAUDE.md's Urgency triage section), office reassignment.
 - **Expected empty?** No once any report has ever been submitted.
 - **Ownership:** Application, but `geom` is raw-PG-only (not in `schema.ts`).
-- **`category`:** Free-form `text`, not a database enum — validated only at the application layer (`CATEGORIES` in `api/src/contracts/schemas.ts`, 11 values). Drives automatic office routing at ticket creation (`officeForCategory`/`categoryRouting`, `api/src/common/utils/office.ts`) and the dedup-merge radius (`radiusForCategory`, `api/src/common/utils/radius.ts`); never re-derived after creation. Not nullable.
+- **`category`:** Free-form `text`, not a database enum — validated only at the application layer. New submissions validate against `CATEGORIES` in `api/src/contracts/schemas.ts` (12 values, replaced in full by a Phase 3 follow-up — manuscript alignment); admin-side filter/query validation additionally accepts `LEGACY_CATEGORIES` (the 11 pre-follow-up values) via the combined `ALL_CATEGORIES`, since historical tickets still carry them and must stay filterable. Drives automatic office routing at ticket creation (`officeForCategory`/`categoryRouting`, `api/src/common/utils/office.ts`) and the dedup-merge radius (`radiusForCategory`, `api/src/common/utils/radius.ts`); never re-derived after creation. Not nullable. **No historical row's `category` value was changed by the Phase 3 follow-up** — this is an additive validation-list swap, not a backfill; every legacy value keeps working exactly as before in routing, marker/icon display, dashboard distribution, and CSV export.
+
+  Legacy → current semantic mapping (routing/`directResponsibility` intentionally match on both sides — see `office.ts`'s `ROUTING_BY_CATEGORY`):
+
+  | Legacy category | Current equivalent | Office | Direct responsibility |
+  |---|---|---|---|
+  | `Pothole` | `Pothole / Road Surface Damage` | MEO | Yes |
+  | `Clogged Drain` | `Drainage / Culvert / Manhole Issue` | MEO | Yes |
+  | `Uneven Sidewalk` | *(unchanged)* | MEO | Yes |
+  | `Streetlight Out` | *(unchanged)* | MEO | Yes |
+  | `Flooding` | `Localized Flooding` | MDRRMO | Yes |
+  | `Fallen Tree` | `Fallen Tree / Storm-Related Obstruction` | MDRRMO | Yes |
+  | `Leaking Pipe` | `Leaking Pipe / Water Supply Concern` | MEO | No (Referral) |
+  | `Illegal Dumping` | `Illegal Dumping Affecting Drainage or Road` | MEO | No (Referral) |
+  | `Overgrown Vegetation` | `Overgrown Vegetation Obstructing Road or Signage` | MEO | No (Referral) |
+  | `Other` | `Other Minor Infrastructure Hazard` | MEO | No — aligned to match its current equivalent; a generic "Other" was never a confirmed direct responsibility |
+  | `Uncollected Garbage` | *(none — legacy-only)* | MEO | No (Referral) — no longer offered on the citizen form; routine solid-waste collection is outside direct MEO/MDRRMO responsibility unless it's affecting roads/drainage, which `Illegal Dumping Affecting Drainage or Road` now covers |
+  | `Soil Erosion` | *(stray seed value, never a validated category)* | MDRRMO | Yes — routed as the closest current equivalent, `Landslide / Slope Failure`, instead of falling through to the generic unknown-category default |
+  | *(any other unrecognized string)* | — | MEO | No — never silently treated as normal MEO work |
+
+  New categories with no legacy predecessor: `Landslide / Slope Failure`, `Lahar / Debris-Flow Threat` (both MDRRMO, direct).
 - **`assigned_office`:** A genuine Postgres enum (`office`, `MEO`/`MDRRMO` only — `officeEnum` in `schema.ts`), unlike `category`. Set once at creation from `categoryRouting(category).office`; changed afterward only via `office_reassignments`-backed manual reassignment (`POST /admin/tickets/:id/reassign`). Every category also carries a `directResponsibility` flag (computed live from `category`, never stored) distinguishing an office's own direct repair responsibility from a Referral/coordination concern it merely holds custody of — see [`features.md`](features.md) §1.
 - **`elevation_factor`/`precipitation_factor`/`cluster_factor`:** The three stored per-factor inputs behind `urgency_score`, each 0–1, rewritten by `RecomputeService.recomputeActiveTicketUrgency` on every recompute (only for tickets in `Reported`/`Under Review`/`In Progress` — resolved/rejected tickets keep whatever they last held). Surfaced as the Ticket Detail urgency decomposition. See [`triage-model.md`](triage-model.md) for what each factor means and the exact formula/weights. `urgency_band` and `urgency_level` are both derived from the same threshold function as of Phase 2 of the manuscript-alignment work — they cannot disagree.
 - **`resolution_image_url`/`resolution_notes`:** Set when an admin advances a ticket to `Resolved` through the resolve dialog (`TicketsService`, `POST /admin/tickets/:id/status`). Both are **citizen-visible** — they render in the Case Closure Summary on the citizen's report detail page, so they are staff-authored for a public audience, unlike `work_orders.notes` (internal-only). Nullable: a ticket can be resolved with neither.

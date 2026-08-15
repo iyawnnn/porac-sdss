@@ -20,13 +20,13 @@ Three principal types, structurally separate:
 
 Citizen and admin sessions are independent and cannot cross over — a citizen account can never reach an `/admin/*` API route, and vice versa. There is **no guest/anonymous reporting**; a citizen account is required to submit. See [`security.md`](security.md) §2–§3.
 
-**Office routing is automatic, by category** (`api/src/common/utils/office.ts`), and every category also carries a **direct responsibility** flag distinguishing "this office owns fixing it" from "this office holds custody for triage, but the real work belongs to an external agency" (a Phase 3 manuscript-alignment change):
+**Office routing is automatic, by category** (`api/src/common/utils/office.ts`), and every category also carries a **direct responsibility** flag distinguishing "this office owns fixing it" from "this office holds custody for triage, but the real work belongs to an external agency". A Phase 3 follow-up (manuscript alignment) replaced the citizen-selectable category list with a more explicit 12-item set; the table below is what a **new** report can be filed as today:
 
 | MDRRMO (direct) | MEO (direct) | MEO custody, Referral |
 |---|---|---|
-| Flooding, Fallen Tree | Clogged Drain, Pothole, Uneven Sidewalk, Streetlight Out, Other | Leaking Pipe, Uncollected Garbage, Illegal Dumping, Overgrown Vegetation |
+| Localized Flooding, Landslide / Slope Failure, Lahar / Debris-Flow Threat, Fallen Tree / Storm-Related Obstruction | Pothole / Road Surface Damage, Uneven Sidewalk, Drainage / Culvert / Manhole Issue, Streetlight Out | Illegal Dumping Affecting Drainage or Road, Overgrown Vegetation Obstructing Road or Signage, Leaking Pipe / Water Supply Concern, Other Minor Infrastructure Hazard |
 
-An unrecognized category string also lands in MEO custody flagged Referral, rather than being silently treated as normal MEO work. A Referral-classified ticket's detail page offers a "Log Referral" action recording the external agency/target and a note as an audit-trail entry — **historical documentation, not a live status**; there is no "pending referral" state to query or filter on. A System Administrator (or any admin with access to the ticket) can reassign a ticket's office afterwards regardless of classification (§4.5).
+"Uncollected Garbage" was removed from the new-submission list entirely — routine solid-waste collection is outside direct MEO/MDRRMO responsibility unless it's specifically affecting roads/drainage (the Illegal Dumping category covers that case instead). An unrecognized category string, or one of the 11 pre-follow-up ("legacy") category strings a historical ticket may still carry, lands in MEO custody flagged Referral, rather than being silently treated as normal MEO work — see [`database.md`](database.md) for the exact legacy → current mapping and which categories stayed direct-responsibility vs. moved to Referral. A Referral-classified ticket's detail page offers a "Log Referral" action recording the external agency/target and a note as an audit-trail entry — **historical documentation, not a live status**; there is no "pending referral" state to query or filter on. A System Administrator (or any admin with access to the ticket) can reassign a ticket's office afterwards regardless of classification (§4.5).
 
 ---
 
@@ -53,7 +53,7 @@ The form walks the citizen through:
    - No GPS in the photo → prompt to place the pin manually.
    - GPS outside Porac's bounds → *"Photo GPS location is outside Porac municipality bounds."*
 3. **Map pin + barangay search.** Placing a pin more than 100m from the photo's GPS warns that the submission will be flagged for review — it is not blocked.
-4. **Category** (11 options) and **citizen severity** (Low / Medium / High / Critical — the citizen's own subjective read, never computed; see §6.1).
+4. **Category** (12 options) and **citizen severity** (Low / Medium / High / Critical — the citizen's own subjective read, never computed; see §6.1).
 
 On submit, the server independently recomputes everything it will not trust from the client: barangay (§5.1), elevation from the DEM (§5.4), and the integrity flags (§5.5). Elevation is **never** accepted from client input.
 

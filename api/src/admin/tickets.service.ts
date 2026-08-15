@@ -21,7 +21,7 @@ import {
   assertOfficeAccess,
 } from '../common/authz/admin-scope';
 import {
-  CATEGORIES,
+  ALL_CATEGORIES,
   TICKET_RESOLUTION_NOTES_MAX_LENGTH,
   REFERRAL_AGENCY_MAX_LENGTH,
   REFERRAL_NOTE_MAX_LENGTH,
@@ -256,7 +256,7 @@ export class TicketsService {
     const urgency = ['Low', 'Medium', 'High'].includes(query.urgency ?? '')
       ? query.urgency
       : undefined;
-    const category = (CATEGORIES as readonly string[]).includes(
+    const category = (ALL_CATEGORIES as readonly string[]).includes(
       query.category ?? '',
     )
       ? query.category

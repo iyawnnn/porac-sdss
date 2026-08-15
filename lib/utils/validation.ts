@@ -1,18 +1,22 @@
 import { z } from "zod";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 
+// Manuscript-aligned category set for NEW submissions (Phase 3 follow-up) —
+// mirrors api/src/contracts/schemas.ts's CATEGORIES exactly. "Uncollected
+// Garbage" is deliberately absent; see that file's comment for why.
 export const CATEGORIES = [
-  "Flooding",
-  "Clogged Drain",
-  "Fallen Tree",
-  "Pothole",
+  "Pothole / Road Surface Damage",
   "Uneven Sidewalk",
+  "Drainage / Culvert / Manhole Issue",
   "Streetlight Out",
-  "Leaking Pipe",
-  "Uncollected Garbage",
-  "Illegal Dumping",
-  "Overgrown Vegetation",
-  "Other",
+  "Localized Flooding",
+  "Landslide / Slope Failure",
+  "Lahar / Debris-Flow Threat",
+  "Fallen Tree / Storm-Related Obstruction",
+  "Illegal Dumping Affecting Drainage or Road",
+  "Overgrown Vegetation Obstructing Road or Signage",
+  "Leaking Pipe / Water Supply Concern",
+  "Other Minor Infrastructure Hazard",
 ] as const;
 
 export const SEVERITIES = ["Low", "Medium", "High", "Critical"] as const;
