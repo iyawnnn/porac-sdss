@@ -11,12 +11,12 @@ async function waitForMapReady(page: import("@playwright/test").Page) {
 
 test("map loads with query params applied and reflects them in the filter bar", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto("/admin/map?category=Pothole&urgency=Critical");
+  await page.goto("/admin/map?category=Pothole&urgency=High");
   await waitForMapReady(page);
 
   await page.getByRole("button", { name: /^Filters/ }).click();
   await expect(page.getByLabel("Category", { exact: true })).toHaveText("Pothole");
-  await expect(page.getByLabel("Urgency", { exact: true })).toHaveText("Critical");
+  await expect(page.getByLabel("Urgency", { exact: true })).toHaveText("High");
 });
 
 test("changing a map filter updates the URL", async ({ page }) => {
@@ -46,7 +46,7 @@ test("refreshing the map page preserves selected filters", async ({ page }) => {
 
 test("clearing filters removes the query params from the URL", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto("/admin/map?category=Pothole&urgency=Critical");
+  await page.goto("/admin/map?category=Pothole&urgency=High");
   await waitForMapReady(page);
 
   await page.getByRole("button", { name: /^Filters/ }).click();

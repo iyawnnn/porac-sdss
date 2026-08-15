@@ -113,25 +113,16 @@ environmentalUrgencyScore = round(((elevationFactor + precipitationFactor)/2) ×
 
 ---
 
-## 5. Bands and labels — and the known discrepancy
+## 5. Bands and labels
 
-Two independent banding schemes are applied to **the same underlying `urgency_score`**, using **thresholds that do not align**:
+`urgency_band` and `urgency_level` are two casing variants of **one** banding scheme, both derived from the same `urgencyLevelFromScore` helper — `urgency_level` in the function's native UPPER form, `urgency_band` as a Title-Case restatement (`HIGH→'High'`, `MEDIUM→'Medium'`, `LOW→'Low'`). They can never disagree with each other or with the underlying `priority_score`:
 
-| Scheme | Column | Thresholds | Labels |
-|---|---|---|---|
-| Band | `urgency_band` | `< 0.4` / `0.4–0.7` / `> 0.7` | Low / Medium / Critical |
-| Level | `urgency_level` | `< 50` / `50–79` / `≥ 80` on the 0–100 scale (i.e. 0.5 / 0.8) | LOW / MEDIUM / HIGH |
-
-**They disagree near the boundaries.** This is documented in `CLAUDE.md` as a known, unresolved discrepancy — not a bug introduced by any single change:
-
-| `urgency_score` | `urgency_band` | `urgency_level` |
+| Column | Thresholds (on `priority_score`, 0–100) | Labels |
 |---|---|---|
-| 0.45 | **Medium** | **LOW** |
-| 0.75 | **Critical** | **MEDIUM** |
+| `urgency_level` | `< 40` / `40–69` / `≥ 70` | LOW / MEDIUM / HIGH |
+| `urgency_band` | Same thresholds, Title-Case restatement | Low / Medium / High |
 
-`urgency_level` is derived from `priority_score` via a single shared helper (`urgencyLevelFromScore`), so the queue's numeric score and its badge can never disagree *with each other*. The unreconciled pair is `urgency_band` vs `urgency_level`.
-
-**Do not "fix" this by quietly changing one threshold set.** Which scheme is authoritative — and whether the other should be retired — is a product/research decision (§11).
+Prior to Phase 2 of the manuscript-alignment work, `urgency_band` was computed independently on the raw 0–1 `urgency_score` with different cutoffs (0.4/0.7) and a third label of "Critical" instead of "High" — this was a real, documented discrepancy where the same ticket could show "Medium" band and "LOW" level simultaneously. That has been resolved by making `urgency_band` derive from `urgency_level` rather than compute its own threshold. "Critical" is no longer a Hazard Urgency label anywhere in the system — it remains a valid **citizen-reported severity** value (`reports.citizen_severity`), which is a separate concept (§2).
 
 `priority_index` has no banding; it is displayed as a raw 1–100 number.
 
@@ -170,9 +161,9 @@ Two independent banding schemes are applied to **the same underlying `urgency_sc
 
 On-demand recompute is what makes the queue re-rank live during a storm. The cron jobs are a safety net for periods with no admin activity — see `docs/deployment-readiness.md` §6.
 
-### Side effect: critical escalation notifications
+### Side effect: high-urgency escalation notifications
 
-During recompute, a ticket whose band transitions **into** `Critical` from anything else generates a `ticket_critical` office notification. The check compares old and new state rather than using a "already notified" flag, so it is naturally idempotent — a ticket already at Critical compares Critical→Critical and notifies nothing.
+During recompute, a ticket whose band transitions **into** `High` from anything else generates a `ticket_critical`-typed office notification (the internal `type` string is unchanged from before the Phase 2 threshold fix — only the boundary value and the user-facing title/message moved from "Critical" to "High"). The check compares old and new state rather than using a "already notified" flag, so it is naturally idempotent — a ticket already at High compares High→High and notifies nothing.
 
 ### Determinism
 
@@ -217,10 +208,9 @@ Engineering assessment only — no academic rewriting.
 1. **Read the inputs.** `GET /admin/tickets/:id` returns the stored factors. From the database you need `elevation_m`, `member_count`, `created_at`, and the ticket's reports' `citizen_severity`.
 2. **Get the city-wide constants.** `pnpm --prefix api verify:config` prints `elev_min` / `elev_max`. Read the current rainfall from the `config` table's `rain_1h_mm` row — **use the cached value, not a fresh API call**, or your arithmetic will not match.
 3. **Compute by hand** using §4.1. Check each factor against the stored `elevation_factor` / `precipitation_factor` / `cluster_factor` columns before checking the composite.
-4. **Verify the derivations.** `priority_score == round(urgency_score × 100)`, and `urgency_level` follows the 50/80 thresholds on that number.
-5. **Expect band/level divergence near boundaries** — that is §5, not a defect.
-6. **Cross-check the surfaces.** The same ticket must show the same number and badge on the Ticket Queue, Ticket Detail, and map popup. They all read the same stored columns.
-7. **Confirm the factor contributions sum correctly** on Ticket Detail — each displayed contribution is its factor × ⅓.
+4. **Verify the derivations.** `priority_score == round(urgency_score × 100)`, and `urgency_level`/`urgency_band` follow the 40/70 thresholds on that number (§5) — they should always agree with each other.
+5. **Cross-check the surfaces.** The same ticket must show the same number and badge on the Ticket Queue, Ticket Detail, and map popup. They all read the same stored columns.
+6. **Confirm the factor contributions sum correctly** on Ticket Detail — each displayed contribution is its factor × ⅓.
 
 **Pitfalls that will make hand-verification fail for non-bug reasons:**
 
@@ -229,7 +219,7 @@ Engineering assessment only — no academic rewriting.
 - `spatialFactor` and `priority_index` shift as other tickets open and close.
 - Resolved tickets are not recomputed at all (§7).
 
-**Automated coverage today:** `api/src/domain/urgency.spec.ts` (9 cases — thresholds, level/score consistency, and thorough cluster-factor edge cases including 0, saturation, overflow, negative input, and monotonicity) and `api/src/common/utils/scoring.spec.ts` (2 cases — range, and directional response to severity/age/density). **There is no test for elevation-factor edge cases**, including the NULL case in §10.4.
+**Automated coverage today:** `api/src/domain/urgency.spec.ts` (11 cases — thresholds, level/score consistency, band/level agreement, and thorough cluster-factor edge cases including 0, saturation, overflow, negative input, and monotonicity) and `api/src/common/utils/scoring.spec.ts` (2 cases — range, and directional response to severity/age/density). **There is no test for elevation-factor edge cases**, including the NULL case in §10.4.
 
 ---
 
@@ -247,9 +237,9 @@ Practically: rainfall can push the whole queue across the Critical threshold dur
 
 Captured once at submission from a 30 m SRTM DEM and never revisited. It measures absolute height inverse-normalized across the whole municipality, **not** local depression or flow accumulation — water pools in local lows, which this does not capture. `PLAN.md` §7 acknowledges this as a limitation.
 
-### 10.3 Two banding schemes disagree
+### 10.3 ~~Two banding schemes disagree~~ — resolved
 
-See §5. A ticket can legitimately display as "Medium" band and "LOW" level simultaneously.
+Previously, `urgency_band` and `urgency_level` were computed independently with different thresholds and could disagree at the boundary. As of Phase 2 of the manuscript-alignment work, `urgency_band` derives from `urgency_level` (§5) — they cannot disagree anymore. Kept here as a resolved-item marker rather than deleted outright, since exports/screenshots/QA notes from before the fix may still reference the old behavior.
 
 ### 10.4 NULL elevation inflates urgency
 

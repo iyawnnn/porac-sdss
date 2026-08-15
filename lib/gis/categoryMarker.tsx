@@ -72,7 +72,7 @@ export function categoryMarkerIcon(category: string, band: string | null, option
   const diameter = selected ? 34 : 26;
   const ringWidth = selected ? 3 : 2;
   const iconSize = selected ? 16 : 13;
-  const pulseClass = band === "Critical" ? "ticket-pulse" : "";
+  const pulseClass = band === "High" ? "ticket-pulse" : "";
   const label = `${category}, ${band ?? "Low"} urgency`;
 
   const icon = L.divIcon({
@@ -100,7 +100,7 @@ export function categoryClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
   const children = cluster.getAllChildMarkers();
   const count = children.length;
   const bands = children.map((marker) => markerUrgency.get(marker) ?? null);
-  const dominantBand = bands.includes("Critical") ? "Critical" : bands.includes("Medium") ? "Medium" : "Low";
+  const dominantBand = bands.includes("High") ? "High" : bands.includes("Medium") ? "Medium" : "Low";
   const ringColor = getUrgencyBandStyle(dominantBand).hex;
 
   const size = count < 10 ? 32 : count < 50 ? 42 : 54;

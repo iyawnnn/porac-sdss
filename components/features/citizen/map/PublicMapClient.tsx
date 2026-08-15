@@ -28,7 +28,7 @@ function MapLegend() {
   return (
     <div className={`absolute bottom-4 left-2 z-[1000] space-y-1.5 px-3 py-2 text-xs text-ink-700 ${GLASS_PANEL}`}>
       <p className="font-medium text-ink-900">Urgency</p>
-      {(["Low", "Medium", "Critical"] as const).map((band) => {
+      {(["Low", "Medium", "High"] as const).map((band) => {
         const spec = getPinSpec(band);
         const color = getUrgencyBandStyle(band).hex;
         return (

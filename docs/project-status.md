@@ -58,6 +58,14 @@ Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript Alignment Phase 2 — Hazard Urgency / Operational Priority threshold unification — **completed**
+
+`urgency_band` (Low/Medium/High) and `urgency_level` (LOW/MEDIUM/HIGH) previously used two independently-thresholded schemes (0.4/0.7 with a "Critical" label vs 50/80) that could disagree at the boundary — the same ticket could show a different label on the map than on the Ticket Queue. `urgency_band` now derives from `urgency_level` via the shared `urgencyLevelFromScore` helper (`api/src/domain/urgency.ts`, mirrored in `lib/utils/urgency.ts`), corrected to the manuscript's 40/70 thresholds; the two can no longer disagree. "Critical" is no longer a Hazard Urgency label anywhere — every consumer (map filter/legend/pins, dashboard quick actions, map presets, reports-export filter, citizen public map/dashboard/reports stat tiles, the `ticket_critical` escalation notification's copy) now reads/writes `'High'`. See `docs/triage-model.md` §5/§10.3.
+
+The Operational Priority Index formula (`api/src/common/utils/scoring.ts`) was audited against the manuscript and needs no change — its unequal weights (0.5 severity / 0.25 age / 0.25 spatial density) are explicitly sanctioned, not a defect. Ticket Queue default sort (currently keys off Hazard Urgency, not Operational Priority) was audited and deliberately left unchanged — see §5 Deferred Enhancements.
+
+A one-time data backfill (not a migration — a plain `UPDATE` recomputing `urgency_band`/`urgency_level` from each ticket's already-stored `priority_score`) corrects legacy rows, since Resolved/Rejected tickets never recompute and would otherwise keep the old "Critical" label forever.
+
 ### Office Work Orders / Office Tasks — **completed**
 
 The first genuinely operational feature: admins can now record and track the actual field work MEO/MDRRMO does to resolve a ticket, not just triage and status-change the ticket itself.
@@ -354,8 +362,9 @@ Not next, not blocked — just not prioritized yet. Each needs a real, separatel
 - CSV export for Barangay Insights, and barangay create/edit/delete flows — both deliberately out of that feature's shipped scope (§3's Barangay Insights)
 - Elevation *filtering* anywhere in the product — elevation is display-only today (§3's Barangay Insights, and the map-preset entry above)
 - **A `Rejected` ticket-status transition/action.** The `Rejected` value already exists in the `ticket_status` enum and both frontend/backend constant sets (deliberately, matching the manuscript lifecycle), and has supporting UI/copy/email-template code, but `NEXT_STATUS` (`api/src/admin/ticket-constants.ts`) and `TicketsService.advanceStatus` never produce it — there is no reject call site today. Wiring one also needs a `STATUS_NOTIFICATION.Rejected` entry (`tickets.service.ts`), since the existing rejection email is currently unreachable behind that map. Confirmed by the Phase 1 terminology audit (2026-08-15); see [`triage-model.md`](triage-model.md) §2 and [`features.md`](features.md) §4.2.
-- **Dashboard "High Urgency Tickets" link parses no filter.** `DashboardClient.tsx` links to `/admin/tickets?urgency=Critical`, but `TicketsWorkspace.tsx`'s query parsing never reads an `urgency` param — the link lands on an unfiltered queue. Found during the Phase 1 terminology audit (2026-08-15); not fixed there since it's a behavior change, not wording.
+- **Dashboard "High Urgency Tickets" link parses no filter.** `DashboardClient.tsx` links to `/admin/tickets?urgency=High` (value corrected in Phase 2's threshold unification; the underlying bug is unchanged), but `TicketsWorkspace.tsx`'s query parsing never reads an `urgency` param — the link lands on an unfiltered queue. Found during the Phase 1 terminology audit (2026-08-15); not fixed there since it's a behavior change, not wording.
 - **Public hazard map's active-ticket filter omits `Under Review`.** `ReportsService`'s public map query (`reports.service.ts`) filters `status IN ('Reported', 'In Progress')` — every other "active" status set in the codebase (~12 sites) is `('Reported', 'Under Review', 'In Progress')`. A ticket disappears from the citizen-facing map for the duration of Under Review. Found during the Phase 1 terminology audit (2026-08-15); not fixed there since it changes citizen-visible map content.
+- **Ticket Queue default sort keying off Hazard Urgency (`priority_score`) rather than Operational Priority Index (`priority_index`).** Audited during Phase 2 of the manuscript-alignment work (2026-08-15) — the manuscript does not mandate which score drives the default queue order, and changing it would redefine what every existing `?sort=priority_desc/priority_asc` URL/bookmark means. Needs its own product-scoped decision before changing; see [`triage-model.md`](triage-model.md) for the current formula split.
 
 ---
 

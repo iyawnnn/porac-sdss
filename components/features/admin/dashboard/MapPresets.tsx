@@ -19,13 +19,13 @@ const MEO_PRESETS: MapPreset[] = [
   { label: "Drainage Issues", icon: Droplets, params: { category: "Clogged Drain" } },
   { label: "Potholes & Road Damage", icon: MapPin, params: { category: "Pothole" } },
   { label: "Illegal Dumping", icon: Trash2, params: { category: "Illegal Dumping" } },
-  { label: "High-Urgency Open Work", icon: AlertTriangle, params: { urgency: "Critical" } },
+  { label: "High-Urgency Open Work", icon: AlertTriangle, params: { urgency: "High" } },
 ];
 
 const MDRRMO_PRESETS: MapPreset[] = [
   { label: "Flooding Reports", icon: Droplets, params: { category: "Flooding" } },
   { label: "Fallen Trees", icon: TreeDeciduous, params: { category: "Fallen Tree" } },
-  { label: "High-Urgency Reports", icon: Flame, params: { urgency: "Critical" } },
+  { label: "High-Urgency Reports", icon: Flame, params: { urgency: "High" } },
 ];
 
 function presetHref(preset: MapPreset, office?: "MEO" | "MDRRMO"): string {

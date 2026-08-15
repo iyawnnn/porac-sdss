@@ -69,7 +69,7 @@ function AnalyticsCard({ title, description, children }: { title: string; descri
 function QuickActions({ isSystemAdmin }: { isSystemAdmin: boolean }) {
   const actions: { href: string; label: string; icon: LucideIcon }[] = [
     { href: "/admin/tickets", label: isSystemAdmin ? "All Tickets" : "My Office Tickets", icon: Ticket },
-    { href: "/admin/tickets?urgency=Critical", label: "High Urgency Tickets", icon: Flame },
+    { href: "/admin/tickets?urgency=High", label: "High Urgency Tickets", icon: Flame },
   ];
   // Office-scoped workbench shortcuts only — status is a real
   // TicketsService.parseTicketQuery filter (tickets.service.ts), so these

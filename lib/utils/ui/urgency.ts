@@ -4,12 +4,12 @@ import { urgencyLevelFromScore, type UrgencyLevel } from "@/lib/utils/urgency";
 // defined twice and drifting (DESIGN.md §8.3): Tailwind classes in
 // admin/tickets/page.tsx and raw hex in admin/map/MapClient.tsx both used
 // green for Low, independently of each other.
-export type UrgencyBand = "Low" | "Medium" | "Critical";
+export type UrgencyBand = "Low" | "Medium" | "High";
 
 interface UrgencyBandStyle {
   // Solid fill for non-Tailwind consumers (Leaflet divIcon inline styles).
   hex: string;
-  // Badge classes: Low/Medium are tinted, Critical is solid — the
+  // Badge classes: Low/Medium are tinted, High is solid — the
   // escalation rule in DESIGN.md §2.2.
   className: string;
 }
@@ -23,7 +23,7 @@ const URGENCY_BAND_STYLE: Record<UrgencyBand, UrgencyBandStyle> = {
     hex: "#e2680e",
     className: "bg-urgency-medium-tint text-urgency-medium-ink border border-urgency-medium-edge",
   },
-  Critical: {
+  High: {
     hex: "#c42b1c",
     className: "bg-urgency-critical text-white",
   },

@@ -118,11 +118,11 @@ test("ticket export URL on the reports page includes the selected filters", asyn
   await page.getByLabel("Ticket category", { exact: true }).click();
   await page.getByRole("option", { name: "Pothole" }).click();
   await page.getByLabel("Ticket urgency", { exact: true }).click();
-  await page.getByRole("option", { name: "Critical", exact: true }).click();
+  await page.getByRole("option", { name: "High", exact: true }).click();
 
   const exportLink = page.getByRole("link", { name: "Export Tickets CSV" });
   await expect(exportLink).toHaveAttribute("href", /category=Pothole/);
-  await expect(exportLink).toHaveAttribute("href", /urgency=Critical/);
+  await expect(exportLink).toHaveAttribute("href", /urgency=High/);
 });
 
 test("work order export URL on the reports page includes the selected filters", async ({ page }) => {

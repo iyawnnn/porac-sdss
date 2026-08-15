@@ -74,7 +74,7 @@ describe('ReportsService.ticketsCsv', () => {
         assigned_office: 'MEO',
         category: 'Pothole',
         barangay_name: 'Poblacion',
-        urgency_band: 'Critical',
+        urgency_band: 'High',
         priority_score: 87,
         member_count: 3,
         created_at: '2026-01-05T00:00:00.000Z',
@@ -89,7 +89,7 @@ describe('ReportsService.ticketsCsv', () => {
     expect(header).toBe(
       'Ticket ID,Status,Assigned Office,Urgency Band,Priority Score,Category,Barangay,Report Count,Created At,Updated At',
     );
-    expect(row).toBe('42,Reported,MEO,Critical,87,Pothole,Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z');
+    expect(row).toBe('42,Reported,MEO,High,87,Pothole,Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z');
   });
 
   it('produces just a header row when there are no matching tickets', async () => {
