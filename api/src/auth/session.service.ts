@@ -160,6 +160,26 @@ export class SessionService {
     }
   }
 
+  // Logout support: the cookie is always cleared client-side regardless,
+  // but bumping session_valid_after here is what actually invalidates the
+  // token server-side — otherwise a copied/stolen JWT stays valid against
+  // every real guard for its full remaining lifetime (8h/30d) even after
+  // the legitimate user logs out. Same lever password change/reset and
+  // admin deactivation already use; this just adds logout as a caller.
+  async invalidateAdminSession(adminId: number): Promise<void> {
+    await this.db
+      .update(admins)
+      .set({ sessionValidAfter: new Date() })
+      .where(eq(admins.id, adminId));
+  }
+
+  async invalidateCitizenSession(citizenId: number): Promise<void> {
+    await this.db
+      .update(citizens)
+      .set({ sessionValidAfter: new Date() })
+      .where(eq(citizens.id, citizenId));
+  }
+
   // Deliberately its own aud ('citizen-reauth') and a much shorter TTL than
   // the session token, so a leaked/expired reauth proof can't be replayed
   // as a session and vice versa — same reasoning as the admin/citizen split

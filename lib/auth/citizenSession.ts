@@ -16,7 +16,7 @@ export interface CitizenSession {
 
 export async function verifyCitizenSession(token: string): Promise<CitizenSession | null> {
   try {
-    const { payload } = await jwtVerify(token, secret);
+    const { payload } = await jwtVerify(token, secret, { audience: "citizen" });
     return payload as unknown as CitizenSession;
   } catch {
     return null;

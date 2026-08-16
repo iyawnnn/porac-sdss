@@ -147,6 +147,41 @@ describe('SessionService', () => {
     });
   });
 
+  describe('invalidateAdminSession / invalidateCitizenSession (logout)', () => {
+    function makeSessionServiceWithUpdate() {
+      const config = {
+        get: () => 'a-test-secret-that-is-at-least-32-bytes-long',
+      } as unknown as ConfigService<Env, true>;
+      const set = jest.fn().mockReturnValue({ where: jest.fn() });
+      const update = jest.fn().mockReturnValue({ set });
+      const db = { update } as unknown as PostgresJsDatabase;
+      return { sessions: new SessionService(config, db), update, set };
+    }
+
+    it('invalidateAdminSession bumps session_valid_after for that admin id', async () => {
+      const { sessions, update, set } = makeSessionServiceWithUpdate();
+      await sessions.invalidateAdminSession(42);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(set).toHaveBeenCalledWith({ sessionValidAfter: expect.any(Date) });
+    });
+
+    it('invalidateCitizenSession bumps session_valid_after for that citizen id', async () => {
+      const { sessions, update, set } = makeSessionServiceWithUpdate();
+      await sessions.invalidateCitizenSession(7);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(set).toHaveBeenCalledWith({ sessionValidAfter: expect.any(Date) });
+    });
+
+    it('a token issued before an invalidateAdminSession-triggered bump is rejected', async () => {
+      // End-to-end proof the two pieces (invalidate + verify) actually
+      // compose: sign a token "now", then simulate logout having bumped
+      // session_valid_after a second later, then verify against that state.
+      const sessions = makeSessionService(new Date(Date.now() + 1_000));
+      const token = await sessions.signAdminSession(adminPayload);
+      await expect(sessions.verifyAdminSession(token)).resolves.toBeNull();
+    });
+  });
+
   describe('is_active invalidation (admin deactivation)', () => {
     it('rejects an admin token for a deactivated account, even with no session_valid_after set', async () => {
       const sessions = makeSessionService(null, false);

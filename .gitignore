@@ -11,3 +11,5 @@ playwright-report/
 api/coverage/
 public/uploads/reports/diverse_*.jpg
 public/uploads/reports/poblacion_cluster_*.jpg
+graphify-out/cost.json
+graphify-out/cache/
