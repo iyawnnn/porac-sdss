@@ -18,6 +18,15 @@ function chain(result: unknown) {
   return obj;
 }
 
+// Drizzle's eq(...) returns an SQL object with a circular table reference
+// (JSON.stringify chokes on it) — the bound literal lives in queryChunks as
+// a Param node.
+function boundParamValue(condition: unknown): unknown {
+  const chunks = (condition as { queryChunks?: { constructor: { name: string }; value: unknown }[] })
+    .queryChunks;
+  return chunks?.find((c) => c.constructor.name === 'Param')?.value;
+}
+
 function makeSessions(): SessionService {
   return {
     signAdminSession: jest.fn().mockResolvedValue('admin-token'),
@@ -651,5 +660,190 @@ describe('AuthService.adminLogin — login audit events (R4)', () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
 
     expect(adminAudit.logBestEffort).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService — citizen email normalization (hardening item 4)', () => {
+  it('signup stores the normalized email, not whatever casing/whitespace was submitted', async () => {
+    const select = jest.fn().mockReturnValueOnce(chain([])); // no existing account
+    const values = jest.fn().mockReturnValue({
+      returning: () =>
+        Promise.resolve([
+          {
+            id: 4,
+            email: 'foo@example.com',
+            firstName: 'New',
+            lastName: 'Citizen',
+          },
+        ]),
+    });
+    const insert = jest.fn().mockReturnValue({ values });
+    const db = { select, insert } as unknown as PostgresJsDatabase;
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      makeAdminAudit(),
+    );
+
+    await service.citizenSignup(
+      '  Foo@Example.com ',
+      'longenoughpassword',
+      'New',
+      'Citizen',
+      '1.2.3.4',
+    );
+
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'foo@example.com' }),
+    );
+  });
+
+  it('signup duplicate check uses the normalized value, so a case/whitespace variant of an existing account is rejected', async () => {
+    const where = jest
+      .fn()
+      .mockReturnValue(Promise.resolve([{ id: 9, email: 'foo@example.com' }]));
+    const select = jest.fn().mockReturnValue({ from: () => ({ where }) });
+    const db = { select } as unknown as PostgresJsDatabase;
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      makeAdminAudit(),
+    );
+
+    await expect(
+      service.citizenSignup(
+        'FOO@Example.com ',
+        'longenoughpassword',
+        'New',
+        'Citizen',
+        '1.2.3.4',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(where).toHaveBeenCalled();
+    expect(boundParamValue(where.mock.calls[0][0])).toBe('foo@example.com');
+  });
+
+  it('login looks the citizen up by the normalized email, so a case/whitespace variant of the stored address still authenticates', async () => {
+    const passwordHash = await bcrypt.hash('hunter22', 10);
+    const where = jest.fn().mockReturnValue(
+      Promise.resolve([
+        {
+          id: 2,
+          email: 'foo@example.com',
+          passwordHash,
+          firstName: 'Cit',
+          lastName: 'Izen',
+        },
+      ]),
+    );
+    const select = jest.fn().mockReturnValue({
+      from: () => ({ where }),
+    });
+    const db = { select } as unknown as PostgresJsDatabase;
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      makeAdminAudit(),
+    );
+
+    const { token } = await service.citizenLogin(
+      '  Foo@Example.COM',
+      'hunter22',
+    );
+    expect(token).toBe('citizen-token');
+    // The lookup predicate must have been built from the normalized email,
+    // not the raw submitted string.
+    expect(where).toHaveBeenCalled();
+    expect(boundParamValue(where.mock.calls[0][0])).toBe('foo@example.com');
+  });
+
+  it('case variants authenticate the same stored account', async () => {
+    const passwordHash = await bcrypt.hash('hunter22', 10);
+    const makeDb = () =>
+      ({
+        select: jest.fn().mockReturnValueOnce(
+          chain([
+            {
+              id: 2,
+              email: 'foo@example.com',
+              passwordHash,
+              firstName: 'Cit',
+              lastName: 'Izen',
+            },
+          ]),
+        ),
+      }) as unknown as PostgresJsDatabase;
+
+    const lower = await new AuthService(
+      makeDb(),
+      makeSessions(),
+      makeRateLimit(),
+      makeAdminAudit(),
+    ).citizenLogin('foo@example.com', 'hunter22');
+    const upper = await new AuthService(
+      makeDb(),
+      makeSessions(),
+      makeRateLimit(),
+      makeAdminAudit(),
+    ).citizenLogin('FOO@EXAMPLE.COM', 'hunter22');
+
+    expect(lower.token).toBe('citizen-token');
+    expect(upper.token).toBe('citizen-token');
+  });
+
+  it('whitespace variants authenticate the same stored account', async () => {
+    const passwordHash = await bcrypt.hash('hunter22', 10);
+    const db = {
+      select: jest.fn().mockReturnValueOnce(
+        chain([
+          {
+            id: 2,
+            email: 'foo@example.com',
+            passwordHash,
+            firstName: 'Cit',
+            lastName: 'Izen',
+          },
+        ]),
+      ),
+    } as unknown as PostgresJsDatabase;
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      makeAdminAudit(),
+    );
+
+    const { token } = await service.citizenLogin(
+      '  foo@example.com  ',
+      'hunter22',
+    );
+    expect(token).toBe('citizen-token');
+  });
+
+  it('the citizen-login rate-limit key stays the normalized email (unchanged from hardening item 3)', async () => {
+    const select = jest.fn().mockReturnValueOnce(chain([])); // no such citizen
+    const db = { select } as unknown as PostgresJsDatabase;
+    const rateLimit = makeRateLimit();
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
+
+    await expect(
+      service.citizenLogin('  Foo@Example.COM  ', 'whatever'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(rateLimit.checkCitizenLoginRateLimit).toHaveBeenCalledWith(
+      'foo@example.com',
+    );
+    expect(rateLimit.recordCitizenLoginFailure).toHaveBeenCalledWith(
+      'foo@example.com',
+    );
   });
 });

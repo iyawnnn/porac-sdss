@@ -142,7 +142,7 @@ export class AuthService {
     const [citizen] = await this.db
       .select()
       .from(citizens)
-      .where(eq(citizens.email, email));
+      .where(eq(citizens.email, normalized));
     // passwordHash is null for OAuth-only citizens (see citizen_identities) —
     // bcrypt.compare() throws on a null hash instead of just failing, so
     // this must be checked explicitly rather than falling through to it.
@@ -203,10 +203,16 @@ export class AuthService {
       );
     }
 
+    // Single canonicalization point, same shape as
+    // PasswordResetService.requestReset — the duplicate check and the
+    // stored row must agree on the same normalized value, or case/whitespace
+    // variants of the same address could silently create two accounts.
+    const normalizedEmail = normalizeEmail(email);
+
     const [existing] = await this.db
       .select()
       .from(citizens)
-      .where(eq(citizens.email, email));
+      .where(eq(citizens.email, normalizedEmail));
     if (existing) {
       throw new ConflictException('An account with this email already exists.');
     }
@@ -214,7 +220,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, 10);
     const [citizen] = await this.db
       .insert(citizens)
-      .values({ email, passwordHash, firstName, lastName })
+      .values({ email: normalizedEmail, passwordHash, firstName, lastName })
       .returning();
 
     const token = await this.sessions.signCitizenSession({
