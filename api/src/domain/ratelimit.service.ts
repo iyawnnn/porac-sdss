@@ -39,6 +39,23 @@ const PASSWORD_RESET_IP_HOURLY_LIMIT = 10;
 // other check method in this file — keep the two in sync if either changes.
 const ADMIN_LOGIN_FAILURE_LIMIT = 10;
 
+// Citizen login (hardening item 3): same threat model and same E2E-repeat-
+// login-from-one-IP constraint as admin login, so it mirrors that pattern
+// exactly — keyed on normalized email only, 15-minute window, same
+// threshold. A separate constant (not a shared one with admin login) so the
+// two can be tuned independently later.
+const CITIZEN_LOGIN_FAILURE_LIMIT = 10;
+
+// Citizen signup (hardening item 3): unlike login, abuse here is about
+// volume of *distinct* new accounts from one source, not repeat attempts
+// against one target (duplicate email is already rejected structurally).
+// Keyed on IP only. Threshold matches IP_HOURLY_BACKSTOP above rather than
+// a tighter guess — the e2e suite creates ~17 disposable citizen accounts
+// from one IP in a single full run (one per disposable-ticket fixture), so
+// anything much lower would break the suite before its own report-limit
+// backstop ever would.
+const CITIZEN_SIGNUP_IP_HOURLY_LIMIT = 20;
+
 // The longest active window either table's checks ever query is 24 hours
 // (checkRateLimit's spatial check, above) — 30 days is a wide safety
 // margin, same convention as NotificationsService's RETENTION_DAYS.
@@ -54,6 +71,8 @@ export interface RateLimitCleanupResult {
   rateLimitEventsDeleted: number;
   passwordResetRateLimitEventsDeleted: number;
   adminLoginRateLimitEventsDeleted: number;
+  citizenLoginRateLimitEventsDeleted: number;
+  citizenSignupRateLimitEventsDeleted: number;
 }
 
 @Injectable()
@@ -218,6 +237,64 @@ export class RateLimitService {
     `;
   }
 
+  // Citizen login (hardening item 3) — same check-before-lookup shape as
+  // checkAdminLoginRateLimit above.
+  async checkCitizenLoginRateLimit(
+    normalizedEmail: string,
+  ): Promise<RateLimitResult> {
+    const [{ count }] = await this.pg<{ count: number }[]>`
+      SELECT count(*)::int AS count FROM citizen_login_rate_limit_events
+      WHERE email_normalized = ${normalizedEmail}
+        AND created_at > now() - interval '15 minutes'
+    `;
+    if (count >= CITIZEN_LOGIN_FAILURE_LIMIT) {
+      return { allowed: false, reason: 'Too many failed login attempts.' };
+    }
+    return { allowed: true };
+  }
+
+  // Recorded for every rejection reason (nonexistent citizen, OAuth-only
+  // account, wrong password) — never only for real accounts, same
+  // enumeration-resistance reasoning as recordAdminLoginFailure.
+  async recordCitizenLoginFailure(normalizedEmail: string): Promise<void> {
+    await this.pg`
+      INSERT INTO citizen_login_rate_limit_events (email_normalized)
+      VALUES (${normalizedEmail})
+    `;
+  }
+
+  async resetCitizenLoginFailures(normalizedEmail: string): Promise<void> {
+    await this.pg`
+      DELETE FROM citizen_login_rate_limit_events WHERE email_normalized = ${normalizedEmail}
+    `;
+  }
+
+  // Citizen signup (hardening item 3) — IP-only, no email component (see
+  // CITIZEN_SIGNUP_IP_HOURLY_LIMIT above for why).
+  async checkCitizenSignupRateLimit(ip: string): Promise<RateLimitResult> {
+    const [{ count }] = await this.pg<{ count: number }[]>`
+      SELECT count(*)::int AS count FROM citizen_signup_rate_limit_events
+      WHERE ip = ${ip} AND created_at > now() - interval '1 hour'
+    `;
+    if (count >= CITIZEN_SIGNUP_IP_HOURLY_LIMIT) {
+      return {
+        allowed: false,
+        reason: 'Too many accounts created from this network. Try again later.',
+      };
+    }
+    return { allowed: true };
+  }
+
+  // Recorded for every signup attempt that passes the rate-limit check
+  // itself, regardless of whether it goes on to hit the duplicate-email
+  // conflict or succeed.
+  async recordCitizenSignupAttempt(ip: string): Promise<void> {
+    await this.pg`
+      INSERT INTO citizen_signup_rate_limit_events (ip)
+      VALUES (${ip})
+    `;
+  }
+
   // Manual/on-demand trigger (POST /cron/cleanup-rate-limit-events), same
   // unscheduled-until-now shape as the notification/password-reset-token
   // cleanup jobs. Deletes rows old enough that they can no longer factor
@@ -227,16 +304,25 @@ export class RateLimitService {
     const cutoff = new Date(
       Date.now() - RATE_LIMIT_EVENT_RETENTION_DAYS * 86_400_000,
     );
-    const [rateLimitResult, passwordResetResult, adminLoginResult] =
-      await Promise.all([
-        sql`DELETE FROM rate_limit_events WHERE created_at < ${cutoff}`,
-        sql`DELETE FROM password_reset_rate_limit_events WHERE created_at < ${cutoff}`,
-        sql`DELETE FROM admin_login_rate_limit_events WHERE created_at < ${cutoff}`,
-      ]);
+    const [
+      rateLimitResult,
+      passwordResetResult,
+      adminLoginResult,
+      citizenLoginResult,
+      citizenSignupResult,
+    ] = await Promise.all([
+      sql`DELETE FROM rate_limit_events WHERE created_at < ${cutoff}`,
+      sql`DELETE FROM password_reset_rate_limit_events WHERE created_at < ${cutoff}`,
+      sql`DELETE FROM admin_login_rate_limit_events WHERE created_at < ${cutoff}`,
+      sql`DELETE FROM citizen_login_rate_limit_events WHERE created_at < ${cutoff}`,
+      sql`DELETE FROM citizen_signup_rate_limit_events WHERE created_at < ${cutoff}`,
+    ]);
     return {
       rateLimitEventsDeleted: rateLimitResult.count,
       passwordResetRateLimitEventsDeleted: passwordResetResult.count,
       adminLoginRateLimitEventsDeleted: adminLoginResult.count,
+      citizenLoginRateLimitEventsDeleted: citizenLoginResult.count,
+      citizenSignupRateLimitEventsDeleted: citizenSignupResult.count,
     };
   }
 }

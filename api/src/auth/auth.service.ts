@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -125,6 +127,18 @@ export class AuthService {
       throw new BadRequestException('Email and password are required');
     }
 
+    // Same check-before-lookup, key-on-normalized-email-only shape as
+    // adminLogin — see RateLimitService.checkCitizenLoginRateLimit.
+    const normalized = normalizeEmail(email);
+    const rateLimitResult =
+      await this.rateLimit.checkCitizenLoginRateLimit(normalized);
+    if (!rateLimitResult.allowed) {
+      throw new HttpException(
+        rateLimitResult.reason ?? 'Too many requests.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     const [citizen] = await this.db
       .select()
       .from(citizens)
@@ -137,8 +151,14 @@ export class AuthService {
       !citizen.passwordHash ||
       !(await bcrypt.compare(password, citizen.passwordHash))
     ) {
+      // Recorded for every rejection reason — nonexistent, OAuth-only,
+      // wrong password — never only for real accounts (see
+      // RateLimitService.recordCitizenLoginFailure).
+      await this.rateLimit.recordCitizenLoginFailure(normalized);
       throw new UnauthorizedException('Invalid email or password');
     }
+
+    await this.rateLimit.resetCitizenLoginFailures(normalized);
 
     const token = await this.sessions.signCitizenSession({
       citizenId: citizen.id,
@@ -154,7 +174,23 @@ export class AuthService {
     password: unknown,
     firstName: unknown,
     lastName: unknown,
+    ip: string,
   ): Promise<{ token: string }> {
+    // Checked before any validation/DB work — mirrors reports.service.ts's
+    // "rate limit, before any expensive work" ordering.
+    const rateLimitResult =
+      await this.rateLimit.checkCitizenSignupRateLimit(ip);
+    if (!rateLimitResult.allowed) {
+      throw new HttpException(
+        rateLimitResult.reason ?? 'Too many requests.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    // Recorded for every attempt that clears the rate-limit check itself,
+    // regardless of whether it goes on to hit the duplicate-email conflict
+    // below or succeed.
+    await this.rateLimit.recordCitizenSignupAttempt(ip);
+
     if (
       typeof email !== 'string' ||
       typeof password !== 'string' ||

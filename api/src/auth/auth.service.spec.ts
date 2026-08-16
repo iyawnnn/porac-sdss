@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { UnauthorizedException } from '@nestjs/common';
+import { ConflictException, HttpException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { SessionService } from './session.service';
@@ -34,6 +34,11 @@ function makeRateLimit(
     checkAdminLoginRateLimit: jest.fn().mockResolvedValue({ allowed: true }),
     recordAdminLoginFailure: jest.fn().mockResolvedValue(undefined),
     resetAdminLoginFailures: jest.fn().mockResolvedValue(undefined),
+    checkCitizenLoginRateLimit: jest.fn().mockResolvedValue({ allowed: true }),
+    recordCitizenLoginFailure: jest.fn().mockResolvedValue(undefined),
+    resetCitizenLoginFailures: jest.fn().mockResolvedValue(undefined),
+    checkCitizenSignupRateLimit: jest.fn().mockResolvedValue({ allowed: true }),
+    recordCitizenSignupAttempt: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as RateLimitService;
 }
@@ -136,10 +141,11 @@ describe('AuthService — existing password flows stay intact', () => {
       ]),
     );
     const db = { select } as unknown as PostgresJsDatabase;
+    const rateLimit = makeRateLimit();
     const service = new AuthService(
       db,
       makeSessions(),
-      makeRateLimit(),
+      rateLimit,
       makeAdminAudit(),
     );
 
@@ -148,6 +154,9 @@ describe('AuthService — existing password flows stay intact', () => {
       'hunter22',
     );
     expect(token).toBe('citizen-token');
+    expect(rateLimit.resetCitizenLoginFailures).toHaveBeenCalledWith(
+      'citizen@example.com',
+    );
   });
 
   it('rejects a citizen login attempt for an OAuth-only account (null password_hash) without crashing', async () => {
@@ -203,8 +212,217 @@ describe('AuthService — existing password flows stay intact', () => {
       'longenoughpassword',
       'New',
       'Citizen',
+      '1.2.3.4',
     );
     expect(token).toBe('citizen-token');
+  });
+});
+
+describe('AuthService.citizenLogin — failed-login throttling (hardening item 3)', () => {
+  it('rejects a throttled request before ever querying the citizens table or running bcrypt', async () => {
+    const select = jest.fn();
+    const db = { select } as unknown as PostgresJsDatabase;
+    const rateLimit = makeRateLimit({
+      checkCitizenLoginRateLimit: jest.fn().mockResolvedValue({
+        allowed: false,
+        reason: 'Too many failed login attempts.',
+      }),
+    });
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
+
+    await expect(
+      service.citizenLogin('citizen@example.com', 'anything'),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(select).not.toHaveBeenCalled();
+    expect(rateLimit.recordCitizenLoginFailure).not.toHaveBeenCalled();
+  });
+
+  it('throws a 429 when throttled, distinct from the normal 401 wrong-password response', async () => {
+    const rateLimit = makeRateLimit({
+      checkCitizenLoginRateLimit: jest.fn().mockResolvedValue({
+        allowed: false,
+        reason: 'Too many failed login attempts.',
+      }),
+    });
+    const db = { select: jest.fn() } as unknown as PostgresJsDatabase;
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
+
+    let status: number | undefined;
+    try {
+      await service.citizenLogin('citizen@example.com', 'anything');
+    } catch (err) {
+      status = (err as HttpException).getStatus();
+    }
+    expect(status).toBe(429);
+  });
+
+  it('records a failure for a nonexistent citizen and for an existing citizen with a wrong password identically (enumeration-safe)', async () => {
+    const nonexistentDb = {
+      select: jest.fn().mockReturnValueOnce(chain([])),
+    } as unknown as PostgresJsDatabase;
+    const nonexistentRateLimit = makeRateLimit();
+    await expect(
+      new AuthService(
+        nonexistentDb,
+        makeSessions(),
+        nonexistentRateLimit,
+        makeAdminAudit(),
+      ).citizenLogin('nobody@example.com', 'whatever'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(nonexistentRateLimit.recordCitizenLoginFailure).toHaveBeenCalledWith(
+      'nobody@example.com',
+    );
+
+    const passwordHash = await bcrypt.hash('correct-horse', 10);
+    const existingDb = {
+      select: jest.fn().mockReturnValueOnce(
+        chain([
+          {
+            id: 5,
+            email: 'citizen@example.com',
+            passwordHash,
+            firstName: 'Cit',
+            lastName: 'Izen',
+          },
+        ]),
+      ),
+    } as unknown as PostgresJsDatabase;
+    const existingRateLimit = makeRateLimit();
+    await expect(
+      new AuthService(
+        existingDb,
+        makeSessions(),
+        existingRateLimit,
+        makeAdminAudit(),
+      ).citizenLogin('citizen@example.com', 'wrong-password'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(existingRateLimit.recordCitizenLoginFailure).toHaveBeenCalledWith(
+      'citizen@example.com',
+    );
+  });
+
+  it('checks and records against the normalized email, not whatever casing/whitespace was submitted', async () => {
+    const select = jest.fn().mockReturnValueOnce(chain([])); // no such citizen
+    const db = { select } as unknown as PostgresJsDatabase;
+    const rateLimit = makeRateLimit();
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
+
+    await expect(
+      service.citizenLogin('  Citizen@Example.com  ', 'whatever'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(rateLimit.checkCitizenLoginRateLimit).toHaveBeenCalledWith(
+      'citizen@example.com',
+    );
+    expect(rateLimit.recordCitizenLoginFailure).toHaveBeenCalledWith(
+      'citizen@example.com',
+    );
+  });
+});
+
+describe('AuthService.citizenSignup — account-creation-spam throttling (hardening item 3)', () => {
+  it('rejects a throttled request before ever querying the citizens table', async () => {
+    const select = jest.fn();
+    const db = { select } as unknown as PostgresJsDatabase;
+    const rateLimit = makeRateLimit({
+      checkCitizenSignupRateLimit: jest.fn().mockResolvedValue({
+        allowed: false,
+        reason: 'Too many accounts created from this network. Try again later.',
+      }),
+    });
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
+
+    await expect(
+      service.citizenSignup(
+        'new@example.com',
+        'longenoughpassword',
+        'New',
+        'Citizen',
+        '1.2.3.4',
+      ),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(select).not.toHaveBeenCalled();
+    expect(rateLimit.recordCitizenSignupAttempt).not.toHaveBeenCalled();
+  });
+
+  it('throws a 429 when the IP signup limit is hit', async () => {
+    const rateLimit = makeRateLimit({
+      checkCitizenSignupRateLimit: jest.fn().mockResolvedValue({
+        allowed: false,
+        reason: 'Too many accounts created from this network. Try again later.',
+      }),
+    });
+    const db = { select: jest.fn() } as unknown as PostgresJsDatabase;
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
+
+    let status: number | undefined;
+    try {
+      await service.citizenSignup(
+        'new@example.com',
+        'longenoughpassword',
+        'New',
+        'Citizen',
+        '1.2.3.4',
+      );
+    } catch (err) {
+      status = (err as HttpException).getStatus();
+    }
+    expect(status).toBe(429);
+  });
+
+  it('records an attempt under the limit, and still enforces the existing duplicate-email conflict unchanged', async () => {
+    const select = jest.fn().mockReturnValueOnce(
+      chain([{ id: 9, email: 'existing@example.com' }]),
+    ); // existing account
+    const db = { select } as unknown as PostgresJsDatabase;
+    const rateLimit = makeRateLimit();
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      rateLimit,
+      makeAdminAudit(),
+    );
+
+    await expect(
+      service.citizenSignup(
+        'existing@example.com',
+        'longenoughpassword',
+        'New',
+        'Citizen',
+        '1.2.3.4',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(rateLimit.checkCitizenSignupRateLimit).toHaveBeenCalledWith(
+      '1.2.3.4',
+    );
+    expect(rateLimit.recordCitizenSignupAttempt).toHaveBeenCalledWith(
+      '1.2.3.4',
+    );
   });
 });
 

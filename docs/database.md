@@ -205,6 +205,21 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 - **Ownership:** Application, raw-PG-only style access (Drizzle-declared for schema documentation, but always queried via the raw `Sql` client, same as `password_reset_rate_limit_events`).
 - **Cleanup:** Same `POST /cron/cleanup-rate-limit-events` call prunes this table too (30-day cutoff) — its own check only ever queries a 15-minute window, so the margin here is wider still than either sibling table's.
 
+### `citizen_login_rate_limit_events`
+- **Purpose:** Per-account failed-login throttling for citizen login (hardening item 3) — identical shape and reasoning to `admin_login_rate_limit_events`: keyed on normalized email only, never IP (the E2E suite's `signupCitizen()` fixtures log in from one shared local IP across specs). 10 failures within 15 minutes throttles further attempts against that email; a successful login deletes that email's rows outright.
+- **Reads/writes:** `RateLimitService.checkCitizenLoginRateLimit`/`recordCitizenLoginFailure`/`resetCitizenLoginFailures`, called from `AuthService.citizenLogin`. A failure is recorded for every rejection reason — nonexistent citizen, OAuth-only account (null password hash), wrong password — never only for real accounts.
+- **Why separate from `admin_login_rate_limit_events`** even though the column shape is identical: different security domain (citizen vs. admin accounts), same reasoning as every other pair in this section — see §G.
+- **Expected empty?** Normal on a fresh DB, and in steady state — only holds rows for accounts currently mid-throttle or between failures and their next success.
+- **Ownership:** Application, raw-PG-only style access (Drizzle-declared for schema documentation, always queried via the raw `Sql` client).
+- **Cleanup:** Same `POST /cron/cleanup-rate-limit-events` call prunes this table too (30-day cutoff).
+
+### `citizen_signup_rate_limit_events`
+- **Purpose:** Account-creation-spam throttling for citizen signup (hardening item 3) — IP-only, no email column, since signup abuse is bounded by volume of *distinct* new accounts from one source rather than repeat attempts against one target address (duplicate email is already rejected by the existing `citizens.email` conflict check, unrelated to this table). 20 signups within 1 hour per IP — the same value as `rate_limit_events`' IP backstop, sized against the E2E suite's actual measured signup volume (~17 disposable citizen accounts per full run) rather than picked arbitrarily.
+- **Reads/writes:** `RateLimitService.checkCitizenSignupRateLimit`/`recordCitizenSignupAttempt`, called from `AuthService.citizenSignup`. An attempt is recorded for every request that clears the rate-limit check itself, regardless of whether it goes on to hit the duplicate-email conflict or succeed.
+- **Expected empty?** Normal on a fresh DB before any signup has been attempted.
+- **Ownership:** Application, raw-PG-only style access (Drizzle-declared for schema documentation, always queried via the raw `Sql` client).
+- **Cleanup:** Same `POST /cron/cleanup-rate-limit-events` call prunes this table too (30-day cutoff) — its own check only ever queries a 1-hour window.
+
 ### `verifications`
 - **Purpose:** **Not email/account verification.** This is planned/future schema for a citizen "upvote a ticket" signal — one row per (ticket, citizen) attesting "I also see this problem," intended as a possible future input to the urgency formula's Cluster Density factor (per `PLAN.md`'s explicit "keep and formalize" note). The feature that would write to this table has never been built.
 - **Reads/writes:** None — no service, controller, or test touches it. It exists in `schema.ts` only.
@@ -247,7 +262,8 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 ## G. Cross-table design notes
 
 - **`rate_limit_events` vs. `password_reset_rate_limit_events`** — keep separate; driven by a real `NOT NULL geom` constraint difference, not duplication. See §D.
-- **`password_reset_rate_limit_events` vs. `admin_login_rate_limit_events`** — identical column shape, kept separate anyway: different security domains (citizen forgot-password vs. admin login) with independent limits and independent actor types. Merging them would let one domain's attempts count against the other's threshold. See §D.
+- **`password_reset_rate_limit_events` vs. `admin_login_rate_limit_events` vs. `citizen_login_rate_limit_events`** — identical or near-identical column shapes, kept separate anyway: different security domains (citizen forgot-password, admin login, citizen login) with independent limits and independent actor types. Merging any of them would let one domain's attempts count against another's threshold. See §D.
+- **`citizen_signup_rate_limit_events`** — IP-only, no email column, unlike its login/reset/admin-login siblings; not a shape mismatch to reconcile, a deliberate consequence of signup's different threat model (volume from a source, not repeat attempts against a target). See §D.
 - **`admin_audit_events` vs. `citizen_audit_events`** — keep separate; different actor types, different event vocabularies, different audiences (System-Administrator-only vs. citizen-self-service), each independently documenting the same "actor snapshot at write time" pattern for its own reasons.
 - **`admins`' security/session/status columns vs. `citizens`' security/session columns** — parallel by design, not accidentally duplicated; each principal type owns its own copy so one type's auth model can evolve (e.g. admin deactivation) without silently changing the other's.
 - **`config` vs. weather/telemetry state** — currently share one table; see §C's design note. Not split in this pass.

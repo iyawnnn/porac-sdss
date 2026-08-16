@@ -291,6 +291,17 @@ Pre-deployment hardening item: `tickets`/`reports` previously carried only their
 - Purely additive DDL — no data, scoring, routing, or API-response changes. Sized to the actual hot query shapes in `tickets.service.ts`/`moderation.service.ts`/`reports.service.ts`/`dashboard.service.ts`, not one index per column; `tickets.category` and `tickets.created_at` were evaluated and deliberately left unindexed (low selectivity / cold-path only).
 - See `docs/database.md`'s `tickets`/`reports` sections for the per-index rationale.
 
+### Rate-Limit Citizen Login and Citizen Signup — **completed**
+
+Pre-deployment hardening item: admin login, password reset, and report submission were all rate-limited, but citizen login and citizen signup had zero protection — unlimited citizen password guessing, and unlimited account-creation spam that indirectly buys more report-submission capacity (reports are gated per-citizen-account).
+
+- **Citizen login** mirrors the admin-login-throttle pattern (see above) near-verbatim: keyed on normalized email only (never IP — the E2E suite's `signupCitizen()` fixtures log in from one shared local IP across specs), 10 failures / 15 minutes, checked before the `citizens` table is queried, a failure recorded for every rejection reason (nonexistent citizen, OAuth-only account, wrong password), reset on success. New table `citizen_login_rate_limit_events`. The throttled response is a distinct `429` rather than admin-login's repeated `401` — still enumeration-safe, since the record-on-every-failure symmetry means the per-email counter accumulates identically whether or not the account exists.
+- **Citizen signup** is a different threat shape (account-creation volume from one source, not repeat attempts against one target — duplicate email is already rejected structurally): keyed on IP only, 20 signups/hour, mirroring `rate_limit_events`' existing IP backstop value and reasoning. The threshold was checked against the E2E suite's actual measured signup volume (~17 disposable citizen accounts per full run, one per disposable-ticket fixture) rather than picked arbitrarily, so it doesn't break the suite. New table `citizen_signup_rate_limit_events`.
+- Migration `0026_citizen_login_signup_rate_limit.sql` (`pnpm --prefix api migrate:citizen-login-signup-rate-limit`). Both tables wired into `RateLimitService.cleanupOldEvents`'s existing 30-day retention job.
+- `normalizeEmail()` is reused only as the rate-limit key for citizen login, exactly mirroring how admin login already uses it — this does **not** touch how `citizens.email` is stored or matched at login/signup, and is a separate concern from the deferred email-normalization item.
+- No change to admin login, password reset, or report-submission rate limiting, session TTLs, password hashing, JWT/session architecture, `trust proxy` config, CAPTCHA, OAuth, or RBAC/office scoping.
+- See `docs/security.md` §5.3/§5.4 and `docs/database.md` §D for the full rationale.
+
 ### Free-Text Length Bounds (R3) — **completed**
 
 Five admin-side/dispute free-text fields had type and non-empty checks but no maximum length: `work_orders.title`/`notes`, `tickets.resolution_notes`, `tickets.dispute_reason`, and the moderation `note`. Report submission was already bounded by Zod; these were not.

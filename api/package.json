@@ -42,6 +42,7 @@
     "migrate:ticket-resolution-confirmation": "tsx --env-file=.env scripts/migrations/migrate-ticket-resolution-confirmation.ts",
     "migrate:admin-login-throttle": "tsx --env-file=.env scripts/migrations/migrate-admin-login-throttle.ts",
     "migrate:ticket-report-indexes": "tsx --env-file=.env scripts/migrations/migrate-ticket-report-indexes.ts",
+    "migrate:citizen-login-signup-rate-limit": "tsx --env-file=.env scripts/migrations/migrate-citizen-login-signup-rate-limit.ts",
     "import:barangays": "tsx --env-file=.env scripts/seed/import-barangays.ts",
     "import:city-boundary": "tsx --env-file=.env scripts/seed/import-city-boundary.ts",
     "seed:dem": "tsx --env-file=.env scripts/seed/seed-dem.ts",
