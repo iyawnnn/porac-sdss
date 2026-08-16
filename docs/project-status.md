@@ -283,6 +283,14 @@ Per-account failed-login throttling, closing the highest-severity gap in the har
 - No MFA, CAPTCHA, permanent lockout, IP-based total-login limiting, citizen-side login throttling, or test-only bypass — all explicitly out of scope. `citizenLogin`/`citizenSignup` untouched.
 - Verified against `e2e/admin-password.spec.ts` and `e2e/admin-rbac.spec.ts` (not the full suite, per `docs/testing.md` §6) — no regression.
 
+### B-tree Indexes for tickets/reports Hot Paths — **completed**
+
+Pre-deployment hardening item: `tickets`/`reports` previously carried only their 3 GiST spatial indexes (`tickets_geom_idx`, `reports_geom_idx`, `reports_pin_geom_idx`) — every status/office/FK-join filter on the two hottest-read tables (admin Ticket Queue, Dashboard, Moderation Queue, public hazard map, urgency recompute) forced a sequential scan, and none of `reports.ticket_id`/`citizen_id` (both FKs) had any index despite Postgres never auto-indexing foreign keys.
+
+- New migration `api/drizzle/0025_ticket_report_indexes.sql` (`pnpm --prefix api migrate:ticket-report-indexes`) adds 6 B-tree indexes: `reports_ticket_id_idx`, `tickets_office_status_idx` (composite `assigned_office, status` — mirrors the existing `work_orders_office_status_idx` pattern), `tickets_status_idx` (for the status-only, no-office-scope queries like the public map and urgency recompute), `reports_citizen_id_idx`, `reports_moderation_status_idx`, `tickets_barangay_id_idx`.
+- Purely additive DDL — no data, scoring, routing, or API-response changes. Sized to the actual hot query shapes in `tickets.service.ts`/`moderation.service.ts`/`reports.service.ts`/`dashboard.service.ts`, not one index per column; `tickets.category` and `tickets.created_at` were evaluated and deliberately left unindexed (low selectivity / cold-path only).
+- See `docs/database.md`'s `tickets`/`reports` sections for the per-index rationale.
+
 ### Free-Text Length Bounds (R3) — **completed**
 
 Five admin-side/dispute free-text fields had type and non-empty checks but no maximum length: `work_orders.title`/`notes`, `tickets.resolution_notes`, `tickets.dispute_reason`, and the moderation `note`. Report submission was already bounded by Zod; these were not.
