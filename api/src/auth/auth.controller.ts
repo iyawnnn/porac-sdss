@@ -56,9 +56,21 @@ export class AuthController {
     return { ok: true, office };
   }
 
+  // No guard here deliberately — logout must succeed even with an expired
+  // or already-invalid cookie (a guard would 401 before the handler runs,
+  // leaving the stale cookie in place). Instead the token is verified
+  // tolerantly: if it resolves to a real session, that session is
+  // invalidated server-side (see SessionService.invalidateAdminSession);
+  // either way the cookie is cleared exactly as before.
   @Post('admin/logout')
   @HttpCode(HttpStatus.OK)
-  adminLogout(@Res({ passthrough: true }) res: Response) {
+  async adminLogout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = req.cookies?.[SESSION_COOKIE] as string | undefined;
+    const session = token ? await this.sessions.verifyAdminSession(token) : null;
+    if (session) await this.sessions.invalidateAdminSession(session.adminId);
     res.cookie(SESSION_COOKIE, '', { path: '/', maxAge: 0 });
     return { ok: true };
   }
@@ -98,9 +110,16 @@ export class AuthController {
     return { ok: true };
   }
 
+  // Same tolerant-verify pattern as adminLogout above.
   @Post('citizens/logout')
   @HttpCode(HttpStatus.OK)
-  citizenLogout(@Res({ passthrough: true }) res: Response) {
+  async citizenLogout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = req.cookies?.[CITIZEN_SESSION_COOKIE] as string | undefined;
+    const session = token ? await this.sessions.verifyCitizenSession(token) : null;
+    if (session) await this.sessions.invalidateCitizenSession(session.citizenId);
     res.cookie(CITIZEN_SESSION_COOKIE, '', { path: '/', maxAge: 0 });
     return { ok: true };
   }

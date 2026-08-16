@@ -19,7 +19,7 @@ export interface AdminSession {
 
 export async function verifySession(token: string): Promise<AdminSession | null> {
   try {
-    const { payload } = await jwtVerify(token, secret);
+    const { payload } = await jwtVerify(token, secret, { audience: "admin" });
     return payload as unknown as AdminSession;
   } catch {
     return null;
