@@ -113,7 +113,119 @@ describe('ResendEmailService.sendPasswordReset', () => {
 
     for (const call of errorSpy.mock.calls) {
       expect(JSON.stringify(call)).not.toContain('SECRET');
+      expect(JSON.stringify(call)).not.toContain('citizen@example.com');
     }
+    errorSpy.mockRestore();
+  });
+
+  it('logs an unambiguous "no email was delivered" message with a masked email when the client itself throws (hardening item 8)', async () => {
+    sendMock.mockRejectedValue(new Error('fetch failed'));
+    const errorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const service = new ResendEmailService(makeConfig());
+
+    await service.sendPasswordReset(
+      'citizen@example.com',
+      'http://localhost:3000/reset-password?token=abc',
+    );
+
+    const [message, meta] = errorSpy.mock.calls[0] as [string, { email: string }];
+    expect(message).toMatch(/RESEND SEND THREW|no email was delivered/i);
+    expect(meta.email).toBe('c***@example.com');
+    errorSpy.mockRestore();
+  });
+
+  it('includes an unverified-domain hint when the error matches Resend\'s actual rejection shape (hardening item 7)', async () => {
+    sendMock.mockResolvedValue({
+      data: null,
+      error: {
+        message:
+          'You can only send testing emails to your own email address (owner@example.com). To send emails to other recipients, please verify a domain.',
+        statusCode: 403,
+        name: 'validation_error',
+      },
+    });
+    const errorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const service = new ResendEmailService(makeConfig());
+
+    await service.sendPasswordReset(
+      'citizen@example.com',
+      'http://localhost:3000/reset-password?token=abc',
+    );
+
+    const [, meta] = errorSpy.mock.calls[0] as [string, { hint?: string }];
+    expect(meta.hint).toMatch(/sending domain is not verified/i);
+    errorSpy.mockRestore();
+  });
+
+  it('does not show the hint for a 403 with an unrelated message', async () => {
+    sendMock.mockResolvedValue({
+      data: null,
+      error: {
+        message: 'Invalid `to` field.',
+        statusCode: 403,
+        name: 'validation_error',
+      },
+    });
+    const errorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const service = new ResendEmailService(makeConfig());
+
+    await service.sendPasswordReset(
+      'citizen@example.com',
+      'http://localhost:3000/reset-password?token=abc',
+    );
+
+    const [, meta] = errorSpy.mock.calls[0] as [string, { hint?: string }];
+    expect(meta.hint).toBeUndefined();
+    errorSpy.mockRestore();
+  });
+
+  it('does not show the hint for a validation_error with a different status code', async () => {
+    sendMock.mockResolvedValue({
+      data: null,
+      error: {
+        message: 'You can only send testing emails to your own email address.',
+        statusCode: 400,
+        name: 'validation_error',
+      },
+    });
+    const errorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const service = new ResendEmailService(makeConfig());
+
+    await service.sendPasswordReset(
+      'citizen@example.com',
+      'http://localhost:3000/reset-password?token=abc',
+    );
+
+    const [, meta] = errorSpy.mock.calls[0] as [string, { hint?: string }];
+    expect(meta.hint).toBeUndefined();
+    errorSpy.mockRestore();
+  });
+
+  it('logs an unambiguous "no email was delivered" message on a provider rejection', async () => {
+    sendMock.mockResolvedValue({
+      data: null,
+      error: { message: 'invalid domain', statusCode: 403, name: 'validation_error' },
+    });
+    const errorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const service = new ResendEmailService(makeConfig());
+
+    await service.sendPasswordReset(
+      'citizen@example.com',
+      'http://localhost:3000/reset-password?token=abc',
+    );
+
+    const [message] = errorSpy.mock.calls[0] as [string];
+    expect(message).toMatch(/no email was delivered/i);
     errorSpy.mockRestore();
   });
 

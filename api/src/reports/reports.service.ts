@@ -228,17 +228,24 @@ export class ReportsService {
     // O(n) scan over the last 30 days of phashes — fine at prototype
     // volume. Move to a bit-column + SQL bit_count, or an ANN index, if
     // this becomes a real bottleneck.
-    const recentPhashes = await sql<{ id: number; image_phash: string }[]>`
-      SELECT id, image_phash FROM reports
-      WHERE image_phash IS NOT NULL AND created_at > now() - interval '30 days'
-    `;
-    const duplicateMatch = recentPhashes.find(
-      (r) =>
-        this.media.hammingDistanceHex(phash, r.image_phash) <=
-        DUPLICATE_HAMMING_THRESHOLD,
-    );
-    if (duplicateMatch) {
-      flags.push(`DUPLICATE_IMAGE:${duplicateMatch.id}`);
+    // Skipped entirely when phash is null (computeDHash couldn't decode
+    // this image) — hammingDistanceHex assumes two well-formed hex
+    // strings, and a report with no phash was already excluded from ever
+    // being matched by the IS NOT NULL filter below, so this is just the
+    // symmetric case of the report being submitted without one.
+    if (phash !== null) {
+      const recentPhashes = await sql<{ id: number; image_phash: string }[]>`
+        SELECT id, image_phash FROM reports
+        WHERE image_phash IS NOT NULL AND created_at > now() - interval '30 days'
+      `;
+      const duplicateMatch = recentPhashes.find(
+        (r) =>
+          this.media.hammingDistanceHex(phash, r.image_phash) <=
+          DUPLICATE_HAMMING_THRESHOLD,
+      );
+      if (duplicateMatch) {
+        flags.push(`DUPLICATE_IMAGE:${duplicateMatch.id}`);
+      }
     }
 
     // Step 6: Cloudinary upload.

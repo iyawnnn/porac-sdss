@@ -17,6 +17,26 @@ function maskEmail(email: string): string {
   return `${local.slice(0, 1)}***@${domain}`;
 }
 
+// Resend's 'validation_error' code is a generic catch-all for many unrelated
+// request-validation failures, not a dedicated "domain not verified" code —
+// so status/name alone isn't a safe signal. Requiring the message substring
+// too keeps this modest and specific: it only fires for the one message
+// shape Resend actually uses for this case, and simply stays silent (never
+// a false claim) if that wording ever changes.
+function unverifiedDomainHint(error: {
+  statusCode: number | null;
+  name: string;
+  message: string;
+}): string | undefined {
+  const looksLikeUnverifiedDomain =
+    error.statusCode === 403 &&
+    error.name === 'validation_error' &&
+    /own email address|verify a domain/i.test(error.message);
+  return looksLikeUnverifiedDomain
+    ? 'Resend may be rejecting this address because the configured sending domain is not verified — see docs/deployment-readiness.md §5.'
+    : undefined;
+}
+
 // Production email delivery via Resend. Never throws — a provider outage
 // must not fail the caller (POST /citizens/forgot-password's generic
 // response, and resetPassword's own best-effort confirmation email, both
@@ -51,9 +71,12 @@ export class ResendEmailService implements EmailService {
         html,
       });
       if (result.error) {
-        console.error('[email] Resend send failed', {
+        const hint = unverifiedDomainHint(result.error);
+        console.error('[email] RESEND SEND FAILED — no email was delivered', {
           email: maskEmail(to),
           errorName: result.error.name,
+          statusCode: result.error.statusCode,
+          ...(hint ? { hint } : {}),
         });
         return;
       }
@@ -64,7 +87,7 @@ export class ResendEmailService implements EmailService {
         id: result.data.id,
       });
     } catch (err) {
-      console.error('[email] Resend send threw', {
+      console.error('[email] RESEND SEND THREW — no email was delivered', {
         email: maskEmail(to),
         errorMessage: err instanceof Error ? err.message : 'unknown error',
       });

@@ -26,4 +26,31 @@ describe('createEmailService', () => {
     const config = makeConfig({});
     expect(createEmailService(config)).toBeInstanceOf(ConsoleEmailService);
   });
+
+  it('logs that Resend is active at boot, without leaking the key (hardening item 7)', () => {
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const config = makeConfig({
+      RESEND_API_KEY: 'test-key',
+      EMAIL_FROM: 'onboarding@resend.dev',
+    });
+
+    createEmailService(config);
+
+    const logged = logSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(logged).toMatch(/Resend/i);
+    expect(logged).not.toContain('test-key');
+    logSpy.mockRestore();
+  });
+
+  it('logs that no real email will be sent when falling back to ConsoleEmailService (hardening item 7)', () => {
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const config = makeConfig({});
+
+    createEmailService(config);
+
+    const logged = logSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(logged).toMatch(/Console/i);
+    expect(logged).toMatch(/no real email will be sent/i);
+    logSpy.mockRestore();
+  });
 });

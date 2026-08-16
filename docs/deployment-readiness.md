@@ -52,7 +52,7 @@ Production-specific concerns, beyond simply setting the values:
 | `CRON_SECRET` | At least 16 characters. Must match the value in GitHub Actions secrets exactly, or every scheduled job fails (§6). |
 | `DATABASE_URL` | The API uses the **direct/unpooled** endpoint, not a pooled one. Advisory locks in the merge transaction and long-lived connections do not behave correctly through a transaction pooler. |
 | `CLOUDINARY_URL` | Contains the API secret. Rotate the development credential before production — the same account should not serve both. |
-| `RESEND_API_KEY` + `EMAIL_FROM` | **Both or neither.** The service factory constructs `ResendEmailService` when `RESEND_API_KEY` is present, and that constructor throws if `EMAIL_FROM` is missing — so setting the key alone is a startup failure. See §5. |
+| `RESEND_API_KEY` + `EMAIL_FROM` | **Both or neither.** Enforced by a Zod `superRefine` in `api/src/config/env.ts` — setting `RESEND_API_KEY` without `EMAIL_FROM` fails at boot-time env validation with a message naming both variables, before the service factory ever runs. (`ResendEmailService`'s own constructor still checks both too, as a redundant second layer, but the env-validation failure fires first in the normal boot path.) See §5. |
 | `WEB_ORIGIN` | Used to build absolute URLs in password-reset emails, OAuth redirects, and notification links. Wrong value means users receive links pointing at the wrong host. Not a CORS setting. |
 | `API_ORIGIN` / `INTERNAL_API_URL` | Frontend → API origins. Both default to `http://127.0.0.1:3001` and **must** be changed for any non-local deployment. |
 | `NODE_ENV=production` | Gates the `secure` flag on session cookies. Without it, cookies are issued without `Secure` over HTTPS. |
@@ -88,11 +88,11 @@ Production-specific concerns, beyond simply setting the values:
 
 ## 5. Email readiness
 
-**How it behaves today:** the provider is chosen at startup — `ResendEmailService` if `RESEND_API_KEY` is set, otherwise `ConsoleEmailService`. Password reset, and any other email path, works either way; only actual delivery differs.
+**How it behaves today:** the provider is chosen at startup — `ResendEmailService` if `RESEND_API_KEY` is set, otherwise `ConsoleEmailService`. Password reset, and any other email path, works either way; only actual delivery differs. A boot log line now states which provider is active, and for `ConsoleEmailService` makes explicit that no real email will be sent — so the active provider is never a guess.
 
-**`ResendEmailService` never throws on a send failure.** It logs the provider's error name and message — never the reset URL or token — and returns. This is deliberate: a provider outage must not break the password-reset flow's enumeration-resistant response, and must not leak whether an address exists.
+**`ResendEmailService` never throws on a send failure.** It logs the provider's error name, HTTP status code, and message — never the reset URL or token — and returns. This is deliberate: a provider outage must not break the password-reset flow's enumeration-resistant response, and must not leak whether an address exists.
 
-**Consequence for development:** Resend rejects sending to addresses outside the account owner's until a domain is verified. Local attempts to email fabricated `@porac.ph` addresses will return a provider error (typically 403) that is **logged, not thrown**. That is the provider declining, not an application failure, and no code change is warranted.
+**Consequence for development:** Resend rejects sending to addresses outside the account owner's until a domain is verified. Local attempts to email fabricated `@porac.ph` addresses will return a provider error (typically 403) that is **logged, not thrown**. That is the provider declining, not an application failure, and no code change is warranted. The failure log now uses an unmissable `RESEND SEND FAILED` prefix, and includes a short hint ("...sending domain is not verified...") when the error specifically matches Resend's own unverified-domain rejection message — not on every 403, only that specific case.
 
 **Pending:**
 
