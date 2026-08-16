@@ -21,9 +21,14 @@ import type { Env } from '../config/env';
 export function createEmailService(
   config: ConfigService<Env, true>,
 ): EmailService {
-  return config.get('RESEND_API_KEY', { infer: true })
-    ? new ResendEmailService(config)
-    : new ConsoleEmailService(config);
+  if (config.get('RESEND_API_KEY', { infer: true })) {
+    console.log('[email] Resend email service active — real email will be sent.');
+    return new ResendEmailService(config);
+  }
+  console.log(
+    '[email] Console email service active — no real email will be sent (development/test fallback).',
+  );
+  return new ConsoleEmailService(config);
 }
 
 @Module({

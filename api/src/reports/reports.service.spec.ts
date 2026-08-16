@@ -394,3 +394,46 @@ describe('confirmResolution (citizen resolution-feedback loop, positive path)', 
     expect(confirmResolution).not.toMatch(/SET\s+status\s*=/);
   });
 });
+
+// Same rationale as the blocks above (no DB test harness) — hardening item
+// 5: computeDHash now returns string | null (MediaService degrades
+// gracefully on a malformed image instead of throwing), so the duplicate-
+// image scan must not reach hammingDistanceHex with a null phash. Asserted
+// on source text since exercising submit() end-to-end would need the same
+// DB-mocking framework this file's other guards already avoid building.
+describe('duplicate-image scan is guarded against a null phash (hardening item 5)', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+
+  it('wraps the recent-phashes query and hammingDistanceHex scan in a phash !== null check', () => {
+    const scanStart = reportsServiceSource.indexOf('recentPhashes');
+    const guardStart = reportsServiceSource.lastIndexOf(
+      'if (phash !== null)',
+      scanStart,
+    );
+    expect(guardStart).toBeGreaterThan(-1);
+
+    const hammingCallIndex = reportsServiceSource.indexOf(
+      'hammingDistanceHex(phash,',
+      scanStart,
+    );
+    expect(hammingCallIndex).toBeGreaterThan(scanStart);
+
+    // No unrelated code (e.g. the Cloudinary upload) sits between the guard
+    // opening and the hammingDistanceHex call — confirms the whole scan,
+    // not just part of it, is inside the null check.
+    const between = reportsServiceSource.slice(guardStart, hammingCallIndex);
+    expect(between).not.toContain('uploadImage');
+  });
+
+  it('still computes EXIF and phash unconditionally before the guard (upload/report creation are not skipped)', () => {
+    expect(reportsServiceSource).toMatch(
+      /const exif = await this\.media\.extractExif\(imageBuffer\);\s*\n\s*const phash = await this\.media\.computeDHash\(imageBuffer\);/,
+    );
+    expect(reportsServiceSource).toMatch(
+      /const imageUrl = await this\.media\.uploadImage\(imageBuffer\);/,
+    );
+  });
+});

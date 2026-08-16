@@ -40,7 +40,11 @@ export class MediaService {
   uploadImage(buffer: Buffer): Promise<string> {
     return new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder: 'porac-sdss-nextjs/reports' },
+        // Explicit rather than relying on Cloudinary's own default (which
+        // is already 'image' when omitted) — pins the provider boundary so
+        // it can't silently change under an account-level upload preset or
+        // a future SDK default change.
+        { folder: 'porac-sdss-nextjs/reports', resource_type: 'image' },
         (err, result) => {
           if (err || !result)
             return reject(
@@ -97,25 +101,34 @@ export class MediaService {
   }
 
   // dHash: resize to 9x8 grayscale, compare each pixel to its right neighbor.
-  // 8x8 comparisons = 64 bits, stored as a 16-char hex string.
-  async computeDHash(buffer: Buffer): Promise<string> {
-    const { data } = await sharp(buffer)
-      .resize(9, 8, { fit: 'fill' })
-      .grayscale()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
+  // 8x8 comparisons = 64 bits, stored as a 16-char hex string. An optional
+  // duplicate-detection enhancement, not a core requirement — reports.
+  // image_phash is nullable and the dedup query already filters it IS NOT
+  // NULL, so a decode failure here degrades gracefully (same shape as
+  // extractExif's own catch above) rather than failing the whole
+  // submission over a photo the citizen still legitimately wants to report.
+  async computeDHash(buffer: Buffer): Promise<string | null> {
+    try {
+      const { data } = await sharp(buffer)
+        .resize(9, 8, { fit: 'fill' })
+        .grayscale()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
 
-    let bits = '';
-    for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 8; col++) {
-        const left = data[row * 9 + col];
-        const right = data[row * 9 + col + 1];
-        bits += left < right ? '1' : '0';
+      let bits = '';
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const left = data[row * 9 + col];
+          const right = data[row * 9 + col + 1];
+          bits += left < right ? '1' : '0';
+        }
       }
+      return BigInt('0b' + bits)
+        .toString(16)
+        .padStart(16, '0');
+    } catch {
+      return null;
     }
-    return BigInt('0b' + bits)
-      .toString(16)
-      .padStart(16, '0');
   }
 
   hammingDistanceHex(hexA: string, hexB: string): number {
