@@ -163,7 +163,23 @@ Events are recorded **inside the same transaction** as the report insert, so onl
 
 Counts **failed attempts only** — a successful login deletes that email's failure rows outright, rather than waiting for them to age out of the window. Keyed on email, not IP, because an IP-based total-login limit would break the E2E suite, which authenticates from one IP nearly 200 times per run (§5.6). The throttled response is the exact same generic `Invalid email or password` `401` as a normal wrong-password rejection — no distinct status, message, or header — and a failure is recorded for every rejection reason (nonexistent email, deactivated admin, wrong password), never only for real/active accounts, so the throttle itself can't become a second enumeration side-channel alongside §2.4's generic error. Checked before the admins table is even queried, so continued attempts during an active cooldown never extend it — it clears ~15 minutes after the failure that tripped it.
 
-### 5.3 Password reset
+### 5.3 Citizen login
+
+| Limit | Value | Key |
+|---|---|---|
+| Failed attempts | **10 within 15 minutes** | normalized account email — never IP |
+
+Same shape as admin login (§5.2), for the same reasons: keyed on normalized email only (an IP-based limit would break the E2E suite's `signupCitizen()` fixtures, which log in from one shared local IP across specs), a successful login resets the counter outright, checked before the `citizens` table is even queried, and a failure is recorded for **every** rejection reason (nonexistent email, OAuth-only account with no password hash, wrong password) — never only for real accounts. Unlike admin login, the throttled response is a distinct `429` (`HttpException`/`HttpStatus.TOO_MANY_REQUESTS`, the same shape §5.1's report submission and §5.4's password reset already use) rather than a repeated `401` — this is still enumeration-safe: the record-on-every-failure symmetry means the per-email counter accumulates identically whether or not the account exists, so a `429` reveals request volume against that address, not account existence.
+
+### 5.4 Citizen signup
+
+| Limit | Value | Key |
+|---|---|---|
+| IP backstop | **20 / hour** | `ip` |
+
+A different threat shape from login — an attacker can't repeat-attempt signup against one target email (duplicate email is already rejected by the existing account-conflict check, unrelated to rate limiting), so the control is IP-only, no email component. The threshold intentionally mirrors §5.1's report-submission IP backstop (same value, same reasoning): the E2E suite creates roughly 17 disposable citizen accounts from one IP in a full run (one per disposable-ticket fixture across several specs), so a materially lower threshold would break the suite before its own report-limit backstop ever would. An attempt is recorded for every request that clears the check itself, regardless of whether it goes on to hit the duplicate-email conflict or succeed.
+
+### 5.5 Password reset
 
 | Limit | Value | Key |
 |---|---|---|
@@ -172,17 +188,17 @@ Counts **failed attempts only** — a successful login deletes that email's fail
 
 Both must pass. Crucially, an attempt is recorded **for every request, including emails with no account** — otherwise the enumeration-resistant identical response would let an attacker probe many addresses without ever consuming the email limit.
 
-### 5.4 OAuth
+### 5.6 OAuth
 
 **10 requests/minute per IP** on OAuth start/callback (`OAuthRateLimitGuard`). This one is **in-memory, not Postgres-backed** — a deliberate, marked tradeoff: OAuth abuse doesn't need to survive a restart the way report spam does. It assumes a single instance; see §8.
 
-### 5.5 Retention
+### 5.7 Retention
 
-`POST /cron/cleanup-rate-limit-events` prunes all three rate-limit tables past a 30-day window. Safe because the longest window any live check consults is 24 hours.
+`POST /cron/cleanup-rate-limit-events` prunes all five rate-limit tables past a 30-day window. Safe because the longest window any live check consults is 24 hours.
 
-### 5.6 The E2E caveat
+### 5.8 The E2E caveat
 
-A full Playwright run posts roughly 17 real reports and will exhaust the 20/hour IP backstop if repeated within the hour. **This is the control working correctly.** There is deliberately **no test-only bypass, env flag, or relaxed limit** — the documented workaround is targeted spec runs. See [`README.md`](../README.md) §I.
+A full Playwright run posts roughly 17 real reports (and creates a similar number of disposable citizen accounts, §5.4) and will exhaust the 20/hour IP backstops if repeated within the hour. **This is the control working correctly.** There is deliberately **no test-only bypass, env flag, or relaxed limit** — the documented workaround is targeted spec runs. See [`README.md`](../README.md) §I.
 
 ---
 

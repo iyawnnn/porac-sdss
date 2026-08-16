@@ -168,6 +168,38 @@ export const adminLoginRateLimitEvents = pgTable(
   },
 );
 
+// Per-account failed-login throttling for citizen login (hardening item 3),
+// same shape and reasoning as adminLoginRateLimitEvents above — its own
+// table rather than reused, since citizens and admins are separate security
+// domains. Keyed by normalized email only, never IP — the E2E suite logs in
+// from one IP repeatedly across specs, same constraint as admin login.
+export const citizenLoginRateLimitEvents = pgTable(
+  'citizen_login_rate_limit_events',
+  {
+    id: serial('id').primaryKey(),
+    emailNormalized: text('email_normalized').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
+// Account-creation-spam counter for citizen signup (hardening item 3).
+// Keyed by IP only, not email — unlike login, signup abuse is bounded by
+// volume of *distinct* new accounts from one source, not repeat attempts
+// against one target address (duplicate email is already rejected by the
+// existing citizens.email uniqueness check).
+export const citizenSignupRateLimitEvents = pgTable(
+  'citizen_signup_rate_limit_events',
+  {
+    id: serial('id').primaryKey(),
+    ip: text('ip').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
 export const tickets = pgTable('tickets', {
   id: serial('id').primaryKey(),
   category: text('category').notNull(),

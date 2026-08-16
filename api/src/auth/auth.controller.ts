@@ -34,6 +34,18 @@ interface SignupBody extends LoginBody {
   lastName?: unknown;
 }
 
+// x-forwarded-for's first hop — main.ts sets `trust proxy` since all
+// traffic arrives one hop away via Next's rewrite proxy (same helper shape
+// as reports.controller.ts/password-reset.controller.ts's getClientIp).
+function getClientIp(req: Request): string {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (forwardedFor) {
+    const value = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+    return value.split(',')[0].trim();
+  }
+  return req.ip ?? 'unknown';
+}
+
 @Controller()
 export class AuthController {
   constructor(
@@ -94,6 +106,7 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   async citizenSignup(
     @Body() body: SignupBody,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const { token } = await this.auth.citizenSignup(
@@ -101,6 +114,7 @@ export class AuthController {
       body.password,
       body.firstName,
       body.lastName,
+      getClientIp(req),
     );
     res.cookie(
       CITIZEN_SESSION_COOKIE,

@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -125,10 +127,22 @@ export class AuthService {
       throw new BadRequestException('Email and password are required');
     }
 
+    // Same check-before-lookup, key-on-normalized-email-only shape as
+    // adminLogin — see RateLimitService.checkCitizenLoginRateLimit.
+    const normalized = normalizeEmail(email);
+    const rateLimitResult =
+      await this.rateLimit.checkCitizenLoginRateLimit(normalized);
+    if (!rateLimitResult.allowed) {
+      throw new HttpException(
+        rateLimitResult.reason ?? 'Too many requests.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     const [citizen] = await this.db
       .select()
       .from(citizens)
-      .where(eq(citizens.email, email));
+      .where(eq(citizens.email, normalized));
     // passwordHash is null for OAuth-only citizens (see citizen_identities) —
     // bcrypt.compare() throws on a null hash instead of just failing, so
     // this must be checked explicitly rather than falling through to it.
@@ -137,8 +151,14 @@ export class AuthService {
       !citizen.passwordHash ||
       !(await bcrypt.compare(password, citizen.passwordHash))
     ) {
+      // Recorded for every rejection reason — nonexistent, OAuth-only,
+      // wrong password — never only for real accounts (see
+      // RateLimitService.recordCitizenLoginFailure).
+      await this.rateLimit.recordCitizenLoginFailure(normalized);
       throw new UnauthorizedException('Invalid email or password');
     }
+
+    await this.rateLimit.resetCitizenLoginFailures(normalized);
 
     const token = await this.sessions.signCitizenSession({
       citizenId: citizen.id,
@@ -154,7 +174,23 @@ export class AuthService {
     password: unknown,
     firstName: unknown,
     lastName: unknown,
+    ip: string,
   ): Promise<{ token: string }> {
+    // Checked before any validation/DB work — mirrors reports.service.ts's
+    // "rate limit, before any expensive work" ordering.
+    const rateLimitResult =
+      await this.rateLimit.checkCitizenSignupRateLimit(ip);
+    if (!rateLimitResult.allowed) {
+      throw new HttpException(
+        rateLimitResult.reason ?? 'Too many requests.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    // Recorded for every attempt that clears the rate-limit check itself,
+    // regardless of whether it goes on to hit the duplicate-email conflict
+    // below or succeed.
+    await this.rateLimit.recordCitizenSignupAttempt(ip);
+
     if (
       typeof email !== 'string' ||
       typeof password !== 'string' ||
@@ -167,10 +203,16 @@ export class AuthService {
       );
     }
 
+    // Single canonicalization point, same shape as
+    // PasswordResetService.requestReset — the duplicate check and the
+    // stored row must agree on the same normalized value, or case/whitespace
+    // variants of the same address could silently create two accounts.
+    const normalizedEmail = normalizeEmail(email);
+
     const [existing] = await this.db
       .select()
       .from(citizens)
-      .where(eq(citizens.email, email));
+      .where(eq(citizens.email, normalizedEmail));
     if (existing) {
       throw new ConflictException('An account with this email already exists.');
     }
@@ -178,7 +220,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, 10);
     const [citizen] = await this.db
       .insert(citizens)
-      .values({ email, passwordHash, firstName, lastName })
+      .values({ email: normalizedEmail, passwordHash, firstName, lastName })
       .returning();
 
     const token = await this.sessions.signCitizenSession({

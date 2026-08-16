@@ -98,14 +98,97 @@ describe('RateLimitService.resetAdminLoginFailures', () => {
   });
 });
 
+describe('RateLimitService.checkCitizenLoginRateLimit', () => {
+  it('allows a request under the failure limit', async () => {
+    const pg = makePg([[{ count: 9 }]]);
+    const service = new RateLimitService(pg);
+
+    await expect(
+      service.checkCitizenLoginRateLimit('citizen@example.com'),
+    ).resolves.toEqual({ allowed: true });
+  });
+
+  it('rejects once the failure limit is hit', async () => {
+    const pg = makePg([[{ count: 10 }]]);
+    const service = new RateLimitService(pg);
+
+    const result =
+      await service.checkCitizenLoginRateLimit('citizen@example.com');
+    expect(result.allowed).toBe(false);
+  });
+});
+
+describe('RateLimitService.recordCitizenLoginFailure', () => {
+  it('records a failure keyed on the normalized email', async () => {
+    const pg = jest.fn().mockResolvedValue(undefined);
+    const service = new RateLimitService(pg as unknown as Sql);
+
+    await service.recordCitizenLoginFailure('citizen@example.com');
+    expect(pg).toHaveBeenCalledTimes(1);
+    const query = (pg.mock.calls[0][0] as TemplateStringsArray).join('');
+    expect(query).toContain('INSERT INTO citizen_login_rate_limit_events');
+  });
+});
+
+describe('RateLimitService.resetCitizenLoginFailures', () => {
+  it('deletes every failure row for that email, not just ones inside the check window', async () => {
+    const pg = jest.fn().mockResolvedValue(undefined);
+    const service = new RateLimitService(pg as unknown as Sql);
+
+    await service.resetCitizenLoginFailures('citizen@example.com');
+    expect(pg).toHaveBeenCalledTimes(1);
+    const query = (pg.mock.calls[0][0] as TemplateStringsArray).join('');
+    expect(query).toContain('DELETE FROM citizen_login_rate_limit_events');
+    expect(query).not.toContain('created_at');
+  });
+});
+
+describe('RateLimitService.checkCitizenSignupRateLimit', () => {
+  it('allows a request under the IP-hourly limit', async () => {
+    const pg = makePg([[{ count: 19 }]]);
+    const service = new RateLimitService(pg);
+
+    await expect(
+      service.checkCitizenSignupRateLimit('1.2.3.4'),
+    ).resolves.toEqual({ allowed: true });
+  });
+
+  it('rejects once the IP-hourly limit is hit', async () => {
+    const pg = makePg([[{ count: 20 }]]);
+    const service = new RateLimitService(pg);
+
+    const result = await service.checkCitizenSignupRateLimit('1.2.3.4');
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/network/i);
+  });
+});
+
+describe('RateLimitService.recordCitizenSignupAttempt', () => {
+  it('records an attempt keyed on IP', async () => {
+    const pg = jest.fn().mockResolvedValue(undefined);
+    const service = new RateLimitService(pg as unknown as Sql);
+
+    await service.recordCitizenSignupAttempt('1.2.3.4');
+    expect(pg).toHaveBeenCalledTimes(1);
+    const query = (pg.mock.calls[0][0] as TemplateStringsArray).join('');
+    expect(query).toContain('INSERT INTO citizen_signup_rate_limit_events');
+  });
+});
+
 describe('RateLimitService.cleanupOldEvents', () => {
   const RETENTION_DAYS = 30;
   // The longest active window any table's checks ever query — anything
   // older than this can never affect a live rate-limit decision.
   const LONGEST_ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-  it('deletes from all three rate-limit tables using a cutoff well past every active window', async () => {
-    const pg = makePg([{ count: 4 }, { count: 1 }, { count: 2 }]);
+  it('deletes from all five rate-limit tables using a cutoff well past every active window', async () => {
+    const pg = makePg([
+      { count: 4 },
+      { count: 1 },
+      { count: 2 },
+      { count: 3 },
+      { count: 5 },
+    ]);
     const service = new RateLimitService(pg);
 
     const before = Date.now();
@@ -116,8 +199,10 @@ describe('RateLimitService.cleanupOldEvents', () => {
       rateLimitEventsDeleted: 4,
       passwordResetRateLimitEventsDeleted: 1,
       adminLoginRateLimitEventsDeleted: 2,
+      citizenLoginRateLimitEventsDeleted: 3,
+      citizenSignupRateLimitEventsDeleted: 5,
     });
-    expect(pg).toHaveBeenCalledTimes(3);
+    expect(pg).toHaveBeenCalledTimes(5);
 
     const queries = (pg as unknown as jest.Mock).mock.calls.map((call) =>
       (call[0] as TemplateStringsArray).join(''),
@@ -135,6 +220,16 @@ describe('RateLimitService.cleanupOldEvents', () => {
         q.includes('DELETE FROM admin_login_rate_limit_events'),
       ),
     ).toBe(true);
+    expect(
+      queries.some((q) =>
+        q.includes('DELETE FROM citizen_login_rate_limit_events'),
+      ),
+    ).toBe(true);
+    expect(
+      queries.some((q) =>
+        q.includes('DELETE FROM citizen_signup_rate_limit_events'),
+      ),
+    ).toBe(true);
 
     // All three calls bind the same cutoff (their second template argument)
     // — confirm it's ~30 days ago, not some other window.
@@ -150,7 +245,13 @@ describe('RateLimitService.cleanupOldEvents', () => {
   });
 
   it('never targets rows inside the active rate-limit window (only WHERE created_at < cutoff, no upper bound that could exclude old-but-still-relevant rows)', async () => {
-    const pg = makePg([{ count: 0 }, { count: 0 }, { count: 0 }]);
+    const pg = makePg([
+      { count: 0 },
+      { count: 0 },
+      { count: 0 },
+      { count: 0 },
+      { count: 0 },
+    ]);
     const service = new RateLimitService(pg);
 
     await service.cleanupOldEvents();
