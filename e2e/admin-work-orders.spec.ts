@@ -577,14 +577,19 @@ test("work order notes never appear on the citizen's report tracking page", asyn
   await citizenContext.close();
 });
 
-test("Needs Attention section on the admin dashboard is office-scoped", async ({ page }) => {
+test("Needs Attention section on the admin dashboard is office-scoped and shows exactly the four intended rows", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin");
   const section = page.getByRole("region", { name: "Needs attention" });
   await expect(section).toBeVisible();
-  await expect(section.getByText("Overdue", { exact: true })).toBeVisible();
+  await expect(section.getByText("Overdue Work", { exact: true })).toBeVisible();
   await expect(section.getByText("Due Today", { exact: true })).toBeVisible();
-  await expect(section.getByText("High-Urgency, Work Pending", { exact: true })).toBeVisible();
+  await expect(section.getByText("High-Urgency Open Work", { exact: true })).toBeVisible();
+  await expect(section.getByText("Flagged Reports Pending", { exact: true })).toBeVisible();
+  // Exactly these four rows — no more, no fewer. Each row's top-level text
+  // is its own flex row div (a direct child of the inset rows panel),
+  // matching the flat hairline-row layout in NeedsAttention.tsx.
+  await expect(section.getByTestId("needs-attention-rows").locator("> *")).toHaveCount(4);
 });
 
 test("system admin's Needs Attention section loads city-wide", async ({ page }) => {

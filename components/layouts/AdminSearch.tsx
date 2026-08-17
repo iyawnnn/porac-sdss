@@ -52,7 +52,7 @@ export function AdminSearch({ sections }: { sections: AdminSearchSection[] }) {
             setOpen(true);
           }
         }}
-        className="cursor-pointer"
+        className="h-8 cursor-pointer rounded-md border-sidebar-border bg-transparent transition-colors hover:border-border hover:bg-accent"
       >
         <InputGroupAddon align="inline-start" className="pl-1.75"><Search /></InputGroupAddon>
         <InputGroupInput aria-label="Open command palette" placeholder="Search..." readOnly tabIndex={-1} value="" />

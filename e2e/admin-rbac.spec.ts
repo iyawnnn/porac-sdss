@@ -54,70 +54,9 @@ test("office admin cannot open another office's ticket via a doctored URL", asyn
   expect(body.tickets.every((t: { assigned_office: string }) => t.assigned_office === "MEO")).toBe(true);
 });
 
-test("office admin dashboard shows only their own office's data, no cross-office card", async ({ page }) => {
-  await loginAs(page, E2E_MDRRMO_ADMIN);
-  const response = await page.evaluate(async () => (await fetch("/api/admin/dashboard")).json());
-  expect(response.departmentWorkload).toBeNull();
-  const analytics = page.getByRole("region", { name: "Dashboard analytics" });
-  await expect(analytics.locator('[data-slot="card"]')).toHaveCount(2);
-  await expect(page.getByText("Department Workload")).toHaveCount(0);
-});
-
-test("system admin dashboard includes the cross-office Department Workload card", async ({ page }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  const response = await page.evaluate(async () => (await fetch("/api/admin/dashboard")).json());
-  expect(Array.isArray(response.departmentWorkload)).toBe(true);
-  await expect(page.getByText("Department Workload")).toBeVisible();
-});
-
-test("system admin dashboard quick actions say All Tickets", async ({ page }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  const quickActions = page.getByRole("region", { name: "Quick actions" });
-  await expect(quickActions.getByRole("link", { name: "All Tickets" })).toHaveAttribute("href", "/admin/tickets");
-  await expect(quickActions.getByRole("link", { name: "My Office Tickets" })).toHaveCount(0);
-  await expect(quickActions.getByRole("link", { name: "High Urgency Tickets" })).toHaveAttribute("href", "/admin/tickets?urgency=High");
-  await expect(quickActions.getByRole("link", { name: "Flagged Reports" })).toHaveAttribute("href", "/admin/flagged");
-  await expect(quickActions.getByRole("link", { name: "GIS Map" })).toHaveAttribute("href", "/admin/map");
-});
-
-test("office admin dashboard quick actions say My Office Tickets, not All Tickets", async ({ page }) => {
-  await loginAs(page, E2E_MEO_ADMIN);
-  const quickActions = page.getByRole("region", { name: "Quick actions" });
-  await expect(quickActions.getByRole("link", { name: "My Office Tickets" })).toHaveAttribute("href", "/admin/tickets");
-  await expect(quickActions.getByRole("link", { name: "All Tickets" })).toHaveCount(0);
-});
-
-for (const [name, account] of [["MEO", E2E_MEO_ADMIN], ["MDRRMO", E2E_MDRRMO_ADMIN]] as const) {
-  test(`${name} office admin dashboard quick actions include Pending Tickets and In Progress shortcuts`, async ({ page }) => {
-    await loginAs(page, account);
-    const quickActions = page.getByRole("region", { name: "Quick actions" });
-    await expect(quickActions.getByRole("link", { name: "Pending Tickets" })).toHaveAttribute("href", "/admin/tickets?status=Reported");
-    await expect(quickActions.getByRole("link", { name: "In Progress" })).toHaveAttribute("href", "/admin/tickets?status=In%20Progress");
-    // No System Admin-only shortcuts leak to an office admin's workbench.
-    await expect(quickActions.getByRole("link", { name: "Manage Admins" })).toHaveCount(0);
-    await expect(quickActions.getByRole("link", { name: "Activity Log" })).toHaveCount(0);
-  });
-}
-
-test("system admin dashboard quick actions do not include the office-only Pending/In Progress shortcuts", async ({ page }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  const quickActions = page.getByRole("region", { name: "Quick actions" });
-  await expect(quickActions.getByRole("link", { name: "Pending Tickets" })).toHaveCount(0);
-  await expect(quickActions.getByRole("link", { name: "In Progress" })).toHaveCount(0);
-});
-
-test("the Pending Tickets shortcut navigates to a ticket queue actually filtered to Reported", async ({ page }) => {
-  await loginAs(page, E2E_MEO_ADMIN);
-  const quickActions = page.getByRole("region", { name: "Quick actions" });
-  await quickActions.getByRole("link", { name: "Pending Tickets" }).click();
-  await expect(page).toHaveURL(/\/admin\/tickets\?status=Reported/);
-  await expect(page.getByLabel("Status", { exact: true })).toHaveText("Reported");
-});
-
-test("the In Progress shortcut navigates to a ticket queue actually filtered to In Progress", async ({ page }) => {
-  await loginAs(page, E2E_MDRRMO_ADMIN);
-  const quickActions = page.getByRole("region", { name: "Quick actions" });
-  await quickActions.getByRole("link", { name: "In Progress" }).click();
-  await expect(page).toHaveURL(/\/admin\/tickets\?status=In(%20|\+)Progress/);
-  await expect(page.getByLabel("Status", { exact: true })).toHaveText("In Progress");
-});
+// Dashboard-analytics-card-count, Department Workload, and Quick Actions
+// coverage were removed here — those sections no longer render on /admin
+// (Phase 3 correction: they were cut from the dashboard-landing composition
+// entirely, with no other route currently rendering them). See
+// e2e/admin-dashboard.spec.ts's "legacy dashboard sections no longer render
+// on /admin" for the replacement negative-assertion coverage.

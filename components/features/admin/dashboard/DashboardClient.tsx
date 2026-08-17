@@ -1,124 +1,189 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useId, useRef, useState, useTransition } from "react";
+import { FileText, Inbox, Ticket } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
-import { Activity, ClipboardList, Flame, Inbox, Map as MapIcon, ShieldAlert, ShieldUser, Ticket, type LucideIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  DASHBOARD_RANGES,
-  type BarangayRiskRow,
-  type CategoryDistributionRow,
-  type DashboardKpis,
-  type DashboardRange,
-  type DistributionRow,
-  type IncidentTrendRow,
-  type OfficePerformanceSummary as OfficePerformanceSummaryData,
-  type NeedsAttention as NeedsAttentionData,
-} from "@/lib/types/admin-dashboard";
+import { DASHBOARD_RANGES, type BarangayRiskRow, type CategoryDistributionRow, type DashboardKpis, type DashboardRange, type DistributionRow, type IncidentTrendRow, type OfficePerformanceSummary as OfficePerformanceSummaryData, type NeedsAttention as NeedsAttentionData } from "@/lib/types/admin-dashboard";
+import type { AdminTicketRow } from "@/lib/types/admin-tickets";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { DistributionChartItem } from "./DistributionChartUtils";
-import { DistributionDonutChart } from "./DistributionDonutChart";
-import { SeverityRadialChart } from "./SeverityRadialChart";
-import { DepartmentWorkloadComparison } from "./DepartmentWorkloadComparison";
-import { OfficePerformanceSummary } from "./OfficePerformanceSummary";
+import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
+import { relativeAge } from "@/lib/utils/ui/time";
+import { StatusPill } from "../shared/StatusPill";
 import { NeedsAttention } from "./NeedsAttention";
-import { MapPresets } from "./MapPresets";
 
-const SEP = "\u00b7";
-const ACTIVE_STATUS_ORDER = ["Reported", "Under Review", "In Progress"] as const;
-const STATUS_ORDER = ["Reported", "Under Review", "In Progress", "Resolved", "Rejected"] as const;
-const SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"] as const;
-const DEPARTMENT_ORDER = ["MEO", "MDRRMO"] as const;
+const SEP = "·";
 const trendChartConfig = { reports: { label: "Submitted reports", color: "var(--color-brand-500)" } } satisfies ChartConfig;
-const statusChartConfig = {
-  reported: { label: "Reported", color: "var(--color-lifecycle-reported)" },
-  "under-review": { label: "Under Review", color: "var(--color-lifecycle-under-review)" },
-  "in-progress": { label: "In Progress", color: "var(--color-lifecycle-in-progress)" },
-  resolved: { label: "Resolved", color: "var(--color-lifecycle-resolved)" },
-  rejected: { label: "Rejected", color: "var(--color-lifecycle-rejected)" },
-} satisfies ChartConfig;
-const severityChartConfig = {
-  critical: { label: "Critical", color: "var(--color-severity-critical)" }, high: { label: "High", color: "var(--color-severity-high)" }, medium: { label: "Medium", color: "var(--color-severity-medium)" }, low: { label: "Low", color: "var(--color-severity-low)" },
-} satisfies ChartConfig;
-const departmentChartConfig = { meo: { label: "MEO", color: "var(--color-office-meo)" }, mdrrmo: { label: "MDRRMO", color: "var(--color-office-mdrrmo)" } } satisfies ChartConfig;
 
-// departmentWorkload is null for office-scoped admins — it's the
-// cross-office comparison, only meaningful for a System Administrator (see
-// dashboard.controller.ts).
+// departmentWorkload/citizenSeverityDistribution/leaderboard/categories/
+// statusDistribution stay in the fetched payload and this type — the API
+// response and its shape are unchanged — even though none of them render
+// on the dashboard landing page anymore (see docs/design-system.md-era
+// Phase 3 correction: Barangay Activity, Category Distribution, Ticket
+// Status Distribution, Reports by Citizen Severity, Department Workload,
+// Office Performance Summary, Quick Actions, and Map Presets were removed
+// from this composition — their components/data remain intact, just
+// unreachable from /admin until a future task gives them a home).
 type DashboardData = { kpis: DashboardKpis; leaderboard: BarangayRiskRow[]; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; statusDistribution: DistributionRow[]; departmentWorkload: DistributionRow[] | null; citizenSeverityDistribution: DistributionRow[]; officePerformanceSummary: OfficePerformanceSummaryData; needsAttention: NeedsAttentionData; range?: DashboardRange };
 
 function numeric(value: number | string | null | undefined): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
-function formatHours(value: number | string | null | undefined): string { if (value === null || value === undefined || !Number.isFinite(Number(value))) return "\u2014"; const hours = numeric(value); if (hours < 1) return Math.round(hours * 60) + " min"; if (hours < 48) return hours.toFixed(1) + " hr"; return (hours / 24).toFixed(1) + " days"; }
 function formatShortDate(value: string): string { const date = new Date(value + "T00:00:00"); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
 function formatLongDate(value: string): string { const date = new Date(value + "T00:00:00"); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }); }
-function chartKey(label: string) { return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""); }
-function distributionItems(rows: DistributionRow[], labels: readonly string[]): DistributionChartItem[] { const counts = new Map(rows.map((row) => [row.label, numeric(row.count)])); return labels.map((label) => ({ key: chartKey(label), label, count: counts.get(label) ?? 0 })); }
-function departmentItems(rows: DistributionRow[]): DistributionChartItem[] { return distributionItems(rows, DEPARTMENT_ORDER); }
 
 function IncidentTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: { date: string; reports: number } }> }) { const row = payload?.[0]?.payload; if (!active || !row) return null; return <div data-testid="incident-chart-tooltip" className="grid min-w-44 gap-1 rounded-lg border bg-background px-3 py-2 text-xs shadow-xl"><p className="font-medium">{formatLongDate(row.date)}</p><div className="flex items-center justify-between gap-4 text-muted-foreground"><span>Submitted reports</span><strong className="font-mono text-sm text-foreground">{numeric(row.reports).toLocaleString()}</strong></div></div>; }
 function RangeControl({ range, isUpdating, onChange }: { range: DashboardRange; isUpdating: boolean; onChange: (range: DashboardRange) => void }) { return <ToggleGroup aria-label="Incident report date range" disabled={isUpdating} onValueChange={(value) => { const nextRange = Number(value); if (DASHBOARD_RANGES.includes(nextRange as DashboardRange)) onChange(nextRange as DashboardRange); }} size="sm" spacing={0} type="single" value={String(range)} variant="outline">{DASHBOARD_RANGES.map((days) => <ToggleGroupItem aria-label={"Last " + days + " Days"} key={days} value={String(days)}>Last {days} Days</ToggleGroupItem>)}</ToggleGroup>; }
 
-function AnalyticsCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) { return <Card className="@container flex h-full flex-col"><CardHeader className="gap-1 border-b px-4 pt-3 pb-2"><CardTitle>{title}</CardTitle><CardDescription>{description}</CardDescription></CardHeader><CardContent className="flex min-h-0 flex-1 p-0">{children}</CardContent></Card>; }
-
-function QuickActions({ isSystemAdmin }: { isSystemAdmin: boolean }) {
-  const actions: { href: string; label: string; icon: LucideIcon }[] = [
-    { href: "/admin/tickets", label: isSystemAdmin ? "All Tickets" : "My Office Tickets", icon: Ticket },
-    { href: "/admin/tickets?urgency=High", label: "High Urgency Tickets", icon: Flame },
-  ];
-  // Office-scoped workbench shortcuts only — status is a real
-  // TicketsService.parseTicketQuery filter (tickets.service.ts), so these
-  // land on an actually-filtered queue, not just a plain link. Not added
-  // for System Admin, matching the smaller system-level shortcut set.
-  if (!isSystemAdmin) {
-    actions.push(
-      { href: "/admin/tickets?status=Reported", label: "Pending Tickets", icon: Inbox },
-      { href: "/admin/tickets?status=In%20Progress", label: "In Progress", icon: Activity },
-    );
-  }
-  actions.push(
-    { href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert },
-    { href: "/admin/map", label: "GIS Map", icon: MapIcon },
-  );
-  if (isSystemAdmin) {
-    actions.push({ href: "/admin/admins", label: "Manage Admins", icon: ShieldUser });
-    actions.push({ href: "/admin/activity-log", label: "Activity Log", icon: ClipboardList });
-  }
+// All three KPI cards share one anatomy: a compact header (label + icon),
+// a hairline divider, then a body with the metric lower-left and a caption
+// underneath. A sparkline (lower-right) only appears where honest
+// time-series data exists — Reports This Month is the only KPI with a real
+// nearby history (data.incidentTrend); Active Tickets and Pending Work
+// Orders are point-in-time counts with no history anywhere in the API
+// response, so they get an honest caption instead of a fabricated chart.
+function KpiCard({ label, value, caption, icon: Icon, sparkline }: { label: string; value: string; caption: string; icon: typeof Ticket; sparkline?: { date: string; reports: number }[] }) {
   return (
-    <Card aria-label="Quick actions" className="lg:col-span-2 dashboard:col-span-4" role="region">
-      <CardHeader><CardTitle>Quick Actions</CardTitle></CardHeader>
-      <CardContent className="flex flex-wrap gap-2">
-        {actions.map((action) => {
-          const Icon = action.icon;
-          return (
-            <Button asChild key={action.href} size="sm" variant="outline">
-              <Link href={action.href}><Icon />{action.label}</Link>
-            </Button>
-          );
-        })}
-      </CardContent>
+    <Card className="gap-0 overflow-hidden rounded-lg border-2 border-input bg-secondary py-0 ring-0">
+      <CardHeader className="flex items-center justify-between gap-2 py-3">
+        <CardTitle className="text-xs font-medium text-muted-foreground">{label}</CardTitle>
+        <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
+      </CardHeader>
+      <div className="p-3">
+        <div className="flex items-end justify-between gap-3 rounded-md border border-input bg-card p-3">
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">{value}</p>
+            <p className="truncate text-xs text-muted-foreground">{caption}</p>
+          </div>
+          {sparkline && (
+            <ChartContainer className="h-8 w-20 shrink-0" config={trendChartConfig}>
+              <AreaChart data={sparkline} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                <Area dataKey="reports" dot={false} fill="var(--color-reports)" fillOpacity={0.15} isAnimationActive={false} stroke="var(--color-reports)" strokeWidth={1.5} type="monotone" />
+              </AreaChart>
+            </ChartContainer>
+          )}
+        </div>
+      </div>
     </Card>
   );
 }
-function RankedTableCard({ kind, rows }: { kind: "barangay" | "category"; rows: BarangayRiskRow[] | CategoryDistributionRow[] }) { const isBarangay = kind === "barangay"; const tableRows = rows.slice(0, 5); return <Card className="flex h-full flex-col dashboard:col-span-2"><CardHeader className="gap-1"><CardTitle>{isBarangay ? "Barangay Activity" : "Category Distribution"}</CardTitle><CardDescription>{isBarangay ? "Top five barangays by active tickets and workflow priority." : "Top five hazard categories; share uses all active tickets."}</CardDescription></CardHeader><CardContent className="flex-1 p-0"><Table className="border-t"><TableCaption className="sr-only">{isBarangay ? "Top five barangays by active ticket count and workflow priority." : "Top five hazard categories by active ticket count; share is calculated across all active tickets."}</TableCaption><TableHeader><TableRow><TableHead className="pl-6" scope="col">{isBarangay ? "Barangay" : "Category"}</TableHead><TableHead className="text-end" scope="col">Active</TableHead><TableHead className="pr-6 text-end" scope="col">{isBarangay ? "Op. Priority" : "Share"}</TableHead></TableRow></TableHeader><TableBody>{tableRows.map((raw) => { if (isBarangay) { const row = raw as BarangayRiskRow; return <TableRow className="hover:bg-transparent" key={row.barangay_id}><TableCell className="max-w-56 pl-6 font-medium"><Link className="block truncate" href={"/admin/tickets?barangayId=" + row.barangay_id + "&status=active"} title={row.barangay_name}>{row.barangay_name}</Link></TableCell><TableCell className="text-end text-xs tabular-nums text-muted-foreground">{numeric(row.active_count).toLocaleString()}</TableCell><TableCell className="pr-6 text-end text-xs tabular-nums text-muted-foreground">{row.avg_priority === null ? "\u2014" : numeric(row.avg_priority).toFixed(0)}</TableCell></TableRow>; } const row = raw as CategoryDistributionRow; const total = numeric(row.active_total); const share = total > 0 ? numeric(row.active_count) / total * 100 : 0; return <TableRow className="hover:bg-transparent" key={row.category}><TableCell className="max-w-56 pl-6 font-medium"><span className="block truncate" title={row.category}>{row.category}</span></TableCell><TableCell className="text-end text-xs tabular-nums text-muted-foreground">{numeric(row.active_count).toLocaleString()}</TableCell><TableCell className="pr-6 text-end text-xs tabular-nums text-muted-foreground">{Number.isInteger(share) ? share.toFixed(0) : share.toFixed(1)}%</TableCell></TableRow>; })}</TableBody></Table></CardContent></Card>; }
 
-export function DashboardClient({ initialData, isSystemAdmin }: { initialData: DashboardData; isSystemAdmin: boolean }) {
+const HUA_HEAD_CLASS = "text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase";
+
+// The dashboard-landing action queue — capped and compact, deliberately not
+// a second Ticket Queue. Ranked by priority_score (Hazard Urgency Score);
+// there is no existing backend sort by priority_index (Operational
+// Priority — api/src/admin/tickets.service.ts's parseTicketQuery only ever
+// orders by priority_score), so this must never be described as
+// Operational-Priority-ranked.
+function HighestUrgencyActionsTable({ tickets }: { tickets: AdminTicketRow[] | null }) {
+  return (
+    <Card className="flex flex-col overflow-hidden rounded-lg border-2 border-input bg-secondary py-0 ring-0" data-testid="highest-urgency-actions">
+      <CardHeader className="py-3">
+        <CardTitle className="text-xs font-medium text-muted-foreground">Highest Urgency Actions</CardTitle>
+        <CardDescription>Highest-urgency active tickets ranked by Hazard Urgency Score.</CardDescription>
+        <CardAction>
+          <Link className="text-sm font-medium text-primary hover:underline" href="/admin/tickets?sort=priority_desc&status=active">View all</Link>
+        </CardAction>
+      </CardHeader>
+      <div className="p-3 pt-0">
+        <div className="overflow-hidden rounded-md border border-input bg-card">
+        <Table className="text-[13px]">
+          <TableCaption className="sr-only">Highest-urgency active tickets, ranked by Hazard Urgency Score.</TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead className={HUA_HEAD_CLASS + " pl-6"} scope="col">Ticket</TableHead>
+              <TableHead className={HUA_HEAD_CLASS} scope="col">Barangay</TableHead>
+              <TableHead className={HUA_HEAD_CLASS} scope="col">Office</TableHead>
+              <TableHead className={HUA_HEAD_CLASS + " text-center"} scope="col">Hazard Urgency</TableHead>
+              <TableHead className={HUA_HEAD_CLASS + " text-center"} scope="col">Status</TableHead>
+              <TableHead className={HUA_HEAD_CLASS + " text-end"} scope="col">Age</TableHead>
+              <TableHead className={HUA_HEAD_CLASS + " pr-6 text-end"} scope="col">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tickets === null ? (
+              <TableRow className="hover:bg-transparent"><TableCell className="p-6 text-center text-sm text-muted-foreground" colSpan={7}>Unable to load priority actions right now.</TableCell></TableRow>
+            ) : tickets.length === 0 ? (
+              <TableRow className="hover:bg-transparent"><TableCell className="p-6 text-center text-sm text-muted-foreground" colSpan={7}>No active tickets right now.</TableCell></TableRow>
+            ) : (
+              tickets.map((ticket) => {
+                const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
+                const detailHref = `/admin/tickets/${ticket.id}`;
+                return (
+                  <TableRow key={ticket.id}>
+                    <TableCell className="max-w-56 pl-6">
+                      <Link className="block truncate font-medium hover:text-primary hover:underline" href={detailHref} title={ticket.title ?? undefined}>{ticket.title ?? `Ticket #${ticket.id}`}</Link>
+                      <div className="text-xs text-muted-foreground">Ticket <span className="font-mono">#{ticket.id}</span></div>
+                    </TableCell>
+                    <TableCell className="max-w-40"><span className="block truncate" title={ticket.barangay_name}>{ticket.barangay_name}</span></TableCell>
+                    <TableCell>{ticket.assigned_office}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge className={urgencyBadge.className} variant="outline">
+                        <span className="font-mono tabular-nums">{ticket.priority_score ?? "—"}</span> {urgencyBadge.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center"><StatusPill status={ticket.status} /></TableCell>
+                    <TableCell className="text-end text-xs text-muted-foreground">{relativeAge(ticket.created_at, ticket.status)}</TableCell>
+                    <TableCell className="pr-6 text-end">
+                      <Button asChild size="sm" variant="outline"><Link href={detailHref}>View ticket</Link></Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+export function DashboardClient({ initialData, topPriorityTickets, adminName }: { initialData: DashboardData; topPriorityTickets: AdminTicketRow[] | null; adminName: string | null }) {
   const [data, setData] = useState(initialData); const [range, setRange] = useState<DashboardRange>(initialData.range ?? 30); const [isPending, startTransition] = useTransition(); const [rangeError, setRangeError] = useState<string | null>(null); const requestId = useRef(0); const gradientId = "incident-area-" + useId().replace(/:/g, "");
-  const trend = data.incidentTrend.map((row) => ({ date: row.date, reports: numeric(row.report_count) })); const reportsInRange = trend.reduce((sum, row) => sum + row.reports, 0); const isMobile = useIsMobile(); const activeStatusItems = distributionItems(data.statusDistribution, ACTIVE_STATUS_ORDER); const allStatusItems = distributionItems(data.statusDistribution, STATUS_ORDER); const severityItems = distributionItems(data.citizenSeverityDistribution, SEVERITY_ORDER); const departments = data.departmentWorkload ? departmentItems(data.departmentWorkload) : null;
+  const trend = data.incidentTrend.map((row) => ({ date: row.date, reports: numeric(row.report_count) })); const reportsInRange = trend.reduce((sum, row) => sum + row.reports, 0); const isMobile = useIsMobile();
   async function updateRange(nextRange: DashboardRange) { if (nextRange === range) return; const id = requestId.current + 1; requestId.current = id; setRange(nextRange); setRangeError(null); try { const response = await fetch("/api/admin/dashboard?range=" + nextRange, { cache: "no-store" }); if (!response.ok) throw new Error(); const nextData = await response.json() as DashboardData; if (requestId.current === id) startTransition(() => setData(nextData)); } catch { if (requestId.current === id) { setRange(initialData.range ?? 30); setRangeError("Unable to update the incident report range. Showing the previous range."); } } }
-  return <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 dashboard:grid-cols-4"><h1 className="sr-only">Operations Dashboard</h1>
-    <QuickActions isSystemAdmin={isSystemAdmin} />
-    <MapPresets isSystemAdmin={isSystemAdmin} office={data.officePerformanceSummary.scope === "ALL" ? undefined : data.officePerformanceSummary.scope} />
-    <Card className="self-start lg:col-span-2 dashboard:col-span-3"><CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 flex-col gap-1.5"><CardTitle className="font-mono text-2xl tabular-nums">{reportsInRange.toLocaleString()}</CardTitle><CardDescription>Incident Reports Over Time {SEP} last {range} days</CardDescription></div><CardAction><RangeControl isUpdating={isPending} onChange={updateRange} range={range} /></CardAction></CardHeader><CardContent><p className="sr-only" id="incident-chart-description">Submitted citizen reports by calendar date for the last {range} days. Missing dates are shown as zero.</p><ChartContainer aria-describedby="incident-chart-description" aria-label={"Submitted citizen reports over the last " + range + " days"} className="h-60 min-h-60 w-full sm:h-64" config={trendChartConfig} role="img"><AreaChart accessibilityLayer data={trend} margin={{ left: 8, right: 8 }}><defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="var(--color-reports)" stopOpacity={0.22} /><stop offset="100%" stopColor="var(--color-reports)" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} /><XAxis axisLine={false} dataKey="date" minTickGap={range === 90 ? 42 : 28} tickCount={isMobile ? 4 : range === 90 ? 6 : 7} tickFormatter={formatShortDate} tickLine={false} tickMargin={8} /><ChartTooltip content={<IncidentTooltip />} cursor={{ stroke: "var(--color-reports)", strokeDasharray: "3 3", strokeLinecap: "round" }} wrapperStyle={{ outline: "none" }} /><Area dataKey="reports" dot={{ fill: "var(--color-reports)", r: 2.5, strokeWidth: 2 }} fill={"url(#" + gradientId + ")"} isAnimationActive={false} name="Submitted reports" stroke="var(--color-reports)" strokeWidth={2} type="monotone" /></AreaChart></ChartContainer><p className="mt-2 text-xs text-muted-foreground">Daily submitted reports {SEP} Missing dates shown as zero</p>{rangeError && <p aria-live="polite" className="mt-2 text-xs text-muted-foreground">{rangeError}</p>}</CardContent></Card>
-    <Card className="@container flex self-start flex-col gap-0 pb-0 lg:col-span-2 dashboard:col-span-1"><CardHeader className="flex flex-row items-start justify-between gap-3 border-b"><div className="flex min-w-0 flex-col gap-0"><CardTitle className="font-mono text-2xl tabular-nums">{numeric(data.kpis.active_count).toLocaleString()}</CardTitle><CardDescription>active tickets</CardDescription></div><Badge variant="secondary">{numeric(data.kpis.high_urgency_count)} high urgency</Badge></CardHeader><CardContent className="flex min-h-0 flex-1 p-0"><DistributionDonutChart ariaLabel="Active ticket lifecycle distribution" centerLabel="Active" config={statusChartConfig} description="Active tickets grouped by lifecycle status." items={activeStatusItems} size="compact" /></CardContent><div className="mt-auto grid grid-cols-2 border-t text-xs"><div className="min-w-0 px-4 py-3"><strong className="block font-mono text-base text-foreground">{numeric(data.kpis.reports_this_month_count)}</strong><span className="text-muted-foreground">Reports this month</span></div><div className="min-w-0 border-l px-4 py-3"><strong className="block font-mono text-base text-foreground">{formatHours(data.kpis.avg_resolution_hours_30d)}</strong><span className="text-muted-foreground">Avg resolution</span></div></div></Card>
-    <RankedTableCard kind="barangay" rows={data.leaderboard} /><RankedTableCard kind="category" rows={data.categories} />
-    <OfficePerformanceSummary summary={data.officePerformanceSummary} />
-    <NeedsAttention data={data.needsAttention} />
-    <section aria-label="Dashboard analytics" className={"grid min-w-0 grid-cols-1 items-stretch gap-3 lg:col-span-2 lg:grid-cols-2 dashboard:col-span-4 " + (departments ? "dashboard:grid-cols-3" : "dashboard:grid-cols-2")}><AnalyticsCard description="All tickets grouped by lifecycle status." title="Ticket Status Distribution"><DistributionDonutChart ariaLabel="Ticket status distribution" config={statusChartConfig} description="All tickets grouped by lifecycle status." items={allStatusItems} /></AnalyticsCard><AnalyticsCard description="Citizen-selected severity in the latest 30 days; not system urgency." title="Reports by Citizen Severity"><SeverityRadialChart ariaLabel="Reports by citizen severity" config={severityChartConfig} description="Citizen-selected severity in the latest 30 days; not system urgency." items={severityItems} /></AnalyticsCard>{departments && <AnalyticsCard description="Active tickets by assigned office." title="Department Workload"><DepartmentWorkloadComparison ariaLabel="Department workload" config={departmentChartConfig} description="Active tickets assigned to MEO and MDRRMO." items={departments} /></AnalyticsCard>}</section>
+  return <div className="flex min-w-0 flex-col gap-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 className="text-[24px] leading-8 font-semibold tracking-[-0.02em]">Welcome back{adminName ? `, ${adminName}` : ""}</h1>
+        <p className="mt-1 text-[13px] text-muted-foreground">Here&apos;s the latest operational overview across Porac.</p>
+      </div>
+      <RangeControl isUpdating={isPending} onChange={updateRange} range={range} />
+    </div>
+
+    <div className="grid min-w-0 grid-cols-1 gap-3 dashboard:grid-cols-10 dashboard:items-start">
+      <div className="flex min-w-0 flex-col gap-3 dashboard:col-span-7">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="dashboard-kpi-row">
+          <KpiCard caption={`${numeric(data.kpis.high_urgency_count).toLocaleString()} high urgency`} icon={Ticket} label="Active Tickets" value={numeric(data.kpis.active_count).toLocaleString()} />
+          <KpiCard caption={`${numeric(data.officePerformanceSummary.inProgressWorkOrders).toLocaleString()} in progress`} icon={Inbox} label="Pending Work Orders" value={numeric(data.officePerformanceSummary.pendingWorkOrders).toLocaleString()} />
+          <KpiCard caption={`Last ${range} days shown below`} icon={FileText} label="Reports This Month" sparkline={trend} value={numeric(data.kpis.reports_this_month_count).toLocaleString()} />
+        </div>
+
+        <Card className="gap-0 overflow-hidden rounded-lg border-2 border-input bg-secondary py-0 ring-0">
+          <CardHeader className="py-3">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Incident Reports Over Time {SEP} last {range} days</CardTitle>
+          </CardHeader>
+          <div className="p-3">
+            <div className="rounded-md border border-input bg-card p-4">
+              <p className="font-mono text-2xl tabular-nums">{reportsInRange.toLocaleString()}</p>
+              <p className="sr-only" id="incident-chart-description">Submitted citizen reports by calendar date for the last {range} days. Missing dates are shown as zero.</p>
+              <ChartContainer aria-describedby="incident-chart-description" aria-label={"Submitted citizen reports over the last " + range + " days"} className="mt-2 h-60 min-h-60 w-full sm:h-64" config={trendChartConfig} role="img"><AreaChart accessibilityLayer data={trend} margin={{ left: 8, right: 8 }}><defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="var(--color-reports)" stopOpacity={0.22} /><stop offset="100%" stopColor="var(--color-reports)" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} /><XAxis axisLine={false} dataKey="date" minTickGap={range === 90 ? 42 : 28} tickCount={isMobile ? 4 : range === 90 ? 6 : 7} tickFormatter={formatShortDate} tickLine={false} tickMargin={8} /><ChartTooltip content={<IncidentTooltip />} cursor={{ stroke: "var(--color-reports)", strokeDasharray: "3 3", strokeLinecap: "round" }} wrapperStyle={{ outline: "none" }} /><Area dataKey="reports" dot={{ fill: "var(--color-reports)", r: 2.5, strokeWidth: 2 }} fill={"url(#" + gradientId + ")"} isAnimationActive={false} name="Submitted reports" stroke="var(--color-reports)" strokeWidth={2} type="monotone" /></AreaChart></ChartContainer>
+              <p className="mt-2 text-xs text-muted-foreground">Daily submitted reports {SEP} Missing dates shown as zero</p>
+              {rangeError && <p aria-live="polite" className="mt-2 text-xs text-muted-foreground">{rangeError}</p>}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <NeedsAttention data={data.needsAttention} flaggedReportsPending={numeric(data.officePerformanceSummary.flaggedReportsPending)} />
+    </div>
+
+    <HighestUrgencyActionsTable tickets={topPriorityTickets} />
   </div>;
 }

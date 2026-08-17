@@ -125,65 +125,13 @@ test("MDRRMO office admin sees their own fixed office badge on the map", async (
   await expect(page.getByLabel("Office", { exact: true })).toHaveText("My Office: MDRRMO");
 });
 
-// --- Phase 2: office-specific Map Presets on the dashboard ---------------
-
-test("MEO office admin sees only MEO-relevant map presets, no MDRRMO badge group", async ({ page }) => {
-  await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto("/admin");
-  const presets = page.getByRole("region", { name: "Map presets" });
-  await expect(presets).toBeVisible();
-  await expect(presets.getByRole("link", { name: "Drainage Issues" })).toBeVisible();
-  await expect(presets.getByRole("link", { name: "Potholes & Road Damage" })).toBeVisible();
-  await expect(presets.getByRole("link", { name: "Illegal Dumping" })).toBeVisible();
-  await expect(presets.getByRole("link", { name: "High-Urgency Open Work" })).toBeVisible();
-  await expect(presets.getByRole("link", { name: "Flooding Reports" })).toHaveCount(0);
-  await expect(presets.getByText("MDRRMO", { exact: true })).toHaveCount(0);
-});
-
-test("MDRRMO office admin sees only MDRRMO-relevant map presets", async ({ page }) => {
-  await loginAs(page, E2E_MDRRMO_ADMIN);
-  await page.goto("/admin");
-  const presets = page.getByRole("region", { name: "Map presets" });
-  await expect(presets.getByRole("link", { name: "Flooding Reports" })).toBeVisible();
-  await expect(presets.getByRole("link", { name: "Fallen Trees" })).toBeVisible();
-  await expect(presets.getByRole("link", { name: "High-Urgency Reports" })).toBeVisible();
-  await expect(presets.getByRole("link", { name: "Drainage Issues" })).toHaveCount(0);
-  await expect(presets.getByRole("link", { name: "Illegal Dumping" })).toHaveCount(0);
-});
-
-test("system admin sees both offices' presets, each labeled by office", async ({ page }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  await page.goto("/admin");
-  const presets = page.getByRole("region", { name: "Map presets" });
-  await expect(presets.getByText("MEO", { exact: true })).toBeVisible();
-  await expect(presets.getByText("MDRRMO", { exact: true })).toBeVisible();
-  await expect(presets.getByRole("link", { name: "Drainage Issues" })).toBeVisible();
-  await expect(presets.getByRole("link", { name: "Flooding Reports" })).toBeVisible();
-});
-
-test("clicking a map preset navigates to /admin/map with real query params that the map actually applies", async ({ page }) => {
-  await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto("/admin");
-  const presets = page.getByRole("region", { name: "Map presets" });
-  await presets.getByRole("link", { name: "Illegal Dumping" }).click();
-
-  await expect(page).toHaveURL(/\/admin\/map\?category=Illegal(%20|\+)Dumping/);
-  await waitForMapReady(page);
-  await page.getByRole("button", { name: /^Filters/ }).click();
-  await expect(page.getByLabel("Category", { exact: true })).toHaveText("Illegal Dumping Affecting Drainage or Road");
-});
-
-test("a system admin's office-specific preset carries an explicit office param, since their map defaults to city-wide", async ({ page }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  await page.goto("/admin");
-  const presets = page.getByRole("region", { name: "Map presets" });
-  await presets.getByRole("link", { name: "Flooding Reports" }).click();
-
-  await expect(page).toHaveURL(/\/admin\/map\?.*office=MDRRMO/);
-  await waitForMapReady(page);
-  const officeGroup = page.getByRole("group", { name: "Office" });
-  await expect(officeGroup.getByRole("button", { name: "MDRRMO" })).toHaveAttribute("aria-current", "true");
-});
+// Map Presets link-text/href/navigation coverage was removed here — Map
+// Presets no longer renders anywhere in the product (Phase 3 correction:
+// cut from the dashboard-landing composition, no other route currently
+// renders it). See e2e/admin-dashboard.spec.ts's "legacy dashboard sections
+// no longer render on /admin" for the replacement negative-assertion
+// coverage. The sidebar-integrity guard below is unrelated to Map Presets'
+// own visibility and stays.
 
 test("no fake sidebar item was added for map presets", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);

@@ -23,16 +23,23 @@
   --color-brand-700: #1a4570;
   --color-brand-900: #102943;
 
-  /* Urgency  urgency_band only, never chrome (DESIGN.md 4.4) */
-  --color-urgency-low: #d99a00;
-  --color-urgency-low-tint: #fdf3d7;
-  --color-urgency-low-ink: #6b4a00;
-  --color-urgency-low-edge: #efd79a;
+  /* Urgency  urgency_band only, never chrome (DESIGN.md 4.4). Low/Medium
+     retuned for docs/design-system.md 3.2's Hazard Urgency TBD: cool slate
+     for Low and a true yellow-gold for Medium, both hue-separated from
+     brand orange (--primary #c2410c / --ring #f26b1d, hue ~15-22Ā°) so a
+     Medium badge and a brand-orange UI element never collide by hue. High
+     is unchanged (already well-separated); the token name stays
+     urgency-critical (internal identifier only  the rendered label is
+     "High" everywhere, see lib/utils/ui/urgency.ts). */
+  --color-urgency-low: #5b7290;
+  --color-urgency-low-tint: #dce6f0;
+  --color-urgency-low-ink: #3c4b5c;
+  --color-urgency-low-edge: #b8c9db;
 
-  --color-urgency-medium: #e2680e;
-  --color-urgency-medium-tint: #fde7d3;
-  --color-urgency-medium-ink: #8a3a00;
-  --color-urgency-medium-edge: #f5c09a;
+  --color-urgency-medium: #a68300;
+  --color-urgency-medium-tint: #fbf2c7;
+  --color-urgency-medium-ink: #7a6500;
+  --color-urgency-medium-edge: #ead98f;
 
   --color-urgency-critical: #c42b1c;
   --color-urgency-critical-tint: #fadcd9;
@@ -158,47 +165,54 @@ body {
 /* shadcn's own generic palette (--background, --foreground, --card, --primary,
    --border, --ring, the --sidebar family, set in :root below) is what the
    Sidebar, Breadcrumb, Avatar, Collapsible, DropdownMenu, and Tooltip
-   primitives actually render with. citizen/light values are shadcn's own
-   neutral defaults (unchanged from init)  reasonable as-is, since no citizen
-   surface currently uses those primitives. */
+   primitives actually render with. Phase 0 of the PORAC-SDSS visual system
+   (docs/design-system.md 3.1) repoints these at the approved warm-neutral
+   light foundation and a two-step brand orange (--primary is the deeper,
+   AA-safe fill; --ring/--sidebar-ring are the brighter accent, used only
+   where a 3:1 UI-component threshold applies, e.g. focus rings). The PORAC
+   data-color tokens in the @theme block above (urgency, status, lifecycle,
+   severity, flag, map accents) are semantic palettes and are intentionally
+   untouched by this phase  see docs/design-system.md 3.2. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: #ffffff;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --primary: #c2410c;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f4;
+  --secondary-foreground: #1c1917;
+  --muted: #fafaf9;
+  --muted-foreground: #79716b;
+  --accent: #f5f5f4;
+  --accent-foreground: #1c1917;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: #e7e5e4;
+  --input: #d6d3d1;
+  --ring: #f26b1d;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.5rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1c1917;
+  --sidebar-primary: #c2410c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fef3ea;
+  --sidebar-accent-foreground: #9a3e06;
+  --sidebar-border: #e7e5e4;
+  --sidebar-ring: #f26b1d;
 }
 
-/* Accessibility floor (DESIGN.md 11)  no focus styling existed before this. */
+/* Accessibility floor (DESIGN.md 11)  no focus styling existed before this.
+   Repointed to --ring (Phase 0 brand orange) in place of the retiring
+   --color-brand-500 blue. */
 :focus-visible {
-  outline: 2px solid var(--color-brand-500);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
