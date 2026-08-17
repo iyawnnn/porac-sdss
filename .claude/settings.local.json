@@ -55,7 +55,8 @@
       "Bash(sort -t: -k2 -rn)",
       "Bash(awk 'length>160 {print FNR\": \"substr\\($0,1,260\\)}' 'app/\\(citizen\\)/reports/page.tsx')",
       "Bash(netstat -ano)",
-      "Bash(powershell.exe -Command 'Stop-Process -Id 45900 -Force -Confirm:$false')"
+      "Bash(powershell.exe -Command 'Stop-Process -Id 45900 -Force -Confirm:$false')",
+      "Bash(echo \"diffcheck exit: $?\")"
     ]
   }
 }

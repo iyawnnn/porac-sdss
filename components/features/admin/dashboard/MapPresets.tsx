@@ -2,7 +2,6 @@ import Link from "next/link";
 import { AlertTriangle, Droplets, Flame, MapPin, TreeDeciduous, Trash2, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface MapPreset {
   label: string;
@@ -65,20 +64,16 @@ function PresetGroup({ office, presets }: { office?: "MEO" | "MDRRMO"; presets: 
 // can't actually apply.
 export function MapPresets({ isSystemAdmin, office }: { isSystemAdmin: boolean; office?: "MEO" | "MDRRMO" }) {
   return (
-    <Card aria-label="Map presets" className="lg:col-span-2 dashboard:col-span-4" role="region">
-      <CardHeader>
-        <CardTitle>Map Presets</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {isSystemAdmin ? (
-          <>
-            <PresetGroup office="MEO" presets={MEO_PRESETS} />
-            <PresetGroup office="MDRRMO" presets={MDRRMO_PRESETS} />
-          </>
-        ) : (
-          <PresetGroup presets={office === "MDRRMO" ? MDRRMO_PRESETS : MEO_PRESETS} />
-        )}
-      </CardContent>
-    </Card>
+    <div aria-label="Map presets" className="flex min-w-0 flex-1 flex-wrap items-start gap-2 sm:pl-3" role="region">
+      <span className="shrink-0 self-center text-xs font-medium text-muted-foreground">Map presets</span>
+      {isSystemAdmin ? (
+        <>
+          <PresetGroup office="MEO" presets={MEO_PRESETS} />
+          <PresetGroup office="MDRRMO" presets={MDRRMO_PRESETS} />
+        </>
+      ) : (
+        <PresetGroup presets={office === "MDRRMO" ? MDRRMO_PRESETS : MEO_PRESETS} />
+      )}
+    </div>
   );
 }

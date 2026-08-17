@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, AlertTriangle, DownloadIcon, Gauge, MapPin, SearchIcon, SearchXIcon, Ticket as TicketIcon, type LucideIcon } from "lucide-react";
+import { DownloadIcon, SearchIcon, SearchXIcon } from "lucide-react";
 import type { AdminTicketRow, PaginatedTickets } from "@/lib/types/admin-tickets";
 import { TICKET_STATUSES, TICKET_CATEGORIES, ALL_TICKET_CATEGORIES, PAGE_LIMITS, type TicketSort } from "@/lib/types/admin-ticket-constants";
 import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
-import { priorityScoreBandClass } from "@/lib/utils/ui/priority";
 import { relativeAge } from "@/lib/utils/ui/time";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -108,7 +107,7 @@ function formatCreatedDate(value: string): string {
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-const HEAD_CLASS = "text-xs font-semibold tracking-wide text-muted-foreground uppercase";
+const HEAD_CLASS = "text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase";
 
 export function TicketsWorkspace({
   initialData,
@@ -224,8 +223,8 @@ export function TicketsWorkspace({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-0.5">
-          <h1 className="font-heading text-base font-semibold">Ticket Queue</h1>
+        <div className="space-y-1">
+          <h1 className="text-[24px] leading-8 font-semibold tracking-[-0.02em]">Ticket Queue</h1>
           <p className="text-xs text-muted-foreground">Current workload summary</p>
         </div>
         <Button asChild size="sm" variant="outline">
@@ -237,11 +236,11 @@ export function TicketsWorkspace({
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard icon={TicketIcon} label="Total Tickets" tint="bg-slate-100 text-slate-600" value={data.total.toLocaleString()} />
-        <KpiCard icon={Activity} label="Active Tickets" tint="bg-blue-50 text-blue-600" value={activeCount.toLocaleString()} />
-        <KpiCard icon={AlertTriangle} label="High Urgency" tint="bg-red-50 text-red-600" value={highPriorityCount.toLocaleString()} />
-        <KpiCard icon={Gauge} label="Avg. Hazard Urgency" tint="bg-amber-50 text-amber-600" value={avgUrgencyScore === null ? "—" : String(avgUrgencyScore)} />
-        <KpiCard icon={MapPin} label="Active Barangays" tint="bg-emerald-50 text-emerald-600" value={activeBarangayCount.toLocaleString()} />
+        <KpiCard label="Total Tickets" value={data.total.toLocaleString()} />
+        <KpiCard label="Active Tickets" value={activeCount.toLocaleString()} />
+        <KpiCard label="High Urgency" value={highPriorityCount.toLocaleString()} />
+        <KpiCard label="Avg. Hazard Urgency" value={avgUrgencyScore === null ? "—" : String(avgUrgencyScore)} />
+        <KpiCard label="Active Barangays" value={activeBarangayCount.toLocaleString()} />
       </div>
 
       <Card className="gap-0">
@@ -336,13 +335,13 @@ export function TicketsWorkspace({
 
         {/* Desktop table */}
         <CardContent className="hidden min-w-0 p-0 md:block">
-          <Table className="[&_td]:py-1.5 [&_th]:h-8">
+          <Table className="text-[13px] [&_td]:py-2 [&_th]:h-9">
             <TableHeader className="bg-muted/40">
               <TableRow>
                 <TableHead className={`${HEAD_CLASS} pl-6`}>Ticket</TableHead>
                 <TableHead className={HEAD_CLASS}>Category</TableHead>
                 <TableHead className={HEAD_CLASS}>Barangay</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Members</TableHead>
+                <TableHead className={`${HEAD_CLASS} text-right`}>Members</TableHead>
                 <TableHead className={`${HEAD_CLASS} text-center`}>Hazard Urgency Score</TableHead>
                 <TableHead className={`${HEAD_CLASS} text-center`}>Hazard Urgency Level</TableHead>
                 <TableHead className={`${HEAD_CLASS} text-center`}>Office</TableHead>
@@ -456,17 +455,12 @@ export function TicketsWorkspace({
   );
 }
 
-function KpiCard({ icon: Icon, label, tint, value }: { icon: LucideIcon; label: string; tint: string; value: string }) {
+function KpiCard({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="py-0 shadow-xs">
-      <CardContent className="flex items-center gap-3 p-4">
-        <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${tint}`}>
-          <Icon aria-hidden="true" className="size-4.5" />
-        </div>
-        <div className="min-w-0 space-y-0.5">
-          <p className="font-mono text-2xl font-semibold tabular-nums">{value}</p>
-          <p className="truncate text-xs text-muted-foreground" title={label}>{label}</p>
-        </div>
+    <Card className="py-0">
+      <CardContent className="space-y-0.5 p-4">
+        <p className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">{value}</p>
+        <p className="truncate text-xs font-medium text-muted-foreground" title={label}>{label}</p>
       </CardContent>
     </Card>
   );
@@ -475,7 +469,7 @@ function KpiCard({ icon: Icon, label, tint, value }: { icon: LucideIcon; label: 
 function EmptyState() {
   return (
     <>
-      <SearchXIcon aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
+      <SearchXIcon aria-hidden="true" className="mx-auto size-5 text-muted-foreground" />
       <p className="mt-3 text-sm font-medium">No tickets match this filter.</p>
       <p className="mt-1 text-sm text-muted-foreground">Try widening your search or resetting filters.</p>
     </>
@@ -489,7 +483,7 @@ function TicketRow({ ticket, returnQuery }: { ticket: AdminTicketRow; returnQuer
     <TableRow>
       <TableCell className="max-w-56 pl-6">
         <div className="flex items-center gap-1.5">
-          <Link className="block truncate font-medium hover:underline" href={detailHref} title={ticket.title ?? undefined}>
+          <Link className="block truncate font-medium hover:text-primary hover:underline" href={detailHref} title={ticket.title ?? undefined}>
             {ticket.title ?? `Ticket #${ticket.id}`}
           </Link>
           {ticket.disputed_at && <Badge className="bg-red-50 text-red-700" variant="outline">Disputed</Badge>}
@@ -504,9 +498,9 @@ function TicketRow({ ticket, returnQuery }: { ticket: AdminTicketRow; returnQuer
           {ticket.barangay_name}
         </span>
       </TableCell>
-      <TableCell className="text-center font-mono tabular-nums">{ticket.member_count}</TableCell>
+      <TableCell className="text-right font-mono tabular-nums">{ticket.member_count}</TableCell>
       <TableCell className="text-center">
-        <Badge className={priorityScoreBandClass(ticket.priority_score)} variant="outline">
+        <Badge className={urgencyBadge.className} variant="outline">
           <span className="font-mono tabular-nums">{ticket.priority_score ?? "—"}</span>
         </Badge>
       </TableCell>
@@ -540,7 +534,7 @@ function TicketCard({ ticket, returnQuery }: { ticket: AdminTicketRow; returnQue
       <CardContent className="flex flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <Link className="block truncate font-medium hover:underline" href={detailHref} title={ticket.title ?? undefined}>
+            <Link className="block truncate font-medium hover:text-primary hover:underline" href={detailHref} title={ticket.title ?? undefined}>
               {ticket.title ?? `Ticket #${ticket.id}`}
             </Link>
             <p className="font-mono text-xs text-muted-foreground">
@@ -556,7 +550,7 @@ function TicketCard({ ticket, returnQuery }: { ticket: AdminTicketRow; returnQue
           {ticket.barangay_name} {"·"} {ticket.assigned_office} {"·"} {ticket.member_count} member{ticket.member_count === 1 ? "" : "s"}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge className={priorityScoreBandClass(ticket.priority_score)} variant="outline">
+          <Badge className={urgencyBadge.className} variant="outline">
             <span className="font-mono tabular-nums">{ticket.priority_score ?? "—"}</span>
           </Badge>
           <Badge className={urgencyBadge.className} variant="outline">

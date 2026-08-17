@@ -16,11 +16,11 @@ interface UrgencyBandStyle {
 
 const URGENCY_BAND_STYLE: Record<UrgencyBand, UrgencyBandStyle> = {
   Low: {
-    hex: "#d99a00",
+    hex: "#5b7290",
     className: "bg-urgency-low-tint text-urgency-low-ink border border-urgency-low-edge",
   },
   Medium: {
-    hex: "#e2680e",
+    hex: "#a68300",
     className: "bg-urgency-medium-tint text-urgency-medium-ink border border-urgency-medium-edge",
   },
   High: {
@@ -51,10 +51,12 @@ const URGENCY_BADGE_CONFIG: Record<UrgencyLevel, Omit<UrgencyBadgeConfig, "level
   LOW: { label: "Low", className: "bg-urgency-low-tint text-urgency-low-ink border border-urgency-low-edge" },
 };
 
-// Ticket Queue's single badge helper: re-derives the level from the same
-// priorityScore the PRIORITY column renders, via the triage engine's own
-// threshold function — so the two columns can never show a mismatched
-// score/badge pair (the bug this replaces).
+// Ticket Queue's single badge helper: both the Hazard Urgency Score column
+// (raw number) and the Hazard Urgency Level column (label) call this and
+// render its className, so the two columns can never show a mismatched
+// score/badge pair for the same priority_score (the bug this replaces —
+// see docs/design-system.md 3.2 and TicketsWorkspace.tsx's TicketRow/
+// TicketCard).
 export function getUrgencyBadgeConfig(priorityScore: number | null): UrgencyBadgeConfig {
   if (priorityScore === null) {
     return { level: "LOW", label: "—", className: "bg-line-100 text-ink-500" };
