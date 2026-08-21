@@ -66,11 +66,43 @@ test("dashboard shows exactly three KPI cards: Active Tickets, Pending Work Orde
   await expect(kpiRow.getByText("Reports This Month", { exact: true })).toBeVisible();
 });
 
-test("only the Reports This Month KPI card renders the incident-trend sparkline", async ({ page }) => {
+// Each KPI card now has its own server-reconstructed history (incidentTrend,
+// activeTicketTrend from status_history, pendingWorkOrderTrend from
+// work_order_status_history), so all three render a sparkline. This
+// previously asserted the opposite — that only Reports This Month had one —
+// because the other two metrics had no history available at all.
+test("every KPI card renders exactly one sparkline from its own trend series", async ({ page }) => {
   await loginAdmin(page);
-  await expect(cardFor(page, "Reports This Month").locator('[data-slot="chart"]')).toHaveCount(1);
-  await expect(cardFor(page, "Active Tickets").locator('[data-slot="chart"]')).toHaveCount(0);
-  await expect(cardFor(page, "Pending Work Orders").locator('[data-slot="chart"]')).toHaveCount(0);
+  for (const label of ["Reports This Month", "Active Tickets", "Pending Work Orders"]) {
+    await expect(cardFor(page, label).locator('[data-slot="chart"]')).toHaveCount(1);
+  }
+});
+
+// Guards the honesty rule these sparklines exist under: each series is a
+// real point-in-time history whose final value must equal the headline count
+// on the same card. A sparkline synthesized from the KPI number, or one
+// scoped to a different office, would drift here.
+test("each KPI sparkline series ends at the card's own headline count", async ({ page }) => {
+  await loginAdmin(page);
+  const response = await page.request.get("/api/admin/dashboard?range=7");
+  expect(response.ok()).toBe(true);
+  const data = await response.json();
+
+  expect(data.activeTicketTrend).toHaveLength(7);
+  expect(data.pendingWorkOrderTrend).toHaveLength(7);
+  expectDailyBuckets(
+    data.activeTicketTrend.map((row: { date: string; count: number }) => ({
+      date: row.date,
+      report_count: row.count,
+    })),
+    7,
+  );
+
+  const lastActive = data.activeTicketTrend.at(-1).count;
+  expect(lastActive).toBe(data.kpis.active_count);
+
+  const lastPending = data.pendingWorkOrderTrend.at(-1).count;
+  expect(lastPending).toBe(data.officePerformanceSummary.pendingWorkOrders);
 });
 
 test("Highest Urgency Actions renders at most 5 rows and its View all link uses the verified Ticket Queue ordering", async ({ page }) => {
@@ -98,12 +130,20 @@ test("range filters, tables, and chart labels remain intact", async ({ page }) =
   const pending = page.waitForResponse(
     (response) => response.url().includes("/api/admin/dashboard?range=7") && response.status() === 200,
   );
-  await page.getByRole("radio", { name: "Last 7 Days" }).click();
+  // The range control is a Select, not the segmented ToggleGroup it used to
+  // be, so the interaction is open-then-choose (combobox -> option) rather
+  // than a single click on a radio.
+  await page.getByRole("combobox", { name: "Incident report date range" }).click();
+  await page.getByRole("option", { name: "Last 7 days" }).click();
   const data = await (await pending).json();
   expectDailyBuckets(data.incidentTrend, 7);
 
-  const dot = page.locator('[data-slot="chart"] .recharts-dot').first();
-  await dot.hover({ force: true });
+  // The incident trend renders as a bar chart, so the hover target is a bar
+  // rectangle — there is no .recharts-dot to grab (dots are an area/line
+  // affordance). The KPI sparkline is still an AreaChart, hence scoping to
+  // the trend card rather than the first [data-slot="chart"] on the page.
+  const bar = page.getByTestId("incident-trend-chart").locator(".recharts-bar-rectangle").first();
+  await bar.hover({ force: true });
   await expect(page.getByTestId("incident-chart-tooltip")).toBeVisible();
 
   expect(data.leaderboard.length).toBeLessThanOrEqual(5);

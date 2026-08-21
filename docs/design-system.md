@@ -101,18 +101,30 @@ charcoal, never pure black.
 
 **Brand — two steps, for contrast reasons.** A single orange cannot do both jobs:
 
+These are the values **as shipped** in `app/globals.css` (`:root`, the 2026-08 brand
+repoint against the PORAC-SDSS Brand Guidelines). An earlier revision of this table
+documented a different, never-shipped ramp (`#F26B1D` / `#C2410C` / `#FEF3EA` / `#F9C99E`);
+those hexes are gone — read `--brand*` in `globals.css` as the source of truth.
+
 | Token | Hex | Contrast vs. white | Use |
 |---|---|---|---|
-| `brand` | `#F26B1D` | 3.05:1 | Focus ring, active-nav indicator, accent borders, small non-text accents — passes the 3:1 UI-component threshold |
-| `brand-solid` | `#C2410C` | **5.18:1** | Filled primary buttons with white text — passes AA for text |
-| `brand-hover` | `#9A3E06` | — | Hover/active on filled controls |
-| `brand-subtle` | `#FEF3EA` | — | Active nav fill, selected row, active chip |
-| `brand-border` | `#F9C99E` | — | Border on `brand-subtle` fills |
-| `brand-text` | `#9A3E06` | — | Links and text on white or on `brand-subtle` |
+| `--brand` | `#FF7A00` | 2.61:1 | The guidelines' orange. Focus ring (`--ring`), active-nav indicator, accent borders, and **decorative** (`aria-hidden`) accent icons. See the contrast caveat below. |
+| `--brand-solid` | `#A85100` | **5.47:1** | `--primary` / `--sidebar-primary`. Filled primary buttons with white text, and any orange that carries text — passes AA |
+| `--brand-hover` | `#854000` | — | Hover/active on filled controls |
+| `--brand-subtle` | `#FFF4EB` | — | Active nav fill, selected row/toggle, active chip |
+| `--brand-border` | `#FFD9AD` | — | Border on `--brand-subtle` fills |
 
-`#F26B1D` **cannot** carry white button text at AA (3.05:1), which is why filled controls
-use the deeper `#C2410C`. This is an accessibility constraint, not a stylistic preference,
-and it is why the primary button reads slightly deeper than a pure Cloudflare orange.
+`#FF7A00` **cannot** carry white button text at AA, which is why filled controls use the
+deeper `#A85100` (same hue, 29°). This is an accessibility constraint, not a stylistic
+preference, and it is why the primary button reads deeper than the guidelines' swatch.
+
+**Contrast caveat on `--brand`.** At 2.61:1 it does not clear the 3:1 non-text floor in §8,
+so it must never be the *only* signal identifying a control or its state. It is used for
+focus rings (which always accompany a native focus change) and for `aria-hidden` icons that
+sit beside a visible text label — decorative, and therefore outside WCAG 1.4.11. Anything
+that carries meaning on its own takes `--brand-solid`.
+
+There is no `brand-text` token. Links and text-on-white use `--primary` (= `--brand-solid`).
 
 **Semantic states — kept distinct from brand.**
 
@@ -126,6 +138,30 @@ and it is why the primary button reads slightly deeper than a pure Cloudflare or
 `info` deliberately reuses the retiring institutional blue `#2B6CB0`: it is already in the
 codebase, already contrast-verified, and keeps a familiar hue in the system rather than
 introducing a tenth.
+
+**KPI deltas.** The dashboard KPI cards carry a week-over-week comparison
+(`DeltaIndicator`, `DashboardClient.tsx`), colored by the arithmetic sign of the change:
+
+| Token | Hex | Use |
+|---|---|---|
+| `--delta-up` | `#0F7A5A` (5.31:1) | Any increase |
+| `--delta-down` | `#B42318` (6.57:1) | Any decrease |
+| `--delta-flat` | `#6B7280` | No change |
+
+**This was a deliberate reversal, recorded so it is not "corrected" back by mistake.** An
+earlier revision colored these by *judgement* rather than sign — a rise in Active Tickets or
+Pending Work Orders rendered `--delta-down` red, on the grounds that a growing hazard backlog
+is bad news and that coloring it green repeats the failure mode behind `DESIGN.md` §4.4's
+rejection of green-for-Low. It was changed to the conventional up-is-green reading on
+request. The consequence is live and intended: a growing backlog reads green on those two
+cards.
+
+One deviation on record: `--delta-up`/`--delta-down` share a hue family with
+`--color-status-resolved-*`/`--color-status-rejected-*`, against §2.1 (one meaning per color
+channel). Accepted because they never share a form factor — a status is a tinted pill with a
+dot, a delta is bold inline text always carrying a `+`/`−` and an arrow, so neither is
+color-only. A *third* green wanting onto this dashboard should trigger a rethink rather than
+being added to the pile.
 
 ### 3.2 Semantic data palettes — TBD
 

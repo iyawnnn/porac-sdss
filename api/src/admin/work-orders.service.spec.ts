@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { WorkOrdersService } from './work-orders.service';
+import { workOrderStatusHistory } from '../db/schema';
 import type { AdminAuditService } from './admin-audit.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { AdminSession } from '../auth/session.service';
@@ -62,18 +63,41 @@ function chain(rowOrRows: Record<string, unknown> | Record<string, unknown>[]) {
 }
 
 function makeDb() {
+  // Every row handed to a work_order_status_history insert, in call order.
+  // That timeline is what makes the dashboard's Pending Work Orders
+  // sparkline reconstructable, and it is only trustworthy if written in the
+  // same transaction as the status write — so it needs real assertions, not
+  // just a mock that tolerates it.
+  const historyRows: Record<string, unknown>[] = [];
   const db: Record<string, unknown> = {
     select: jest.fn(),
-    insert: jest.fn(),
+    // Defaults to a chain rather than undefined so a test that only stubs
+    // the work_orders write doesn't crash on the history row that create()
+    // and setStatus() also append. Tests that care assert on historyRows.
+    insert: jest.fn((table: unknown) => {
+      const link = chain([]);
+      if (table === workOrderStatusHistory) {
+        (link as Record<string, unknown>).values = (
+          row: Record<string, unknown>,
+        ) => {
+          historyRows.push(row);
+          return link;
+        };
+      }
+      return link;
+    }),
     update: jest.fn(),
   };
   db.transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(db));
-  return db as unknown as PostgresJsDatabase & {
-    select: jest.Mock;
-    insert: jest.Mock;
-    update: jest.Mock;
-    transaction: jest.Mock;
-  };
+  return Object.assign(
+    db as unknown as PostgresJsDatabase & {
+      select: jest.Mock;
+      insert: jest.Mock;
+      update: jest.Mock;
+      transaction: jest.Mock;
+    },
+    { historyRows },
+  );
 }
 
 function makeDeps() {
@@ -290,6 +314,12 @@ describe('WorkOrdersService.create', () => {
         targetType: 'work_order',
       }),
     );
+    // Origin row: without it a work order never touched again would have no
+    // history at all, and the as-of trend query would have nothing to
+    // resolve it to on any date.
+    expect(db.historyRows).toEqual([
+      expect.objectContaining({ workOrderId: result.id, status: 'pending' }),
+    ]);
     // Office-wide notification (no assignedAdminId) rather than a targeted one.
     expect(notifyCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -474,6 +504,48 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
       db,
       expect.objectContaining({ actionType: 'work_order_completed' }),
     );
+    // The dashboard trend replays this table, so a transition that updates
+    // work_orders without appending here would leave the sparkline showing
+    // the work order as still pending forever.
+    expect(db.historyRows).toEqual([
+      expect.objectContaining({
+        workOrderId: 10,
+        status: 'completed',
+        adminId: MEO_OFFICER.adminId,
+        adminName: MEO_OFFICER.adminName,
+      }),
+    ]);
+  });
+
+  it('setStatus() appends one history row per transition, inside the same transaction as the status write', async () => {
+    const db = makeDb();
+    db.select.mockReturnValueOnce(chain(workOrderRow()));
+    db.update.mockReturnValueOnce(chain(workOrderRow({ status: 'in_progress' })));
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    await service.setStatus(10, 'in_progress', MEO_OFFICER);
+
+    expect(db.historyRows).toHaveLength(1);
+    expect(db.historyRows[0]).toMatchObject({ status: 'in_progress' });
+    // One transaction, and the history insert happened within it — the whole
+    // point, since a separate write could fail independently and desync the
+    // timeline from work_orders.status.
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('setStatus() records a cancelled transition, which sets no completed_at and so is invisible to any created_at/completed_at approximation', async () => {
+    const db = makeDb();
+    db.select.mockReturnValueOnce(chain(workOrderRow()));
+    db.update.mockReturnValueOnce(chain(workOrderRow({ status: 'cancelled' })));
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    await service.setStatus(10, 'cancelled', MEO_OFFICER);
+
+    expect(db.historyRows).toEqual([
+      expect.objectContaining({ status: 'cancelled' }),
+    ]);
   });
 
   it('update() never writes note bodies into audit metadata, only changed field names', async () => {
