@@ -58,6 +58,32 @@ Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[
 
 ## 3. Recently Completed Operational Features
 
+### Dashboard KPI Week-over-Week Deltas — **completed**
+
+All four `/admin` dashboard cards (Active Tickets, Pending Work Orders, Reports This Month, Incident Reports Over Time) now show a week-over-week comparison beside the headline number.
+
+`DashboardService.getKpiDeltas` computes it server-side against a **fixed 7-day baseline that does not move with the 7/30/90 range toggle**. Deriving it client-side from the existing sparkline series was rejected: those are cut to the toggle, so the same "vs last week" label would have meant "vs 89 days ago" at range=90, and at range=7 the oldest point is only 6 days back so a 7-day baseline does not exist there at all.
+
+Two comparison shapes, because the cards measure two different quantities. Active Tickets and Pending Work Orders are **levels** — today's count vs. the count on the baseline date, replayed from status history the same way the sparklines are. Reports is a **flow** — the last 7 days' total vs. the 7 days before it. Both report cards read the single `reports` delta: their headline numbers differ (month-to-date vs. range total) but both count citizen report submissions, so there is one honest number, not two.
+
+Color follows the **arithmetic sign**: any rise renders green (`--delta-up`), any fall red (`--delta-down`), on all four cards. This was a deliberate reversal and is recorded as one. The first implementation colored by judgement instead — a rise in Active Tickets or Pending Work Orders rendered red, since a growing hazard backlog is bad news, and the two report cards rendered a neutral brand-orange because more citizen reports could mean more hazards *or* better civic engagement and nothing in the system distinguishes them. That was changed on request to the conventional up-is-green convention; the consequence is intended and live, namely that a growing backlog now reads green. The brand-orange `--delta-flat` went away with it, which also retired the `docs/design-system.md` §2.2 "orange is chrome, never data" deviation this feature had briefly carried.
+
+**Known limitation, deliberately not smoothed over:** Pending Work Orders returns `null` — rendered as a dash, never a fabricated 0% — until `work_order_status_history` reaches back a full week, guarded in SQL by `baseline_covered`. This is the same migration-forward caveat the sparkline already carries. A zero baseline also yields `changePct: null` rather than an infinite percentage; the UI falls back to the absolute change.
+
+No schema change. `docs/design-system.md` §3.1 gained the `--delta-*` token table and both deviations on record.
+
+### Dashboard KPI Sparklines / Work Order Status History — **completed**
+
+All three `/admin` KPI cards (Active Tickets, Pending Work Orders, Reports This Month) now render a sparkline from real server-reconstructed history rather than only the one card that previously had a series available.
+
+Active Tickets needed no schema change: `status_history` already records every ticket transition, so `DashboardService.getActiveTicketTrend` replays each day's status as-of that date. Ticket creation deliberately writes no `status_history` row (`ReportsService.create` INSERTs the ticket directly), so a ticket with no history at or before a date resolves to `Reported` — without that fallback the series silently undercounts every date before a ticket's first admin action. Office scoping reads the ticket's *current* `assigned_office` and does not replay `office_reassignments`, deliberately, so the series' last point agrees with the `active_count` KPI it sits under.
+
+Pending Work Orders did require one: `work_orders` stores only the current status, so a `pending` → `in_progress` transition left no trace, and `cancelled` never sets `completed_at`, ruling out a `created_at`/`completed_at` approximation. New table `work_order_status_history` (migration `0027`), written in-transaction by `WorkOrdersService.create` (origin row) and `setStatus` (one row per transition). **Known limitation, deliberately not smoothed over:** history exists only from the migration forward. The migration seeds one origin row per pre-existing work order at its `created_at` with `pending`, so older work orders are represented rather than dropped, but real pre-migration transitions are unrecoverable — early dates in that series can read high until real history accumulates. Documented in `docs/database.md` and in the service docblock.
+
+Rejected alternative: deriving the work-order trend from `admin_audit_events`, which already logs status changes. That would couple a dashboard chart to a System-Administrator-only oversight trail, and the audit log is keyed on actor rather than on the work order.
+
+The E2E spec that asserted only Reports This Month had a chart was inverted to assert all three do, and a new spec pins each series' final value to its own card's headline count — a sparkline synthesized from the KPI number, or scoped to a different office, would drift there.
+
 ### Manuscript Alignment Phase 6 — Final verification and documentation cleanup — **completed**
 
 A verification-only pass across backend, frontend, tests, and docs to confirm Phases 1–5 are internally consistent and to close the gaps a repo-wide audit found. No production code changed — every fix in this phase is a test addition or a documentation correction.

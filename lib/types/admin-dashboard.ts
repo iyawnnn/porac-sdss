@@ -13,6 +13,41 @@ export interface IncidentTrendRow {
   report_count: number;
 }
 
+/**
+ * Daily point-in-time counts backing the KPI sparklines. Reconstructed
+ * server-side from status_history (tickets) and work_order_status_history
+ * (work orders) — see api/src/admin/dashboard.service.ts for the honesty
+ * caveats, particularly that work-order history only exists from its
+ * migration forward.
+ */
+export interface CountTrendRow {
+  date: string;
+  count: number;
+}
+
+/**
+ * One KPI card's week-over-week comparison, computed server-side against a
+ * fixed 7-day baseline that does NOT move with the range toggle — see
+ * api/src/admin/dashboard.service.ts getKpiDeltas for why, and for the
+ * level-vs-flow distinction between the cards.
+ *
+ * `changePct` is null when the baseline was 0 (a percentage off zero is
+ * undefined); render `changeAbs` in that case.
+ */
+export interface KpiDelta {
+  current: number;
+  previous: number;
+  changeAbs: number;
+  changePct: number | null;
+}
+
+export interface DashboardDeltas {
+  activeTickets: KpiDelta;
+  /** null until work_order_status_history reaches back a full week. */
+  pendingWorkOrders: KpiDelta | null;
+  reports: KpiDelta;
+}
+
 export interface DistributionRow {
   label: string;
   count: number;

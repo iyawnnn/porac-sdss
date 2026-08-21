@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { AlertTriangle, CalendarClock, Flame, ShieldAlert, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Bell, CalendarClock, Flame, ShieldAlert, type LucideIcon } from "lucide-react";
 import type { NeedsAttention as NeedsAttentionData } from "@/lib/types/admin-dashboard";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { CardBodyPanel } from "../shared/CardBodyPanel";
+import { CardHeaderRow } from "../shared/CardHeaderRow";
 
 // Compact awareness feed, not a work queue — one aggregate row per
 // condition (icon, label, count, short description), never a per-item list.
@@ -11,7 +13,7 @@ import { cn } from "@/lib/utils";
 function AttentionRow({ icon: Icon, tone, label, count, description, href }: { icon: LucideIcon; tone: string; label: string; count: number; description: string; href?: string }) {
   const nonzero = count > 0;
   const row = (
-    <div className="flex items-center gap-3 px-3 py-3">
+    <div className="flex items-center gap-3 px-4 py-3">
       <Icon aria-hidden="true" className={cn("size-4 shrink-0", nonzero ? tone : "text-muted-foreground")} />
       <div className="min-w-0 flex-1">
         <p className={cn("text-sm", nonzero ? "font-medium text-foreground" : "text-muted-foreground")}>{label}</p>
@@ -30,12 +32,15 @@ function AttentionRow({ icon: Icon, tone, label, count, description, href }: { i
 
 export function NeedsAttention({ data, flaggedReportsPending }: { data: NeedsAttentionData; flaggedReportsPending: number }) {
   return (
-    <Card aria-label="Needs attention" className="flex flex-col overflow-hidden rounded-lg border-2 border-input bg-secondary py-0 ring-0 dashboard:col-span-3" role="region">
-      <CardHeader className="py-3">
-        <CardTitle className="text-xs font-medium text-muted-foreground">Needs Attention</CardTitle>
+    <Card aria-label="Needs attention" className="flex flex-col gap-0 overflow-hidden rounded-xl bg-muted pt-2 pb-5 dashboard:col-span-3" role="region">
+      <CardHeader className="px-4 pb-2">
+        <CardHeaderRow>
+          <CardTitle className="text-xs font-medium text-muted-foreground">Needs Attention</CardTitle>
+          <Bell aria-hidden="true" className="size-5 shrink-0 text-[var(--brand)]" />
+        </CardHeaderRow>
       </CardHeader>
-      <div className="flex-1 p-3 pt-0">
-        <div className="flex flex-col divide-y divide-line-100 overflow-hidden rounded-md border border-input bg-card" data-testid="needs-attention-rows">
+      <CardBodyPanel className="flex flex-1 flex-col">
+        <div className="flex flex-col divide-y divide-border" data-testid="needs-attention-rows">
           {/* /admin/work-orders?overdue=true — real, existing WorkOrdersWorkspace filter. */}
           <AttentionRow
             count={data.overdueWorkOrders.length}
@@ -43,7 +48,7 @@ export function NeedsAttention({ data, flaggedReportsPending }: { data: NeedsAtt
             href="/admin/work-orders?overdue=true"
             icon={AlertTriangle}
             label="Overdue Work"
-            tone="text-red-600"
+            tone="text-destructive"
           />
           {/* No due-date-specific filter exists on Work Orders (only the
               boolean ?overdue=true above) — not linked rather than inventing one. */}
@@ -52,7 +57,7 @@ export function NeedsAttention({ data, flaggedReportsPending }: { data: NeedsAtt
             description="Work orders due today"
             icon={CalendarClock}
             label="Due Today"
-            tone="text-amber-600"
+            tone="text-urgency-medium"
           />
           {/* /admin/tickets?urgency=High — the closest existing Ticket Queue
               filter. A superset of "high urgency AND has open work"; there is
@@ -63,7 +68,7 @@ export function NeedsAttention({ data, flaggedReportsPending }: { data: NeedsAtt
             href="/admin/tickets?urgency=High"
             icon={Flame}
             label="High-Urgency Open Work"
-            tone="text-orange-600"
+            tone="text-urgency-critical"
           />
           <AttentionRow
             count={flaggedReportsPending}
@@ -71,10 +76,10 @@ export function NeedsAttention({ data, flaggedReportsPending }: { data: NeedsAtt
             href="/admin/flagged"
             icon={ShieldAlert}
             label="Flagged Reports Pending"
-            tone="text-purple-600"
+            tone="text-flag"
           />
         </div>
-      </div>
+      </CardBodyPanel>
     </Card>
   );
 }

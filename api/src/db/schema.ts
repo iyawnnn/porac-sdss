@@ -446,6 +446,27 @@ export const workOrders = pgTable('work_orders', {
   completedAt: timestamp('completed_at', { withTimezone: true }),
 });
 
+// Append-only status timeline for work orders — what status_history is to
+// tickets. work_orders carries only the current status, so without this
+// table a pending -> in_progress transition left no trace and "how many were
+// pending on date X" was unanswerable. Read by
+// DashboardService.getPendingWorkOrderTrend.
+//
+// No FK on admin_id, and admin_name is a write-time snapshot — same
+// reasoning as status_history.admin_id/office_reassignments.admin_id above.
+export const workOrderStatusHistory = pgTable('work_order_status_history', {
+  id: serial('id').primaryKey(),
+  workOrderId: integer('work_order_id')
+    .notNull()
+    .references(() => workOrders.id),
+  status: workOrderStatusEnum('status').notNull(),
+  adminId: integer('admin_id'),
+  adminName: text('admin_name'),
+  changedAt: timestamp('changed_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // Append-only trail for administrative actions (account create/role change,
 // ticket status/reassignment, report moderation) — System Administrator
 // visible only, see api/src/admin/admin-audit.service.ts. actor_* columns
