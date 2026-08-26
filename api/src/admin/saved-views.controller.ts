@@ -6,12 +6,13 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
-import { SavedViewsService } from './saved-views.service';
+import { SavedViewsService, parseSavedViewSurface } from './saved-views.service';
 
 // No SystemAdminGuard: a saved view is the caller's own private bookmark and
 // carries no office-scoped data of its own. SavedViewsService scopes every
@@ -21,9 +22,15 @@ import { SavedViewsService } from './saved-views.service';
 export class SavedViewsController {
   constructor(private readonly savedViews: SavedViewsService) {}
 
+  // `surface` is optional on both routes and falls back to 'tickets'. The
+  // Ticket Queue shipped before the column existed and still calls these
+  // without one — that request has to keep resolving to its own strip.
   @Get()
-  list(@CurrentAdmin() admin: AdminSession) {
-    return this.savedViews.list(admin);
+  list(
+    @CurrentAdmin() admin: AdminSession,
+    @Query('surface') surface: string | undefined,
+  ) {
+    return this.savedViews.list(admin, parseSavedViewSurface(surface));
   }
 
   @Post()
@@ -31,8 +38,14 @@ export class SavedViewsController {
     @CurrentAdmin() admin: AdminSession,
     @Body('name') name: unknown,
     @Body('query') query: unknown,
+    @Body('surface') surface: unknown,
   ) {
-    return this.savedViews.create(admin, name, query);
+    return this.savedViews.create(
+      admin,
+      name,
+      query,
+      parseSavedViewSurface(surface),
+    );
   }
 
   @Delete(':id')

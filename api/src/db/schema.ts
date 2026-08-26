@@ -485,6 +485,11 @@ export const adminSavedViews = pgTable('admin_saved_views', {
     .references(() => admins.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   query: text('query').notNull(),
+  // Which admin surface the preset belongs to ('tickets' | 'flagged'), so the
+  // two view strips stay disjoint. CHECK-constrained in 0029; existing rows
+  // backfilled to 'tickets' because that was the only surface that could
+  // write one before this column existed.
+  surface: text('surface').notNull().default('tickets'),
   position: integer('position').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()

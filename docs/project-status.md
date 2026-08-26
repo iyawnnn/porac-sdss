@@ -20,7 +20,7 @@ This file replaced two earlier documents that split the same material and each c
 
 **Phase: polish, testing, security hardening, and deployment readiness.** Not feature development.
 
-- **No new product feature is currently queued.** The pipeline that Barangay Insights and then Notification Center filled is clear, and the most recent audit found no remaining unfinished item of real product weight outside what §5 already defers. The most recent shipped work is the Ticket Queue rebuild (§3), which was a redesign of an existing surface plus the bulk-triage capability it needed, not a new surface.
+- **No new product feature is currently queued.** The pipeline that Barangay Insights and then Notification Center filled is clear, and the most recent audit found no remaining unfinished item of real product weight outside what §5 already defers. The most recent shipped work is the Flagged Reports rebuild (§3), which — like the Ticket Queue rebuild before it — was a redesign of an existing surface plus the bulk-moderation capability it needed, not a new surface.
 - **Current work should focus on** reliability hardening, security hardening, test coverage, documentation accuracy, and deployment readiness — all of which are enumerated in §4.
 - **Do not treat an empty feature queue as licence to start something new.** Read §6 before proposing a feature. If a genuinely new feature is justified, it belongs in §4 with a stated reason, not started directly.
 - **Nothing has been deployed.** No hosting platform, production database, domain, or verified email sending domain exists yet — see [`deployment-readiness.md`](deployment-readiness.md).
@@ -43,7 +43,7 @@ Verified against the current tree, not assumed:
 - Ticket Queue with URL-query filters — `?status=`, `?urgency=`, `?barangayId=` are real `TicketsService.parseTicketQuery` filters (`tickets/`)
 - Ticket Detail: reports, status tracker, assignment/reassignment panel, urgency decomposition, priority breakdown, resolution photo + notes (`tickets/[id]/`)
 - Interactive map with category/urgency/barangay/status filters and heatmap layer (`map/`)
-- Flagged Reports moderation queue — dismiss / quarantine / duplicate (`flagged/`)
+- Flagged Reports moderation queue — dismiss / quarantine / duplicate, singly or in bulk, with saved views and a CSV export (`flagged/`)
 - System Admin Management, Admin Activity Log, admin password management, account activation/deactivation (`admins/`, `activity-log/`, `account/`)
 
 **Platform**
@@ -73,6 +73,22 @@ Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[
 **Known limitation.** The artboard fits all ten columns at a 1440px full frame; the admin content column is ~960px at a 1280px viewport, so the table scrolls inside its own card below `queueMinWidth()` rather than collapsing the flexible Ticket column. The toolbar's column-visibility menu is the intended escape hatch. Page-level horizontal scroll is never introduced.
 
 One migration: `pnpm --prefix api migrate:admin-saved-views`. New spec `api/src/admin/tickets-queue.service.spec.ts` (21 tests) covers view-count office scoping, bulk eligibility, and the delegation properties above — including a route-ordering guard, since `bulk/reassign` matches `:id/reassign` with `:id = "bulk"` and Nest resolves by declaration order, not specificity.
+
+### Flagged Reports rebuild — **completed**
+
+`/admin/flagged` rebuilt onto the Precision Queue grammar, to the Claude Design artboards "2a Moderation queue" and "2b Review drawer". Behaviour is in [`features.md`](features.md) §3.5.
+
+**The design added no data.** Every column, KPI and filter in the artboards already existed on `ModerationQueueRow` / `ModerationStats` / `parseModerationQuery` — including the reporter's clean-submission rate and the average-resolution KPI. The moderation query and mutation logic were not touched.
+
+**Server.** Two additions. `admin_saved_views` gained a `surface` column (`'tickets' | 'flagged'`, migration `0029`) so the two view-tab strips stay disjoint — without it a Ticket Queue preset would replay `urgency=High` against a parser that has no such filter and silently resolve to no filters at all. The 12-preset cap and the same-name overwrite are now per surface, and a request omitting `surface` still means `'tickets'`, so the queue's existing calls were unchanged. And `GET /admin/reports/flagged.csv` joins the two existing exports, delegating to `ModerationService.parseModerationQuery` exactly as the others delegate to their own list parsers.
+
+**Bulk moderation has no bulk endpoint, deliberately.** The client loops `POST /admin/reports/:id/moderate`, which keeps one audit event and one citizen notification per report — the same trail as if a moderator had opened each one — and reports `{ ok, failed }` per id, because a mixed selection (some already decided) routinely half-succeeds. Reports that failed stay selected so they can be retried without being re-found. This differs from the Ticket Queue's bulk actions, which loop **server-side** because they also fan out emails and status history; moderation had no such fan-out to keep on one transaction boundary.
+
+**One deviation on record.** The flagged CSV does not carry the risk score the UI shows. `computeRiskScore` lives in `lib/utils/flag-risk.ts` (frontend-only, no server twin), and adding one would create a second copy of those weights to change-control alongside the urgency/scoring pair. The raw `flags` are exported instead — the score is derivable from them, the reverse is not.
+
+**Client.** `FlaggedWorkspace.tsx` split into a `flagged/queue/` folder mirroring `tickets/queue/`, with its own column model rather than a generalization of the queue's: the two surfaces share a visual grammar, not a row shape. `FlaggedQueueSkeleton` lays out from that model, so it cannot drift from the real table. `KpiBar.tsx` and `RiskMeter.tsx` were deleted — the redesign replaced both treatments and neither had another consumer. `FlagBadge` gained a `compact` size so the queue's 20px badge and Ticket Detail's full-size one stay one definition.
+
+One migration: `pnpm --prefix api migrate:saved-views-surface`. New spec `api/src/admin/saved-views.service.spec.ts` (7 tests) covers surface scoping and the per-surface cap; `reports.service.spec.ts` gained 5 for the flagged export's delegation, id whitelist and columns.
 
 ### Dashboard KPI Week-over-Week Deltas — **completed**
 

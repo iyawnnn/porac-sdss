@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import type { TicketsService } from './tickets.service';
 import type { WorkOrdersService } from './work-orders.service';
+import type { ModerationService } from './moderation.service';
 import type { AdminSession } from '../auth/session.service';
 
 const MEO_OFFICER: AdminSession = {
@@ -17,6 +18,8 @@ function makeService(overrides: {
   getTicketsForExport?: jest.Mock;
   parseQuery?: jest.Mock;
   getWorkOrdersForExport?: jest.Mock;
+  parseModerationQuery?: jest.Mock;
+  getModerationForExport?: jest.Mock;
 } = {}) {
   const tickets = {
     parseTicketQuery: overrides.parseTicketQuery ?? jest.fn().mockReturnValue({ office: 'MEO' }),
@@ -26,7 +29,18 @@ function makeService(overrides: {
     parseQuery: overrides.parseQuery ?? jest.fn().mockReturnValue({ office: 'MEO' }),
     getWorkOrdersForExport: overrides.getWorkOrdersForExport ?? jest.fn().mockResolvedValue([]),
   } as unknown as WorkOrdersService;
-  return { service: new ReportsService(tickets, workOrders), tickets, workOrders };
+  const moderation = {
+    parseModerationQuery:
+      overrides.parseModerationQuery ?? jest.fn().mockReturnValue({ office: 'MEO' }),
+    getModerationForExport:
+      overrides.getModerationForExport ?? jest.fn().mockResolvedValue([]),
+  } as unknown as ModerationService;
+  return {
+    service: new ReportsService(tickets, workOrders, moderation),
+    tickets,
+    workOrders,
+    moderation,
+  };
 }
 
 describe('ReportsService.parseDateRange', () => {
@@ -183,5 +197,85 @@ describe('ReportsService.workOrdersCsv', () => {
     const { service } = makeService({ getWorkOrdersForExport: jest.fn().mockResolvedValue([]) });
     const csv = await service.workOrdersCsv({}, MEO_OFFICER);
     expect(csv.trim().split('\r\n')).toHaveLength(1);
+  });
+});
+
+describe('ReportsService.flaggedCsv', () => {
+  it('delegates filter parsing (and office scoping) to ModerationService.parseModerationQuery', async () => {
+    const parseModerationQuery = jest
+      .fn()
+      .mockReturnValue({ office: 'MEO', status: 'pending' });
+    const { service, moderation } = makeService({ parseModerationQuery });
+
+    await service.flaggedCsv({ flag: 'NO_EXIF' }, MEO_OFFICER);
+
+    expect(parseModerationQuery).toHaveBeenCalledWith({ flag: 'NO_EXIF' }, MEO_OFFICER);
+    expect(moderation.getModerationForExport).toHaveBeenCalledWith(
+      expect.objectContaining({ office: 'MEO', status: 'pending' }),
+    );
+  });
+
+  // The export must not become a second authorization path: a caller asking
+  // for the other office still gets whatever resolveOfficeScope clamped them
+  // to inside parseModerationQuery, never the office they typed.
+  it('never widens office scope past what the parser returned', async () => {
+    const parseModerationQuery = jest.fn().mockReturnValue({ office: 'MEO' });
+    const { service, moderation } = makeService({ parseModerationQuery });
+
+    await service.flaggedCsv({ office: 'MDRRMO' }, MEO_OFFICER);
+
+    expect(moderation.getModerationForExport).toHaveBeenCalledWith(
+      expect.objectContaining({ office: 'MEO' }),
+    );
+  });
+
+  it('passes an explicit selection through as an id whitelist', async () => {
+    const { service, moderation } = makeService();
+
+    await service.flaggedCsv({ ids: '211, 215,211' }, MEO_OFFICER);
+
+    expect(moderation.getModerationForExport).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: [211, 215] }),
+    );
+  });
+
+  it('rejects a malformed id list', async () => {
+    const { service } = makeService();
+
+    await expect(service.flaggedCsv({ ids: '211,abc' }, MEO_OFFICER)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('renders flagged rows into stable CSV columns', async () => {
+    const getModerationForExport = jest.fn().mockResolvedValue([
+      {
+        id: 211,
+        ticket_id: 1036,
+        title: 'Lahar / Debris-Flow Threat in Sapang Uwak',
+        category: 'Lahar / Debris-Flow Threat',
+        barangay_name: 'Sapang Uwak',
+        assigned_office: 'MDRRMO',
+        citizen_name: 'Maria Santos',
+        citizen_severity: 'Critical',
+        flags: ['DUPLICATE_IMAGE:96', 'LOCATION_MISMATCH'],
+        location_mismatch_m: 412,
+        moderation_status: null,
+        moderated_by: null,
+        moderated_at: null,
+        created_at: '2026-08-20T08:12:00.000Z',
+      },
+    ]);
+    const { service } = makeService({ getModerationForExport });
+
+    const csv = await service.flaggedCsv({}, MEO_OFFICER);
+    const [header, row] = csv.trim().split('\r\n');
+
+    expect(header).toContain('Report ID');
+    expect(header).toContain('Flags');
+    expect(row).toContain('211');
+    expect(row).toContain('DUPLICATE_IMAGE:96 | LOCATION_MISMATCH');
+    // Pending is the absence of a stored decision, not a null cell.
+    expect(row).toContain('pending');
   });
 });
