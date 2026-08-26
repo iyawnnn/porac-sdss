@@ -245,17 +245,30 @@ Admin is the compact column, citizen the generous one. Weight and tracking are s
 | Body | 14 / 20 | **16 / 24 (hard floor)** | 400 | 0 | Inter |
 | Body emphasis | 14 / 20 | 16 / 24 | 500 | 0 | Inter |
 | Label (form, KPI) | 12 / 16 | 14 / 20 | 500 | 0 | Inter |
-| Table header | 11 / 16 | — | 600 | +0.06em, uppercase | Inter |
+| Micro-label (Queue KPI) | 11 / 16 | — | 600 | +0.08em, uppercase | Inter |
+| Table header | 10 / 16 | — | 700 | +0.09em, uppercase | Inter |
 | Table cell | 13 / 18 | — | 400, `tnum` | 0 | Inter |
 | Caption / helper | 12 / 16 | 13 / 18 | 400 | 0 | Inter |
 | Numeric KPI value | 28 / 32 | 24 / 30 | 600, `tnum` | −0.02em | Inter |
 | Badge | 11 / 16 | 12 / 16 | 500 | +0.01em | Inter |
 | Data (IDs, coordinates) | 12 / 16 | 13 / 18 | 400, `tnum` | 0 | **Geist Mono** |
 
-**Uppercase is confined to table headers.** It is not used for navigation, buttons, or
-section headings. This supersedes `DESIGN.md` v3's blanket "no uppercase transform" rule:
-v3 was never implemented, the existing `HEAD_CLASS` already does this, and micro-caps table
-headers are a genuine part of the target register.
+**Uppercase is confined to table headers and Queue KPI micro-labels.** It is not used for
+navigation, buttons, or section headings. This supersedes `DESIGN.md` v3's blanket "no
+uppercase transform" rule: v3 was never implemented, the existing `TABLE_HEAD_CLASS`
+already does this, and micro-caps table headers are a genuine part of the target register.
+
+The Queue KPI micro-label is the single deliberate extension, added with the Precision
+Queue rebuild (§5.8). Those five tiles sit directly above a table whose headers are
+micro-caps; setting the tile labels in sentence case made the KPI row read as a separate
+design from the table three rows below it. The extension is scoped to that one row — it is
+not a licence to uppercase any label anywhere.
+
+`TABLE_HEAD_CLASS` (`components/features/admin/shared/tableHead.ts`) is the single
+definition of the table-header setting and is shared by the Dashboard and the Queue. It was
+retuned from 11/600/+0.06em to 10/700/+0.09em with the Queue rebuild: the Queue's header
+strip sits on `--color-surface-subtle` rather than white, and at the old setting the labels
+competed with the 13px row text beneath them.
 
 **The 16px citizen input floor is non-negotiable.** Below 16px, iOS Safari zooms the
 viewport on input focus — disorienting for someone reporting a hazard outdoors, one-handed.
@@ -335,6 +348,47 @@ only for large empty-state illustrations.
 120ms for color and opacity on hover/focus; 150ms for layered enter/exit. No entrance
 animations, no scroll-triggered effects. `prefers-reduced-motion` is already respected
 globally and must stay that way.
+
+### 5.8 The two admin card treatments
+
+There are **two** card treatments in the admin shell, and which one applies is decided by
+the surface, not by taste. Do not mix them within one page.
+
+**Dashboard treatment — gray frame.** `Card` with `bg-muted pt-2 pb-5` and a white
+`CardBodyPanel` inset 5px left/right. The gray reads as a frame and the strip above the
+panel is the header band. Used by `DashboardClient.tsx` and every card on `/admin`. Two
+coupled invariants: the card's `pt-2` must equal the header's `pb-2` (that equality is what
+centers the band), and the card's `pb-5` is paired to `CardBodyPanel`'s `mb-[-17px]`.
+
+**Queue treatment — plain white card.** A single `rounded-xl border border-border bg-card`
+container with no gray frame, introduced by the Precision Queue rebuild of `/admin/tickets`
+and matching the Claude Design artboard "1a Precision queue". Used by the Queue's five KPI
+tiles and by its one table card.
+
+The Queue does not use the gray frame because its table card already stacks four bands that
+each need their own fill — toolbar (`--card`), selection bar (`--brand-subtle`), header strip
+(`--color-surface-subtle`), footer strip (`--color-surface-subtle`). A gray frame around
+those reads as a fifth band and the card stops having a legible edge. `--color-surface-subtle`
+(#fafafa) is the lateral tint §5.1 already allows for table headers, footers and inset wells;
+it is not a fourth elevation step.
+
+Both treatments are `rounded-xl` (11.2px at the 8px base) and carry no shadow (§5.4). The
+Dashboard is deliberately **not** migrated to the Queue treatment — its cards are stat tiles
+with a header band, and the frame is what separates label from value there.
+
+Two more Queue-surface rules:
+
+- **The table is a CSS grid, not `<table>`.** Ten columns at fixed px tracks cannot be
+  expressed with table auto-layout, which re-derives widths from cell content. Tracks live
+  in `components/features/admin/tickets/queue/columns.ts`, which is the single source for
+  the header strip, the rows *and* `TicketQueueSkeleton` — that import is what now enforces
+  the §5.5 skeleton-matches-grid rule instead of a hand-synced `COLUMN_COUNT`.
+- **Wide tables scroll inside their own card, never on the page body.** The fixed tracks
+  cannot compress, so below `queueMinWidth()` the flexible Ticket column would otherwise
+  absorb the whole shortfall and collapse. The admin content column is ~960px at a 1280px
+  viewport against the 1440px full-frame width the artboard was drawn at, so this is the
+  common case, not an edge case. The toolbar's column-visibility menu is the real escape
+  hatch: hiding columns lowers the floor.
 
 ---
 
@@ -428,8 +482,11 @@ Explicitly banned:
 - **Duplicate color definitions.** One token, one definition. Leaflet hex mirrors are
   generated from the token source, never hand-maintained.
 - **A fourth elevation level.** Three surfaces, no nested card-in-card-in-card.
+- **Mixing the two card treatments on one page** (§5.8). A page is either gray-frame or
+  plain-white throughout.
+- **Page-level horizontal scroll.** A wide table scrolls inside its own container.
 - **Shadows as default elevation.** Borders first.
-- **Uppercase micro-copy outside table headers.**
+- **Uppercase micro-copy outside table headers and Queue KPI micro-labels** (§4.2, §5.8).
 - **Oversized headings in operational views.** A dashboard title never out-competes its data.
 
 ---

@@ -1,23 +1,54 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { DownloadIcon, SearchIcon, SearchXIcon } from "lucide-react";
-import type { AdminTicketRow, PaginatedTickets } from "@/lib/types/admin-tickets";
-import { TICKET_STATUSES, TICKET_CATEGORIES, ALL_TICKET_CATEGORIES, PAGE_LIMITS, type TicketSort } from "@/lib/types/admin-ticket-constants";
+import {
+  ActivityIcon,
+  CloudRainIcon,
+  DownloadIcon,
+  GaugeIcon,
+  MapPinIcon,
+  TicketIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import type {
+  BulkActionResult,
+  PaginatedTickets,
+  SavedView,
+  TicketViewCounts,
+} from "@/lib/types/admin-tickets";
+import {
+  ALL_TICKET_CATEGORIES,
+  PAGE_LIMITS,
+  TICKET_STATUSES,
+  type TicketSort,
+} from "@/lib/types/admin-ticket-constants";
 import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
-import { relativeAge } from "@/lib/utils/ui/time";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
-import { StatusPill } from "../shared/StatusPill";
 import { AdminErrorCard } from "../shared/AdminErrorCard";
+import type { QueueColumnKey, QueueColumnVisibility, QueueDensity } from "./queue/columns";
+import type { QueueFilterValues } from "./queue/QueueFiltersPopover";
+import { QueueBulkBar } from "./queue/QueueBulkBar";
+import { QueuePagination } from "./queue/QueuePagination";
+import { QueueTable } from "./queue/QueueTable";
+import { QueueToolbar, type FilterChip } from "./queue/QueueToolbar";
+import {
+  buildBuiltInViews,
+  QueueViewTabs,
+  type BuiltInViewKey,
+} from "./queue/QueueViewTabs";
+import { useQueueKeyboard } from "./queue/useQueueKeyboard";
+import { useQueueSelection } from "./queue/useQueueSelection";
 
 interface RecomputeResult {
   updated: number;
@@ -29,8 +60,8 @@ interface Barangay {
   name: string;
 }
 
-// Mirrors the URL exactly (all strings) — separate from lib/admin/tickets's
-// typed AdminTicketFilters, which is the DB-query shape.
+// Mirrors the URL exactly (all strings) — separate from the API's typed
+// AdminTicketFilters, which is the DB-query shape.
 interface QueryState {
   office: string;
   status: string;
@@ -44,7 +75,10 @@ interface QueryState {
   limit: number;
 }
 
-function initialQueryState(query: Record<string, string | undefined>, sessionOffice?: string): QueryState {
+function initialQueryState(
+  query: Record<string, string | undefined>,
+  sessionOffice?: string,
+): QueryState {
   const office =
     query.office === "all" || query.office === "MEO" || query.office === "MDRRMO"
       ? query.office
@@ -55,10 +89,18 @@ function initialQueryState(query: Record<string, string | undefined>, sessionOff
     (TICKET_STATUSES as string[]).includes(query.status ?? "")
       ? (query.status as string)
       : "active";
-  const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "";
-  const urgency = query.urgency === "Low" || query.urgency === "Medium" || query.urgency === "High" ? query.urgency : "";
-  const sort: TicketSort = query.sort === "priority_asc" || query.sort === "newest" ? query.sort : "priority_desc";
-  const limit = (PAGE_LIMITS as readonly number[]).includes(Number(query.limit)) ? Number(query.limit) : 15;
+  const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "")
+    ? (query.category as string)
+    : "";
+  const urgency =
+    query.urgency === "Low" || query.urgency === "Medium" || query.urgency === "High"
+      ? query.urgency
+      : "";
+  const sort: TicketSort =
+    query.sort === "priority_asc" || query.sort === "newest" ? query.sort : "priority_desc";
+  const limit = (PAGE_LIMITS as readonly number[]).includes(Number(query.limit))
+    ? Number(query.limit)
+    : 15;
 
   return {
     office,
@@ -89,30 +131,27 @@ function buildParams(state: QueryState): URLSearchParams {
   return params;
 }
 
-function getPageNumbers(current: number, total: number): (number | "ellipsis")[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const keep = new Set([1, total, current - 1, current, current + 1].filter((p) => p >= 1 && p <= total));
-  const sorted = [...keep].sort((a, b) => a - b);
-  const result: (number | "ellipsis")[] = [];
-  let prev = 0;
-  for (const p of sorted) {
-    if (prev && p - prev > 1) result.push("ellipsis");
-    result.push(p);
-    prev = p;
-  }
-  return result;
+// A built-in tab is "active" only when the filter state is EXACTLY what that
+// tab sets — never a loose match. A tab underlined while an extra category or
+// barangay filter is also narrowing the list would misreport what is on screen,
+// so an ad-hoc combination underlines nothing.
+function matchBuiltInView(state: QueryState, defaultOffice: string): BuiltInViewKey | null {
+  if (state.status !== "active" || state.category || state.barangayId || state.search) return null;
+  if (state.disputed) return state.urgency || state.office !== defaultOffice ? null : "disputed";
+  if (state.urgency === "High") return state.office !== defaultOffice ? null : "highUrgency";
+  if (state.urgency) return null;
+  if (state.office === "MEO" && defaultOffice !== "MEO") return "meo";
+  if (state.office === "MDRRMO" && defaultOffice !== "MDRRMO") return "mdrrmo";
+  if (state.office === defaultOffice) return "allActive";
+  return null;
 }
-
-function formatCreatedDate(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-const HEAD_CLASS = "text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase";
 
 export function TicketsWorkspace({
   initialData,
   initialQuery,
   initialRecompute,
+  initialViewCounts,
+  initialSavedViews,
   barangays,
   sessionOffice,
   isSystemAdmin = false,
@@ -120,26 +159,44 @@ export function TicketsWorkspace({
   initialData: PaginatedTickets;
   initialQuery: Record<string, string | undefined>;
   initialRecompute: RecomputeResult;
+  initialViewCounts: TicketViewCounts;
+  initialSavedViews: SavedView[];
   barangays: Barangay[];
   sessionOffice?: string;
   isSystemAdmin?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const defaultOffice = sessionOffice ?? "all";
 
-  const [query, setQuery] = useState<QueryState>(() => initialQueryState(initialQuery, sessionOffice));
+  const [query, setQuery] = useState<QueryState>(() =>
+    initialQueryState(initialQuery, sessionOffice),
+  );
   const [searchInput, setSearchInput] = useState(query.search);
   const [data, setData] = useState(initialData);
-  const [, setRecompute] = useState(initialRecompute);
+  const [recompute, setRecompute] = useState(initialRecompute);
+  const [viewCounts, setViewCounts] = useState(initialViewCounts);
+  const [savedViews, setSavedViews] = useState(initialSavedViews);
+  const [activeSavedViewId, setActiveSavedViewId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refetchNonce, setRefetchNonce] = useState(0);
 
+  const [columnVisibility, setColumnVisibility] = useState<QueueColumnVisibility>({});
+  const [density, setDensity] = useState<QueueDensity>("comfortable");
+
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ action: string; result: BulkActionResult } | null>(
+    null,
+  );
+  const [saveViewOpen, setSaveViewOpen] = useState(false);
+  const [saveViewName, setSaveViewName] = useState("");
+
   const skipFetchRef = useRef(true);
   const skipSearchDebounceRef = useRef(true);
 
-  // Debounce the search box into query.search (and reset to page 1) rather
-  // than refetching on every keystroke.
+  // Debounce the search box into query.search (and reset to page 1) rather than
+  // refetching on every keystroke.
   useEffect(() => {
     if (skipSearchDebounceRef.current) {
       skipSearchDebounceRef.current = false;
@@ -171,6 +228,10 @@ export function TicketsWorkspace({
         if (cancelled) return;
         setData(json);
         setRecompute(json.recompute);
+        // The tab counts are recounted server-side on every list fetch, so a
+        // bulk action that moves tickets out of a tab updates that tab's number
+        // in the same round trip as the rows.
+        if (json.viewCounts) setViewCounts(json.viewCounts);
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load tickets.");
@@ -183,418 +244,475 @@ export function TicketsWorkspace({
     };
   }, [query, pathname, router, refetchNonce]);
 
-  function updateFilter(patch: Partial<QueryState>) {
-    setQuery((q) => ({ ...q, ...patch, page: 1 }));
-  }
+  const visibleIds = useMemo(() => data.tickets.map((t) => t.id), [data.tickets]);
+  const selection = useQueueSelection(visibleIds);
+  const { selectedIds, clear: clearSelection } = selection;
 
-  function resetFilters() {
-    setSearchInput("");
-    setQuery({ office: sessionOffice ?? "all", status: "active", category: "", barangayId: "", urgency: "", sort: "priority_desc", search: "", disputed: false, page: 1, limit: query.limit });
+  const returnQuery = buildParams(query).toString();
+  const detailHref = useCallback(
+    (id: number) =>
+      `/admin/tickets/${id}?from=${encodeURIComponent(`/admin/tickets?${returnQuery}`)}`,
+    [returnQuery],
+  );
+
+  const openTicket = useCallback(
+    (id: number) => router.push(detailHref(id)),
+    [router, detailHref],
+  );
+  const { focusedId, setFocusedId } = useQueueKeyboard({
+    ids: visibleIds,
+    onToggleSelect: selection.toggle,
+    onOpen: openTicket,
+    // Disabled while a bulk action is in flight so J/K cannot move the ring
+    // under a selection that is mid-mutation.
+    enabled: !bulkBusy,
+  });
+
+  function updateFilter(patch: Partial<QueryState>) {
+    setActiveSavedViewId(null);
+    setQuery((q) => ({ ...q, ...patch, page: 1 }));
   }
 
   function retry() {
     setRefetchNonce((n) => n + 1);
   }
 
-  const hasActiveFilters =
-    query.office !== (sessionOffice ?? "all") ||
-    query.status !== "active" ||
-    query.category !== "" ||
-    query.barangayId !== "" ||
-    query.urgency !== "" ||
-    query.search !== "" ||
-    query.disputed ||
-    query.sort !== "priority_desc";
+  // --- View tabs -----------------------------------------------------------
+  const builtInViews = buildBuiltInViews(viewCounts, { showOfficeTabs: isSystemAdmin });
+  const activeViewKey = activeSavedViewId === null ? matchBuiltInView(query, defaultOffice) : null;
+
+  function selectBuiltInView(key: BuiltInViewKey) {
+    setSearchInput("");
+    setActiveSavedViewId(null);
+    setQuery((q) => ({
+      ...q,
+      office: key === "meo" ? "MEO" : key === "mdrrmo" ? "MDRRMO" : defaultOffice,
+      status: "active",
+      category: "",
+      barangayId: "",
+      urgency: key === "highUrgency" ? "High" : "",
+      search: "",
+      disputed: key === "disputed",
+      page: 1,
+    }));
+  }
+
+  function selectSavedView(view: SavedView) {
+    // Replayed through the same parser the address bar uses, so a stored
+    // office= is still clamped by resolveOfficeScope server-side — a saved view
+    // is a bookmark, never a grant.
+    const parsed = initialQueryState(
+      Object.fromEntries(new URLSearchParams(view.query).entries()),
+      sessionOffice,
+    );
+    setSearchInput(parsed.search);
+    setQuery({ ...parsed, page: 1 });
+    setActiveSavedViewId(view.id);
+  }
+
+  async function saveCurrentView() {
+    const name = saveViewName.trim();
+    if (!name) return;
+    setSaveViewOpen(false);
+    setSaveViewName("");
+    try {
+      const res = await fetch("/api/admin/saved-views", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, query: buildParams(query).toString() }),
+      });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const saved: SavedView = await res.json();
+      setSavedViews((views) => {
+        const rest = views.filter((v) => v.id !== saved.id);
+        return [...rest, saved].sort((a, b) => a.position - b.position || a.id - b.id);
+      });
+      setActiveSavedViewId(saved.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save this view.");
+    }
+  }
+
+  async function deleteSavedView(view: SavedView) {
+    setSavedViews((views) => views.filter((v) => v.id !== view.id));
+    if (activeSavedViewId === view.id) setActiveSavedViewId(null);
+    try {
+      await fetch(`/api/admin/saved-views/${view.id}`, { method: "DELETE" });
+    } catch {
+      // The tab is already gone from the strip; a failed delete resurfaces on
+      // the next full page load rather than snapping back mid-interaction.
+    }
+  }
+
+  // --- Bulk actions --------------------------------------------------------
+  // Every bulk call refetches the list afterwards rather than patching rows in
+  // place: the server may have skipped some tickets, recomputed urgency, and
+  // moved rows out of the current filter entirely. Re-reading is the only way
+  // the rows, the tab counts and the KPI row stay consistent with each other.
+  const runBulk = useCallback(
+    async (action: string, url: string, body: Record<string, unknown>) => {
+      setBulkBusy(true);
+      setBulkResult(null);
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, ticketIds: selectedIds }),
+        });
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        const result: BulkActionResult = await res.json();
+        setBulkResult({ action, result });
+        clearSelection();
+        setRefetchNonce((n) => n + 1);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "The bulk action failed.");
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [selectedIds, clearSelection],
+  );
+
+  // A single row's status chevron reuses the bulk endpoint with one id rather
+  // than the single-ticket route: advanceStatus for a non-Resolved transition
+  // needs no photo, and going through the same path means the row menu and the
+  // bulk bar can never disagree about what "advance" means.
+  const advanceOne = useCallback(
+    async (id: number) => {
+      setBulkBusy(true);
+      setBulkResult(null);
+      try {
+        const res = await fetch("/api/admin/tickets/bulk/advance-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ticketIds: [id] }),
+        });
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        const result: BulkActionResult = await res.json();
+        setBulkResult({ action: "Advance status", result });
+        setRefetchNonce((n) => n + 1);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not advance this ticket.");
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [],
+  );
+
+  // --- Derived display -----------------------------------------------------
+  const filters: QueueFilterValues = {
+    office: query.office,
+    status: query.status,
+    category: query.category,
+    barangayId: query.barangayId,
+    urgency: query.urgency,
+    disputed: query.disputed,
+  };
+
+  const barangayName = barangays.find((b) => String(b.id) === query.barangayId)?.name;
+  const filterChips: FilterChip[] = [
+    query.office !== defaultOffice ? { key: "office", label: `Office: ${query.office}` } : null,
+    query.status !== "active" ? { key: "status", label: `Status: ${query.status === "all" ? "All" : query.status}` } : null,
+    query.category ? { key: "category", label: `Category: ${query.category}` } : null,
+    query.barangayId ? { key: "barangayId", label: `Barangay: ${barangayName ?? query.barangayId}` } : null,
+    query.urgency ? { key: "urgency", label: `Urgency: ${query.urgency}` } : null,
+    query.disputed ? { key: "disputed", label: "Disputed only" } : null,
+  ].filter((chip): chip is FilterChip => chip !== null);
+
+  function removeChip(key: string) {
+    switch (key) {
+      case "office":
+        return updateFilter({ office: defaultOffice });
+      case "status":
+        return updateFilter({ status: "active" });
+      case "category":
+        return updateFilter({ category: "" });
+      case "barangayId":
+        return updateFilter({ barangayId: "" });
+      case "urgency":
+        return updateFilter({ urgency: "" });
+      case "disputed":
+        return updateFilter({ disputed: false });
+    }
+  }
+
+  function clearAllFilters() {
+    setSearchInput("");
+    setActiveSavedViewId(null);
+    setQuery((q) => ({
+      ...q,
+      office: defaultOffice,
+      status: "active",
+      category: "",
+      barangayId: "",
+      urgency: "",
+      search: "",
+      disputed: false,
+      page: 1,
+    }));
+  }
 
   const from = data.total === 0 ? 0 : (data.page - 1) * data.limit + 1;
   const to = Math.min(data.total, data.page * data.limit);
-  const returnQuery = buildParams(query).toString();
-  const sortedBarangays = [...barangays].sort((a, b) => a.name.localeCompare(b.name));
 
-  // KPI row is derived entirely from the page's own already-loaded data (no
-  // extra fetches): data.total is the server-computed count across all
-  // filtered results, everything else is scoped to the current page of rows.
-  const activeCount = data.tickets.filter((t) => t.status === "Reported" || t.status === "Under Review" || t.status === "In Progress").length;
-  const highPriorityCount = data.tickets.filter((t) => getUrgencyBadgeConfig(t.priority_score).level === "HIGH").length;
-  const scoredTickets = data.tickets.map((t) => t.priority_score).filter((s): s is number => s !== null);
-  const avgUrgencyScore = scoredTickets.length ? Math.round(scoredTickets.reduce((sum, s) => sum + s, 0) / scoredTickets.length) : null;
-  const activeBarangayCount = new Set(data.tickets.map((t) => t.barangay_id)).size;
+  // KPI row is derived from the page's own already-loaded data (no extra
+  // fetches): data.total is the server-computed count across all filtered
+  // results, everything else is scoped to the current page of rows — which is
+  // why each tile carries a note saying which of the two it is.
+  const activeCount = data.tickets.filter(
+    (t) => t.status === "Reported" || t.status === "Under Review" || t.status === "In Progress",
+  ).length;
+  const highUrgencyCount = data.tickets.filter(
+    (t) => getUrgencyBadgeConfig(t.priority_score).level === "HIGH",
+  ).length;
+  const scored = data.tickets.map((t) => t.priority_score).filter((s): s is number => s !== null);
+  const avgUrgency = scored.length
+    ? Math.round(scored.reduce((sum, s) => sum + s, 0) / scored.length)
+    : null;
+  const barangayCount = new Set(data.tickets.map((t) => t.barangay_id)).size;
+
+  const exportParams = buildParams(query);
+  const selectionExportParams = new URLSearchParams(exportParams);
+  selectionExportParams.set("ids", selectedIds.join(","));
+
+  const sortLabel =
+    query.sort === "newest" ? "newest first" : query.sort === "priority_asc" ? "lowest hazard urgency" : "hazard urgency";
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-[24px] leading-8 font-semibold tracking-[-0.02em]">Ticket Queue</h1>
-          <p className="text-xs text-muted-foreground">Current workload summary</p>
+    <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[26px] leading-8 font-semibold tracking-[-0.02em]">Ticket Queue</h1>
+          <p className="mt-1.5 text-[13px] text-muted-foreground">
+            {data.total.toLocaleString()} ticket{data.total === 1 ? "" : "s"} across{" "}
+            {barangayCount} barangay{barangayCount === 1 ? "" : "s"} &middot; sorted by {sortLabel}
+          </p>
         </div>
-        <Button asChild size="sm" variant="outline">
-          <a href={`/api/admin/reports/tickets.csv?${buildParams(query).toString()}`}>
-            <DownloadIcon />
-            Export CSV
-          </a>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* initialRecompute was fetched and discarded before this rebuild. It
+              is the freshest thing on the page — the rain figure every urgency
+              score was just recomputed against — and belongs beside the data it
+              explains rather than in the layout's app header, which has no
+              access to it. */}
+          <span className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-[var(--brand-border)] bg-[var(--brand-subtle)] px-2.5 text-xs font-medium text-primary">
+            <CloudRainIcon aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
+            Rain {recompute.rain1hMm.toFixed(1)} mm/h &middot; {recompute.updated} urgency score
+            {recompute.updated === 1 ? "" : "s"} recomputed
+          </span>
+          <Button asChild size="sm" variant="outline">
+            <a href={`/api/admin/reports/tickets.csv?${exportParams.toString()}`}>
+              <DownloadIcon />
+              Export CSV
+            </a>
+          </Button>
+        </div>
       </div>
+
+      <QueueViewTabs
+        activeKey={activeViewKey}
+        activeSavedViewId={activeSavedViewId}
+        onDeleteSaved={deleteSavedView}
+        onSaveCurrent={() => setSaveViewOpen(true)}
+        onSelectBuiltIn={selectBuiltInView}
+        onSelectSaved={selectSavedView}
+        savedViews={savedViews}
+        views={builtInViews}
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard label="Total Tickets" value={data.total.toLocaleString()} />
-        <KpiCard label="Active Tickets" value={activeCount.toLocaleString()} />
-        <KpiCard label="High Urgency" value={highPriorityCount.toLocaleString()} />
-        <KpiCard label="Avg. Hazard Urgency" value={avgUrgencyScore === null ? "—" : String(avgUrgencyScore)} />
-        <KpiCard label="Active Barangays" value={activeBarangayCount.toLocaleString()} />
+        <KpiCard icon={TicketIcon} label="Total tickets" note="all filters" value={data.total.toLocaleString()} />
+        <KpiCard icon={ActivityIcon} label="Active" note="on this page" value={activeCount.toLocaleString()} />
+        <KpiCard icon={TriangleAlertIcon} label="High urgency" note="&ge; 70" value={highUrgencyCount.toLocaleString()} />
+        <KpiCard icon={GaugeIcon} label="Avg. urgency" note="of 100" value={avgUrgency === null ? "—" : String(avgUrgency)} />
+        <KpiCard icon={MapPinIcon} label="Barangays" note="affected" value={barangayCount.toLocaleString()} />
       </div>
 
-      <Card className="gap-0">
-        <CardContent className="flex flex-wrap items-center gap-3 border-b p-3">
-          <div className="relative w-full max-w-[380px]">
-            <SearchIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              aria-label="Search tickets"
-              className="pl-8"
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search by ticket ID, title, or barangay..."
-              type="search"
-              value={searchInput}
-            />
-          </div>
-          {isSystemAdmin ? (
-            <Select onValueChange={(v) => updateFilter({ office: v })} value={query.office}>
-              <SelectTrigger aria-label="Office"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All offices</SelectItem>
-                <SelectItem value="MEO">MEO</SelectItem>
-                <SelectItem value="MDRRMO">MDRRMO</SelectItem>
-              </SelectContent>
-            </Select>
-          ) : (
-            // Non-system-admins can't view another office's tickets — the
-            // backend clamps this regardless of what's sent, so the picker
-            // is replaced with a fixed label instead of a control that
-            // would look interactive but do nothing.
-            <Badge aria-label="Office" variant="secondary">My Office: {sessionOffice}</Badge>
-          )}
-          <Select onValueChange={(v) => updateFilter({ status: v })} value={query.status}>
-            <SelectTrigger aria-label="Status"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active / Open</SelectItem>
-              <SelectItem value="all">All statuses</SelectItem>
-              {TICKET_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select onValueChange={(v) => updateFilter({ category: v === "all" ? "" : v })} value={query.category || "all"}>
-            <SelectTrigger aria-label="Category"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {TICKET_CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select onValueChange={(v) => updateFilter({ barangayId: v === "all" ? "" : v })} value={query.barangayId || "all"}>
-            <SelectTrigger aria-label="Barangay"><SelectValue /></SelectTrigger>
-            <SelectContent className="min-w-56">
-              <SelectItem value="all">All barangays</SelectItem>
-              {sortedBarangays.map((b) => (
-                <SelectItem key={b.id} value={String(b.id)}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select onValueChange={(v) => updateFilter({ urgency: v === "all" ? "" : v })} value={query.urgency || "all"}>
-            <SelectTrigger aria-label="Hazard Urgency"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All urgency bands</SelectItem>
-              <SelectItem value="Low">Low</SelectItem>
-              <SelectItem value="Medium">Medium</SelectItem>
-              <SelectItem value="High">High</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select onValueChange={(v) => updateFilter({ sort: v as TicketSort })} value={query.sort}>
-            <SelectTrigger aria-label="Sort tickets"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="priority_desc">Urgency: highest first</SelectItem>
-              <SelectItem value="priority_asc">Urgency: lowest first</SelectItem>
-              <SelectItem value="newest">Newest first</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button onClick={() => updateFilter({ disputed: !query.disputed })} size="sm" variant={query.disputed ? "default" : "outline"}>
-            Disputed only
-          </Button>
-          {hasActiveFilters && (
-            <Button className="ml-auto" onClick={resetFilters} size="sm" variant="ghost">
-              Reset filters
-            </Button>
-          )}
-        </CardContent>
+      {error && !loading && (
+        <AdminErrorCard
+          message="Something went wrong while updating the queue."
+          onRetry={retry}
+          title="Queue action failed"
+          detail={error}
+        />
+      )}
 
-        {/* Desktop table */}
-        <CardContent className="hidden min-w-0 p-0 md:block">
-          <Table className="text-[13px] [&_td]:py-2 [&_th]:h-9">
-            <TableHeader className="bg-muted/40">
-              <TableRow>
-                <TableHead className={`${HEAD_CLASS} pl-6`}>Ticket</TableHead>
-                <TableHead className={HEAD_CLASS}>Category</TableHead>
-                <TableHead className={HEAD_CLASS}>Barangay</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-right`}>Members</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Hazard Urgency Score</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Hazard Urgency Level</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Office</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Status</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Created</TableHead>
-                <TableHead className={`${HEAD_CLASS} pr-6 text-end`}>Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {error ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell className="p-4" colSpan={10}>
-                    <AdminErrorCard message={error} onRetry={retry} title="Couldn't refresh tickets" />
-                  </TableCell>
-                </TableRow>
-              ) : loading ? (
-                <SkeletonRows count={data.limit} />
-              ) : data.tickets.length === 0 ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell className="p-10 text-center" colSpan={10}>
-                    <EmptyState />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                data.tickets.map((ticket) => <TicketRow key={ticket.id} returnQuery={returnQuery} ticket={ticket} />)
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* The Queue surface: a plain white bordered card at 12px radius, not the
+          dashboard's gray-frame + CardBodyPanel idiom. See docs/design-system.md
+          §5.7 — the queue's toolbar, selection bar, header strip and footer are
+          four stacked bands that each need their own fill, and a gray frame
+          around them reads as a fifth. */}
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <QueueToolbar
+          activeFilterCount={filterChips.length}
+          barangays={barangays}
+          columnVisibility={columnVisibility}
+          density={density}
+          filterChips={filterChips}
+          filters={filters}
+          isSystemAdmin={isSystemAdmin}
+          onClearAll={clearAllFilters}
+          onDensityChange={setDensity}
+          onFilterChange={(patch) => updateFilter(patch)}
+          onRemoveChip={removeChip}
+          onSearchInput={setSearchInput}
+          onSortChange={(sort) => updateFilter({ sort })}
+          onToggleColumn={(key: QueueColumnKey) =>
+            setColumnVisibility((v) => ({ ...v, [key]: v[key] === false }))
+          }
+          searchInput={searchInput}
+          sessionOffice={sessionOffice}
+          sort={query.sort}
+        />
 
-      {/* Mobile card list */}
-      <div className="flex flex-col gap-2 md:hidden">
-        {error ? (
-          <AdminErrorCard message={error} onRetry={retry} title="Couldn't refresh tickets" />
-        ) : loading ? (
-          Array.from({ length: Math.min(data.limit, 8) }).map((_, i) => <TicketCardSkeleton key={i} />)
-        ) : data.tickets.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-1 p-8 text-center">
-              <EmptyState />
-            </CardContent>
-          </Card>
-        ) : (
-          data.tickets.map((ticket) => <TicketCard key={ticket.id} returnQuery={returnQuery} ticket={ticket} />)
+        {selectedIds.length > 0 && (
+          <QueueBulkBar
+            busy={bulkBusy}
+            exportHref={`/api/admin/reports/tickets.csv?${selectionExportParams.toString()}`}
+            onAdvanceStatus={() =>
+              runBulk("Advance status", "/api/admin/tickets/bulk/advance-status", {})
+            }
+            onClearSelection={clearSelection}
+            onCreateWorkOrders={(input) =>
+              runBulk("Create work orders", "/api/admin/work-orders/bulk", {
+                title: input.title,
+                dueDate: input.dueDate || undefined,
+              })
+            }
+            onDismissResult={() => setBulkResult(null)}
+            onReassign={(toOffice) =>
+              runBulk("Assign office", "/api/admin/tickets/bulk/reassign", { toOffice })
+            }
+            result={bulkResult}
+            selectedIds={selectedIds}
+          />
         )}
+
+        {selectedIds.length === 0 && bulkResult && (
+          <div className="flex flex-wrap items-start gap-3 border-b border-border bg-muted px-3.5 py-2.5 text-[13px]">
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">
+                {bulkResult.action}: {bulkResult.result.ok.length} updated
+                {bulkResult.result.skipped.length > 0 &&
+                  `, ${bulkResult.result.skipped.length} skipped`}
+              </p>
+              {bulkResult.result.skipped.length > 0 && (
+                <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                  {bulkResult.result.skipped.map((skip) => (
+                    <li key={skip.id}>
+                      <span className="font-mono">#{skip.id}</span> {skip.reason}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <Button className="h-7 px-2 text-xs" onClick={() => setBulkResult(null)} size="sm" variant="ghost">
+              Dismiss
+            </Button>
+          </div>
+        )}
+
+        <QueueTable
+          columnVisibility={columnVisibility}
+          density={density}
+          detailHref={(ticket) => detailHref(ticket.id)}
+          error={error && loading === false && data.tickets.length === 0 ? error : null}
+          focusedId={focusedId}
+          headerState={selection.headerState}
+          isSelected={selection.isSelected}
+          loading={loading}
+          onAdvanceStatus={advanceOne}
+          onFocusRow={setFocusedId}
+          onRetry={retry}
+          onToggleAll={selection.toggleAll}
+          onToggleSelect={selection.toggle}
+          skeletonRows={data.limit}
+          tickets={data.tickets}
+        />
+
+        <QueuePagination
+          from={from}
+          limit={data.limit}
+          onLimitChange={(limit) => setQuery((q) => ({ ...q, limit, page: 1 }))}
+          onPageChange={(page) => setQuery((q) => ({ ...q, page }))}
+          page={data.page}
+          to={to}
+          total={data.total}
+          totalPages={data.totalPages}
+        />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">{data.total === 0 ? "No tickets" : `Showing ${from}–${to} of ${data.total} tickets`}</p>
-        <div className="flex flex-wrap items-center gap-3">
-          <Select onValueChange={(v) => setQuery((q) => ({ ...q, limit: Number(v), page: 1 }))} value={String(query.limit)}>
-            <SelectTrigger aria-label="Rows per page" size="sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {PAGE_LIMITS.map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  {n} / page
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Pagination className="mx-0 w-auto">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  aria-disabled={data.page <= 1}
-                  className={data.page <= 1 ? "pointer-events-none opacity-40" : undefined}
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (data.page > 1) setQuery((q) => ({ ...q, page: q.page - 1 }));
-                  }}
-                />
-              </PaginationItem>
-              {getPageNumbers(data.page, data.totalPages).map((p, i) =>
-                p === "ellipsis" ? (
-                  <PaginationItem key={`e${i}`}>
-                    <PaginationEllipsis />
-                  </PaginationItem>
-                ) : (
-                  <PaginationItem key={p}>
-                    <PaginationLink
-                      href="#"
-                      isActive={p === data.page}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setQuery((q) => ({ ...q, page: p }));
-                      }}
-                    >
-                      {p}
-                    </PaginationLink>
-                  </PaginationItem>
-                ),
-              )}
-              <PaginationItem>
-                <PaginationNext
-                  aria-disabled={data.page >= data.totalPages}
-                  className={data.page >= data.totalPages ? "pointer-events-none opacity-40" : undefined}
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (data.page < data.totalPages) setQuery((q) => ({ ...q, page: q.page + 1 }));
-                  }}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
-      </div>
+      <Dialog onOpenChange={setSaveViewOpen} open={saveViewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save this view</DialogTitle>
+            <DialogDescription>
+              Saves the current filters, sort and page size as a personal tab. Only you can see it.
+              Saving over an existing name replaces it.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            aria-label="View name"
+            maxLength={40}
+            onChange={(e) => setSaveViewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveCurrentView();
+            }}
+            placeholder="e.g. Poblacion drainage"
+            value={saveViewName}
+          />
+          <DialogFooter>
+            <Button onClick={() => setSaveViewOpen(false)} variant="outline">
+              Cancel
+            </Button>
+            <Button disabled={!saveViewName.trim()} onClick={saveCurrentView}>
+              Save view
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function KpiCard({ label, value }: { label: string; value: string }) {
+// White bordered card at 12px radius with an uppercase micro-label — the Queue
+// surface treatment, deliberately not the dashboard's gray-frame KPI tile (see
+// docs/design-system.md §5.8). The icon is aria-hidden beside a visible label,
+// which is what lets it use --brand (2.61:1) rather than the AA-safe
+// --brand-solid. Bare icon, never an icon-in-a-colored-tile (§5.6/§7). No
+// sparkline and no delta: the queue has no trend data and must not imply one.
+//
+// `note` is not decoration — the tiles mix a server-wide figure (Total tickets)
+// with page-scoped ones, and without the note the row would read as five
+// comparable numbers when only one spans every page.
+function KpiCard({
+  label,
+  value,
+  note,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  icon: LucideIcon;
+}) {
   return (
-    <Card className="py-0">
-      <CardContent className="space-y-0.5 p-4">
-        <p className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">{value}</p>
-        <p className="truncate text-xs font-medium text-muted-foreground" title={label}>{label}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function EmptyState() {
-  return (
-    <>
-      <SearchXIcon aria-hidden="true" className="mx-auto size-5 text-muted-foreground" />
-      <p className="mt-3 text-sm font-medium">No tickets match this filter.</p>
-      <p className="mt-1 text-sm text-muted-foreground">Try widening your search or resetting filters.</p>
-    </>
-  );
-}
-
-function TicketRow({ ticket, returnQuery }: { ticket: AdminTicketRow; returnQuery: string }) {
-  const detailHref = `/admin/tickets/${ticket.id}?from=${encodeURIComponent(`/admin/tickets?${returnQuery}`)}`;
-  const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
-  return (
-    <TableRow>
-      <TableCell className="max-w-56 pl-6">
-        <div className="flex items-center gap-1.5">
-          <Link className="block truncate font-medium hover:text-primary hover:underline" href={detailHref} title={ticket.title ?? undefined}>
-            {ticket.title ?? `Ticket #${ticket.id}`}
-          </Link>
-          {ticket.disputed_at && <Badge className="bg-red-50 text-red-700" variant="outline">Disputed</Badge>}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Ticket <span className="font-mono">#{ticket.id}</span>
-        </div>
-      </TableCell>
-      <TableCell>{ticket.category}</TableCell>
-      <TableCell className="max-w-40">
-        <span className="block truncate" title={ticket.barangay_name}>
-          {ticket.barangay_name}
+    <div className="flex flex-col gap-2.5 rounded-xl border border-border bg-card px-4 pt-3.5 pb-4">
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className="truncate text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground"
+          title={label}
+        >
+          {label}
         </span>
-      </TableCell>
-      <TableCell className="text-right font-mono tabular-nums">{ticket.member_count}</TableCell>
-      <TableCell className="text-center">
-        <Badge className={urgencyBadge.className} variant="outline">
-          <span className="font-mono tabular-nums">{ticket.priority_score ?? "—"}</span>
-        </Badge>
-      </TableCell>
-      <TableCell className="text-center">
-        <Badge className={urgencyBadge.className} variant="outline">
-          {urgencyBadge.label}
-        </Badge>
-      </TableCell>
-      <TableCell className="text-center">{ticket.assigned_office}</TableCell>
-      <TableCell className="text-center">
-        <StatusPill status={ticket.status} />
-      </TableCell>
-      <TableCell className="text-center text-xs">
-        <div>{formatCreatedDate(ticket.created_at)}</div>
-        <div className="text-muted-foreground">{relativeAge(ticket.created_at, ticket.status)}</div>
-      </TableCell>
-      <TableCell className="pr-6 text-end">
-        <Button asChild size="sm" variant="outline">
-          <Link href={detailHref}>View ticket</Link>
-        </Button>
-      </TableCell>
-    </TableRow>
-  );
-}
-
-function TicketCard({ ticket, returnQuery }: { ticket: AdminTicketRow; returnQuery: string }) {
-  const detailHref = `/admin/tickets/${ticket.id}?from=${encodeURIComponent(`/admin/tickets?${returnQuery}`)}`;
-  const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-2 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <Link className="block truncate font-medium hover:text-primary hover:underline" href={detailHref} title={ticket.title ?? undefined}>
-              {ticket.title ?? `Ticket #${ticket.id}`}
-            </Link>
-            <p className="font-mono text-xs text-muted-foreground">
-              #{ticket.id} {"·"} {ticket.category}
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {ticket.disputed_at && <Badge className="bg-red-50 text-red-700" variant="outline">Disputed</Badge>}
-            <StatusPill status={ticket.status} />
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {ticket.barangay_name} {"·"} {ticket.assigned_office} {"·"} {ticket.member_count} member{ticket.member_count === 1 ? "" : "s"}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge className={urgencyBadge.className} variant="outline">
-            <span className="font-mono tabular-nums">{ticket.priority_score ?? "—"}</span>
-          </Badge>
-          <Badge className={urgencyBadge.className} variant="outline">
-            {urgencyBadge.label}
-          </Badge>
-          <span className="text-xs text-muted-foreground">{relativeAge(ticket.created_at, ticket.status)}</span>
-        </div>
-        <Button asChild className="self-start" size="sm" variant="outline">
-          <Link href={detailHref}>View ticket</Link>
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SkeletonRows({ count }: { count: number }) {
-  return (
-    <>
-      {Array.from({ length: Math.min(count, 15) }).map((_, i) => (
-        <TableRow className="hover:bg-transparent" key={i}>
-          {Array.from({ length: 10 }).map((__, j) => (
-            <TableCell key={j}>
-              <Skeleton className="h-4 w-full max-w-24" />
-            </TableCell>
-          ))}
-        </TableRow>
-      ))}
-    </>
-  );
-}
-
-function TicketCardSkeleton() {
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-2 p-4">
-        <Skeleton className="h-4 w-2/3" />
-        <Skeleton className="h-3 w-1/3" />
-        <Skeleton className="h-3 w-1/2" />
-        <div className="flex gap-2">
-          <Skeleton className="h-5 w-12" />
-          <Skeleton className="h-5 w-16" />
-        </div>
-        <Skeleton className="h-7 w-24" />
-      </CardContent>
-    </Card>
+        <Icon aria-hidden="true" className="size-[15px] shrink-0 text-[var(--brand)]" strokeWidth={1.75} />
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[30px] leading-8 font-semibold tracking-[-0.03em] tabular-nums">
+          {value}
+        </span>
+        <span className="text-xs text-muted-foreground">{note}</span>
+      </div>
+    </div>
   );
 }

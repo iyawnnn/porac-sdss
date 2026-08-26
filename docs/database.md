@@ -118,6 +118,17 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 - **Ownership:** Application (Drizzle).
 - **Relation to `admin_audit_events`:** Intentionally separate — different actor types, different event vocabularies, different audiences (this one is citizen-self-service; the admin one is System-Administrator-only). See §G below for the full cross-table rationale.
 
+### `admin_saved_views`
+- **Purpose:** Personal filter presets for the Ticket Queue's view-tab strip — the tabs that appear after the five built-in ones ("All active", "High urgency", "Disputed", "MEO", "MDRRMO"). One row per saved preset per admin.
+- **Reads:** `SavedViewsService.list`, called by `app/admin/tickets/page.tsx` on first paint and by `GET /admin/saved-views`.
+- **Writes:** `SavedViewsService.create` ("Save this view" in the queue toolbar) and `.remove` (the × on a saved tab). Re-saving an existing name UPDATEs that row rather than inserting a near-duplicate — enforced by the `(admin_id, name)` unique index.
+- **Expected empty?** Yes. Saved views are opt-in; a fresh install and most admins will have none, and the queue renders its five built-in tabs regardless.
+- **Ownership:** Application (Drizzle).
+- **Scoping:** Strictly personal. `admin_id` is the only read/write key and is the authorization boundary — there is no office-wide or shared preset, and `remove` matches on `(id, admin_id)` so one admin can never delete another's. Unlike `status_history.admin_id` and `admin_audit_events.actor_admin_id`, which deliberately keep an unreferenced id so history survives the actor, this table uses a real FK with `ON DELETE CASCADE`: a deleted admin's private bookmarks have no historical value.
+- **Why `query` is a string, not columns:** It stores the serialized queue querystring (e.g. `status=active&urgency=High`), so adding a new queue filter never requires a migration here. It is re-parsed through the same URL parsing the address bar uses and then through `TicketsService.parseTicketQuery` server-side, which means a stored or hand-edited `office=` can never widen scope past `resolveOfficeScope` — a saved view is a bookmark, never a grant.
+- **Caps:** 12 views per admin, name ≤ 40 chars, query ≤ 500 chars (`SavedViewsService`). The cap exists so one admin cannot turn their own queue header into an unbounded tab strip.
+- **Counts:** The five built-in tabs carry server-computed counts (`TicketsService.getViewCounts`, returned on `GET /admin/tickets`). Saved views deliberately carry **no** count — counting an arbitrary stored filter would mean one aggregate query per preset on every page load.
+
 ---
 
 ## B. GIS/PostGIS tables and views

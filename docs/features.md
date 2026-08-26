@@ -104,14 +104,21 @@ Everything here is office-scoped server-side. Covered by `e2e/admin-dashboard.sp
 
 ### 3.2 Ticket Queue (`/admin/tickets`)
 
-The primary triage surface, sorted by urgency by default.
+The primary triage surface, sorted by urgency by default. Rebuilt to the "Precision Queue" design (`docs/design-system.md` §5.8) so an admin can act on a batch of tickets without opening each one.
 
-- **Filters, all URL-synced:** status, urgency, category, barangay, free-text search (ticket ID, title, or barangay), a "Disputed only" toggle, and — for System Administrators only — an office picker. A "Reset filters" control appears when any are active.
-- **Sorting and pagination**, both reflected in the URL.
-- **Responsive:** a desktop table and a mobile card list below `md`.
-- **CSV export** honoring the currently applied filters.
+- **View tabs with live counts:** five built-in presets — All active, High urgency, Disputed, MEO, MDRRMO — each carrying a server-computed count (`TicketsService.getViewCounts`, returned alongside the list on `GET /admin/tickets`). Counts are office-scoped to the caller, so an office admin sees no MEO/MDRRMO split at all. A tab underlines only when the filter state is *exactly* what it sets; an ad-hoc combination underlines nothing.
+- **Saved views:** "Save this view" stores the current filters, sort and page size as a personal tab (`admin_saved_views`, max 12 per admin). Private to the admin who saved it, never office-wide, and re-parsed through `parseTicketQuery` on use — a stored `office=` can never widen scope. Saved views carry no count.
+- **Filters, all URL-synced,** collapsed behind a `Filters` popover carrying an active count, with each active filter also shown as a dismissable chip: status, urgency, category, barangay, a "Disputed only" toggle, and — for System Administrators only — an office picker. Free-text search (ticket ID, title, or barangay) stays a standalone box. "Clear all" resets them.
+- **Sorting and pagination**, both reflected in the URL. Sort offers only what the list endpoint supports (urgency highest/lowest, newest) — never Operational Priority, which has no `ORDER BY` support and is a different formula (§5.1).
+- **Row selection and bulk actions:** select rows individually or the whole page, then Assign office, Advance status, Create work orders, or Export selection. Bulk work **loops the single-ticket service methods**, so each ticket gets the same office check, `status_history` row, `admin_audit_events` entry and citizen notification a single action would write. Partial success is normal and always reported per ticket — most importantly, a ticket whose next status is `Resolved` is **skipped**, because resolving requires a proof photo only the Ticket Detail page can collect. Capped at 50 ids (the largest page size).
+- **Inline status advance:** the status pill's chevron offers the single legal next status (`NEXT_STATUS`), not a free choice of all five. The Resolved step links to Ticket Detail instead of firing.
+- **Keyboard navigation:** `J`/`K` move the row focus, `X` selects, `Enter` opens. Suppressed while typing in any field.
+- **Column visibility and row density** toggles in the toolbar. The queue's ten columns are fixed-width tracks, so the table scrolls inside its own card rather than squeezing; hiding columns is the way to fit a narrow screen.
+- **Live recompute read-out:** the current `rain["1h"]` mm/h and the number of urgency scores just recomputed, shown beside Export CSV — the same `recompute` payload the list endpoint already returned but the page previously discarded.
+- **Responsive:** the grid table above `md`, a stacked row list below it.
+- **CSV export** honoring the currently applied filters, plus an `ids` export-only parameter used by "Export selection" (parsed in `ReportsService`, never added to the list endpoint's query shape).
 
-Covered by `e2e/admin-tickets.spec.ts` (~21 tests).
+Covered by `e2e/admin-tickets.spec.ts` (~21 tests) and `api/src/admin/tickets-queue.service.spec.ts` (view-count office scoping and bulk eligibility/delegation).
 
 ### 3.3 Ticket Detail (`/admin/tickets/[id]`)
 

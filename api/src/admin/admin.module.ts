@@ -23,8 +23,10 @@ import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { BarangayInsightsController } from './barangay-insights.controller';
 import { BarangayInsightsService } from './barangay-insights.service';
+import { SavedViewsController } from './saved-views.controller';
+import { SavedViewsService } from './saved-views.service';
 
-// Ten controllers sharing one module — they share nothing else, but
+// Eleven controllers sharing one module — they share nothing else, but
 // splitting into separate modules buys nothing (see blueprint §1). Each
 // controller carries its own @UseGuards(...) (not an APP_GUARD provider,
 // which would leak the guard onto every module app-wide) — closes the
@@ -41,7 +43,10 @@ import { BarangayInsightsService } from './barangay-insights.service';
 // office-scoped query parsing rather than any new authorization logic.
 // BarangayInsightsController is the same shape again — read-only aggregates
 // over tickets/barangays/dem_points, office-scoped via resolveOfficeScope,
-// no new authorization path.
+// no new authorization path. SavedViewsController is the narrowest of all:
+// it only ever touches rows keyed to the caller's own admin_id, so its
+// authorization boundary is that predicate rather than a guard or an
+// office scope.
 @Module({
   imports: [AuthModule, DomainModule, NotificationsModule, CitizensModule],
   controllers: [
@@ -55,6 +60,7 @@ import { BarangayInsightsService } from './barangay-insights.service';
     AdminDirectoryController,
     ReportsController,
     BarangayInsightsController,
+    SavedViewsController,
   ],
   providers: [
     TicketsService,
@@ -67,6 +73,7 @@ import { BarangayInsightsService } from './barangay-insights.service';
     WorkOrdersService,
     ReportsService,
     BarangayInsightsService,
+    SavedViewsService,
   ],
 })
 export class AdminModule {}

@@ -6,6 +6,27 @@ import { loginAdmin as loginAs, loginCitizen, settleAdminPage } from "./helpers"
 
 test.setTimeout(60_000);
 
+// The Ticket Queue's table is a CSS grid, not a <table> (docs/design-system.md
+// §5.8), and its rows no longer carry a "View ticket" button — the row's own
+// data attribute is the stable handle. Every row assertion in this file goes
+// through this rather than re-deriving a locator per test.
+function queueRows(page: Page) {
+  return page.locator("[data-ticket-row]");
+}
+
+// The seven filters live behind a Filters popover now. Opening it is a
+// precondition for touching any of them, so it is one helper rather than a
+// click repeated in every filter test.
+async function openQueueFilters(page: Page) {
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+}
+
+// The row link is an icon button labelled by the ticket it opens.
+function openTicketLink(page: Page, ticketId: number) {
+  return page.getByRole("link", { name: `Open ticket ${ticketId}`, exact: true });
+}
+
 function sessionCookieHeader(cookies: { name: string; value: string }[]): Record<string, string> {
   const cookie = cookies.find((c) => c.name === "ac_admin_session");
   return cookie ? { cookie: `${cookie.name}=${cookie.value}` } : {};
@@ -87,10 +108,9 @@ test("authenticated admin can open the Ticket Queue and see its content", async 
   await expect(page.getByRole("heading", { name: "Ticket Queue" })).toBeVisible();
   // Either seeded rows or the documented empty state must render — never a
   // blank/broken page.
-  const table = page.getByRole("table");
-  const hasRows = (await table.getByRole("row").count()) > 1; // header row + N data rows
+  const hasRows = (await queueRows(page).count()) > 0;
   if (hasRows) {
-    await expect(page.getByRole("link", { name: "View ticket" }).first()).toBeVisible();
+    await expect(queueRows(page).first()).toBeVisible();
   } else {
     await expect(page.getByText("No tickets match this filter.")).toBeVisible();
   }
@@ -103,12 +123,13 @@ test("status filter changes the visible ticket set", async ({ page }) => {
   await page.goto("/admin/tickets?status=all");
   await page.waitForLoadState("networkidle");
 
+  await openQueueFilters(page);
   await page.getByLabel("Status", { exact: true }).click();
   await page.getByRole("option", { name: "Resolved", exact: true }).click();
   await expect(page).toHaveURL(/[?&]status=Resolved(&|$)/);
   await page.waitForLoadState("networkidle");
 
-  const rows = page.getByRole("row").filter({ hasText: "View ticket" });
+  const rows = queueRows(page);
   const count = await rows.count();
   if (count === 0) {
     await expect(page.getByText("No tickets match this filter.")).toBeVisible();
@@ -140,7 +161,7 @@ test("search filter narrows results to the searched ticket", async ({ page, requ
   // dev DB — a numeric ID can coincidentally substring-match another
   // ticket's title. What must hold is that the target ticket itself is
   // among the results.
-  const rows = page.getByRole("row").filter({ hasText: "View ticket" });
+  const rows = queueRows(page);
   await expect(rows.first()).toBeVisible();
   await expect(page.getByText(`#${target.id}`, { exact: true })).toBeVisible();
 });
@@ -150,11 +171,13 @@ test("disputed-only filter shows only disputed tickets or the empty state", asyn
   await page.goto("/admin/tickets?status=all");
   await page.waitForLoadState("networkidle");
 
+  await openQueueFilters(page);
   await page.getByRole("button", { name: "Disputed only" }).click();
   await expect(page).toHaveURL(/[?&]disputed=true(&|$)/);
+  await page.keyboard.press("Escape");
   await page.waitForLoadState("networkidle");
 
-  const rows = page.getByRole("row").filter({ hasText: "View ticket" });
+  const rows = queueRows(page);
   const count = await rows.count();
   if (count === 0) {
     await expect(page.getByText("No tickets match this filter.")).toBeVisible();
@@ -170,12 +193,14 @@ test("reset filters clears status, search, and disputed back to defaults", async
   await page.goto("/admin/tickets?status=all&search=zzz&disputed=true");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByRole("button", { name: "Reset filters" })).toBeVisible();
-  await page.getByRole("button", { name: "Reset filters" }).click();
+  // Active filters surface as dismissable chips with a "Clear all" beside
+  // them; the old always-present "Reset filters" button is gone.
+  await expect(page.getByRole("button", { name: "Clear all" })).toBeVisible();
+  await page.getByRole("button", { name: "Clear all" }).click();
 
   await expect(page).not.toHaveURL(/disputed=true/);
   await expect(page).not.toHaveURL(/search=zzz/);
-  await expect(page.getByRole("button", { name: "Reset filters" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Clear all" })).toHaveCount(0);
   await expect(page.getByLabel("Search tickets")).toHaveValue("");
 });
 
@@ -217,6 +242,7 @@ test("a doctored office query value does not widen an office admin's visibility"
 test("system admin sees an office picker exposing a city-wide view", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/tickets");
+  await openQueueFilters(page);
   const officePicker = page.getByLabel("Office", { exact: true });
   await expect(officePicker).toBeVisible();
   await expect(officePicker).toHaveText("All offices");
@@ -238,7 +264,7 @@ test("clicking a ticket from the queue opens its detail page and back link retur
   // Search can substring-match other tickets' titles/barangays too, so more
   // than one row may render — locate the anchor whose href is this exact
   // ticket's detail link rather than trusting "first visible row link".
-  const link = page.locator(`a:visible[href^="/admin/tickets/${ticketId}?"], a:visible[href="/admin/tickets/${ticketId}"]`).filter({ hasText: "View ticket" });
+  const link = openTicketLink(page, ticketId);
   await expect(link).toBeVisible();
   await link.click();
 
@@ -472,7 +498,7 @@ test("category filter narrows the queue to only that category", async ({ page, r
   await page.goto(`/admin/tickets?status=all&category=${encodeURIComponent(targetCategory)}`);
   await page.waitForLoadState("networkidle");
 
-  const rows = page.getByRole("row").filter({ hasText: "View ticket" });
+  const rows = queueRows(page);
   await expect(rows.first()).toBeVisible();
   const count = await rows.count();
   for (let i = 0; i < count; i++) {
@@ -491,11 +517,13 @@ test("barangay filter narrows the queue to only that barangay", async ({ page, r
   await page.goto("/admin/tickets?status=all");
   await page.waitForLoadState("networkidle");
   const filtered = page.waitForResponse((r) => r.url().includes("/api/admin/tickets?") && r.url().includes("barangayId="));
+  await openQueueFilters(page);
   await page.getByLabel("Barangay", { exact: true }).click();
   await page.getByRole("option", { name: targetBarangay, exact: true }).click();
   await filtered;
+  await page.keyboard.press("Escape");
 
-  const rows = page.getByRole("row").filter({ hasText: "View ticket" });
+  const rows = queueRows(page);
   await expect(rows.first()).toBeVisible();
   const count = await rows.count();
   for (let i = 0; i < count; i++) {
@@ -510,17 +538,23 @@ test("Hazard Urgency deep-link filters the queue and survives an unrelated filte
   await page.goto("/admin/tickets?status=all&urgency=High");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByLabel("Hazard Urgency", { exact: true })).toHaveText("High");
+  // The active filter is advertised twice now: as a toolbar chip, and inside
+  // the popover. Both must agree with the URL.
+  await expect(page.getByRole("button", { name: "Urgency: High" })).toBeVisible();
   await expect(page).toHaveURL(/[?&]urgency=High(&|$)/);
+
+  await openQueueFilters(page);
+  await expect(page.getByLabel("Hazard Urgency", { exact: true })).toHaveText("High");
+  await page.keyboard.press("Escape");
 
   // An unrelated filter change must not silently drop the urgency filter.
   const filtered = page.waitForResponse((r) => r.url().includes("/api/admin/tickets?") && r.url().includes("urgency=High"));
-  await page.getByLabel("Sort tickets", { exact: true }).click();
-  await page.getByRole("option", { name: "Newest first" }).click();
+  await page.getByRole("button", { name: "Sort tickets" }).click();
+  await page.getByRole("menuitemradio", { name: "Newest first" }).click();
   await filtered;
 
   await expect(page).toHaveURL(/[?&]urgency=High(&|$)/);
-  await expect(page.getByLabel("Hazard Urgency", { exact: true })).toHaveText("High");
+  await expect(page.getByRole("button", { name: "Urgency: High" })).toBeVisible();
 });
 
 // --- 9. Pagination and sorting -------------------------------------------------
@@ -534,12 +568,14 @@ test("pagination advances to the next page of results when enough tickets exist"
 
   await page.goto("/admin/tickets?status=all&limit=10&page=1");
   await page.waitForLoadState("networkidle");
-  const firstPageFirstRow = await page.getByRole("row").filter({ hasText: "View ticket" }).first().innerText();
+  const firstPageFirstRow = await queueRows(page).first().innerText();
 
-  await page.getByRole("link", { name: "Go to next page" }).click();
+  // The pager moved inside the table card and its controls are buttons now,
+  // not anchors — a page change refetches, it never navigates.
+  await page.getByRole("button", { name: "Next page" }).click();
   await expect(page).toHaveURL(/[?&]page=2(&|$)/);
   await page.waitForLoadState("networkidle");
-  const secondPageFirstRow = await page.getByRole("row").filter({ hasText: "View ticket" }).first().innerText();
+  const secondPageFirstRow = await queueRows(page).first().innerText();
   expect(secondPageFirstRow).not.toBe(firstPageFirstRow);
 });
 
@@ -548,15 +584,18 @@ test("sort control reorders tickets by urgency", async ({ page }) => {
   await page.goto("/admin/tickets?status=all&limit=50");
   await page.waitForLoadState("networkidle");
 
-  await page.getByLabel("Sort tickets", { exact: true }).click();
-  await page.getByRole("option", { name: "Urgency: lowest first" }).click();
+  await page.getByRole("button", { name: "Sort tickets" }).click();
+  await page.getByRole("menuitemradio", { name: "Urgency: lowest" }).click();
   await expect(page).toHaveURL(/[?&]sort=priority_asc(&|$)/);
   await page.waitForLoadState("networkidle");
 
-  const scores = await page.getByRole("row").filter({ hasText: "View ticket" }).evaluateAll((rows) =>
+  // Read the score off the row's own data attribute rather than a cell index:
+  // the queue's columns are user-hideable, so nth-child is no longer a stable
+  // way to find the urgency column.
+  const scores = await queueRows(page).evaluateAll((rows) =>
     rows
-      .map((row) => row.querySelector("td:nth-child(5)")?.textContent?.trim())
-      .filter((v): v is string => !!v && v !== "—")
+      .map((row) => (row as HTMLElement).dataset.urgencyScore)
+      .filter((v): v is string => !!v)
       .map(Number),
   );
   test.skip(scores.length < 2, "not enough scored tickets to assert an order");
@@ -583,7 +622,7 @@ test("mobile viewport renders the ticket queue card list, not the desktop table,
   // Search can substring-match other tickets' titles/barangays too, so more
   // than one card may render — locate the anchor whose href is this exact
   // ticket's detail link rather than trusting "first visible card link".
-  const cardLink = page.locator(`a:visible[href^="/admin/tickets/${ticketId}?"], a:visible[href="/admin/tickets/${ticketId}"]`).filter({ hasText: "View ticket" });
+  const cardLink = page.locator(`a:visible[href^="/admin/tickets/${ticketId}?"], a:visible[href="/admin/tickets/${ticketId}"]`).first();
   await expect(cardLink).toBeVisible();
   await cardLink.click();
   await expect(page).toHaveURL(new RegExp(`/admin/tickets/${ticketId}(\\?.*)?$`));

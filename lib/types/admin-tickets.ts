@@ -33,6 +33,36 @@ export interface PaginatedTickets {
   totalPages: number;
 }
 
+// Counts behind the queue's built-in view tabs, returned alongside the list
+// by GET /admin/tickets. Office-scoped to the caller: an MEO officer always
+// receives mdrrmo: 0, and the strip hides that tab rather than showing a
+// permanent zero. Mirrors TicketViewCounts in api/src/admin/tickets.service.ts.
+export interface TicketViewCounts {
+  allActive: number;
+  highUrgency: number;
+  disputed: number;
+  meo: number;
+  mdrrmo: number;
+}
+
+// A personal saved filter preset (GET /admin/saved-views). `query` is the raw
+// queue querystring; it is replayed through the same URL parsing the address
+// bar uses, so a stale preset can never widen office scope.
+export interface SavedView {
+  id: number;
+  name: string;
+  query: string;
+  position: number;
+}
+
+// Outcome of a bulk action. Bulk work loops the single-ticket endpoints, so
+// partial success is normal — `skipped` always carries a per-ticket reason
+// and must be surfaced to the admin, never discarded.
+export interface BulkActionResult {
+  ok: number[];
+  skipped: { id: number; reason: string }[];
+}
+
 export interface TicketDetail {
   id: number;
   category: string;

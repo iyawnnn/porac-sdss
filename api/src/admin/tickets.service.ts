@@ -41,6 +41,33 @@ import {
   type TicketSort,
 } from './ticket-constants';
 
+// Counts behind the queue's built-in view tabs. Each field MUST be counted
+// with the same predicate the tab's filter applies, or the tab will promise a
+// number the list then contradicts: highUrgency uses urgency_band (what the
+// urgency filter matches), not a priority_score >= 70 comparison, even though
+// the two agree today by construction (urgencyLevelFromScore).
+export interface TicketViewCounts {
+  allActive: number;
+  highUrgency: number;
+  disputed: number;
+  meo: number;
+  mdrrmo: number;
+}
+
+// Result shape shared by every bulk action. Bulk work is a LOOP over the
+// existing single-ticket methods, each of which opens its own transaction —
+// so partial success is the normal outcome, not an error case, and the
+// caller is always told exactly which ids did not move and why. Never
+// collapse this to a boolean.
+export interface BulkActionResult {
+  ok: number[];
+  skipped: { id: number; reason: string }[];
+}
+
+// Matches the largest PAGE_LIMITS value, so "select every row on this page"
+// always fits in one request and the UI never has to chunk.
+export const BULK_MAX_TICKETS = 50;
+
 export interface AdminTicketFilters {
   office?: 'MEO' | 'MDRRMO';
   status?: 'active' | 'all' | TicketStatus;
@@ -367,11 +394,58 @@ export class TicketsService {
     };
   }
 
+  // Powers the queue's view-tab strip. Deliberately NOT a separate endpoint:
+  // it rides along on GET /admin/tickets so it can't be fetched without the
+  // list it labels, needs no second recomputeActiveTicketUrgency() pass, and
+  // sidesteps the @Get(':id') ParseIntPipe route-ordering trap.
+  //
+  // Office scope is the caller's, not the current filter's — the tabs are a
+  // fixed frame around everything this admin can see, so clicking MEO while
+  // MDRRMO is selected still shows the right number. An office admin gets 0
+  // for the office that is not theirs (resolveOfficeScope clamps them), and
+  // the UI hides that tab rather than rendering a permanent zero.
+  async getViewCounts(
+    admin: Pick<AdminSession, 'role' | 'office'>,
+  ): Promise<TicketViewCounts> {
+    const sql = this.pg;
+    const office = resolveOfficeScope(admin, undefined) ?? null;
+    const [row] = await sql<
+      {
+        all_active: number;
+        high_urgency: number;
+        disputed: number;
+        meo: number;
+        mdrrmo: number;
+      }[]
+    >`
+      SELECT
+        COUNT(*)::int AS all_active,
+        COUNT(*) FILTER (WHERE t.urgency_band = 'High')::int AS high_urgency,
+        COUNT(*) FILTER (WHERE t.disputed_at IS NOT NULL)::int AS disputed,
+        COUNT(*) FILTER (WHERE t.assigned_office = 'MEO')::int AS meo,
+        COUNT(*) FILTER (WHERE t.assigned_office = 'MDRRMO')::int AS mdrrmo
+      FROM tickets t
+      WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
+        AND (${office}::text IS NULL OR t.assigned_office = ${office}::office)
+    `;
+    return {
+      allActive: row?.all_active ?? 0,
+      highUrgency: row?.high_urgency ?? 0,
+      disputed: row?.disputed ?? 0,
+      meo: row?.meo ?? 0,
+      mdrrmo: row?.mdrrmo ?? 0,
+    };
+  }
+
   // ponytail: capped at 5,000 rows rather than streamed/paginated — fine at
   // this LGU's current ticket volume; revisit with a cursor/streaming CSV
   // writer if a real municipality-scale dataset ever needs a bigger export.
   async getTicketsForExport(
-    filters: AdminTicketFilters & { dateFrom?: Date; dateTo?: Date } = {},
+    filters: AdminTicketFilters & {
+      dateFrom?: Date;
+      dateTo?: Date;
+      ids?: number[];
+    } = {},
   ): Promise<AdminTicketExportRow[]> {
     const sql = this.pg;
     const status = filters.status ?? 'active';
@@ -390,6 +464,11 @@ export class TicketsService {
     // to byte-serialize the Date directly) — ISO strings sidestep that.
     const dateFrom = filters.dateFrom?.toISOString() ?? null;
     const dateTo = filters.dateTo?.toISOString() ?? null;
+    // Export-only, set by "Export selection" in the queue's bulk bar. It
+    // NARROWS the already-scoped filter set — it is ANDed with office/status
+    // /search like every other predicate, never used to look up ids outside
+    // what resolveOfficeScope allows this admin to see.
+    const ids = filters.ids?.length ? filters.ids : null;
 
     return sql<AdminTicketExportRow[]>`
       SELECT t.id, t.status, t.assigned_office, t.category, b.name AS barangay_name,
@@ -403,6 +482,7 @@ export class TicketsService {
         AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
         AND (${dateFrom}::timestamptz IS NULL OR t.created_at >= ${dateFrom}::timestamptz)
         AND (${dateTo}::timestamptz IS NULL OR t.created_at <= ${dateTo}::timestamptz)
+        AND (${ids}::int[] IS NULL OR t.id = ANY(${ids}::int[]))
         AND (
           ${search}::text IS NULL
           OR b.name ILIKE '%' || ${search} || '%'
@@ -880,5 +960,97 @@ export class TicketsService {
     }
 
     return { status: 'Rejected' };
+  }
+
+  // ---- Bulk actions -------------------------------------------------
+  //
+  // Every bulk method below deliberately LOOPS the single-ticket method
+  // rather than issuing one wide UPDATE. That is what keeps bulk work
+  // identical to single work: the same assertOfficeAccess check, the same
+  // status_history row, the same per-ticket admin_audit_events entry, and
+  // the same citizen notification/email fan-out. A set-based UPDATE would
+  // be faster and would quietly become a second authorization path with no
+  // audit trail — exactly the drift CLAUDE.md warns about for CSV exports.
+  //
+  // Per-ticket failures are caught and reported as `skipped`, never thrown:
+  // one ticket another office owns, or one already sitting at Resolved,
+  // must not roll back the twenty that succeeded.
+  private async runBulk(
+    ticketIds: number[],
+    run: (id: number) => Promise<void>,
+  ): Promise<BulkActionResult> {
+    const result: BulkActionResult = { ok: [], skipped: [] };
+    for (const id of ticketIds) {
+      try {
+        await run(id);
+        result.ok.push(id);
+      } catch (err) {
+        result.skipped.push({
+          id,
+          reason:
+            err instanceof Error && err.message
+              ? err.message
+              : 'Could not be updated.',
+        });
+      }
+    }
+    return result;
+  }
+
+  // Resolving is the one transition that carries a proof photo, and
+  // advanceStatus is where that photo is uploaded — so a ticket sitting at
+  // "In Progress" is filtered out here BEFORE the loop rather than being
+  // allowed through and silently resolved with no evidence attached. The
+  // admin is told to open those tickets individually.
+  async bulkAdvanceStatus(
+    ticketIds: number[],
+    admin: AdminSession,
+  ): Promise<BulkActionResult> {
+    const sql = this.pg;
+    const rows = await sql<{ id: number; status: TicketStatus }[]>`
+      SELECT id, status FROM tickets WHERE id = ANY(${ticketIds}::int[])
+    `;
+    const statusById = new Map(rows.map((r) => [r.id, r.status]));
+
+    const eligible: number[] = [];
+    const skipped: { id: number; reason: string }[] = [];
+    for (const id of ticketIds) {
+      const status = statusById.get(id);
+      if (!status) {
+        skipped.push({ id, reason: 'Ticket not found.' });
+        continue;
+      }
+      const next = NEXT_STATUS[status];
+      if (!next) {
+        skipped.push({
+          id,
+          reason: `Already ${status} — no transition available.`,
+        });
+        continue;
+      }
+      if (next === 'Resolved') {
+        skipped.push({
+          id,
+          reason: 'Resolving needs a proof photo — open the ticket to resolve it.',
+        });
+        continue;
+      }
+      eligible.push(id);
+    }
+
+    const result = await this.runBulk(eligible, async (id) => {
+      await this.advanceStatus(id, admin, undefined, undefined);
+    });
+    return { ok: result.ok, skipped: [...skipped, ...result.skipped] };
+  }
+
+  async bulkReassign(
+    ticketIds: number[],
+    admin: AdminSession,
+    toOffice: 'MEO' | 'MDRRMO',
+  ): Promise<BulkActionResult> {
+    return this.runBulk(ticketIds, async (id) => {
+      await this.reassignOffice(id, admin, toOffice);
+    });
   }
 }

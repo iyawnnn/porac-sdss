@@ -278,6 +278,40 @@ export class WorkOrdersService {
     return row;
   }
 
+  // One work order per selected ticket, sharing the same title/notes/
+  // assignee/due date. Loops create() rather than batch-inserting so each
+  // work order gets the identical office check, work_order_status_history
+  // origin row and audit entry a single create() writes. Partial success is
+  // reported, never rolled back — see BulkActionResult in tickets.service.ts.
+  async bulkCreate(
+    ticketIds: number[],
+    input: {
+      title: unknown;
+      notes: unknown;
+      assignedAdminId: unknown;
+      dueDate: unknown;
+    },
+    admin: AdminSession,
+  ): Promise<{ ok: number[]; skipped: { id: number; reason: string }[] }> {
+    const ok: number[] = [];
+    const skipped: { id: number; reason: string }[] = [];
+    for (const ticketId of ticketIds) {
+      try {
+        await this.create({ ...input, ticketId }, admin);
+        ok.push(ticketId);
+      } catch (err) {
+        skipped.push({
+          id: ticketId,
+          reason:
+            err instanceof Error && err.message
+              ? err.message
+              : 'Could not create a work order.',
+        });
+      }
+    }
+    return { ok, skipped };
+  }
+
   async create(
     input: {
       ticketId: unknown;
