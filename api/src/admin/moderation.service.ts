@@ -71,6 +71,23 @@ export interface PaginatedModeration {
   totalPages: number;
 }
 
+export interface ModerationExportRow {
+  id: number;
+  ticket_id: number;
+  title: string;
+  category: string;
+  barangay_name: string;
+  assigned_office: 'MEO' | 'MDRRMO';
+  citizen_name: string;
+  citizen_severity: string;
+  flags: string[];
+  location_mismatch_m: number | null;
+  moderation_status: string | null;
+  moderated_by: string | null;
+  moderated_at: string | null;
+  created_at: string;
+}
+
 export interface ModerationStats {
   pending: number;
   quarantined: number;
@@ -208,6 +225,69 @@ export class ModerationService {
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+  }
+
+  // Same shape as TicketsService.getTicketsForExport: the FILTERS come from
+  // parseModerationQuery (which is where resolveOfficeScope clamps office),
+  // and only the projection and the id whitelist differ from the paginated
+  // queue query above. An export can therefore never reach a report the
+  // caller's own GET /admin/moderation would not return.
+  //
+  // No dateFrom/dateTo here, unlike the tickets and work-orders exports:
+  // those two exist because their list endpoints have no date filter at all,
+  // while moderation already parses `from`/`to`. A second date mechanism
+  // would just be two ways to spell the same predicate.
+  async getModerationForExport(
+    filters: ModerationFilters & { ids?: number[] } = {},
+  ): Promise<ModerationExportRow[]> {
+    const sql = this.pg;
+    const status = filters.status ?? 'pending';
+    const statusClause =
+      status === 'all'
+        ? sql``
+        : status === 'pending'
+          ? sql`AND r.moderation_status IS NULL`
+          : sql`AND r.moderation_status = ${status}`;
+    const flagClause = filters.flag
+      ? sql`AND EXISTS (
+          SELECT 1 FROM unnest(r.flags) f
+          WHERE f = ${filters.flag} OR f LIKE ${filters.flag + ':%'}
+        )`
+      : sql``;
+    const search = filters.search?.trim() || null;
+    // Export-only, set by "Export selection" in the bulk bar. It NARROWS the
+    // already-scoped filter set — ANDed with office/status/flag like every
+    // other predicate, never a way to name ids outside that scope.
+    const ids = filters.ids?.length ? filters.ids : null;
+
+    return sql<ModerationExportRow[]>`
+      SELECT
+        r.id, r.ticket_id, r.title, r.citizen_severity, r.flags,
+        r.location_mismatch_m, r.created_at,
+        r.moderation_status, r.moderated_by, r.moderated_at,
+        t.category, t.assigned_office, b.name AS barangay_name,
+        (c.first_name || ' ' || c.last_name) AS citizen_name
+      FROM reports r
+      JOIN tickets t ON t.id = r.ticket_id
+      JOIN barangays b ON b.id = t.barangay_id
+      JOIN citizens c ON c.id = r.citizen_id
+      WHERE r.flags IS NOT NULL AND array_length(r.flags, 1) > 0
+        ${statusClause}
+        ${flagClause}
+        AND (${ids}::int[] IS NULL OR r.id = ANY(${ids}::int[]))
+        AND (${filters.office ?? null}::text IS NULL OR t.assigned_office = ${filters.office ?? null}::office)
+        AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
+        AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
+        AND (${filters.from ?? null}::date IS NULL OR r.created_at >= ${filters.from ?? null}::date)
+        AND (${filters.to ?? null}::date IS NULL OR r.created_at < (${filters.to ?? null}::date + interval '1 day'))
+        AND (
+          ${search}::text IS NULL
+          OR r.title ILIKE '%' || ${search} || '%'
+          OR c.first_name ILIKE '%' || ${search} || '%'
+          OR c.last_name ILIKE '%' || ${search} || '%'
+        )
+      ORDER BY r.created_at DESC
+    `;
   }
 
   async getModerationStats(

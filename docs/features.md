@@ -147,7 +147,14 @@ The record of actual field work. **A fourth, independent status track** — `pen
 
 ### 3.5 Flagged Reports (`/admin/flagged`)
 
-Moderation queue for integrity-flagged submissions (§5.5). Three actions: **dismiss**, **quarantine**, **mark duplicate**. Quarantine surfaces to the citizen through the neutral banner described in §2.3. Covered by `e2e/admin-flagged.spec.ts`.
+Moderation queue for integrity-flagged submissions (§5.5), on the same Precision Queue grammar as the Ticket Queue: view tabs with server counts, a collapsed filter popover with dismissable chips, column/density controls, row selection, and personal saved views (`admin_saved_views` with `surface = 'flagged'`, so the Ticket Queue's presets never appear here).
+
+Three actions: **dismiss**, **quarantine**, **mark duplicate**. Quarantine surfaces to the citizen through the neutral banner described in §2.3, and is the only one with an immediate public consequence — which is why it is the only solid-filled control in both the row and the drawer, and the only one the server refuses without a note.
+
+- **Review drawer** — prev/next walk the filtered page without closing it. Shows the deterministic risk score with its arithmetic spelled out (`computeRiskScore`, `lib/utils/flag-risk.ts` — duplicate 35 + location 30 + authenticity 25, +10 for a repeated signal), the evidence photo, a per-flag breakdown with its evidence string and weight, report/ticket facts, and the reporter's clean-submission rate.
+- **Bulk actions** — dismiss, quarantine or mark-duplicate a selection, plus "Export selection". There is **no bulk endpoint**: the client loops `POST /admin/reports/:id/moderate`, so every report keeps its own audit event and citizen notification, and a mixed selection half-succeeds with a per-id account of what failed. Bulk quarantine asks once for the note the server requires; bulk mark-duplicate points every selected report at one canonical report, and says so.
+
+Covered by `e2e/admin-flagged.spec.ts`.
 
 ### 3.6 Barangay Insights (`/admin/barangay-insights`)
 
@@ -168,7 +175,9 @@ Full history behind the bell, with cursor pagination and read/unread plus type f
 
 ### 3.9 Reports & Exports (`/admin/reports`)
 
-A shared office/date-range filter panel driving both the ticket and work-order CSV exports, plus a printable operational summary (`window.print()` with a print stylesheet; no PDF library). Exports reuse the list endpoints' own filter parsing, so an export can never return more than the equivalent list view already allows.
+A shared office/date-range filter panel driving the ticket and work-order CSV exports, plus a printable operational summary (`window.print()` with a print stylesheet; no PDF library). A third export, `GET /admin/reports/flagged.csv`, is driven from the Flagged Reports page itself rather than this panel (whole-filter or current selection).
+
+Every export reuses the list endpoint's own filter parsing — `parseTicketQuery`, `WorkOrdersService.parseQuery`, `parseModerationQuery` — so an export can never return more than the equivalent list view already allows. The flagged export deliberately omits the risk score: that heuristic lives in frontend code (`lib/utils/flag-risk.ts`), and a second copy of its weights in the API would be a duplicate definition to keep in sync. The raw `flags` the score is derived from are exported instead.
 
 ### 3.10 System Administrator only
 

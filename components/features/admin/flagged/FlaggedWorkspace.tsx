@@ -1,29 +1,58 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Ban, CheckCircle2, Copy, ImageOffIcon, SearchIcon, ShieldAlert, type LucideIcon } from "lucide-react";
-import type { ModerationQueueRow, ModerationStats, ModerationAction, PaginatedModeration } from "@/lib/types/admin-moderation";
+import {
+  BanIcon,
+  ClockIcon,
+  CircleCheckIcon,
+  DownloadIcon,
+  ShieldAlertIcon,
+  type LucideIcon,
+} from "lucide-react";
+import type {
+  ModerationAction,
+  ModerationQueueRow,
+  ModerationStats,
+  PaginatedModeration,
+} from "@/lib/types/admin-moderation";
 import { MODERATION_STATUSES, FLAG_TYPES } from "@/lib/types/admin-moderation";
-import { TICKET_CATEGORIES, ALL_TICKET_CATEGORIES, PAGE_LIMITS, DEFAULT_PAGE_LIMIT } from "@/lib/types/admin-ticket-constants";
-import { computeRiskScore } from "@/lib/utils/flag-risk";
-import { flagEvidence, flagLabel, moderationStatusLabel, FLAG_TYPE_LABELS } from "./flagText";
-import { KpiBar } from "./KpiBar";
-import { FlagBadge } from "./FlagBadge";
-import { RiskMeter } from "./RiskMeter";
-import { Badge } from "@/components/ui/badge";
+import type { SavedView } from "@/lib/types/admin-tickets";
+import {
+  ALL_TICKET_CATEGORIES,
+  PAGE_LIMITS,
+  DEFAULT_PAGE_LIMIT,
+} from "@/lib/types/admin-ticket-constants";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Textarea } from "@/components/ui/textarea";
-import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { AdminErrorCard } from "../shared/AdminErrorCard";
+import { FLAG_TYPE_LABELS, moderationStatusLabel } from "./flagText";
+import {
+  type FlaggedColumnKey,
+  type FlaggedColumnVisibility,
+  type FlaggedDensity,
+} from "./queue/columns";
+import { FlaggedBulkBar, type BulkModerationResult } from "./queue/FlaggedBulkBar";
+import type { FlaggedFilterValues } from "./queue/FlaggedFiltersPopover";
+import { FlaggedPagination } from "./queue/FlaggedPagination";
+import { FlaggedReviewDrawer } from "./queue/FlaggedReviewDrawer";
+import { FlaggedTable } from "./queue/FlaggedTable";
+import { FlaggedToolbar, type FilterChip } from "./queue/FlaggedToolbar";
+import {
+  buildBuiltInFlaggedViews,
+  FlaggedViewTabs,
+  type BuiltInFlaggedViewKey,
+} from "./queue/FlaggedViewTabs";
+import { useFlaggedKeyboard } from "./queue/useFlaggedKeyboard";
+import { useFlaggedSelection } from "./queue/useFlaggedSelection";
 
 interface Barangay {
   id: number;
@@ -45,16 +74,31 @@ interface QueryState {
   limit: number;
 }
 
-function initialQueryState(query: Record<string, string | undefined>, sessionOffice?: string): QueryState {
+// Which surface this page's saved views belong to. The Ticket Queue passes
+// nothing and gets 'tickets'; without this the two strips would share one list
+// and a queue preset would replay `urgency=High` against a parser that has no
+// such filter.
+const SAVED_VIEW_SURFACE = "flagged";
+
+function initialQueryState(
+  query: Record<string, string | undefined>,
+  sessionOffice?: string,
+): QueryState {
   const office =
     query.office === "all" || query.office === "MEO" || query.office === "MDRRMO"
       ? query.office
       : (sessionOffice ?? "all");
   const status =
-    query.status === "all" || (MODERATION_STATUSES as string[]).includes(query.status ?? "") ? (query.status as string) : "pending";
-  const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "";
+    query.status === "all" || (MODERATION_STATUSES as string[]).includes(query.status ?? "")
+      ? (query.status as string)
+      : "pending";
+  const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "")
+    ? (query.category as string)
+    : "";
   const flag = (FLAG_TYPES as string[]).includes(query.flag ?? "") ? (query.flag as string) : "";
-  const limit = (PAGE_LIMITS as readonly number[]).includes(Number(query.limit)) ? Number(query.limit) : DEFAULT_PAGE_LIMIT;
+  const limit = (PAGE_LIMITS as readonly number[]).includes(Number(query.limit))
+    ? Number(query.limit)
+    : DEFAULT_PAGE_LIMIT;
 
   return {
     office,
@@ -85,64 +129,32 @@ function buildParams(state: QueryState): URLSearchParams {
   return params;
 }
 
-function getPageNumbers(current: number, total: number): (number | "ellipsis")[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const keep = new Set([1, total, current - 1, current, current + 1].filter((p) => p >= 1 && p <= total));
-  const sorted = [...keep].sort((a, b) => a - b);
-  const result: (number | "ellipsis")[] = [];
-  let prev = 0;
-  for (const p of sorted) {
-    if (prev && p - prev > 1) result.push("ellipsis");
-    result.push(p);
-    prev = p;
-  }
-  return result;
-}
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-const HEAD_CLASS = "text-xs font-semibold tracking-wide text-muted-foreground uppercase";
-
-// Deliberately distinct from FLAG_CATEGORIES' palette (lib/utils/flag-risk.ts) — moderation
-// status and flag type are different axes shown in the same row, and must not share hues
-// (e.g. "Quarantined" status vs. "Photo authenticity" flag both being rose read as one signal).
-const STATUS_BADGE_CLASS: Record<string, string> = {
-  pending: "border-blue-200 bg-blue-50 text-blue-800",
-  quarantined: "border-orange-200 bg-orange-50 text-orange-700",
-  dismissed: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  duplicate: "border-sky-200 bg-sky-50 text-sky-700",
-};
-
-function ModerationStatusBadge({ status }: { status: string | null }) {
-  const key = status ?? "pending";
-  return (
-    <Badge className={STATUS_BADGE_CLASS[key]} variant="outline">
-      {moderationStatusLabel(status)}
-    </Badge>
-  );
-}
-
-function RowThumbnail({ src, alt }: { src: string; alt: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <div aria-label={`${alt} — image unavailable`} className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-muted text-muted-foreground" role="img">
-        <ImageOffIcon aria-hidden="true" className="size-4" />
-      </div>
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} className="size-10 shrink-0 rounded-md border object-cover" onError={() => setFailed(true)} src={src} />
-  );
+// Which built-in tab the current filters match, or null when they are ad-hoc.
+// Deliberately not "fall back to All flagged", which would claim a preset the
+// admin is not actually looking at.
+function matchBuiltInView(state: QueryState, defaultOffice: string): BuiltInFlaggedViewKey | null {
+  const bare =
+    state.category === "" &&
+    state.barangayId === "" &&
+    state.flag === "" &&
+    state.search === "" &&
+    state.from === "" &&
+    state.to === "" &&
+    state.office === defaultOffice;
+  if (!bare) return null;
+  if (state.status === "all") return "all";
+  if (state.status === "pending") return "pending";
+  if (state.status === "quarantined") return "quarantined";
+  if (state.status === "dismissed") return "dismissed";
+  if (state.status === "duplicate") return "duplicate";
+  return null;
 }
 
 export function FlaggedWorkspace({
   initialData,
   initialQuery,
   initialStats,
+  initialSavedViews = [],
   barangays,
   sessionOffice,
   isSystemAdmin = false,
@@ -150,24 +162,51 @@ export function FlaggedWorkspace({
   initialData: PaginatedModeration;
   initialQuery: Record<string, string | undefined>;
   initialStats: ModerationStats;
+  initialSavedViews?: SavedView[];
   barangays: Barangay[];
   sessionOffice?: string;
   isSystemAdmin?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const defaultOffice = sessionOffice ?? "all";
 
-  const [query, setQuery] = useState<QueryState>(() => initialQueryState(initialQuery, sessionOffice));
+  const [query, setQuery] = useState<QueryState>(() =>
+    initialQueryState(initialQuery, sessionOffice),
+  );
   const [searchInput, setSearchInput] = useState(query.search);
   const [data, setData] = useState(initialData);
   const [stats, setStats] = useState(initialStats);
+  const [savedViews, setSavedViews] = useState(initialSavedViews);
+  const [activeSavedViewId, setActiveSavedViewId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refetchNonce, setRefetchNonce] = useState(0);
+
+  const [columnVisibility, setColumnVisibility] = useState<FlaggedColumnVisibility>({});
+  const [density, setDensity] = useState<FlaggedDensity>("comfortable");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [saveViewOpen, setSaveViewOpen] = useState(false);
+  const [saveViewName, setSaveViewName] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState<BulkModerationResult | null>(null);
 
   const skipFetchRef = useRef(true);
   const skipSearchDebounceRef = useRef(true);
+
+  const visibleIds = data.reports.map((r) => r.id);
+  const selection = useFlaggedSelection(visibleIds);
+  const { clear: clearSelection } = selection;
+
+  const openReview = useCallback((id: number) => setSelectedId(id), []);
+  const { focusedId, setFocusedId } = useFlaggedKeyboard({
+    ids: visibleIds,
+    onToggleSelect: selection.toggle,
+    onOpen: openReview,
+    // The drawer owns the keyboard while it is open — J/K there would move the
+    // list underneath the report being reviewed.
+    enabled: selectedId === null && !saveViewOpen,
+  });
 
   useEffect(() => {
     if (skipSearchDebounceRef.current) {
@@ -207,7 +246,9 @@ export function FlaggedWorkspace({
         setStats(statsJson);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load flagged reports.");
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load flagged reports.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -218,573 +259,410 @@ export function FlaggedWorkspace({
   }, [query, pathname, router, refetchNonce]);
 
   function updateFilter(patch: Partial<QueryState>) {
+    setActiveSavedViewId(null);
     setQuery((q) => ({ ...q, ...patch, page: 1 }));
-  }
-
-  function resetFilters() {
-    setSearchInput("");
-    setQuery({ office: sessionOffice ?? "all", status: "pending", category: "", barangayId: "", flag: "", search: "", from: "", to: "", page: 1, limit: query.limit });
   }
 
   function retry() {
     setRefetchNonce((n) => n + 1);
   }
 
-  function refetchNow() {
+  function resetFilters() {
+    setSearchInput("");
+    setActiveSavedViewId(null);
+    setQuery((q) => ({
+      ...q,
+      office: defaultOffice,
+      status: "pending",
+      category: "",
+      barangayId: "",
+      flag: "",
+      search: "",
+      from: "",
+      to: "",
+      page: 1,
+    }));
+  }
+
+  const activeViewKey =
+    activeSavedViewId === null ? matchBuiltInView(query, defaultOffice) : null;
+
+  function selectBuiltInView(key: BuiltInFlaggedViewKey) {
+    setSearchInput("");
+    setActiveSavedViewId(null);
+    setQuery((q) => ({
+      ...q,
+      office: defaultOffice,
+      status: key === "all" ? "all" : key,
+      category: "",
+      barangayId: "",
+      flag: "",
+      search: "",
+      from: "",
+      to: "",
+      page: 1,
+    }));
+  }
+
+  function selectSavedView(view: SavedView) {
+    // Replayed through the same parser the address bar uses, so a stored
+    // office= is still clamped by resolveOfficeScope server-side — a saved view
+    // is a bookmark, never a grant.
+    const parsed = initialQueryState(
+      Object.fromEntries(new URLSearchParams(view.query).entries()),
+      sessionOffice,
+    );
+    setSearchInput(parsed.search);
+    setQuery(parsed);
+    setActiveSavedViewId(view.id);
+  }
+
+  async function saveCurrentView() {
+    const name = saveViewName.trim();
+    if (!name) return;
+    setSaveViewOpen(false);
+    setSaveViewName("");
+    try {
+      const res = await fetch("/api/admin/saved-views", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          query: buildParams(query).toString(),
+          surface: SAVED_VIEW_SURFACE,
+        }),
+      });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const saved: SavedView = await res.json();
+      setSavedViews((views) => {
+        const rest = views.filter((v) => v.id !== saved.id);
+        return [...rest, saved].sort((a, b) => a.position - b.position || a.id - b.id);
+      });
+      setActiveSavedViewId(saved.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save this view.");
+    }
+  }
+
+  async function deleteSavedView(view: SavedView) {
+    setSavedViews((views) => views.filter((v) => v.id !== view.id));
+    if (activeSavedViewId === view.id) setActiveSavedViewId(null);
+    try {
+      await fetch(`/api/admin/saved-views/${view.id}`, { method: "DELETE" });
+    } catch {
+      // The tab is already gone from the strip; a failed delete resurfaces on
+      // the next full page load rather than snapping back mid-interaction.
+    }
+  }
+
+  // No bulk endpoint exists for moderation, and this loops the single-report
+  // route rather than adding one. That is the honest shape here: every report
+  // gets its own audit event and its own citizen notification, exactly as if a
+  // moderator had opened each one — and a mixed selection (some already
+  // decided) half-succeeds, which the caller is told about per id.
+  async function bulkModerate({
+    action,
+    note,
+    canonicalReportId,
+  }: {
+    action: ModerationAction;
+    note?: string;
+    canonicalReportId?: number;
+  }) {
+    const ids = selection.selectedIds;
+    if (ids.length === 0) return;
+
+    setBulkBusy(true);
+    setBulkResult(null);
+    const ok: number[] = [];
+    const failed: { id: number; reason: string }[] = [];
+
+    for (const id of ids) {
+      try {
+        const res = await fetch(`/api/admin/reports/${id}/moderate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, note, canonicalReportId }),
+        });
+        if (res.ok) {
+          ok.push(id);
+        } else {
+          const body = await res.json().catch(() => ({}));
+          failed.push({ id, reason: body.error ?? body.message ?? `Failed (${res.status})` });
+        }
+      } catch {
+        failed.push({ id, reason: "Network error" });
+      }
+    }
+
+    setBulkBusy(false);
+    setBulkResult({ action: ACTION_LABEL[action], ok, failed });
+    // Only the reports that actually moved leave the selection: the ones that
+    // failed stay selected so the admin can retry them without re-finding them.
+    if (failed.length === 0) clearSelection();
     setRefetchNonce((n) => n + 1);
   }
 
-  const hasActiveFilters =
-    query.office !== (sessionOffice ?? "all") ||
-    query.status !== "pending" ||
-    query.category !== "" ||
-    query.barangayId !== "" ||
-    query.flag !== "" ||
-    query.search !== "" ||
-    query.from !== "" ||
-    query.to !== "";
+  function toggleColumn(key: FlaggedColumnKey) {
+    setColumnVisibility((visibility) => ({ ...visibility, [key]: visibility[key] === false }));
+  }
+
+  const filters: FlaggedFilterValues = {
+    office: query.office,
+    status: query.status,
+    category: query.category,
+    barangayId: query.barangayId,
+    flag: query.flag,
+    from: query.from,
+    to: query.to,
+  };
+
+  const filterChips: FilterChip[] = [];
+  if (query.flag) {
+    filterChips.push({ key: "flag", label: `Flag: ${FLAG_TYPE_LABELS[query.flag] ?? query.flag}` });
+  }
+  if (query.status !== "pending") {
+    filterChips.push({
+      key: "status",
+      label: `Status: ${query.status === "all" ? "All" : moderationStatusLabel(query.status)}`,
+    });
+  }
+  if (query.office !== defaultOffice) {
+    filterChips.push({ key: "office", label: `Office: ${query.office === "all" ? "All" : query.office}` });
+  }
+  if (query.category) filterChips.push({ key: "category", label: `Category: ${query.category}` });
+  if (query.barangayId) {
+    const name = barangays.find((b) => String(b.id) === query.barangayId)?.name ?? query.barangayId;
+    filterChips.push({ key: "barangayId", label: `Barangay: ${name}` });
+  }
+  if (query.from) filterChips.push({ key: "from", label: `From: ${query.from}` });
+  if (query.to) filterChips.push({ key: "to", label: `To: ${query.to}` });
+
+  function removeChip(key: string) {
+    if (key === "status") updateFilter({ status: "pending" });
+    else if (key === "office") updateFilter({ office: defaultOffice });
+    else updateFilter({ [key]: "" } as Partial<QueryState>);
+  }
+
+  const exportParams = buildParams(query);
+  const selectionExportParams = new URLSearchParams(exportParams);
+  selectionExportParams.set("ids", selection.selectedIds.join(","));
 
   const from = data.total === 0 ? 0 : (data.page - 1) * data.limit + 1;
   const to = Math.min(data.total, data.page * data.limit);
-  const sortedBarangays = [...barangays].sort((a, b) => a.name.localeCompare(b.name));
-  const selected = data.reports.find((r) => r.id === selectedId) ?? null;
+  const builtInViews = buildBuiltInFlaggedViews(stats);
+
+  // Drawer navigation walks the page currently on screen, in the order it is
+  // displayed — the same order the moderator is reading.
+  const selectedIndex = selectedId === null ? -1 : visibleIds.indexOf(selectedId);
+  const selectedReport: ModerationQueueRow | null =
+    selectedIndex >= 0 ? data.reports[selectedIndex] : null;
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <div className="space-y-0.5">
-        <h1 className="font-heading text-base font-semibold">Flagged Reports</h1>
-        <p className="text-xs text-muted-foreground">
-          Flags are a signal, not an auto-reject — every report below was still created. Review the evidence and choose an action.
-        </p>
-      </div>
-
-      <KpiBar stats={stats} />
-
-      <Card className="gap-0">
-        <CardContent className="flex flex-wrap items-center gap-3 border-b p-3">
-          <div className="relative w-full max-w-[320px]">
-            <SearchIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              aria-label="Search flagged reports"
-              className="pl-8"
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search by title or citizen name..."
-              type="search"
-              value={searchInput}
-            />
-          </div>
-          <Select onValueChange={(v) => updateFilter({ status: v })} value={query.status}>
-            <SelectTrigger aria-label="Moderation status"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pending">Pending review</SelectItem>
-              <SelectItem value="all">All statuses</SelectItem>
-              {MODERATION_STATUSES.filter((s) => s !== "pending").map((s) => (
-                <SelectItem key={s} value={s}>
-                  {moderationStatusLabel(s)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select onValueChange={(v) => updateFilter({ flag: v === "all" ? "" : v })} value={query.flag || "all"}>
-            <SelectTrigger aria-label="Flag type"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All flag types</SelectItem>
-              {FLAG_TYPES.map((f) => (
-                <SelectItem key={f} value={f}>
-                  {FLAG_TYPE_LABELS[f]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {isSystemAdmin ? (
-            <Select onValueChange={(v) => updateFilter({ office: v })} value={query.office}>
-              <SelectTrigger aria-label="Office"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All offices</SelectItem>
-                <SelectItem value="MEO">MEO</SelectItem>
-                <SelectItem value="MDRRMO">MDRRMO</SelectItem>
-              </SelectContent>
-            </Select>
-          ) : (
-            // Non-system-admins can't view another office's flagged reports —
-            // the backend clamps this regardless of what's sent, so the
-            // picker is replaced with a fixed label instead of a control
-            // that would look interactive but do nothing.
-            <Badge aria-label="Office" variant="secondary">My Office: {sessionOffice}</Badge>
-          )}
-          <Select onValueChange={(v) => updateFilter({ category: v === "all" ? "" : v })} value={query.category || "all"}>
-            <SelectTrigger aria-label="Category"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {TICKET_CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select onValueChange={(v) => updateFilter({ barangayId: v === "all" ? "" : v })} value={query.barangayId || "all"}>
-            <SelectTrigger aria-label="Barangay"><SelectValue /></SelectTrigger>
-            <SelectContent className="min-w-56">
-              <SelectItem value="all">All barangays</SelectItem>
-              {sortedBarangays.map((b) => (
-                <SelectItem key={b.id} value={String(b.id)}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex items-center gap-1.5">
-            <Input aria-label="Submitted from" className="w-[140px]" onChange={(e) => updateFilter({ from: e.target.value })} type="date" value={query.from} />
-            <span className="text-xs text-muted-foreground">to</span>
-            <Input aria-label="Submitted to" className="w-[140px]" onChange={(e) => updateFilter({ to: e.target.value })} type="date" value={query.to} />
-          </div>
-          {hasActiveFilters && (
-            <Button className="ml-auto" onClick={resetFilters} size="sm" variant="ghost">
-              Reset filters
-            </Button>
-          )}
-        </CardContent>
-
-        {/* Desktop table */}
-        <CardContent className="hidden min-w-0 p-0 md:block">
-          <Table className="[&_td]:py-1.5 [&_th]:h-8">
-            <TableHeader className="bg-muted/40">
-              <TableRow>
-                <TableHead className={`${HEAD_CLASS} pl-6`}>Report</TableHead>
-                <TableHead className={HEAD_CLASS}>Flags</TableHead>
-                <TableHead className={HEAD_CLASS}>Category</TableHead>
-                <TableHead className={HEAD_CLASS}>Barangay</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Office</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Submitted</TableHead>
-                <TableHead className={`${HEAD_CLASS} text-center`}>Moderation</TableHead>
-                <TableHead className={`${HEAD_CLASS} pr-6 text-end`}>Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {error ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell className="p-4" colSpan={8}>
-                    <AdminErrorCard message={error} onRetry={retry} title="Couldn't refresh flagged reports" />
-                  </TableCell>
-                </TableRow>
-              ) : loading ? (
-                <SkeletonRows count={data.limit} />
-              ) : data.reports.length === 0 ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell className="p-10 text-center" colSpan={8}>
-                    <EmptyState />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                data.reports.map((report) => <ReportRow key={report.id} onReview={() => setSelectedId(report.id)} report={report} />)
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Mobile card list */}
-      <div className="flex flex-col gap-2 md:hidden">
-        {error ? (
-          <AdminErrorCard message={error} onRetry={retry} title="Couldn't refresh flagged reports" />
-        ) : loading ? (
-          Array.from({ length: Math.min(data.limit, 8) }).map((_, i) => <ReportCardSkeleton key={i} />)
-        ) : data.reports.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-1 p-8 text-center">
-              <EmptyState />
-            </CardContent>
-          </Card>
-        ) : (
-          data.reports.map((report) => <ReportCard key={report.id} onReview={() => setSelectedId(report.id)} report={report} />)
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">{data.total === 0 ? "No flagged reports" : `Showing ${from}–${to} of ${data.total} flagged reports`}</p>
-        <div className="flex flex-wrap items-center gap-3">
-          <Select onValueChange={(v) => setQuery((q) => ({ ...q, limit: Number(v), page: 1 }))} value={String(query.limit)}>
-            <SelectTrigger aria-label="Rows per page" size="sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {PAGE_LIMITS.map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  {n} / page
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Pagination className="mx-0 w-auto">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  aria-disabled={data.page <= 1}
-                  className={data.page <= 1 ? "pointer-events-none opacity-40" : undefined}
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (data.page > 1) setQuery((q) => ({ ...q, page: q.page - 1 }));
-                  }}
-                />
-              </PaginationItem>
-              {getPageNumbers(data.page, data.totalPages).map((p, i) =>
-                p === "ellipsis" ? (
-                  <PaginationItem key={`e${i}`}>
-                    <PaginationEllipsis />
-                  </PaginationItem>
-                ) : (
-                  <PaginationItem key={p}>
-                    <PaginationLink
-                      href="#"
-                      isActive={p === data.page}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setQuery((q) => ({ ...q, page: p }));
-                      }}
-                    >
-                      {p}
-                    </PaginationLink>
-                  </PaginationItem>
-                ),
-              )}
-              <PaginationItem>
-                <PaginationNext
-                  aria-disabled={data.page >= data.totalPages}
-                  className={data.page >= data.totalPages ? "pointer-events-none opacity-40" : undefined}
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (data.page < data.totalPages) setQuery((q) => ({ ...q, page: q.page + 1 }));
-                  }}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
-      </div>
-
-      <Sheet onOpenChange={(open) => !open && setSelectedId(null)} open={selected !== null}>
-        <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-md" side="right">
-          {selected && (
-            <ReportDetail
-              onModerated={() => {
-                setSelectedId(null);
-                refetchNow();
-              }}
-              report={selected}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <>
-      <ShieldAlert aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
-      <p className="mt-3 text-sm font-medium">No flagged reports match this filter.</p>
-      <p className="mt-1 text-sm text-muted-foreground">Try widening your search or resetting filters.</p>
-    </>
-  );
-}
-
-function FlagsCell({ flags }: { flags: string[] }) {
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      <FlagBadge flag={flags[0]} />
-      {flags.length > 1 && <span className="text-xs text-muted-foreground">+{flags.length - 1} more</span>}
-    </div>
-  );
-}
-
-function ReportRow({ report, onReview }: { report: ModerationQueueRow; onReview: () => void }) {
-  return (
-    <TableRow>
-      <TableCell className="max-w-64 pl-6">
-        <div className="flex items-center gap-2.5">
-          <RowThumbnail alt={`Evidence photo for "${report.title}"`} src={report.image_url} />
-          <div className="min-w-0">
-            <button className="block truncate text-left font-medium hover:underline" onClick={onReview} title={report.title} type="button">
-              {report.title}
-            </button>
-            <div className="text-xs text-muted-foreground">
-              Report <span className="font-mono">#{report.id}</span>
-            </div>
-          </div>
-        </div>
-      </TableCell>
-      <TableCell>
-        <FlagsCell flags={report.flags} />
-      </TableCell>
-      <TableCell>{report.category}</TableCell>
-      <TableCell className="max-w-32">
-        <span className="block truncate" title={report.barangay_name}>
-          {report.barangay_name}
-        </span>
-      </TableCell>
-      <TableCell className="text-center">{report.assigned_office}</TableCell>
-      <TableCell className="text-center text-xs">{formatDate(report.created_at)}</TableCell>
-      <TableCell className="text-center">
-        <ModerationStatusBadge status={report.moderation_status} />
-      </TableCell>
-      <TableCell className="pr-6 text-end">
-        <Button onClick={onReview} size="sm" variant="outline">
-          Review
-        </Button>
-      </TableCell>
-    </TableRow>
-  );
-}
-
-function ReportCard({ report, onReview }: { report: ModerationQueueRow; onReview: () => void }) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-2 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <RowThumbnail alt={`Evidence photo for "${report.title}"`} src={report.image_url} />
-            <div className="min-w-0">
-              <p className="truncate font-medium" title={report.title}>
-                {report.title}
-              </p>
-              <p className="font-mono text-xs text-muted-foreground">#{report.id} · {report.category}</p>
-            </div>
-          </div>
-          <ModerationStatusBadge status={report.moderation_status} />
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {report.barangay_name} · {report.assigned_office} · {formatDate(report.created_at)}
-        </p>
-        <FlagsCell flags={report.flags} />
-        <Button className="self-start" onClick={onReview} size="sm" variant="outline">
-          Review
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SkeletonRows({ count }: { count: number }) {
-  return (
-    <>
-      {Array.from({ length: Math.min(count, 15) }).map((_, i) => (
-        <TableRow className="hover:bg-transparent" key={i}>
-          {Array.from({ length: 8 }).map((__, j) => (
-            <TableCell key={j}>
-              <Skeleton className="h-4 w-full max-w-24" />
-            </TableCell>
-          ))}
-        </TableRow>
-      ))}
-    </>
-  );
-}
-
-function ReportCardSkeleton() {
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-2 p-4">
-        <Skeleton className="h-4 w-2/3" />
-        <Skeleton className="h-3 w-1/3" />
-        <Skeleton className="h-3 w-1/2" />
-        <Skeleton className="h-5 w-20" />
-        <Skeleton className="h-7 w-24" />
-      </CardContent>
-    </Card>
-  );
-}
-
-type PendingAction = { action: ModerationAction } | null;
-
-function ReportDetail({ report, onModerated }: { report: ModerationQueueRow; onModerated: () => void }) {
-  const score = computeRiskScore(report.flags);
-  const trustRatio = report.citizen_report_count > 0 ? Math.round((1 - report.citizen_flag_count / report.citizen_report_count) * 100) : 100;
-  const isPending = report.moderation_status === null;
-
-  const [pending, setPending] = useState<PendingAction>(null);
-  const [note, setNote] = useState("");
-  const [duplicateId, setDuplicateId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  function startAction(action: ModerationAction) {
-    setPending({ action });
-    setNote("");
-    setDuplicateId("");
-    setActionError(null);
-  }
-
-  async function confirmAction() {
-    if (!pending) return;
-    if (pending.action === "quarantine" && !note.trim()) {
-      setActionError("A moderation note is required to quarantine a report.");
-      return;
-    }
-    if (pending.action === "duplicate" && !duplicateId.trim()) {
-      setActionError("Enter the canonical report ID first.");
-      return;
-    }
-
-    setSubmitting(true);
-    setActionError(null);
-    const res = await fetch(`/api/admin/reports/${report.id}/moderate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: pending.action,
-        canonicalReportId: pending.action === "duplicate" ? Number(duplicateId) : undefined,
-        note: note.trim() || undefined,
-      }),
-    });
-    const responseData = await res.json();
-    setSubmitting(false);
-
-    if (!res.ok) {
-      setActionError(responseData.error ?? "Action failed.");
-      return;
-    }
-    onModerated();
-  }
-
-  return (
-    <>
-      <SheetHeader className="border-b">
-        <SheetTitle>{report.title}</SheetTitle>
-        <SheetDescription>
-          {report.category} · {report.barangay_name} ·{" "}
-          <Link className="text-primary underline" href={`/admin/tickets/${report.ticket_id}`}>
-            Ticket #{report.ticket_id}
-          </Link>
-        </SheetDescription>
-      </SheetHeader>
-
-      <div className="flex flex-col gap-4 overflow-y-auto p-4">
-        <div className="flex items-start justify-between gap-3">
-          <ModerationStatusBadge status={report.moderation_status} />
-          <RiskMeter score={score} size="lg" />
-        </div>
-
-        <ImageLightbox alt={`Evidence photo submitted for "${report.title}" in ${report.barangay_name}, flagged for review`} src={report.image_url} />
-
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-          <div>
-            <dt className="text-xs text-muted-foreground">Report / Ticket</dt>
-            <dd className="font-mono">
-              #{report.id} / #{report.ticket_id}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Citizen severity</dt>
-            <dd>{report.citizen_severity}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Office</dt>
-            <dd>{report.assigned_office}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Submitted</dt>
-            <dd>{new Date(report.created_at).toLocaleString()}</dd>
-          </div>
-        </dl>
-
-        {report.description && (
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</p>
-            <p className="text-sm">{report.description}</p>
-          </div>
-        )}
-
+    <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Flag breakdown</p>
-          <ul className="space-y-1.5">
-            {report.flags.map((flag) => (
-              <li className="flex flex-wrap items-center gap-2 text-sm" key={flag}>
-                <FlagBadge flag={flag} />
-                <span className="text-muted-foreground">{flagEvidence(flag, report) || flagLabel(flag)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="rounded-lg border bg-muted/30 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reporter history</p>
-          <p className="mt-1 text-sm">
-            {report.citizen_name} · {report.citizen_report_count} report{report.citizen_report_count === 1 ? "" : "s"} submitted, {report.citizen_flag_count} flagged
+          <h1 className="text-[26px] leading-8 font-semibold tracking-[-0.02em]">Flagged Reports</h1>
+          <p className="mt-1.5 max-w-[68ch] text-[13px] text-muted-foreground">
+            Flags are a signal, not an auto-reject — every report below was still created. Review the
+            evidence and choose an action.
           </p>
-          <p className="text-xs text-muted-foreground">{trustRatio}% clean submission rate</p>
         </div>
+        <Button asChild size="sm" variant="outline">
+          <a href={`/api/admin/reports/flagged.csv?${exportParams.toString()}`}>
+            <DownloadIcon />
+            Export CSV
+          </a>
+        </Button>
+      </div>
 
-        {!isPending && (
-          <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Moderation decision</p>
-            <p className="mt-1">
-              {moderationStatusLabel(report.moderation_status)} by {report.moderated_by ?? "—"}
-              {report.moderated_at && ` on ${new Date(report.moderated_at).toLocaleString()}`}
-            </p>
-            {report.moderation_status === "duplicate" ? (
-              <p className="text-muted-foreground">Canonical report #{report.moderation_note}</p>
-            ) : (
-              report.moderation_note && <p className="text-muted-foreground">&ldquo;{report.moderation_note}&rdquo;</p>
-            )}
-          </div>
+      <FlaggedViewTabs
+        activeKey={activeViewKey}
+        activeSavedViewId={activeSavedViewId}
+        onDeleteSaved={deleteSavedView}
+        onSaveCurrent={() => setSaveViewOpen(true)}
+        onSelectBuiltIn={selectBuiltInView}
+        onSelectSaved={selectSavedView}
+        savedViews={savedViews}
+        views={builtInViews}
+      />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard
+          icon={ShieldAlertIcon}
+          label="Pending review"
+          note="awaiting a decision"
+          value={stats.pending.toLocaleString()}
+        />
+        <KpiCard
+          icon={BanIcon}
+          label="Quarantined"
+          note="hidden from map"
+          value={stats.quarantined.toLocaleString()}
+        />
+        <KpiCard
+          icon={CircleCheckIcon}
+          label="Dismissed"
+          note="kept as-is"
+          value={stats.dismissed.toLocaleString()}
+        />
+        <KpiCard
+          icon={ClockIcon}
+          label="Avg. resolution time"
+          note="flag to decision"
+          value={stats.avgResolutionHours == null ? "—" : `${stats.avgResolutionHours.toFixed(1)}h`}
+        />
+      </div>
+
+      {error && !loading && (
+        <AdminErrorCard
+          message="Something went wrong while updating the flagged queue."
+          onRetry={retry}
+          title="Moderation action failed"
+        />
+      )}
+
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <FlaggedToolbar
+          activeFilterCount={filterChips.length}
+          barangays={barangays}
+          columnVisibility={columnVisibility}
+          density={density}
+          filterChips={filterChips}
+          filters={filters}
+          isSystemAdmin={isSystemAdmin}
+          onClearAll={resetFilters}
+          onDensityChange={setDensity}
+          onFilterChange={(patch) => updateFilter(patch)}
+          onRemoveChip={removeChip}
+          onSearchInput={setSearchInput}
+          onToggleColumn={toggleColumn}
+          searchInput={searchInput}
+          sessionOffice={sessionOffice}
+        />
+
+        {selection.selectedIds.length > 0 && (
+          <FlaggedBulkBar
+            busy={bulkBusy}
+            exportHref={`/api/admin/reports/flagged.csv?${selectionExportParams.toString()}`}
+            onClearSelection={clearSelection}
+            onDismissResult={() => setBulkResult(null)}
+            onModerate={bulkModerate}
+            result={bulkResult}
+            selectedIds={selection.selectedIds}
+          />
         )}
 
-        {isPending &&
-          (pending ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              {pending.action === "duplicate" ? (
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium" htmlFor="canonical-report-id">
-                    Canonical report ID this duplicates
-                  </label>
-                  <Input id="canonical-report-id" onChange={(e) => setDuplicateId(e.target.value)} placeholder="e.g. 42" type="number" value={duplicateId} />
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-sm">
-                    {pending.action === "dismiss" ? "Dismiss this flag? The report stays visible as-is." : "Quarantine this report? It will be hidden from the public map immediately."}
-                  </p>
-                  <label className="block text-xs font-medium" htmlFor="moderation-note">
-                    Moderation note {pending.action === "quarantine" ? "(required)" : "(optional)"}
-                  </label>
-                  <Textarea id="moderation-note" onChange={(e) => setNote(e.target.value)} placeholder="Why this decision?" value={note} />
-                </div>
-              )}
-              {actionError && <p className="mt-2 text-sm text-destructive">{actionError}</p>}
-              <div className="mt-3 flex gap-2">
-                <Button disabled={submitting} onClick={confirmAction} size="sm">
-                  {submitting ? "Working..." : "Confirm"}
-                </Button>
-                <Button disabled={submitting} onClick={() => setPending(null)} size="sm" variant="outline">
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              <ActionButton icon={CheckCircle2} label="Dismiss flag" onClick={() => startAction("dismiss")} tone="emerald" />
-              <ActionButton icon={Ban} label="Quarantine report" onClick={() => startAction("quarantine")} tone="rose" />
-              <ActionButton icon={Copy} label="Mark as duplicate" onClick={() => startAction("duplicate")} tone="neutral" />
-            </div>
-          ))}
+        <FlaggedTable
+          columnVisibility={columnVisibility}
+          density={density}
+          error={error}
+          focusedId={focusedId}
+          headerState={selection.headerState}
+          isSelected={selection.isSelected}
+          loading={loading}
+          onFocusRow={setFocusedId}
+          onRetry={retry}
+          onReview={openReview}
+          onToggleAll={selection.toggleAll}
+          onToggleSelect={selection.toggle}
+          reports={data.reports}
+          skeletonRows={data.limit}
+        />
+
+        <FlaggedPagination
+          from={from}
+          limit={query.limit}
+          onLimitChange={(limit) => setQuery((q) => ({ ...q, limit, page: 1 }))}
+          onPageChange={(page) => setQuery((q) => ({ ...q, page }))}
+          page={data.page}
+          to={to}
+          total={data.total}
+          totalPages={data.totalPages}
+        />
       </div>
-    </>
+
+      <FlaggedReviewDrawer
+        hasNext={selectedIndex >= 0 && selectedIndex < visibleIds.length - 1}
+        hasPrevious={selectedIndex > 0}
+        onClose={() => setSelectedId(null)}
+        onModerated={() => {
+          setSelectedId(null);
+          setRefetchNonce((n) => n + 1);
+        }}
+        onNext={() => setSelectedId(visibleIds[selectedIndex + 1] ?? selectedId)}
+        onPrevious={() => setSelectedId(visibleIds[selectedIndex - 1] ?? selectedId)}
+        report={selectedReport}
+      />
+
+      <Dialog onOpenChange={setSaveViewOpen} open={saveViewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save this view</DialogTitle>
+            <DialogDescription>
+              Saves the current filters and page size as a personal tab on this page only. Only you
+              can see it. Saving over an existing name replaces it.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            aria-label="View name"
+            maxLength={40}
+            onChange={(e) => setSaveViewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveCurrentView();
+            }}
+            placeholder="e.g. Duplicate photos, MDRRMO"
+            value={saveViewName}
+          />
+          <DialogFooter>
+            <Button onClick={() => setSaveViewOpen(false)} variant="outline">
+              Cancel
+            </Button>
+            <Button disabled={!saveViewName.trim()} onClick={saveCurrentView}>
+              Save view
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
-const TONE_CLASS: Record<string, string> = {
-  emerald: "bg-emerald-600 text-white hover:bg-emerald-700",
-  rose: "bg-rose-600 text-white hover:bg-rose-700",
-  neutral: "",
+const ACTION_LABEL: Record<ModerationAction, string> = {
+  dismiss: "Dismiss flags",
+  quarantine: "Quarantine",
+  duplicate: "Mark duplicate",
 };
 
-function ActionButton({ icon: Icon, label, onClick, tone }: { icon: LucideIcon; label: string; onClick: () => void; tone: string }) {
+// Same card as the Ticket Queue's KPI row — flat, bordered, one accent icon.
+function KpiCard({
+  label,
+  value,
+  note,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  icon: LucideIcon;
+}) {
   return (
-    <Button className={TONE_CLASS[tone]} onClick={onClick} size="sm" variant={tone === "neutral" ? "outline" : "default"}>
-      <Icon aria-hidden="true" className="size-4" />
-      {label}
-    </Button>
+    <div className="flex flex-col gap-2.5 rounded-xl border border-border bg-card px-4 pt-3.5 pb-4">
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className="truncate text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
+          title={label}
+        >
+          {label}
+        </span>
+        <Icon aria-hidden="true" className="size-[15px] shrink-0 text-[var(--brand)]" strokeWidth={1.75} />
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[30px] leading-8 font-semibold tracking-[-0.03em] tabular-nums">
+          {value}
+        </span>
+        <span className="text-xs text-muted-foreground">{note}</span>
+      </div>
+    </div>
   );
 }

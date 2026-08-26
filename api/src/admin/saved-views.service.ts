@@ -11,6 +11,23 @@ export const SAVED_VIEW_QUERY_MAX_LENGTH = 500;
 // admin cannot turn their own queue header into an unbounded list.
 export const SAVED_VIEWS_MAX_PER_ADMIN = 12;
 
+// The admin surfaces that own a view strip. Kept in sync with the CHECK
+// constraint in 0029_saved_views_surface.sql — a value that passes here but
+// fails there would surface as a 500 on save rather than a 400.
+export const SAVED_VIEW_SURFACES = ['tickets', 'flagged'] as const;
+export type SavedViewSurface = (typeof SAVED_VIEW_SURFACES)[number];
+export const DEFAULT_SAVED_VIEW_SURFACE: SavedViewSurface = 'tickets';
+
+// Callers send the surface as a raw query/body value. Anything unrecognized
+// falls back to 'tickets' rather than throwing: the Ticket Queue shipped
+// before this column existed and still calls these endpoints without a
+// surface at all, and that request must keep meaning what it always did.
+export function parseSavedViewSurface(input: unknown): SavedViewSurface {
+  return SAVED_VIEW_SURFACES.includes(input as SavedViewSurface)
+    ? (input as SavedViewSurface)
+    : DEFAULT_SAVED_VIEW_SURFACE;
+}
+
 export interface SavedViewRow {
   id: number;
   name: string;
@@ -25,11 +42,18 @@ export interface SavedViewRow {
 // replayed. A saved view is a bookmark, never a grant — a preset containing
 // `office=MDRRMO` saved by a system admin and somehow replayed by an MEO
 // officer would still be clamped back to MEO on read.
+//
+// The same holds for the 'flagged' surface, where the replaying parser is
+// ModerationService.parseModerationQuery instead. Adding a surface changed
+// which parser re-reads the string, not whether one does.
 @Injectable()
 export class SavedViewsService {
   constructor(@Inject(DB) private readonly db: PostgresJsDatabase) {}
 
-  async list(admin: AdminSession): Promise<SavedViewRow[]> {
+  async list(
+    admin: AdminSession,
+    surface: SavedViewSurface = DEFAULT_SAVED_VIEW_SURFACE,
+  ): Promise<SavedViewRow[]> {
     return this.db
       .select({
         id: adminSavedViews.id,
@@ -38,7 +62,12 @@ export class SavedViewsService {
         position: adminSavedViews.position,
       })
       .from(adminSavedViews)
-      .where(eq(adminSavedViews.adminId, admin.adminId))
+      .where(
+        and(
+          eq(adminSavedViews.adminId, admin.adminId),
+          eq(adminSavedViews.surface, surface),
+        ),
+      )
       .orderBy(asc(adminSavedViews.position), asc(adminSavedViews.id));
   }
 
@@ -50,6 +79,7 @@ export class SavedViewsService {
     admin: AdminSession,
     nameInput: unknown,
     queryInput: unknown,
+    surface: SavedViewSurface = DEFAULT_SAVED_VIEW_SURFACE,
   ): Promise<SavedViewRow> {
     const name = typeof nameInput === 'string' ? nameInput.trim() : '';
     if (!name) throw new BadRequestException('name is required.');
@@ -65,7 +95,11 @@ export class SavedViewsService {
       );
     }
 
-    const existing = await this.list(admin);
+    // Per surface, not per admin: list() is already scoped, so the 12-view
+    // cap and the same-name overwrite below both apply within one strip.
+    // A "Needs review" preset on Flagged Reports and one on the Ticket Queue
+    // are different bookmarks and must not collide.
+    const existing = await this.list(admin, surface);
     const match = existing.find((view) => view.name === name);
     if (match) {
       const [updated] = await this.db
@@ -93,6 +127,7 @@ export class SavedViewsService {
         adminId: admin.adminId,
         name,
         query,
+        surface,
         position: existing.length,
       })
       .returning({

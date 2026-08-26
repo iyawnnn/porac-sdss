@@ -363,7 +363,8 @@ centers the band), and the card's `pb-5` is paired to `CardBodyPanel`'s `mb-[-17
 **Queue treatment — plain white card.** A single `rounded-xl border border-border bg-card`
 container with no gray frame, introduced by the Precision Queue rebuild of `/admin/tickets`
 and matching the Claude Design artboard "1a Precision queue". Used by the Queue's five KPI
-tiles and by its one table card.
+tiles and its table card, and by `/admin/flagged`'s four KPI tiles and table card since that
+page was rebuilt to the same grammar (artboards "2a Moderation queue" / "2b Review drawer").
 
 The Queue does not use the gray frame because its table card already stacks four bands that
 each need their own fill — toolbar (`--card`), selection bar (`--brand-subtle`), header strip
@@ -383,6 +384,20 @@ Two more Queue-surface rules:
   in `components/features/admin/tickets/queue/columns.ts`, which is the single source for
   the header strip, the rows *and* `TicketQueueSkeleton` — that import is what now enforces
   the §5.5 skeleton-matches-grid rule instead of a hand-synced `COLUMN_COUNT`.
+  `/admin/flagged` has its own `flagged/queue/columns.ts` on the same shape. The two are
+  deliberately **not** one generic model: they share a grammar, not a row type, and a shared
+  model would have to be parameterized over both key unions, so every flagged-only column
+  would widen a type the Ticket Queue depends on. What is genuinely shared stays shared —
+  `TABLE_HEAD_CLASS` (§4.2) and the 9px/5px density pair are the same on both surfaces, so a
+  Comfortable row is 40px on either.
+- **A status that acts on the public gets the only solid fill.** On `/admin/flagged`,
+  Pending / Dismissed / Duplicate are dot-and-tint pills drawn from the `--color-status-*`
+  ramp, while Quarantined is a solid `--foreground` fill and quarantine is the only solid
+  button in the review drawer. It is the one moderation decision with an immediate
+  public-facing consequence, and it must not read as one more tinted state. Flag-type badges
+  keep their own violet/amber/rose palette (`FLAG_CATEGORIES`) because flag type and
+  moderation status are different axes shown in the same row — sharing a hue would read as
+  one signal.
 - **Wide tables scroll inside their own card, never on the page body.** The fixed tracks
   cannot compress, so below `queueMinWidth()` the flexible Ticket column would otherwise
   absorb the whole shortfall and collapse. The admin content column is ~960px at a 1280px
