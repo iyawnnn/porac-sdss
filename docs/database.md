@@ -90,6 +90,15 @@ Two ORMs are in play (see `CLAUDE.md`'s Architecture section for the full ration
 - **Ownership:** Application (Drizzle) — no geometry column.
 - **Note:** `notes` is internal-only and must never appear in any `api/src/citizens/*` response or the citizen tracking timeline. `assigned_admin_id`/`created_by_admin_id` are FK-less integers, same cross-table reasoning as `status_history.admin_id`/`office_reassignments.admin_id`.
 
+### `work_order_status_history`
+- **Purpose:** Append-only status timeline for work orders — what `status_history` is to tickets. `work_orders` stores only the *current* status, so before this table a `pending` → `in_progress` transition left no trace and "how many work orders were pending on date X" was unanswerable (`cancelled` never sets `completed_at`, so even a `created_at`/`completed_at` approximation was wrong). Carries `work_order_id`, the `work_order_status` value, and a write-time `admin_id`/`admin_name` snapshot.
+- **Reads:** `DashboardService.getPendingWorkOrderTrend` — the Pending Work Orders KPI sparkline on `/admin`.
+- **Writes:** `WorkOrdersService.create` (one origin row, in the same transaction as the INSERT) and `WorkOrdersService.setStatus` (one row per transition, in the same transaction as the UPDATE). Never written anywhere else.
+- **Expected empty?** Only before the first work order exists. The migration seeds one origin row per pre-existing work order at its `created_at` with `pending`.
+- **Ownership:** Application (Drizzle) — no geometry column.
+- **Honesty caveat:** History exists only from migration `0027` forward. Real transitions that happened *before* the migration are unrecoverable and are deliberately not invented — the seeded origin rows only give each pre-existing work order a defined starting point. Early dates in the trend can therefore read high, since a work order completed before the migration still resolves to its seeded `pending` origin. This is documented rather than smoothed over because the alternative is a chart that silently lies about the past.
+- **Relation to `admin_audit_events`:** Separate on purpose. The audit log is System-Administrator-only and keyed on *actor*; this table is a metric source keyed on the work order. Deriving the trend from the audit log would couple a dashboard chart to an access-restricted oversight trail.
+
 ### `notifications`
 - **Purpose:** One row per notification, targeted either at a specific `recipient_id` (an admin or citizen, per `recipient_type`) or at an entire `recipient_office` (admin-only, read by every admin in that office — no per-admin fan-out rows). No FK on `recipient_id` since it points to one of two different tables depending on `recipient_type`.
 - **Reads:** Notification bell/list UI (citizen and admin), read by both a specific-recipient query and an office-wide query.

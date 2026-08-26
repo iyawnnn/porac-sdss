@@ -87,6 +87,8 @@ export class DashboardController {
       leaderboard,
       categories,
       incidentTrend,
+      activeTicketTrend,
+      pendingWorkOrderTrend,
       statusDistribution,
       departmentWorkload,
       citizenSeverityDistribution,
@@ -94,11 +96,17 @@ export class DashboardController {
       rain1hMm,
       officePerformanceSummary,
       needsAttention,
+      deltas,
     ] = await Promise.all([
       this.dashboard.getDashboardKpis(office),
       this.dashboard.getBarangayRiskRanking(5, office),
       this.dashboard.getCategoryDistribution(5, office),
       this.dashboard.getIncidentTrend(range, office),
+      // Point-in-time histories backing the two KPI sparklines. Same range
+      // and office scope as every other series here, so the last point of
+      // each agrees with the matching KPI count above.
+      this.dashboard.getActiveTicketTrend(range, office),
+      this.dashboard.getPendingWorkOrderTrend(range, office),
       this.dashboard.getStatusDistribution(office),
       // Cross-office comparison — only meaningful (and only shown) to a
       // system admin; an office admin's own KPIs above already cover them.
@@ -114,6 +122,9 @@ export class DashboardController {
       this.weather.getCurrentRain1hMm(),
       this.getOfficePerformanceSummary(office),
       this.workOrders.getNeedsAttention(office),
+      // Week-over-week KPI comparison. Fixed 7-day baseline, deliberately
+      // independent of `range` — see DashboardService.getKpiDeltas.
+      this.dashboard.getKpiDeltas(office),
     ]);
 
     return {
@@ -121,6 +132,8 @@ export class DashboardController {
       leaderboard,
       categories,
       incidentTrend,
+      activeTicketTrend,
+      pendingWorkOrderTrend,
       statusDistribution,
       departmentWorkload,
       citizenSeverityDistribution,
@@ -128,6 +141,7 @@ export class DashboardController {
       topUrgencyQueue: topUrgencyQueueData.tickets,
       range,
       rain1hMm,
+      deltas,
       officePerformanceSummary,
       needsAttention,
     };

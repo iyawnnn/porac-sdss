@@ -29,10 +29,14 @@ const URGENCY_BAND_STYLE: Record<UrgencyBand, UrgencyBandStyle> = {
   },
 };
 
-// Fallback for null/unknown band — neutral canvas + ink-500, stays in token system.
+// Fallback for null/unknown band. Uses the shadcn neutral tokens the admin
+// shell actually renders from, not the legacy cool-slate --color-canvas /
+// --color-ink-* ramp this previously reached into — those are a separate,
+// still-unmigrated neutral system, so a badge using them read visibly cooler
+// than the card it sat on.
 const FALLBACK_STYLE: UrgencyBandStyle = {
   hex: "#808c99",
-  className: "bg-canvas text-ink-500",
+  className: "bg-muted text-muted-foreground",
 };
 
 export function getUrgencyBandStyle(band: string | null | undefined): UrgencyBandStyle {
@@ -59,7 +63,7 @@ const URGENCY_BADGE_CONFIG: Record<UrgencyLevel, Omit<UrgencyBadgeConfig, "level
 // TicketCard).
 export function getUrgencyBadgeConfig(priorityScore: number | null): UrgencyBadgeConfig {
   if (priorityScore === null) {
-    return { level: "LOW", label: "—", className: "bg-line-100 text-ink-500" };
+    return { level: "LOW", label: "—", className: "bg-muted text-muted-foreground" };
   }
   const level = urgencyLevelFromScore(priorityScore);
   return { level, ...URGENCY_BADGE_CONFIG[level] };
