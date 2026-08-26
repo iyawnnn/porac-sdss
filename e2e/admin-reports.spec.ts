@@ -32,8 +32,11 @@ test("Ticket Queue has an Export CSV button whose href includes the current filt
 test("Ticket Queue export href updates when a filter changes", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/tickets");
+  // Category moved into the Filters popover with the queue rebuild.
+  await page.getByRole("button", { name: /^Filters/ }).click();
   await page.getByLabel("Category", { exact: true }).click();
   await page.getByRole("option", { name: "Pothole / Road Surface Damage" }).click();
+  await page.keyboard.press("Escape");
 
   const exportLink = page.getByRole("link", { name: "Export CSV" });
   await expect(exportLink).toHaveAttribute("href", /category=Pothole/);

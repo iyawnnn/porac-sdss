@@ -18,7 +18,7 @@ import {
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
-import { admins, tickets, workOrders } from '../db/schema';
+import { admins, tickets, workOrders, workOrderStatusHistory } from '../db/schema';
 import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
@@ -278,6 +278,40 @@ export class WorkOrdersService {
     return row;
   }
 
+  // One work order per selected ticket, sharing the same title/notes/
+  // assignee/due date. Loops create() rather than batch-inserting so each
+  // work order gets the identical office check, work_order_status_history
+  // origin row and audit entry a single create() writes. Partial success is
+  // reported, never rolled back — see BulkActionResult in tickets.service.ts.
+  async bulkCreate(
+    ticketIds: number[],
+    input: {
+      title: unknown;
+      notes: unknown;
+      assignedAdminId: unknown;
+      dueDate: unknown;
+    },
+    admin: AdminSession,
+  ): Promise<{ ok: number[]; skipped: { id: number; reason: string }[] }> {
+    const ok: number[] = [];
+    const skipped: { id: number; reason: string }[] = [];
+    for (const ticketId of ticketIds) {
+      try {
+        await this.create({ ...input, ticketId }, admin);
+        ok.push(ticketId);
+      } catch (err) {
+        skipped.push({
+          id: ticketId,
+          reason:
+            err instanceof Error && err.message
+              ? err.message
+              : 'Could not create a work order.',
+        });
+      }
+    }
+    return { ok, skipped };
+  }
+
   async create(
     input: {
       ticketId: unknown;
@@ -342,6 +376,17 @@ export class WorkOrdersService {
           dueDate,
         })
         .returning(SAFE_COLUMNS);
+      // Origin row for the status timeline. Without it a work order that is
+      // never touched again would have no history at all, and the as-of
+      // trend query would have nothing to resolve it to. status is read back
+      // from the inserted row rather than hardcoded to 'pending' so this
+      // stays correct if the column default ever changes.
+      await tx.insert(workOrderStatusHistory).values({
+        workOrderId: created.id,
+        status: created.status,
+        adminId: admin.adminId,
+        adminName: admin.adminName,
+      });
       await this.audit.logInTx(tx, {
         actor: actorFrom(admin),
         actionType: 'work_order_created',
@@ -519,6 +564,18 @@ export class WorkOrdersService {
         .set({ status: nextStatus, completedAt, updatedAt: new Date() })
         .where(eq(workOrders.id, id))
         .returning(SAFE_COLUMNS);
+      // Append-only status timeline, in the same transaction as the status
+      // write itself so the two can never disagree. This is what makes the
+      // dashboard's Pending Work Orders sparkline reconstructable — the
+      // work_orders row only ever holds the current status. Distinct from
+      // the audit log below, which is System-Administrator-only and keyed on
+      // actor, not on the metric.
+      await tx.insert(workOrderStatusHistory).values({
+        workOrderId: id,
+        status: nextStatus,
+        adminId: admin.adminId,
+        adminName: admin.adminName,
+      });
       await this.audit.logInTx(tx, {
         actor: actorFrom(admin),
         actionType:

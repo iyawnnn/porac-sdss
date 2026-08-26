@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -12,6 +13,7 @@ import {
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
+import { BULK_MAX_TICKETS } from './tickets.service';
 import { WorkOrdersService } from './work-orders.service';
 
 @UseGuards(AdminSessionGuard)
@@ -43,6 +45,37 @@ export class WorkOrdersController {
     @Body('dueDate') dueDate: unknown,
   ) {
     return this.workOrders.create({ ticketId, title, notes, assignedAdminId, dueDate }, admin);
+  }
+
+  // Declared before @Patch(':id')/@Post(':id/status') is not required (the
+  // path segment differs), but 'bulk' is a literal that must never be parsed
+  // as an id — keeping it on its own POST path guarantees that.
+  @Post('bulk')
+  bulkCreate(
+    @CurrentAdmin() admin: AdminSession,
+    @Body('ticketIds') ticketIds: unknown,
+    @Body('title') title: unknown,
+    @Body('notes') notes: unknown,
+    @Body('assignedAdminId') assignedAdminId: unknown,
+    @Body('dueDate') dueDate: unknown,
+  ) {
+    if (!Array.isArray(ticketIds) || ticketIds.length === 0) {
+      throw new BadRequestException('ticketIds must be a non-empty array');
+    }
+    if (ticketIds.length > BULK_MAX_TICKETS) {
+      throw new BadRequestException(
+        `ticketIds must contain at most ${BULK_MAX_TICKETS} ids`,
+      );
+    }
+    const ids = [...new Set(ticketIds.map((v) => Number(v)))];
+    if (ids.some((n) => !Number.isInteger(n) || n <= 0)) {
+      throw new BadRequestException('ticketIds must be positive integers');
+    }
+    return this.workOrders.bulkCreate(
+      ids,
+      { title, notes, assignedAdminId, dueDate },
+      admin,
+    );
   }
 
   @Patch(':id')

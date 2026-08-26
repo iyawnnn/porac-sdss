@@ -1,0 +1,51 @@
+"use client"
+
+import * as React from "react"
+import { Popover as PopoverPrimitive } from "radix-ui"
+
+import { cn } from "@/lib/utils"
+
+function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
+  return <PopoverPrimitive.Root data-slot="popover" {...props} />
+}
+
+function PopoverTrigger({
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
+  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
+}
+
+function PopoverAnchor({
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Anchor>) {
+  return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />
+}
+
+// Surface classes deliberately mirror DropdownMenuContent's (rounded-lg,
+// bg-popover, shadow-md, ring-1 ring-foreground/10, same enter/exit set) so a
+// popover and a dropdown opened from adjacent toolbar buttons read as one
+// family. The only difference is sizing: a dropdown matches its trigger width,
+// a popover sizes to its own content.
+function PopoverContent({
+  className,
+  align = "start",
+  sideOffset = 4,
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+  return (
+    <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Content
+        data-slot="popover-content"
+        align={align}
+        sideOffset={sideOffset}
+        className={cn(
+          "z-50 max-h-(--radix-popover-content-available-height) w-72 origin-(--radix-popover-content-transform-origin) overflow-y-auto rounded-lg bg-popover p-4 text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          className
+        )}
+        {...props}
+      />
+    </PopoverPrimitive.Portal>
+  )
+}
+
+export { Popover, PopoverTrigger, PopoverAnchor, PopoverContent }

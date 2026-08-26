@@ -90,6 +90,15 @@ Two ORMs are in play (see `CLAUDE.md`'s Architecture section for the full ration
 - **Ownership:** Application (Drizzle) — no geometry column.
 - **Note:** `notes` is internal-only and must never appear in any `api/src/citizens/*` response or the citizen tracking timeline. `assigned_admin_id`/`created_by_admin_id` are FK-less integers, same cross-table reasoning as `status_history.admin_id`/`office_reassignments.admin_id`.
 
+### `work_order_status_history`
+- **Purpose:** Append-only status timeline for work orders — what `status_history` is to tickets. `work_orders` stores only the *current* status, so before this table a `pending` → `in_progress` transition left no trace and "how many work orders were pending on date X" was unanswerable (`cancelled` never sets `completed_at`, so even a `created_at`/`completed_at` approximation was wrong). Carries `work_order_id`, the `work_order_status` value, and a write-time `admin_id`/`admin_name` snapshot.
+- **Reads:** `DashboardService.getPendingWorkOrderTrend` — the Pending Work Orders KPI sparkline on `/admin`.
+- **Writes:** `WorkOrdersService.create` (one origin row, in the same transaction as the INSERT) and `WorkOrdersService.setStatus` (one row per transition, in the same transaction as the UPDATE). Never written anywhere else.
+- **Expected empty?** Only before the first work order exists. The migration seeds one origin row per pre-existing work order at its `created_at` with `pending`.
+- **Ownership:** Application (Drizzle) — no geometry column.
+- **Honesty caveat:** History exists only from migration `0027` forward. Real transitions that happened *before* the migration are unrecoverable and are deliberately not invented — the seeded origin rows only give each pre-existing work order a defined starting point. Early dates in the trend can therefore read high, since a work order completed before the migration still resolves to its seeded `pending` origin. This is documented rather than smoothed over because the alternative is a chart that silently lies about the past.
+- **Relation to `admin_audit_events`:** Separate on purpose. The audit log is System-Administrator-only and keyed on *actor*; this table is a metric source keyed on the work order. Deriving the trend from the audit log would couple a dashboard chart to an access-restricted oversight trail.
+
 ### `notifications`
 - **Purpose:** One row per notification, targeted either at a specific `recipient_id` (an admin or citizen, per `recipient_type`) or at an entire `recipient_office` (admin-only, read by every admin in that office — no per-admin fan-out rows). No FK on `recipient_id` since it points to one of two different tables depending on `recipient_type`.
 - **Reads:** Notification bell/list UI (citizen and admin), read by both a specific-recipient query and an office-wide query.
@@ -108,6 +117,18 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 - **Expected empty?** Yes for a citizen who has never touched Account & Security beyond initial signup.
 - **Ownership:** Application (Drizzle).
 - **Relation to `admin_audit_events`:** Intentionally separate — different actor types, different event vocabularies, different audiences (this one is citizen-self-service; the admin one is System-Administrator-only). See §G below for the full cross-table rationale.
+
+### `admin_saved_views`
+- **Purpose:** Personal filter presets for an admin table's view-tab strip — the tabs that appear after the built-in ones. Two surfaces use it: the Ticket Queue ("All active", "High urgency", "Disputed", "MEO", "MDRRMO") and Flagged Reports ("All flagged", "Pending review", "Quarantined", "Dismissed", "Duplicates"). One row per saved preset per admin per surface.
+- **Reads:** `SavedViewsService.list`, called by `app/admin/tickets/page.tsx` and `app/admin/flagged/page.tsx` on first paint and by `GET /admin/saved-views?surface=`. Both call sites let the fetch fail to an empty list — a saved view is a convenience, never load-bearing for the table.
+- **Writes:** `SavedViewsService.create` ("Save this view" in either view-tab strip) and `.remove` (the × on a saved tab). Re-saving an existing name UPDATEs that row rather than inserting a near-duplicate — enforced by the `(admin_id, surface, name)` unique index.
+- **Expected empty?** Yes. Saved views are opt-in; a fresh install and most admins will have none, and the queue renders its five built-in tabs regardless.
+- **Ownership:** Application (Drizzle).
+- **Scoping:** Strictly personal. `admin_id` is the only read/write key and is the authorization boundary — there is no office-wide or shared preset, and `remove` matches on `(id, admin_id)` so one admin can never delete another's. Unlike `status_history.admin_id` and `admin_audit_events.actor_admin_id`, which deliberately keep an unreferenced id so history survives the actor, this table uses a real FK with `ON DELETE CASCADE`: a deleted admin's private bookmarks have no historical value.
+- **Why `query` is a string, not columns:** It stores the serialized querystring (e.g. `status=active&urgency=High`), so adding a new filter never requires a migration here. It is re-parsed through the same URL parsing the address bar uses and then through the surface's own server-side parser — `TicketsService.parseTicketQuery` or `ModerationService.parseModerationQuery` — which means a stored or hand-edited `office=` can never widen scope past `resolveOfficeScope`. A saved view is a bookmark, never a grant; adding a surface changed which parser replays the string, not whether one does.
+- **`surface` (added in `0029`):** `'tickets' | 'flagged'`, CHECK-constrained, defaulting to `'tickets'` — which is also what backfilled every pre-existing row, since the Ticket Queue was the only surface able to write one before the column existed. It keeps the two strips disjoint: without it a queue preset would replay `urgency=High` against Flagged Reports, whose parser has no such filter, and silently resolve to no filters at all. A request that omits `surface` still means `'tickets'` (`parseSavedViewSurface`), so the Ticket Queue's existing calls were not changed.
+- **Caps:** 12 views per admin **per surface**, name ≤ 40 chars, query ≤ 500 chars (`SavedViewsService`). Per surface rather than per admin, so a full Ticket Queue strip cannot block saving anything on Flagged Reports.
+- **Counts:** Built-in tabs carry server-computed counts (`TicketsService.getViewCounts` on `GET /admin/tickets`; `GET /admin/moderation/stats` for Flagged Reports, whose "All flagged" tab is the sum of the four states). Saved views deliberately carry **no** count — counting an arbitrary stored filter would mean one aggregate query per preset on every page load.
 
 ---
 

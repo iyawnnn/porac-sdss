@@ -46,16 +46,33 @@
   --color-urgency-critical-ink: #8a1d12;
   --color-urgency-critical-edge: #eda9a1;
 
-  /* Status  ticket_status. Under Review / In Progress reuse the brand
-     ramp exactly (DESIGN.md 4.5); only Reported and Resolved need their
-     own tokens since they sit outside that progression. */
+  /* Status  ticket_status. Now a complete five-status set: Under Review
+     and In Progress previously had no tokens and were hand-copied as hex
+     into StatusPill.tsx, borrowed from the retiring --color-brand-* blue
+     ramp. The values here are byte-identical to those hex literals  this
+     is a de-duplication, not a re-hue. Ticket-status hues remain the
+     approval-gated TBD in docs/design-system.md 3.2; consolidating them
+     onto tokens is what makes that future decision a one-file edit
+     instead of a hunt through five call sites. */
   --color-status-reported-tint: #f1f3f5;
   --color-status-reported-ink: #434b54;
   --color-status-reported-dot: #98a2ac;
 
+  --color-status-under-review-tint: #eff5fc;
+  --color-status-under-review-ink: #1a4570;
+  --color-status-under-review-dot: #2b6cb0;
+
+  --color-status-in-progress-tint: #d8e6f7;
+  --color-status-in-progress-ink: #102943;
+  --color-status-in-progress-dot: #22578e;
+
   --color-status-resolved-tint: #e3f5ee;
   --color-status-resolved-ink: #0b5741;
   --color-status-resolved-dot: #0f7a5a;
+
+  --color-status-rejected-tint: #fdeaea;
+  --color-status-rejected-ink: #8a1d12;
+  --color-status-rejected-dot: #b42318;
   --color-lifecycle-reported: #4f86c6;
   --color-lifecycle-under-review: #c27a2c;
   --color-lifecycle-in-progress: #7966ad;
@@ -93,6 +110,20 @@
   --color-ink-500: #5a6672;
   --color-ink-700: #2e3841;
   --color-ink-900: #10151a;
+
+  /* Ticket Queue surface (docs/design-system.md 5.8). The queue is the one
+     admin surface that does NOT use the dashboard gray-frame card idiom:
+     its table lives in a plain white bordered card, so it needs a band tint
+     one step off #ffffff that --muted (#f3f4f6) is too heavy for. Used by
+     the queue table header strip and its footer strip only. */
+  --color-surface-subtle: #fafafa;
+
+  /* Track behind the Urgency column inline meter. Deliberately not --border
+     (#e5e7eb): the meter sits beside a mono score at 13px and an e5 track
+     reads as a rule rather than an empty gauge. The FILL is never defined
+     here - it comes from getUrgencyBandStyle().hex so the meter, the score
+     and the level badge can never disagree. */
+  --color-meter-track: #eef0f2;
 }
 
 /* Font variables come from next/font (see app/layout.tsx) as runtime CSS
@@ -173,25 +204,48 @@ body {
    data-color tokens in the @theme block above (urgency, status, lifecycle,
    severity, flag, map accents) are semantic palettes and are intentionally
    untouched by this phase  see docs/design-system.md 3.2. */
+/* PORAC-SDSS brand repoint (2026-08) — admin shell + dashboard scope only.
+   Source: PORAC-SDSS Brand Guidelines (orange #FF7A00 / charcoal #111827 /
+   gray #6B7280 / light gray #F3F4F6 / white). #FF7A00 itself only reaches
+   2.6:1 against white — below the 3:1 UI-component floor DESIGN system 8
+   requires — so it is used for the ring/accent role only (never text/fill).
+   --primary/--sidebar-primary use --brand-solid, a deepened same-hue shade
+   (hue 29°, same as #FF7A00) that clears 4.5:1 for white button/label text.
+   The legacy --color-brand ramp (blue, citizen auth/report pages) and the
+   --color-ink, --color-line, and --color-canvas neutrals are deliberately
+   untouched here — out of scope for this pass, see docs/design-system.md 9.
+   NB: do not write a token glob with a trailing asterisk-slash in this
+   comment; that sequence terminates the CSS comment and breaks the build. */
 :root {
+  --brand: #ff7a00;
+  --brand-solid: #a85100;
+  --brand-hover: #854000;
+  --brand-subtle: #fff4eb;
+  /* One step lighter than --brand-subtle. --brand-subtle is the FILL for
+     chips, badges and the bulk-action bar; --brand-wash is the row-level
+     wash behind a hovered or selected table row, which sits underneath
+     those chips and would otherwise tie with them. Keep them distinct. */
+  --brand-wash: #fffaf5;
+  --brand-border: #ffd9ad;
+
   --background: #ffffff;
-  --foreground: #1c1917;
+  --foreground: #111827;
   --card: #ffffff;
-  --card-foreground: #1c1917;
+  --card-foreground: #111827;
   --popover: #ffffff;
-  --popover-foreground: #1c1917;
-  --primary: #c2410c;
+  --popover-foreground: #111827;
+  --primary: var(--brand-solid);
   --primary-foreground: #ffffff;
-  --secondary: #f5f5f4;
-  --secondary-foreground: #1c1917;
-  --muted: #fafaf9;
-  --muted-foreground: #79716b;
-  --accent: #f5f5f4;
-  --accent-foreground: #1c1917;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #111827;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #f3f4f6;
+  --accent-foreground: #111827;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: #e7e5e4;
-  --input: #d6d3d1;
-  --ring: #f26b1d;
+  --border: #e5e7eb;
+  --input: #d1d5db;
+  --ring: var(--brand);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -199,13 +253,47 @@ body {
   --chart-5: oklch(0.269 0 0);
   --radius: 0.5rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #1c1917;
-  --sidebar-primary: #c2410c;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: var(--brand-solid);
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #fef3ea;
-  --sidebar-accent-foreground: #9a3e06;
-  --sidebar-border: #e7e5e4;
-  --sidebar-ring: #f26b1d;
+  --sidebar-accent: var(--brand-subtle);
+  --sidebar-accent-foreground: var(--brand-solid);
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: var(--brand);
+
+  /* Dashboard trend chart — deliberately neutral. Brand orange is chrome,
+     never data (docs/design-system.md §2.2), and the trend series carries no
+     semantic meaning that any existing data ramp already owns, so it renders
+     in the neutral scale with a charcoal accent on the peak bar rather than
+     joining the lifecycle/severity/office series palettes. Replaces the
+     legacy --color-brand-500 (blue #2b6cb0) these charts read before. */
+  /* KPI week-over-week deltas. Colored by the arithmetic SIGN: a rise is
+     green, a fall is red, on every card that carries one.
+
+     Recorded because it was a deliberate reversal, not an oversight: an
+     earlier revision colored these by judgement instead (a rise in Active
+     Tickets or Pending Work Orders rendered red, because a growing hazard
+     backlog is bad news). That was changed on request to the conventional
+     up-is-green reading. The consequence is live and intended — a growing
+     backlog now reads green on those two cards.
+
+     Deviation on record (docs/design-system.md 2.1, one meaning per color
+     channel): these share a hue family with --color-status-resolved-* and
+     --color-status-rejected-*. Accepted because the two never share a form
+     factor — a status is a tinted pill with a dot, a delta is bold inline
+     text that always carries a +/- glyph and an arrow, so neither is
+     color-only. If a third green ever wants onto this dashboard, revisit
+     rather than adding to the pile. */
+  --delta-up: #0f7a5a;
+  --delta-down: #b42318;
+  --delta-flat: #6b7280;
+
+  --chart-bar: #e5e7eb;
+  --chart-bar-hover: #d1d5db;
+  --chart-bar-peak: #111827;
+  --chart-grid: #eef0f2;
+  --chart-axis-text: #9ca3af;
+  --chart-reference: #c9ced4;
 }
 
 /* Accessibility floor (DESIGN.md 11)  no focus styling existed before this.

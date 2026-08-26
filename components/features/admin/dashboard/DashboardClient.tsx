@@ -1,25 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useRef, useState, useTransition } from "react";
-import { FileText, Inbox, Ticket } from "lucide-react";
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
-import { DASHBOARD_RANGES, type BarangayRiskRow, type CategoryDistributionRow, type DashboardKpis, type DashboardRange, type DistributionRow, type IncidentTrendRow, type OfficePerformanceSummary as OfficePerformanceSummaryData, type NeedsAttention as NeedsAttentionData } from "@/lib/types/admin-dashboard";
+import { useRef, useState, useTransition } from "react";
+import { ArrowDownRight, ArrowUpRight, BarChart3, ClipboardList, FileText, Inbox, Ticket } from "lucide-react";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ReferenceLine, XAxis, YAxis } from "recharts";
+import { DASHBOARD_RANGES, type BarangayRiskRow, type CategoryDistributionRow, type CountTrendRow, type DashboardDeltas, type DashboardKpis, type DashboardRange, type DistributionRow, type IncidentTrendRow, type KpiDelta, type OfficePerformanceSummary as OfficePerformanceSummaryData, type NeedsAttention as NeedsAttentionData } from "@/lib/types/admin-dashboard";
 import type { AdminTicketRow } from "@/lib/types/admin-tickets";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { relativeAge } from "@/lib/utils/ui/time";
+import { CardBodyPanel } from "../shared/CardBodyPanel";
+import { CardHeaderRow } from "../shared/CardHeaderRow";
+import { TABLE_HEAD_CLASS } from "../shared/tableHead";
 import { StatusPill } from "../shared/StatusPill";
 import { NeedsAttention } from "./NeedsAttention";
 
 const SEP = "·";
-const trendChartConfig = { reports: { label: "Submitted reports", color: "var(--color-brand-500)" } } satisfies ChartConfig;
+// Neutral by design — see the --chart-* block in app/globals.css for why the
+// trend series does not use brand orange (or the legacy brand blue it read
+// before): brand is chrome, never data.
+const trendChartConfig = { reports: { label: "Submitted reports", color: "var(--chart-bar-peak)" } } satisfies ChartConfig;
+// KPI sparklines share one series key ("value") so the three cards can feed
+// KpiCard from differently-named API fields without three near-identical
+// configs — the label is generic because each card's own heading names it.
+const sparklineChartConfig = { value: { label: "Recent trend", color: "var(--chart-bar-peak)" } } satisfies ChartConfig;
 
 // departmentWorkload/citizenSeverityDistribution/leaderboard/categories/
 // statusDistribution stay in the fetched payload and this type — the API
@@ -30,49 +39,167 @@ const trendChartConfig = { reports: { label: "Submitted reports", color: "var(--
 // Office Performance Summary, Quick Actions, and Map Presets were removed
 // from this composition — their components/data remain intact, just
 // unreachable from /admin until a future task gives them a home).
-type DashboardData = { kpis: DashboardKpis; leaderboard: BarangayRiskRow[]; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; statusDistribution: DistributionRow[]; departmentWorkload: DistributionRow[] | null; citizenSeverityDistribution: DistributionRow[]; officePerformanceSummary: OfficePerformanceSummaryData; needsAttention: NeedsAttentionData; range?: DashboardRange };
+type DashboardData = { kpis: DashboardKpis; leaderboard: BarangayRiskRow[]; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; activeTicketTrend: CountTrendRow[]; pendingWorkOrderTrend: CountTrendRow[]; statusDistribution: DistributionRow[]; departmentWorkload: DistributionRow[] | null; citizenSeverityDistribution: DistributionRow[]; officePerformanceSummary: OfficePerformanceSummaryData; needsAttention: NeedsAttentionData; deltas?: DashboardDeltas; range?: DashboardRange };
 
 function numeric(value: number | string | null | undefined): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function formatShortDate(value: string): string { const date = new Date(value + "T00:00:00"); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
 function formatLongDate(value: string): string { const date = new Date(value + "T00:00:00"); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }); }
 
-function IncidentTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: { date: string; reports: number } }> }) { const row = payload?.[0]?.payload; if (!active || !row) return null; return <div data-testid="incident-chart-tooltip" className="grid min-w-44 gap-1 rounded-lg border bg-background px-3 py-2 text-xs shadow-xl"><p className="font-medium">{formatLongDate(row.date)}</p><div className="flex items-center justify-between gap-4 text-muted-foreground"><span>Submitted reports</span><strong className="font-mono text-sm text-foreground">{numeric(row.reports).toLocaleString()}</strong></div></div>; }
-function RangeControl({ range, isUpdating, onChange }: { range: DashboardRange; isUpdating: boolean; onChange: (range: DashboardRange) => void }) { return <ToggleGroup aria-label="Incident report date range" disabled={isUpdating} onValueChange={(value) => { const nextRange = Number(value); if (DASHBOARD_RANGES.includes(nextRange as DashboardRange)) onChange(nextRange as DashboardRange); }} size="sm" spacing={0} type="single" value={String(range)} variant="outline">{DASHBOARD_RANGES.map((days) => <ToggleGroupItem aria-label={"Last " + days + " Days"} key={days} value={String(days)}>Last {days} Days</ToggleGroupItem>)}</ToggleGroup>; }
+// Dark charcoal pill, matching the approved reference composition. Uses the
+// charcoal --chart-bar-peak rather than a surface token because it floats
+// over the bars and needs to out-contrast them, not sit beside them.
+function IncidentTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: { date: string; reports: number } }> }) { const row = payload?.[0]?.payload; if (!active || !row) return null; return <div data-testid="incident-chart-tooltip" className="flex items-center gap-2 rounded-md bg-[var(--chart-bar-peak)] px-2.5 py-1.5 text-xs text-white shadow-lg"><span className="text-white/70">{formatLongDate(row.date)}</span><strong className="font-mono text-sm font-semibold tabular-nums text-white">{numeric(row.reports).toLocaleString()}</strong></div>; }
+// Brand orange appears on this page in exactly two chrome roles, both of
+// them permitted by docs/design-system.md §2.2 ("brand orange is chrome,
+// never data"): the card-header icons (decorative, aria-hidden) and the
+// Highest Urgency Actions row hover (selection affordance). It is
+// deliberately absent from every data surface — the sparklines, the incident
+// bars, the urgency badges and the status pills stay neutral/semantic. That
+// is not fussiness: the Hazard Urgency ramp is warm (amber → orange → red),
+// so an orange KPI or series would sit on the same hue as urgency Medium and
+// make the color channel ambiguous (§7, "warm-hue collision risk").
+//
+// This was three roles until the range control became a Select: the old
+// segmented ToggleGroup tinted its selected segment --brand-subtle. A Select
+// marks its choice with a check glyph instead, so there is nothing left to
+// tint, and the control is now entirely neutral. --brand-subtle is not
+// orphaned by that — the sidebar's active nav item still uses it.
 
-// All three KPI cards share one anatomy: a compact header (label + icon),
-// a hairline divider, then a body with the metric lower-left and a caption
-// underneath. A sparkline (lower-right) only appears where honest
-// time-series data exists — Reports This Month is the only KPI with a real
-// nearby history (data.incidentTrend); Active Tickets and Pending Work
-// Orders are point-in-time counts with no history anywhere in the API
-// response, so they get an honest caption instead of a fabricated chart.
-function KpiCard({ label, value, caption, icon: Icon, sparkline }: { label: string; value: string; caption: string; icon: typeof Ticket; sparkline?: { date: string; reports: number }[] }) {
+// Range control for every trend series on this page — the incident bar chart
+// and all three KPI sparklines (it does NOT rescope the KPI headline numbers
+// or the week-over-week deltas, which are fixed at 7 days by design).
+//
+// A Select rather than the segmented ToggleGroup this used to be. The three
+// options each read "Last N days", so a segmented control spent two of its
+// three words per segment on text identical across all of them and ran ~290px
+// wide beside the page title. Collapsing to a dropdown costs one click to
+// change range and buys the header back.
+//
+// The width is pinned rather than left to the trigger's default w-fit: the
+// label shrinks by a character between "Last 7 days" and "Last 30 days", so
+// an auto-width trigger visibly jitters as you change range. Pinning it also
+// keeps the header's right edge stable while the value changes.
+//
+// No per-item aria-label. The visible text is already the accessible name,
+// and the trigger's own label supplies the context — which is what keeps this
+// clear of WCAG 2.5.3 (Label in Name), the rule an abbreviated "7D" visible
+// label paired with a spelled-out aria-label would have violated.
+function RangeControl({ range, isUpdating, onChange }: { range: DashboardRange; isUpdating: boolean; onChange: (range: DashboardRange) => void }) {
   return (
-    <Card className="gap-0 overflow-hidden rounded-lg border-2 border-input bg-secondary py-0 ring-0">
-      <CardHeader className="flex items-center justify-between gap-2 py-3">
-        <CardTitle className="text-xs font-medium text-muted-foreground">{label}</CardTitle>
-        <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <div className="p-3">
-        <div className="flex items-end justify-between gap-3 rounded-md border border-input bg-card p-3">
-          <div className="min-w-0 space-y-0.5">
-            <p className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">{value}</p>
-            <p className="truncate text-xs text-muted-foreground">{caption}</p>
-          </div>
-          {sparkline && (
-            <ChartContainer className="h-8 w-20 shrink-0" config={trendChartConfig}>
-              <AreaChart data={sparkline} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-                <Area dataKey="reports" dot={false} fill="var(--color-reports)" fillOpacity={0.15} isAnimationActive={false} stroke="var(--color-reports)" strokeWidth={1.5} type="monotone" />
-              </AreaChart>
-            </ChartContainer>
-          )}
-        </div>
-      </div>
-    </Card>
+    <Select
+      disabled={isUpdating}
+      onValueChange={(value) => { const nextRange = Number(value); if (DASHBOARD_RANGES.includes(nextRange as DashboardRange)) onChange(nextRange as DashboardRange); }}
+      value={String(range)}
+    >
+      <SelectTrigger aria-label="Incident report date range" className="w-36" size="sm">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end">
+        {DASHBOARD_RANGES.map((days) => <SelectItem key={days} value={String(days)}>Last {days} days</SelectItem>)}
+      </SelectContent>
+    </Select>
   );
 }
 
-const HUA_HEAD_CLASS = "text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase";
+// All three KPI cards share one anatomy: a compact header (label + icon),
+// then a body with the metric lower-left and a sparkline lower-right.
+//
+// Every sparkline is real server-reconstructed history, never a projection
+// of the headline number: Reports This Month reads data.incidentTrend,
+// Active Tickets reads a status_history replay, and Pending Work Orders
+// reads work_order_status_history. See dashboard.service.ts for the caveats
+// on each — notably that work-order history only exists from its migration
+// forward, so that series is short until it accumulates. sparkline stays
+// optional so a card can still render honestly if a series is ever absent.
+// Week-over-week delta shown beside each headline number.
+//
+// Colored purely by the sign of the change: up is green, down is red, on
+// every card. This is a deliberate reversal of an earlier revision that
+// colored by judgement (a rise in Active Tickets or Pending Work Orders
+// rendered red, on the grounds that a growing hazard backlog is bad news).
+// It was changed on request. The consequence is intended and worth knowing
+// when reading these cards: a growing backlog now reads green.
+//
+// Never color-only (docs/design-system.md anti-patterns): the arrow glyph
+// and the signed number both carry the direction independently of hue.
+// `stacked` drops the "vs last week" qualifier onto its own line beneath the
+// figure, which is the KPI cards' arrangement. The Incident Reports card
+// keeps the default inline reading, where the indicator sits beside the range
+// total in a single row and a two-line block would misalign against it — so
+// this stays a variant rather than a change to every caller.
+function DeltaIndicator({ delta, stacked = false }: { delta: KpiDelta | null | undefined; stacked?: boolean }) {
+  const qualifier = <span className={stacked ? "block font-normal text-muted-foreground" : "font-normal text-muted-foreground"}>{stacked ? "vs last week" : " vs last week"}</span>;
+
+  // A missing delta is a real state, not an error — Pending Work Orders has
+  // no honest baseline until work_order_status_history reaches back a week
+  // (see getKpiDeltas). Show a dash, never a fabricated 0%.
+  if (!delta) return <span className="shrink-0 text-xs text-muted-foreground" title="Not enough history to compare yet">{stacked ? <>—{qualifier}</> : <>— vs last week</>}</span>;
+
+  const { changeAbs, changePct } = delta;
+  const rising = changeAbs > 0;
+  const flat = changeAbs === 0;
+  const tone = flat ? "var(--delta-flat)" : rising ? "var(--delta-up)" : "var(--delta-down)";
+  // changePct is null when the baseline was 0 — "+infinity%" helps nobody,
+  // so fall back to the absolute change, which is always well defined.
+  const magnitude = changePct === null
+    ? `${rising ? "+" : ""}${changeAbs.toLocaleString()}`
+    : `${changePct > 0 ? "+" : ""}${changePct.toFixed(1)}%`;
+  const Arrow = rising ? ArrowUpRight : ArrowDownRight;
+
+  // Stacked keeps the arrow+figure on their own flex row so the tone color
+  // stays scoped to them; the qualifier below is always muted, never tinted,
+  // because it is a constant label and not part of the signal.
+  if (stacked) {
+    return (
+      <span className="shrink-0 text-xs font-medium tabular-nums">
+        <span className="flex items-center gap-0.5" style={{ color: tone }}>
+          {!flat && <Arrow aria-hidden="true" className="size-3.5 shrink-0" />}
+          {magnitude}
+        </span>
+        {qualifier}
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex shrink-0 items-center gap-0.5 text-xs font-medium tabular-nums" style={{ color: tone }}>
+      {!flat && <Arrow aria-hidden="true" className="size-3.5 shrink-0" />}
+      {magnitude}
+      {qualifier}
+    </span>
+  );
+}
+
+// The header icon is --brand (#ff7a00, the guidelines' orange) rather than
+// --brand-solid. It is aria-hidden and sits beside a visible text label, so
+// it is decorative and outside WCAG 1.4.11 — which is what lets it use the
+// 2.61:1 brand orange instead of the deepened AA-safe shade. Any icon that
+// ever becomes the sole carrier of meaning has to move to --brand-solid.
+function KpiCard({ label, value, icon: Icon, sparkline, delta }: { label: string; value: string; icon: typeof Ticket; sparkline?: { date: string; value: number }[]; delta?: KpiDelta | null }) {
+  return (
+    <Card className="gap-0 rounded-xl bg-muted pt-2 pb-5">
+      <CardHeader className="px-4 pb-2">
+        <CardHeaderRow>
+          <CardTitle className="text-xs font-medium text-muted-foreground">{label}</CardTitle>
+          <Icon aria-hidden="true" className="size-5 shrink-0 text-[var(--brand)]" />
+        </CardHeaderRow>
+      </CardHeader>
+      <CardBodyPanel className="flex items-end justify-between gap-3 px-4 pt-3 pb-4">
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">{value}</p>
+          <DeltaIndicator delta={delta} stacked />
+        </div>
+        {sparkline && sparkline.length > 0 && (
+          <ChartContainer className="h-9 w-24 shrink-0" config={sparklineChartConfig}>
+            <AreaChart data={sparkline} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+              <Area dataKey="value" dot={false} fill="var(--chart-bar-peak)" fillOpacity={0.08} isAnimationActive={false} stroke="var(--chart-bar-peak)" strokeWidth={1.5} type="monotone" />
+            </AreaChart>
+          </ChartContainer>
+        )}
+      </CardBodyPanel>
+    </Card>
+  );
+}
 
 // The dashboard-landing action queue — capped and compact, deliberately not
 // a second Ticket Queue. Ranked by priority_score (Hazard Urgency Score);
@@ -82,71 +209,106 @@ const HUA_HEAD_CLASS = "text-[11px] font-semibold tracking-[0.06em] text-muted-f
 // Operational-Priority-ranked.
 function HighestUrgencyActionsTable({ tickets }: { tickets: AdminTicketRow[] | null }) {
   return (
-    <Card className="flex flex-col overflow-hidden rounded-lg border-2 border-input bg-secondary py-0 ring-0" data-testid="highest-urgency-actions">
-      <CardHeader className="py-3">
-        <CardTitle className="text-xs font-medium text-muted-foreground">Highest Urgency Actions</CardTitle>
-        <CardDescription>Highest-urgency active tickets ranked by Hazard Urgency Score.</CardDescription>
-        <CardAction>
-          <Link className="text-sm font-medium text-primary hover:underline" href="/admin/tickets?sort=priority_desc&status=active">View all</Link>
-        </CardAction>
+    <Card className="gap-0 overflow-hidden rounded-xl bg-muted pt-2 pb-5" data-testid="highest-urgency-actions">
+      {/* pt-2/pb-2 pairing, px-4 gutters and a bare title+icon header row are
+          what make this sit in the same family as the KPI and Needs Attention
+          cards — see CardBodyPanel's docblock on why pt-2 is not a free
+          parameter. This card previously used py-5, which left its gray
+          header band ~12px thicker than every other card on the page.
+
+          "View all" shares the right-hand cluster with the icon rather than
+          living in a CardAction. CardHeader switches to grid-cols-[1fr_auto]
+          whenever a CardAction is present, which pushed the icon to the right
+          edge of column 1 — i.e. directly against the link — instead of the
+          card's true right edge where every other card anchors it.
+
+          No CardDescription: the sr-only TableCaption below still gives
+          assistive tech the full description, and no other dashboard card
+          carries a visible subtitle. */}
+      <CardHeader className="px-4 pb-2">
+        <CardHeaderRow>
+          <CardTitle className="text-xs font-medium text-muted-foreground">Highest Urgency Actions</CardTitle>
+          <div className="flex shrink-0 items-center gap-3">
+            <Link className="text-sm font-medium text-primary hover:underline" href="/admin/tickets?sort=priority_desc&status=active">View all</Link>
+            <ClipboardList aria-hidden="true" className="size-5 shrink-0 text-[var(--brand)]" />
+          </div>
+        </CardHeaderRow>
       </CardHeader>
-      <div className="p-3 pt-0">
-        <div className="overflow-hidden rounded-md border border-input bg-card">
+      <CardBodyPanel>
         <Table className="text-[13px]">
           <TableCaption className="sr-only">Highest-urgency active tickets, ranked by Hazard Urgency Score.</TableCaption>
+          {/* No bg tint on the header row — the panel is a flat white surface
+              on every other card, and the uppercase micro-caps already
+              separate the header from the body without one. */}
           <TableHeader>
-            <TableRow>
-              <TableHead className={HUA_HEAD_CLASS + " pl-6"} scope="col">Ticket</TableHead>
-              <TableHead className={HUA_HEAD_CLASS} scope="col">Barangay</TableHead>
-              <TableHead className={HUA_HEAD_CLASS} scope="col">Office</TableHead>
-              <TableHead className={HUA_HEAD_CLASS + " text-center"} scope="col">Hazard Urgency</TableHead>
-              <TableHead className={HUA_HEAD_CLASS + " text-center"} scope="col">Status</TableHead>
-              <TableHead className={HUA_HEAD_CLASS + " text-end"} scope="col">Age</TableHead>
-              <TableHead className={HUA_HEAD_CLASS + " pr-6 text-end"} scope="col">Action</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className={TABLE_HEAD_CLASS + " pl-4"} scope="col">Ticket</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS} scope="col">Barangay / Office</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS} scope="col">Hazard Urgency</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS} scope="col">Status</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS + " pr-4 text-end"} scope="col">Age</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {tickets === null ? (
-              <TableRow className="hover:bg-transparent"><TableCell className="p-6 text-center text-sm text-muted-foreground" colSpan={7}>Unable to load priority actions right now.</TableCell></TableRow>
+              <TableRow className="hover:bg-transparent"><TableCell className="p-6 text-center text-sm text-muted-foreground" colSpan={5}>Unable to load priority actions right now.</TableCell></TableRow>
             ) : tickets.length === 0 ? (
-              <TableRow className="hover:bg-transparent"><TableCell className="p-6 text-center text-sm text-muted-foreground" colSpan={7}>No active tickets right now.</TableCell></TableRow>
+              <TableRow className="hover:bg-transparent"><TableCell className="p-6 text-center text-sm text-muted-foreground" colSpan={5}>No active tickets right now.</TableCell></TableRow>
             ) : (
               tickets.map((ticket) => {
                 const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
                 const detailHref = `/admin/tickets/${ticket.id}`;
                 return (
-                  <TableRow key={ticket.id}>
-                    <TableCell className="max-w-56 pl-6">
+                  <TableRow className="hover:bg-[var(--brand-subtle)]" key={ticket.id}>
+                    <TableCell className="max-w-56 py-2.5 pl-4">
                       <Link className="block truncate font-medium hover:text-primary hover:underline" href={detailHref} title={ticket.title ?? undefined}>{ticket.title ?? `Ticket #${ticket.id}`}</Link>
                       <div className="text-xs text-muted-foreground">Ticket <span className="font-mono">#{ticket.id}</span></div>
                     </TableCell>
-                    <TableCell className="max-w-40"><span className="block truncate" title={ticket.barangay_name}>{ticket.barangay_name}</span></TableCell>
-                    <TableCell>{ticket.assigned_office}</TableCell>
-                    <TableCell className="text-center">
+                    {/* Barangay over office in one cell, mirroring the Ticket
+                        cell's primary-over-secondary idiom. Office is a bare
+                        MEO/MDRRMO token that reads fine as a subline and does
+                        not warrant a column of its own in a card that is
+                        explicitly not a second Ticket Queue. */}
+                    <TableCell className="max-w-40 py-2.5">
+                      <span className="block truncate" title={ticket.barangay_name}>{ticket.barangay_name}</span>
+                      <span className="block text-xs text-muted-foreground">{ticket.assigned_office}</span>
+                    </TableCell>
+                    <TableCell className="py-2.5">
                       <Badge className={urgencyBadge.className} variant="outline">
                         <span className="font-mono tabular-nums">{ticket.priority_score ?? "—"}</span> {urgencyBadge.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-center"><StatusPill status={ticket.status} /></TableCell>
-                    <TableCell className="text-end text-xs text-muted-foreground">{relativeAge(ticket.created_at, ticket.status)}</TableCell>
-                    <TableCell className="pr-6 text-end">
-                      <Button asChild size="sm" variant="outline"><Link href={detailHref}>View ticket</Link></Button>
-                    </TableCell>
+                    <TableCell className="py-2.5"><StatusPill status={ticket.status} /></TableCell>
+                    {/* Age is the only right-aligned column: it is the one
+                        genuinely scannable quantity here. The urgency score
+                        stays left with its badge — right-aligning a pill
+                        column would bunch it against the status pills rather
+                        than form a numeric edge. */}
+                    <TableCell className="py-2.5 pr-4 text-end text-xs text-muted-foreground">{relativeAge(ticket.created_at, ticket.status)}</TableCell>
                   </TableRow>
                 );
               })
             )}
           </TableBody>
         </Table>
-        </div>
-      </div>
+      </CardBodyPanel>
     </Card>
   );
 }
 
 export function DashboardClient({ initialData, topPriorityTickets, adminName }: { initialData: DashboardData; topPriorityTickets: AdminTicketRow[] | null; adminName: string | null }) {
-  const [data, setData] = useState(initialData); const [range, setRange] = useState<DashboardRange>(initialData.range ?? 30); const [isPending, startTransition] = useTransition(); const [rangeError, setRangeError] = useState<string | null>(null); const requestId = useRef(0); const gradientId = "incident-area-" + useId().replace(/:/g, "");
+  const [data, setData] = useState(initialData); const [range, setRange] = useState<DashboardRange>(initialData.range ?? 30); const [isPending, startTransition] = useTransition(); const [rangeError, setRangeError] = useState<string | null>(null); const requestId = useRef(0);
   const trend = data.incidentTrend.map((row) => ({ date: row.date, reports: numeric(row.report_count) })); const reportsInRange = trend.reduce((sum, row) => sum + row.reports, 0); const isMobile = useIsMobile();
+  // Peak drives both the charcoal accent bar and the dashed reference line.
+  // Guarded at 0 so an all-zero range (a legitimate state — see the zero-total
+  // dashboard spec) highlights nothing instead of painting every bar dark.
+  const peakReports = trend.reduce((max, row) => Math.max(max, row.reports), 0);
+  // ?? [] rather than assuming presence: an older API build (or a partial
+  // deploy where the UI ships ahead of the NestJS side) simply omits these
+  // fields, and KpiCard drops the sparkline instead of throwing.
+  const activeTicketSeries = (data.activeTicketTrend ?? []).map((row) => ({ date: row.date, value: numeric(row.count) }));
+  const pendingWorkOrderSeries = (data.pendingWorkOrderTrend ?? []).map((row) => ({ date: row.date, value: numeric(row.count) }));
+  const reportSeries = trend.map((row) => ({ date: row.date, value: row.reports }));
   async function updateRange(nextRange: DashboardRange) { if (nextRange === range) return; const id = requestId.current + 1; requestId.current = id; setRange(nextRange); setRangeError(null); try { const response = await fetch("/api/admin/dashboard?range=" + nextRange, { cache: "no-store" }); if (!response.ok) throw new Error(); const nextData = await response.json() as DashboardData; if (requestId.current === id) startTransition(() => setData(nextData)); } catch { if (requestId.current === id) { setRange(initialData.range ?? 30); setRangeError("Unable to update the incident report range. Showing the previous range."); } } }
   return <div className="flex min-w-0 flex-col gap-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -160,24 +322,35 @@ export function DashboardClient({ initialData, topPriorityTickets, adminName }: 
     <div className="grid min-w-0 grid-cols-1 gap-3 dashboard:grid-cols-10 dashboard:items-start">
       <div className="flex min-w-0 flex-col gap-3 dashboard:col-span-7">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="dashboard-kpi-row">
-          <KpiCard caption={`${numeric(data.kpis.high_urgency_count).toLocaleString()} high urgency`} icon={Ticket} label="Active Tickets" value={numeric(data.kpis.active_count).toLocaleString()} />
-          <KpiCard caption={`${numeric(data.officePerformanceSummary.inProgressWorkOrders).toLocaleString()} in progress`} icon={Inbox} label="Pending Work Orders" value={numeric(data.officePerformanceSummary.pendingWorkOrders).toLocaleString()} />
-          <KpiCard caption={`Last ${range} days shown below`} icon={FileText} label="Reports This Month" sparkline={trend} value={numeric(data.kpis.reports_this_month_count).toLocaleString()} />
+          {/* No caption line any more. These carried a secondary figure each
+              ("N high urgency", "N in progress", "Last N days"); the cards now
+              show the headline number and its week-over-week delta only.
+              kpis.high_urgency_count and officePerformanceSummary
+              .inProgressWorkOrders are consequently fetched but unrendered —
+              the API response shape is deliberately unchanged, same as the
+              other payload fields this composition stopped displaying. */}
+          <KpiCard delta={data.deltas?.activeTickets} icon={Ticket} label="Active Tickets" sparkline={activeTicketSeries} value={numeric(data.kpis.active_count).toLocaleString()} />
+          <KpiCard delta={data.deltas?.pendingWorkOrders} icon={Inbox} label="Pending Work Orders" sparkline={pendingWorkOrderSeries} value={numeric(data.officePerformanceSummary.pendingWorkOrders).toLocaleString()} />
+          <KpiCard delta={data.deltas?.reports} icon={FileText} label="Reports This Month" sparkline={reportSeries} value={numeric(data.kpis.reports_this_month_count).toLocaleString()} />
         </div>
 
-        <Card className="gap-0 overflow-hidden rounded-lg border-2 border-input bg-secondary py-0 ring-0">
-          <CardHeader className="py-3">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Incident Reports Over Time {SEP} last {range} days</CardTitle>
+        <Card className="gap-0 rounded-xl bg-muted pt-2 pb-5">
+          <CardHeader className="px-4 pb-2">
+            <CardHeaderRow>
+              <CardTitle className="text-xs font-medium text-muted-foreground">Incident Reports Over Time {SEP} last {range} days</CardTitle>
+              <BarChart3 aria-hidden="true" className="size-5 shrink-0 text-[var(--brand)]" />
+            </CardHeaderRow>
           </CardHeader>
-          <div className="p-3">
-            <div className="rounded-md border border-input bg-card p-4">
+          <CardBodyPanel className="px-4 pt-3 pb-4">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <p className="font-mono text-2xl tabular-nums">{reportsInRange.toLocaleString()}</p>
-              <p className="sr-only" id="incident-chart-description">Submitted citizen reports by calendar date for the last {range} days. Missing dates are shown as zero.</p>
-              <ChartContainer aria-describedby="incident-chart-description" aria-label={"Submitted citizen reports over the last " + range + " days"} className="mt-2 h-60 min-h-60 w-full sm:h-64" config={trendChartConfig} role="img"><AreaChart accessibilityLayer data={trend} margin={{ left: 8, right: 8 }}><defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="var(--color-reports)" stopOpacity={0.22} /><stop offset="100%" stopColor="var(--color-reports)" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} /><XAxis axisLine={false} dataKey="date" minTickGap={range === 90 ? 42 : 28} tickCount={isMobile ? 4 : range === 90 ? 6 : 7} tickFormatter={formatShortDate} tickLine={false} tickMargin={8} /><ChartTooltip content={<IncidentTooltip />} cursor={{ stroke: "var(--color-reports)", strokeDasharray: "3 3", strokeLinecap: "round" }} wrapperStyle={{ outline: "none" }} /><Area dataKey="reports" dot={{ fill: "var(--color-reports)", r: 2.5, strokeWidth: 2 }} fill={"url(#" + gradientId + ")"} isAnimationActive={false} name="Submitted reports" stroke="var(--color-reports)" strokeWidth={2} type="monotone" /></AreaChart></ChartContainer>
-              <p className="mt-2 text-xs text-muted-foreground">Daily submitted reports {SEP} Missing dates shown as zero</p>
-              {rangeError && <p aria-live="polite" className="mt-2 text-xs text-muted-foreground">{rangeError}</p>}
+              <DeltaIndicator delta={data.deltas?.reports} />
             </div>
-          </div>
+            <p className="sr-only" id="incident-chart-description">Submitted citizen reports by calendar date for the last {range} days. Missing dates are shown as zero.</p>
+            <ChartContainer aria-describedby="incident-chart-description" aria-label={"Submitted citizen reports over the last " + range + " days"} className="mt-2 h-60 min-h-60 w-full sm:h-64" config={trendChartConfig} data-testid="incident-trend-chart" role="img"><BarChart accessibilityLayer data={trend} margin={{ left: 8, right: 8, top: 8 }}><CartesianGrid horizontal stroke="var(--chart-grid)" vertical={false} /><XAxis axisLine={false} dataKey="date" minTickGap={range === 90 ? 42 : 28} tick={{ fill: "var(--chart-axis-text)", fontSize: 11 }} tickCount={isMobile ? 4 : range === 90 ? 6 : 7} tickFormatter={formatShortDate} tickLine={false} tickMargin={8} /><YAxis axisLine={false} orientation="right" tick={{ fill: "var(--chart-axis-text)", fontSize: 11 }} tickLine={false} tickMargin={4} width={40} /><ChartTooltip content={<IncidentTooltip />} cursor={false} wrapperStyle={{ outline: "none" }} />{peakReports > 0 && <ReferenceLine ifOverflow="extendDomain" stroke="var(--chart-reference)" strokeDasharray="4 4" y={peakReports} />}<Bar dataKey="reports" isAnimationActive={false} name="Submitted reports" radius={[4, 4, 0, 0]}>{trend.map((row) => <Cell fill={row.reports === peakReports && peakReports > 0 ? "var(--chart-bar-peak)" : "var(--chart-bar)"} key={row.date} />)}</Bar></BarChart></ChartContainer>
+            <p className="mt-2 text-xs text-muted-foreground">Daily submitted reports {SEP} Missing dates shown as zero</p>
+            {rangeError && <p aria-live="polite" className="mt-2 text-xs text-muted-foreground">{rangeError}</p>}
+          </CardBodyPanel>
         </Card>
       </div>
 

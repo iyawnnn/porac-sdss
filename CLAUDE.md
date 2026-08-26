@@ -76,7 +76,10 @@ pnpm --prefix api migrate:admin-created-at
 pnpm --prefix api migrate:admin-audit-events
 pnpm --prefix api migrate:admin-password-security
 pnpm --prefix api migrate:admin-status              # admins.is_active (account activation/deactivation)
+pnpm --prefix api migrate:admin-saved-views          # admin_saved_views (personal filter presets) — FKs admins(id), so it follows
+pnpm --prefix api migrate:saved-views-surface        # admin_saved_views.surface ('tickets' | 'flagged') — ALTERs the table above, so it follows it
 pnpm --prefix api migrate:work-orders               # work_orders — FKs tickets(id) and admins(id), so it follows both
+pnpm --prefix api migrate:work-order-status-history  # work_order_status_history — FKs work_orders(id), so it follows it; seeds an origin row per existing work order
 pnpm --prefix api migrate:ticket-disputes           # tickets.disputed_at/dispute_reason
 pnpm --prefix api migrate:ticket-resolution-confirmation  # tickets.resolution_confirmed_at
 pnpm --prefix api migrate:admin-login-throttle      # admin_login_rate_limit_events (per-account failed-login throttling)

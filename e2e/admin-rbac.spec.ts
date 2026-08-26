@@ -24,6 +24,9 @@ test("office admin ticket queue has no office picker, only a fixed office badge"
   // label. Scoped to the labeled Badge specifically: the sidebar footer
   // shows the same "My Office: MDRRMO" text, so a plain getByText here
   // would match both and violate Playwright's strict-locator mode.
+  // The filters collapsed into a popover with the queue rebuild, so the office
+  // control has to be opened before it can be asserted on.
+  await page.getByRole("button", { name: /^Filters/ }).click();
   await expect(page.getByRole("combobox", { name: "Office" })).toHaveCount(0);
   await expect(page.getByLabel("Office", { exact: true })).toHaveText("My Office: MDRRMO");
 });
@@ -31,6 +34,7 @@ test("office admin ticket queue has no office picker, only a fixed office badge"
 test("system admin ticket queue has a real office picker with All offices", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/tickets");
+  await page.getByRole("button", { name: /^Filters/ }).click();
   const officeSelect = page.getByLabel("Office", { exact: true });
   await expect(officeSelect).toBeVisible();
   await officeSelect.click();

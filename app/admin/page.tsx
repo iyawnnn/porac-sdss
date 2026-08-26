@@ -3,6 +3,7 @@ import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
 import type {
   BarangayRiskRow,
   CategoryDistributionRow,
+  CountTrendRow,
   DashboardKpis,
   DistributionRow,
   IncidentTrendRow,
@@ -19,6 +20,8 @@ interface DashboardResponse {
   leaderboard: BarangayRiskRow[];
   categories: CategoryDistributionRow[];
   incidentTrend: IncidentTrendRow[];
+  activeTicketTrend: CountTrendRow[];
+  pendingWorkOrderTrend: CountTrendRow[];
   statusDistribution: DistributionRow[];
   // null for office-scoped admins — cross-office comparison is System
   // Administrator only, see api/src/admin/dashboard.controller.ts.

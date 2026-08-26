@@ -38,6 +38,17 @@ function buildNavSections(systemAdmin: boolean): { heading: string; items: NavIt
   ];
 }
 
+// Avatar fallback — the admin session carries no photo, so the footer block
+// mirrors the reference composition with initials rather than inventing an
+// image field that does not exist on AdminSession.
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
+  return (first + last).toUpperCase();
+}
+
 function isActivePath(pathname: string, href: string): boolean {
   return href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -84,9 +95,15 @@ export default function AdminSidebar({ session }: { session: AdminSession }) {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter className="gap-1 border-t border-sidebar-border px-4 py-3">
-        <p className="truncate text-xs font-medium text-sidebar-foreground">{isSystemAdmin(session) ? "All Offices" : `My Office: ${session.office}`}</p>
-        <p className="truncate text-[11px] text-sidebar-foreground/60">Signed in as {session.adminName} {"\u00b7"} {isSystemAdmin(session) ? "System Administrator" : session.office}</p>
+      <SidebarFooter className="border-t border-sidebar-border p-3">
+        <div className="flex items-center gap-2.5 rounded-lg border border-sidebar-border bg-muted/40 px-2.5 py-2 group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:px-0">
+          <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">{initialsOf(session.adminName)}</span>
+          <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+            <p className="truncate text-xs font-medium text-sidebar-foreground">{session.adminName}</p>
+            <p className="truncate text-[11px] text-sidebar-foreground/60">{isSystemAdmin(session) ? "All Offices" : `My Office: ${session.office}`}</p>
+          </div>
+        </div>
+        <p className="sr-only">Signed in as {session.adminName} {"\u00b7"} {isSystemAdmin(session) ? "System Administrator" : session.office}</p>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
