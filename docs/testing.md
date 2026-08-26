@@ -17,7 +17,7 @@ This file does not repeat setup instructions; see [`README.md`](../README.md) §
 | **Type check** | `pnpm exec tsc --noEmit` | No dedicated script exists; run it directly. Do the same inside `api/` for the API's own `tsconfig`. |
 | **Next build** | `pnpm build` | Catches build-time failures type-checking alone misses (static generation, route conventions) |
 | **API build** | `pnpm --prefix api build` | `nest build` — wipes `dist/` and the tsc buildinfo first (see [`CLAUDE.md`](../CLAUDE.md)) |
-| **API unit tests** | `pnpm --prefix api test` | Jest across **36 spec files** in `api/src/**/*.spec.ts` — scoring, dedup, office routing, CSV writing, session service, OAuth linking, admin scope, guards. Fast, no database required. |
+| **API unit tests** | `pnpm --prefix api test` | Jest across **45 spec files** in `api/src/**/*.spec.ts` — scoring, dedup, office routing, CSV writing, session service, OAuth linking, admin scope, guards, ticket-queue view counts and bulk-action eligibility. Fast, no database required. |
 | **API e2e (Jest)** | `pnpm --prefix api test:e2e` | `api/test/app.e2e-spec.ts` with its own config. **Not** Playwright — a separate, NestJS-side harness. |
 | **Browser E2E** | `pnpm exec playwright test -- --workers=1` | 19 spec files, roughly 200 tests, against a real server and database |
 

@@ -84,7 +84,7 @@ test("command palette supports arrow-key navigation and Enter to select", async 
 test("Ctrl+K does not fire while typing in an input or textarea", async ({ page }) => {
   await loginAdmin(page);
   await page.goto("/admin/tickets");
-  const filterInput = page.getByPlaceholder("Search by ticket ID, title, or barangay...");
+  const filterInput = page.getByLabel("Search tickets");
   await filterInput.click();
   await page.keyboard.press("Control+K");
   await expect(page.getByRole("dialog", { name: "Admin navigation" })).toHaveCount(0);
@@ -98,7 +98,9 @@ test("active route state updates on navigation, including nested ticket-detail r
   await expect(page).toHaveURL(/\/admin\/tickets(\?|$)/);
   await expect(nav.getByRole("link", { name: "Ticket Queue" })).toHaveAttribute("aria-current", "page");
 
-  const firstTicketLink = page.getByRole("link", { name: "View ticket" }).first();
+  // The queue rebuild replaced the per-row "View ticket" button with an icon
+  // link named after the ticket it opens (docs/design-system.md §5.8).
+  const firstTicketLink = page.getByRole("link", { name: /^Open ticket [0-9]+$/ }).first();
   await firstTicketLink.click();
   await expect(page).toHaveURL(/\/admin\/tickets\/\d+/);
   await expect(nav.getByRole("link", { name: "Ticket Queue" })).toHaveAttribute("aria-current", "page");

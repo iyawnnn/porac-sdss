@@ -467,6 +467,30 @@ export const workOrderStatusHistory = pgTable('work_order_status_history', {
     .defaultNow(),
 });
 
+// Per-admin saved filter presets for the Ticket Queue view-tab strip. Owned
+// privately by one admin (admin_id is the only read/write key) — office
+// colleagues never see each other's presets, so this is NOT a shared office
+// configuration table. ON DELETE CASCADE here, unlike status_history and
+// admin_audit_events which keep an unreferenced admin_id on purpose: a
+// deleted admin's private presets have no historical value to preserve.
+//
+// `query` is the serialized queue querystring, not parsed columns, so a new
+// queue filter never needs a migration. It is always re-parsed through
+// TicketsService.parseTicketQuery on read — a stored office= can therefore
+// never widen scope past resolveOfficeScope.
+export const adminSavedViews = pgTable('admin_saved_views', {
+  id: serial('id').primaryKey(),
+  adminId: integer('admin_id')
+    .notNull()
+    .references(() => admins.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  query: text('query').notNull(),
+  position: integer('position').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // Append-only trail for administrative actions (account create/role change,
 // ticket status/reassignment, report moderation) — System Administrator
 // visible only, see api/src/admin/admin-audit.service.ts. actor_* columns

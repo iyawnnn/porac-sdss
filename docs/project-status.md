@@ -20,7 +20,7 @@ This file replaced two earlier documents that split the same material and each c
 
 **Phase: polish, testing, security hardening, and deployment readiness.** Not feature development.
 
-- **No new product feature is currently queued.** The pipeline that Barangay Insights and then Notification Center filled is clear, and the most recent audit found no remaining unfinished item of real product weight outside what §5 already defers.
+- **No new product feature is currently queued.** The pipeline that Barangay Insights and then Notification Center filled is clear, and the most recent audit found no remaining unfinished item of real product weight outside what §5 already defers. The most recent shipped work is the Ticket Queue rebuild (§3), which was a redesign of an existing surface plus the bulk-triage capability it needed, not a new surface.
 - **Current work should focus on** reliability hardening, security hardening, test coverage, documentation accuracy, and deployment readiness — all of which are enumerated in §4.
 - **Do not treat an empty feature queue as licence to start something new.** Read §6 before proposing a feature. If a genuinely new feature is justified, it belongs in §4 with a stated reason, not started directly.
 - **Nothing has been deployed.** No hosting platform, production database, domain, or verified email sending domain exists yet — see [`deployment-readiness.md`](deployment-readiness.md).
@@ -57,6 +57,22 @@ Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[
 ---
 
 ## 3. Recently Completed Operational Features
+
+### Ticket Queue rebuild ("Precision Queue") — **completed**
+
+`/admin/tickets` rebuilt from a filter-bar-over-table page into a batch triage surface, to the Claude Design artboard "1a Precision queue". Behaviour is documented in [`features.md`](features.md) §3.2 and the visual rules in [`design-system.md`](design-system.md) §5.8.
+
+**Server.** Three additions. `TicketsService.getViewCounts` rides along on `GET /admin/tickets` rather than living on its own route — it labels that exact list, and a separate endpoint would trigger a second `recomputeActiveTicketUrgency()` pass for numbers that then have to agree with rows already returned. It counts High urgency off `urgency_band`, the same column the urgency filter matches, so a tab can never advertise a number the list it opens disagrees with. Bulk actions (`POST /admin/tickets/bulk/advance-status`, `/bulk/reassign`, `POST /admin/work-orders/bulk`) **loop the existing single-ticket service methods** instead of issuing a wide `UPDATE` — that is what keeps `assertOfficeAccess`, `status_history`, the per-ticket `admin_audit_events` row and the citizen notification/email fan-out identical between bulk and single work, with no second authorization path. Capped at 50 ids, the largest page size. And `admin_saved_views` stores personal filter presets (see [`database.md`](database.md)).
+
+**The Resolved carve-out is deliberate.** `advanceStatus` is the only transition that carries a proof photo, so `bulkAdvanceStatus` filters out any ticket whose next status is `Resolved` *before* the loop and reports it as skipped. Bulk actions therefore return `{ ok, skipped }` with a per-ticket reason rather than a boolean — partial success is the normal outcome when each ticket has its own transaction, and the admin has to be told which ones did not move. The row-level status chevron follows the same rule: it offers the single legal `NEXT_STATUS`, and the Resolved step links to Ticket Detail instead of firing.
+
+**Client.** `TicketsWorkspace.tsx` split into a `queue/` folder. `queue/columns.ts` is now the single source for the grid tracks, consumed by the header strip, the rows *and* `TicketQueueSkeleton` — which retires the hand-synced `COLUMN_COUNT` invariant `design-system.md` §5.5 previously required somebody to remember. The queue also finally renders `initialRecompute`, which the page had been fetching and discarding.
+
+**Two deviations on record.** The queue uses a plain white bordered card rather than the dashboard's gray-frame + `CardBodyPanel` idiom, and it uppercases its five KPI micro-labels — both now written into `design-system.md` (§5.8, §4.2) rather than left as silent drift. The dashboard is deliberately **not** migrated; its cards are stat tiles where the frame separates label from value. `TABLE_HEAD_CLASS` was retuned to 10/700/+0.09em and is still shared by both pages.
+
+**Known limitation.** The artboard fits all ten columns at a 1440px full frame; the admin content column is ~960px at a 1280px viewport, so the table scrolls inside its own card below `queueMinWidth()` rather than collapsing the flexible Ticket column. The toolbar's column-visibility menu is the intended escape hatch. Page-level horizontal scroll is never introduced.
+
+One migration: `pnpm --prefix api migrate:admin-saved-views`. New spec `api/src/admin/tickets-queue.service.spec.ts` (21 tests) covers view-count office scoping, bulk eligibility, and the delegation properties above — including a route-ordering guard, since `bulk/reassign` matches `:id/reassign` with `:id = "bulk"` and Nest resolves by declaration order, not specificity.
 
 ### Dashboard KPI Week-over-Week Deltas — **completed**
 

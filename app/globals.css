@@ -110,6 +110,20 @@
   --color-ink-500: #5a6672;
   --color-ink-700: #2e3841;
   --color-ink-900: #10151a;
+
+  /* Ticket Queue surface (docs/design-system.md 5.8). The queue is the one
+     admin surface that does NOT use the dashboard gray-frame card idiom:
+     its table lives in a plain white bordered card, so it needs a band tint
+     one step off #ffffff that --muted (#f3f4f6) is too heavy for. Used by
+     the queue table header strip and its footer strip only. */
+  --color-surface-subtle: #fafafa;
+
+  /* Track behind the Urgency column inline meter. Deliberately not --border
+     (#e5e7eb): the meter sits beside a mono score at 13px and an e5 track
+     reads as a rule rather than an empty gauge. The FILL is never defined
+     here - it comes from getUrgencyBandStyle().hex so the meter, the score
+     and the level badge can never disagree. */
+  --color-meter-track: #eef0f2;
 }
 
 /* Font variables come from next/font (see app/layout.tsx) as runtime CSS
@@ -207,6 +221,11 @@ body {
   --brand-solid: #a85100;
   --brand-hover: #854000;
   --brand-subtle: #fff4eb;
+  /* One step lighter than --brand-subtle. --brand-subtle is the FILL for
+     chips, badges and the bulk-action bar; --brand-wash is the row-level
+     wash behind a hovered or selected table row, which sits underneath
+     those chips and would otherwise tie with them. Keep them distinct. */
+  --brand-wash: #fffaf5;
   --brand-border: #ffd9ad;
 
   --background: #ffffff;

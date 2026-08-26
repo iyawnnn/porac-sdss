@@ -9,6 +9,27 @@ export interface ReportDateRange {
   dateTo?: Date;
 }
 
+// Export-only. Kept out of AdminTicketFilters/parseTicketQuery on purpose:
+// the list endpoint must never grow an id whitelist (CLAUDE.md — export-only
+// params are parsed here, never mixed into the list query shape).
+const EXPORT_IDS_MAX = 500;
+
+function parseIdsParam(value: string | undefined): number[] | undefined {
+  if (!value) return undefined;
+  const ids = [
+    ...new Set(value.split(',').map((part) => Number(part.trim()))),
+  ];
+  if (ids.some((n) => !Number.isInteger(n) || n <= 0)) {
+    throw new BadRequestException('ids must be a comma-separated list of ticket ids.');
+  }
+  if (ids.length > EXPORT_IDS_MAX) {
+    throw new BadRequestException(
+      `ids must contain at most ${EXPORT_IDS_MAX} ticket ids.`,
+    );
+  }
+  return ids.length ? ids : undefined;
+}
+
 function parseDateParam(value: string | undefined, label: string): Date | undefined {
   if (!value) return undefined;
   const date = new Date(value);
@@ -49,7 +70,13 @@ export class ReportsService {
   ): Promise<string> {
     const filters = this.tickets.parseTicketQuery(query, admin);
     const { dateFrom, dateTo } = this.parseDateRange(query);
-    const rows = await this.tickets.getTicketsForExport({ ...filters, dateFrom, dateTo });
+    const ids = parseIdsParam(query.ids);
+    const rows = await this.tickets.getTicketsForExport({
+      ...filters,
+      dateFrom,
+      dateTo,
+      ids,
+    });
 
     return toCsv(rows, [
       { header: 'Ticket ID', value: (r) => r.id },

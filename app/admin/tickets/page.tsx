@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
-import type { PaginatedTickets } from "@/lib/types/admin-tickets";
+import type { PaginatedTickets, SavedView, TicketViewCounts } from "@/lib/types/admin-tickets";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
 import { TicketsWorkspace } from "@/components/features/admin/tickets/TicketsWorkspace";
 import { TicketQueueSkeleton } from "@/components/features/admin/tickets/TicketQueueSkeleton";
@@ -20,7 +20,7 @@ interface RecomputeResult {
   rain1hMm: number;
 }
 
-type TicketsResponse = PaginatedTickets & { recompute: RecomputeResult };
+type TicketsResponse = PaginatedTickets & { recompute: RecomputeResult; viewCounts: TicketViewCounts };
 
 async function TicketsData({ query }: { query: Record<string, string | undefined> }) {
   const session = await getAdminSessionFromApi();
@@ -31,6 +31,16 @@ async function TicketsData({ query }: { query: Record<string, string | undefined
 
   let initialData: TicketsResponse;
   let barangaysGeo: { features: BarangaysGeoFeature[] };
+  // Saved views are a convenience layer, not part of the queue. They are
+  // fetched outside the try/catch below and degrade to an empty list on
+  // failure, so an outage in that one endpoint cannot take down the ticket
+  // queue itself — the five built-in view tabs, the filters and the table all
+  // work with no saved views at all, which is also the normal state for most
+  // admins. Putting it in the Promise.all would have made a cosmetic feature
+  // load-bearing for the primary triage surface.
+  const savedViews: SavedView[] = await apiGet<SavedView[]>("/admin/saved-views").catch(
+    () => [],
+  );
   try {
     [initialData, barangaysGeo] = await Promise.all([
       apiGet<TicketsResponse>(`/admin/tickets${qs ? `?${qs}` : ""}`),
@@ -47,13 +57,15 @@ async function TicketsData({ query }: { query: Record<string, string | undefined
   }
 
   const barangays: Barangay[] = barangaysGeo.features.map((f) => f.properties);
-  const { recompute: initialRecompute, ...paginated } = initialData;
+  const { recompute: initialRecompute, viewCounts, ...paginated } = initialData;
 
   return (
     <TicketsWorkspace
       initialData={paginated}
       initialQuery={query}
       initialRecompute={initialRecompute}
+      initialViewCounts={viewCounts}
+      initialSavedViews={savedViews}
       barangays={barangays}
       sessionOffice={session?.office ?? undefined}
       isSystemAdmin={session ? isSystemAdmin(session) : false}

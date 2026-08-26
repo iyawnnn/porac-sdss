@@ -16,6 +16,7 @@ import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { relativeAge } from "@/lib/utils/ui/time";
 import { CardBodyPanel } from "../shared/CardBodyPanel";
 import { CardHeaderRow } from "../shared/CardHeaderRow";
+import { TABLE_HEAD_CLASS } from "../shared/tableHead";
 import { StatusPill } from "../shared/StatusPill";
 import { NeedsAttention } from "./NeedsAttention";
 
@@ -200,8 +201,6 @@ function KpiCard({ label, value, icon: Icon, sparkline, delta }: { label: string
   );
 }
 
-const HUA_HEAD_CLASS = "text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase";
-
 // The dashboard-landing action queue — capped and compact, deliberately not
 // a second Ticket Queue. Ranked by priority_score (Hazard Urgency Score);
 // there is no existing backend sort by priority_index (Operational
@@ -243,11 +242,11 @@ function HighestUrgencyActionsTable({ tickets }: { tickets: AdminTicketRow[] | n
               separate the header from the body without one. */}
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className={HUA_HEAD_CLASS + " pl-4"} scope="col">Ticket</TableHead>
-              <TableHead className={HUA_HEAD_CLASS} scope="col">Barangay / Office</TableHead>
-              <TableHead className={HUA_HEAD_CLASS} scope="col">Hazard Urgency</TableHead>
-              <TableHead className={HUA_HEAD_CLASS} scope="col">Status</TableHead>
-              <TableHead className={HUA_HEAD_CLASS + " pr-4 text-end"} scope="col">Age</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS + " pl-4"} scope="col">Ticket</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS} scope="col">Barangay / Office</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS} scope="col">Hazard Urgency</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS} scope="col">Status</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS + " pr-4 text-end"} scope="col">Age</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
