@@ -265,6 +265,31 @@ $issues = @(
     @{ Num = '034'; File = '034-deferred-barangay-insights-csv-export.md'
        Title = '[Deferred] CSV export for Barangay Insights'
        Labels = 'deferred,discussion,product' }
+
+    # ---------- New frontend wave (2026-08-27, Ian/Kian) ----------
+    @{ Num = '035'; File = '035-frontend-shared-kpi-card-header-fix.md'
+       Title = 'Add a shared admin KpiCard primitive and fix the AdminHeader route-label gap'
+       Labels = 'frontend,priority:p1' }
+
+    @{ Num = '036'; File = '036-frontend-dashboard-operational-sections.md'
+       Title = 'Restore Office Performance Summary and other orphaned Dashboard sections'
+       Labels = 'frontend,priority:p2' }
+
+    @{ Num = '037'; File = '037-frontend-work-orders-redesign.md'
+       Title = 'Improve Work Orders workspace hierarchy, urgency visibility, and scanning'
+       Labels = 'frontend,priority:p2' }
+
+    @{ Num = '038'; File = '038-frontend-barangay-insights-decision-support.md'
+       Title = 'Add sortable, rankable triage view to Barangay Insights'
+       Labels = 'frontend,priority:p2' }
+
+    @{ Num = '039'; File = '039-frontend-map-refinement.md'
+       Title = 'Align Interactive Map legend and marker colors to the token system'
+       Labels = 'frontend,priority:p3' }
+
+    @{ Num = '040'; File = '040-frontend-shared-empty-state.md'
+       Title = 'Add a shared admin EmptyState component and migrate existing usages'
+       Labels = 'frontend,priority:p3' }
 )
 
 # -----------------------------------------------------------------------------
@@ -273,7 +298,10 @@ $issues = @(
 $selected = $issues
 
 if ($SkipDeferred) {
-    $selected = $selected | Where-Object { [int]$_.Num -lt 29 }
+    # Filter by the 'deferred' label rather than a numeric cutoff, so this
+    # stays correct as new non-deferred drafts (e.g. 035+) are appended after
+    # the deferred block (029-034) in the array above.
+    $selected = $selected | Where-Object { $_.Labels -notmatch '(^|,)deferred(,|$)' }
 }
 
 if ($Only) {

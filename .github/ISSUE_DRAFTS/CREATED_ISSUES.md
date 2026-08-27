@@ -2,9 +2,90 @@
 
 Manual tracker for PORAC-SDSS GitHub issues already created from `.github/ISSUE_DRAFTS/`.
 
-Last updated: 2026-08-13
+Last updated: 2026-08-27 (backlog audit — see "Pending manual close" section below; the "Created issues" table's own `Notes` column was last hand-verified 2026-08-13 and is **not** a live `gh issue list` snapshot).
 
-Summary: **28 active seeded issues** · **6 closed duplicate issues** · **0 implemented issues recorded by this tracker**
+Summary: **28 seeded issues total** · **13 verified implemented, pending manual close** · **15 verified still open or blocked** · **6 closed duplicate issues (historical)** · **6 new drafts (035–040) prepared, not yet created**
+
+**Important:** this file is a manually-maintained local tracker, not a live sync of GitHub. The 2026-08-27 audit did not run `gh issue list` (by instruction) — it verified completion against `docs/project-status.md` §3 and the actual current code, cross-referenced against the `Active` rows already in this file as of 2026-08-13. Before closing anything, run `gh issue list --state open` yourself to confirm these issue numbers and states still match GitHub's actual current state.
+
+## Pending manual close (verified implemented, 2026-08-27 audit)
+
+These 13 are **not yet closed on GitHub** — that is a manual action the repo owner takes from their own authenticated account. Do not treat the `Created issues` table below as reflecting reality for these 13 until that close actually happens; their `Notes` column still reads `Active` there deliberately, since this file must not claim a GitHub state that hasn't occurred yet.
+
+| Draft # | GitHub Issue | Title | Evidence of completion |
+| --- | --- | --- | --- |
+| 001 | #42 | Add failed-login throttling for admin login | `docs/project-status.md` §3 "Failed-Login Throttling for Admin Login (R1) — completed" |
+| 002 | #43 | Add baseline HTTP security response headers | §3 "Baseline HTTP Security Response Headers (R2) — completed" |
+| 003 | #48 | Add max length bounds for free-text fields | §3 "Free-Text Length Bounds (R3) — completed" |
+| 004 | #49 | Add login audit events | §3 "Admin Login Audit Events (R4) — completed" |
+| 007 | #50 | Add security tests for office-scoped CSV exports | §3 "CSV Export Office-Scoping and Note-Leak Regression Tests — completed" |
+| 008 | #51 | Close remaining gaps in work-order office-scoping tests | §3 "Work-Order Office-Scoping Test Gaps Closed — completed" |
+| 009 | #52 | Add security tests for ticket reassignment behavior | §3 "Ticket Reassignment Security Tests Added — completed" |
+| 010 | #53 | Add citizen cross-account report access regression test | §3 "Citizen Cross-Account Report Access Regression Test (R8) — completed" |
+| 011 | #44 | Add root and admin SSR/API error boundaries | §3 "Root and Admin SSR/API Error Boundaries (R10) — completed" |
+| 014 | #65 | Improve Resend/email failure visibility in development | §3 entry titled "...(GitHub #65) — completed" (self-referential) |
+| 015 | #66 | Add clearer API startup validation messages | §3 entry titled "...(GitHub #66) — completed" (self-referential) |
+| 016 | #46 | Reduce report creation in admin-tickets.spec.ts | §4.3 "Wider fixture sharing — done for the read-only slice"; `docs/testing.md` §6 report-count table updated |
+| 017 | #67 | Document and standardize the shared-fixture strategy | Confirmed directly in `docs/testing.md` §5 (decision-rule table present at the documented location) and §10 (checklist reminder present) |
+
+**Recommended close command** (repo owner runs manually, from their own `gh auth status` account):
+
+```powershell
+gh issue close 42 43 44 46 48 49 50 51 52 53 65 66 67 --reason completed --comment "Verified shipped against docs/project-status.md §3 — see PORAC-SDSS backlog audit 2026-08-27."
+```
+
+**After running that**, update the 13 rows in the `Created issues` table below: change `Notes` from `Active` to `Closed — completed (2026-08-27 audit)` and adjust this file's summary line accordingly. Do not make that edit before the `gh issue close` has actually run.
+
+## Still open or blocked (not touched by this audit's close recommendation)
+
+| Draft # | GitHub Issue | Title | Category |
+| --- | --- | --- | --- |
+| 005 | #62 | Add Content-Security-Policy in Report-Only mode | Still valid — now unblocked (002 shipped) |
+| 006 | #63 | Review trust proxy behavior before deployment | Blocked — hosting decision |
+| 012 | #45 | Fix citizen error boundaries to use the recovering retry prop | Still valid, not done |
+| 013 | #64 | Add a better fallback UI when the API is unavailable | Still valid, waiting on 012 |
+| 018 | #68 | Plan per-run test database isolation | Still valid, not done (spike) |
+| 019 | #69 | Add Playwright to CI | Blocked by 018 |
+| 020 | #70 | Add a CI job summary for build and test results | Still valid, not done |
+| 021 | #71 | Add a lint/typecheck/build verification checklist | Still valid, not done |
+| 022 | #72 | Create the production deployment runbook | Blocked — hosting |
+| 023 | #73 | Document PostGIS production database setup | Blocked — provider |
+| 024 | #74 | Add a backup and restore verification checklist | Blocked — provider |
+| 025 | #75 | Add a monitoring and alerting checklist | Blocked — hosting |
+| 026 | #76 | Add a credential rotation checklist | Blocked — deploy |
+| 027 | #77 | Verify the Resend sending domain setup | Blocked — domain |
+| 028 | #78 | Set and verify the GitHub Actions cron variables | Blocked — deployed API |
+
+## Deferred / not created (029–034)
+
+Drafts 029–034 do not exist as GitHub issues and were not created by this audit either — see the existing "Deferred (not seeded)" section below. No status change.
+
+## New frontend wave — not yet created (035–040)
+
+Prepared 2026-08-27, approved by the repo owner, **not yet seeded as GitHub issues**. See `README.md`'s "New frontend wave" table for the owner/priority/dependency summary and each draft file for full detail.
+
+| Draft # | Title | Owner |
+| --- | --- | --- |
+| 035 | Add a shared admin KpiCard primitive and fix the AdminHeader route-label gap | Ian |
+| 036 | Restore Office Performance Summary and other orphaned Dashboard sections | Kian |
+| 037 | Improve Work Orders workspace hierarchy, urgency visibility, and scanning | Ian |
+| 038 | Add sortable, rankable triage view to Barangay Insights | Kian |
+| 039 | Align Interactive Map legend and marker colors to the token system | Kian |
+| 040 | Add a shared admin EmptyState component and migrate existing usages | Either (last) |
+
+**Dry-run command** (repo owner runs manually):
+
+```powershell
+.\scripts\github-issues\create-issues.ps1 -Only 035,036,037,038,039,040 -DryRun
+```
+
+**Create command** (repo owner runs manually, after reviewing the dry run):
+
+```powershell
+.\scripts\github-issues\create-issues.ps1 -Only 035,036,037,038,039,040
+```
+
+---
 
 ## Created issues
 

@@ -23,9 +23,14 @@ This file does not repeat setup instructions; see [`README.md`](../README.md) §
 
 ### What CI runs
 
-`.github/workflows/ci.yml` runs five steps: API build-recovery check → API build → **API Jest tests** → root lint → root build.
+`.github/workflows/ci.yml` runs on every pull request into `dev` or `main`, and on every push to either — two independent jobs in parallel, so a frontend failure and an API failure are never conflated on the PR checks list:
 
-**CI does not run Playwright.** It has no database and no running API, so the browser suite is a local-only gate today. Treat a green CI as "it compiles and the unit tests pass," not "the flows work."
+- **Frontend job:** install (frozen lockfile) → `pnpm exec tsc --noEmit` → `pnpm lint` → `pnpm build`.
+- **API job:** install (frozen lockfile) → `verify:build-recovery` → `pnpm --prefix api build` → **`pnpm --prefix api test`**.
+
+**API lint does not run in CI**, deliberately — `pnpm --prefix api lint` runs with `--fix` and would modify files, which a CI check must never do. Run it locally before opening a PR instead (see §1's table above).
+
+**CI does not run Playwright.** It has no database and no running API, so the browser suite is a local-only gate today — see issue #018/`docs/testing-db-isolation-spike.md` for why, and issue #019 for what would need to change first. Treat a green CI as "it typechecks, lints, builds, and the unit tests pass," not "the flows work."
 
 ---
 
