@@ -30,10 +30,17 @@ function PopoverContent({
   className,
   align = "start",
   sideOffset = 4,
+  container,
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content> & {
+  // Defaults to document.body via Radix, same as before. Pass a node inside
+  // a modal Dialog's own content to keep this popover's portaled DOM node
+  // within the Dialog's scroll-lock shard — otherwise Radix's RemoveScroll
+  // can't recognize it as scrollable and blocks wheel/trackpad input over it.
+  container?: React.ComponentProps<typeof PopoverPrimitive.Portal>["container"]
+}) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={container}>
       <PopoverPrimitive.Content
         data-slot="popover-content"
         align={align}

@@ -348,6 +348,10 @@ body {
 .leaflet-popup.admin-ticket-popup .leaflet-popup-content { margin: 0; width: auto !important; }
 .leaflet-popup.admin-ticket-popup .leaflet-popup-tip-container { display: none; }
 
+/* Muted-gray basemap treatment (replaces the old CARTO light_all look) applied via
+   TileLayer's className prop, which Leaflet puts only on the raster tile <img>s. */
+.map-tile-muted { filter: grayscale(100%) saturate(20%) brightness(1.06) contrast(0.9); }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

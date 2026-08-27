@@ -136,8 +136,14 @@ function buildParams(state: QueryState): URLSearchParams {
 // barangay filter is also narrowing the list would misreport what is on screen,
 // so an ad-hoc combination underlines nothing.
 function matchBuiltInView(state: QueryState, defaultOffice: string): BuiltInViewKey | null {
-  if (state.status !== "active" || state.category || state.barangayId || state.search) return null;
-  if (state.disputed) return state.urgency || state.office !== defaultOffice ? null : "disputed";
+  if (state.category || state.barangayId || state.search) return null;
+  // Disputed tickets are always Resolved, never active — this tab uses
+  // status=all (see selectBuiltInView), so it's matched against that
+  // instead of the "active" requirement every other built-in tab needs.
+  if (state.disputed) {
+    return state.status !== "all" || state.urgency || state.office !== defaultOffice ? null : "disputed";
+  }
+  if (state.status !== "active") return null;
   if (state.urgency === "High") return state.office !== defaultOffice ? null : "highUrgency";
   if (state.urgency) return null;
   if (state.office === "MEO" && defaultOffice !== "MEO") return "meo";
@@ -287,7 +293,11 @@ export function TicketsWorkspace({
     setQuery((q) => ({
       ...q,
       office: key === "meo" ? "MEO" : key === "mdrrmo" ? "MDRRMO" : defaultOffice,
-      status: "active",
+      // Disputed tickets are always Resolved, never active (a dispute can
+      // only be filed on a resolved ticket) — status=active would AND
+      // together with the disputed filter into a combination that can
+      // never match a row, so this tab alone opens status=all instead.
+      status: key === "disputed" ? "all" : "active",
       category: "",
       barangayId: "",
       urgency: key === "highUrgency" ? "High" : "",
@@ -523,7 +533,7 @@ export function TicketsWorkspace({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard icon={TicketIcon} label="Total tickets" note="all filters" value={data.total.toLocaleString()} />
         <KpiCard icon={ActivityIcon} label="Active" note="on this page" value={activeCount.toLocaleString()} />
-        <KpiCard icon={TriangleAlertIcon} label="High urgency" note="&ge; 70" value={highUrgencyCount.toLocaleString()} />
+        <KpiCard icon={TriangleAlertIcon} label="High urgency" note="&ge; 80" value={highUrgencyCount.toLocaleString()} />
         <KpiCard icon={GaugeIcon} label="Avg. urgency" note="of 100" value={avgUrgency === null ? "—" : String(avgUrgency)} />
         <KpiCard icon={MapPinIcon} label="Barangays" note="affected" value={barangayCount.toLocaleString()} />
       </div>

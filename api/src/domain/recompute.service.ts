@@ -27,7 +27,10 @@ export class RecomputeService {
     const tickets = await sql<
       {
         id: number;
-        elevation_m: number;
+        // Nullable in the schema (unseeded dem_points at submission time) —
+        // computeUrgency() now handles this explicitly rather than the type
+        // silently lying that it can't happen.
+        elevation_m: number | null;
         member_count: number;
         created_at: string;
         severity_rank: number;

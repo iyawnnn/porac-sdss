@@ -119,7 +119,7 @@ environmentalUrgencyScore = round(((elevationFactor + precipitationFactor)/2) ×
 
 | Column | Thresholds (on `priority_score`, 0–100) | Labels |
 |---|---|---|
-| `urgency_level` | `< 40` / `40–69` / `≥ 70` | LOW / MEDIUM / HIGH |
+| `urgency_level` | `< 50` / `50–79` / `≥ 80` | LOW / MEDIUM / HIGH |
 | `urgency_band` | Same thresholds, Title-Case restatement | Low / Medium / High |
 
 Prior to Phase 2 of the manuscript-alignment work, `urgency_band` was computed independently on the raw 0–1 `urgency_score` with different cutoffs (0.4/0.7) and a third label of "Critical" instead of "High" — this was a real, documented discrepancy where the same ticket could show "Medium" band and "LOW" level simultaneously. That has been resolved by making `urgency_band` derive from `urgency_level` rather than compute its own threshold. "Critical" is no longer a Hazard Urgency label anywhere in the system — it remains a valid **citizen-reported severity** value (`reports.citizen_severity`), which is a separate concept (§2).
@@ -183,7 +183,7 @@ Engineering assessment only — no academic rewriting.
 
 ### Fully aligned
 
-- **The urgency formula matches the specification.** `PLAN.md` §7 records it as implemented exactly as written: three factors, equal ⅓ weights, bands at 0.4/0.7.
+- **The urgency formula matches the specification.** `PLAN.md` §7 records it as implemented exactly as written: three factors, equal ⅓ weights. Bands were originally set at 0.4/0.7 per that section; the current manuscript specifies 0.50/0.80, which is what `HAZARD_URGENCY_HIGH_THRESHOLD`/`HAZARD_URGENCY_MEDIUM_THRESHOLD` (§5) now implement.
 - **Elevation** is genuine DEM-derived topographical exposure, inverse-normalized city-wide, server-computed and never client-trusted.
 - **Spatial clustering** is real: PostGIS radius-based deduplication feeding a saturating log curve.
 - **Rainfall** is real telemetry, capped at a defensible published threshold (PAGASA 30 mm/h).
@@ -208,7 +208,7 @@ Engineering assessment only — no academic rewriting.
 1. **Read the inputs.** `GET /admin/tickets/:id` returns the stored factors. From the database you need `elevation_m`, `member_count`, `created_at`, and the ticket's reports' `citizen_severity`.
 2. **Get the city-wide constants.** `pnpm --prefix api verify:config` prints `elev_min` / `elev_max`. Read the current rainfall from the `config` table's `rain_1h_mm` row — **use the cached value, not a fresh API call**, or your arithmetic will not match.
 3. **Compute by hand** using §4.1. Check each factor against the stored `elevation_factor` / `precipitation_factor` / `cluster_factor` columns before checking the composite.
-4. **Verify the derivations.** `priority_score == round(urgency_score × 100)`, and `urgency_level`/`urgency_band` follow the 40/70 thresholds on that number (§5) — they should always agree with each other.
+4. **Verify the derivations.** `priority_score == round(urgency_score × 100)`, and `urgency_level`/`urgency_band` follow the 50/80 thresholds on that number (§5) — they should always agree with each other.
 5. **Cross-check the surfaces.** The same ticket must show the same number and badge on the Ticket Queue, Ticket Detail, and map popup. They all read the same stored columns.
 6. **Confirm the factor contributions sum correctly** on Ticket Detail — each displayed contribution is its factor × ⅓.
 

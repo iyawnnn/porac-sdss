@@ -154,7 +154,6 @@ export function WorkOrdersWorkspace({
             </a>
           </Button>
           <CreateWorkOrderDialog
-            isSystemAdmin={isSystemAdmin}
             onCreated={handleCreated}
             sessionOffice={sessionOffice === "MEO" || sessionOffice === "MDRRMO" ? sessionOffice : undefined}
           />
@@ -288,7 +287,7 @@ function EmptyState() {
     <>
       <ClipboardListIcon aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
       <p className="mt-3 text-sm font-medium">No work orders match this filter.</p>
-      <p className="mt-1 text-sm text-muted-foreground">Create one from a ticket, or from here with a ticket ID.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Create one from a ticket, or search for one here.</p>
     </>
   );
 }
