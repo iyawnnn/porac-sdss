@@ -10,7 +10,7 @@
 
 Separately, `AdminHeader.tsx`'s `pageLabel()` (`components/layouts/AdminHeader.tsx`, lines 11–21) has no case for `/admin/work-orders` or `/admin/reports` — both fall through to the `"Dashboard"` default, so the breadcrumb on those two pages is wrong today. `docs/design-system.md` §9 already names this exact function as a known bug.
 
-Also found during the audit that produced this issue: `docs/design-system.md`'s own status header claims "No application code has been changed to match it" for the target visual system. That is stale for at least the admin shell — `app/globals.css` already carries a 2026-08 brand-repoint block (`--primary`/`--sidebar-primary` → `--brand-solid`, `--ring`/`--sidebar-ring` → `--brand`, the full warm-neutral `:root` palette, `--delta-*` tokens), and `AdminSidebar.tsx` already consumes it correctly (`bg-primary`/`text-primary-foreground` logo tile, `data-active:bg-sidebar-accent` nav state, brand-solid avatar). Phase 0 (token foundation + admin shell) has substantially shipped without the doc being updated to say so.
+**Update (2026-08-27 documentation audit): item 3 of this issue's original scope — correcting `docs/design-system.md`'s stale "not yet implemented" status header — has already been done directly as part of a separate documentation-audit pass.** The status header and the §9 phase table now correctly state that Phase 0 (token foundation + admin shell) has shipped, citing `app/globals.css`'s brand-repoint block and `AdminSidebar.tsx`'s consumption of it. **Do not redo this** — this issue's remaining scope is just items 1 and 2 below (the `KpiCard` extraction and the `AdminHeader.pageLabel()` fix).
 
 ## Owner
 
@@ -30,20 +30,18 @@ No end-user-visible workflow change on its own — this is foundational. Direct 
 
 1. Extract `components/features/admin/shared/KpiCard.tsx` from `DashboardClient.tsx`'s existing private `KpiCard` implementation — same props, same rendering, **no visual change to the Dashboard**. Update `DashboardClient.tsx` to import it instead of defining it inline.
 2. Add the two missing cases to `AdminHeader.tsx`'s `pageLabel()`: `/admin/work-orders` and `/admin/reports`. Match the exact label text `AdminSidebar.tsx` already uses for those two nav entries — do not invent new copy.
-3. Update `docs/design-system.md`'s status section to state plainly that the admin shell + dashboard token layer (Phase 0) has already shipped, citing `app/globals.css`'s brand-repoint block and `AdminSidebar.tsx`'s consumption of it. Do not rewrite the rest of the document — this is a status-accuracy correction, not a content revision.
+3. ~~Update `docs/design-system.md`'s status section...~~ **Already done** — see the update note above. No remaining work here.
 
 ## File ownership
 
 - `components/features/admin/shared/KpiCard.tsx` (new)
 - `components/features/admin/dashboard/DashboardClient.tsx` (import swap only)
 - `components/layouts/AdminHeader.tsx`
-- `docs/design-system.md` (status section only)
 
 ## Files the other developer (Kian) should avoid while this is active
 
 - `components/features/admin/shared/**`
 - `components/layouts/AdminHeader.tsx`
-- `docs/design-system.md`
 
 (In practice #036 and #038 don't touch any of these, so this is a safety note, not an expected real conflict.)
 
@@ -65,7 +63,7 @@ None. This issue is itself the dependency for #037.
 - [ ] `/admin/work-orders` shows the correct breadcrumb label.
 - [ ] `/admin/reports` shows the correct breadcrumb label.
 - [ ] No other route's breadcrumb changes.
-- [ ] `docs/design-system.md`'s status framing accurately reflects that the admin shell/dashboard token layer has shipped.
+- [x] `docs/design-system.md`'s status framing accurately reflects that the admin shell/dashboard token layer has shipped — **already done**, not part of this issue's remaining work.
 - [ ] `pnpm build` and `pnpm lint` pass.
 
 ## Validation
@@ -81,31 +79,30 @@ Any visual redesign of the Dashboard KPI row itself (that's #036's territory if 
 ## Claude Code handoff prompt
 
 ```
-Extract a shared KpiCard primitive and fix two bugs in PORAC-SDSS's admin shell.
+Extract a shared KpiCard primitive and fix one bug in PORAC-SDSS's admin shell.
 This is issue #035, the prerequisite for #037 — nothing else should build on
 components/features/admin/shared/ until this merges.
+
+NOTE: a separate documentation-audit pass already corrected
+docs/design-system.md's stale "not yet implemented" status header and its §9
+phase table. Do not redo that — it is no longer part of this issue's scope.
 
 Read first: components/features/admin/dashboard/DashboardClient.tsx (the
 existing private KpiCard function, ~lines 178-202), components/layouts/
 AdminHeader.tsx (pageLabel(), lines 11-21), components/layouts/AdminSidebar.tsx
 (for the exact label text of the Work Orders and Reports & Exports nav
-entries), docs/design-system.md (status header, and §6's shared-component
-ask), app/globals.css (the 2026-08 brand-repoint block, to cite accurately).
+entries).
 
-Do exactly three things:
+Do exactly two things:
 1. Extract components/features/admin/shared/KpiCard.tsx from DashboardClient's
    existing KpiCard function — same props, same rendering, NO visual change.
    Update DashboardClient.tsx to import it.
 2. Add cases to AdminHeader.tsx's pageLabel() for /admin/work-orders and
    /admin/reports, using AdminSidebar.tsx's exact existing label text for each.
-3. Update docs/design-system.md's status section to state that the admin shell
-   + dashboard token layer (Phase 0) has already shipped — cite
-   app/globals.css's brand-repoint block and AdminSidebar.tsx's consumption of
-   it. Do not rewrite anything else in that document.
 
 Do NOT change the Dashboard's visual output, do not touch any other route's
-breadcrumb, do not resolve the §3.2 semantic-palette TBDs, do not start any
-work that belongs to #036/#037/#038.
+breadcrumb, do not touch docs/design-system.md (already corrected separately),
+do not start any work that belongs to #036/#037/#038.
 
 Verify: pnpm build, pnpm lint, then manually click through every admin sidebar
 route and confirm each breadcrumb is correct (not just the two you fixed).

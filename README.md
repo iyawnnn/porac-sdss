@@ -238,7 +238,7 @@ That workflow only works once two values are set under the repository's **Settin
 | `CRON_SECRET` | Secret | Must be the exact same value as the deployed API's `CRON_SECRET` env var |
 | `PORAC_API_BASE_URL` | Variable | The deployed API's public origin, e.g. `https://api.example.com` — **no trailing slash** |
 
-**This scheduling only takes effect once the API is actually deployed and reachable at `PORAC_API_BASE_URL`.** Until then, the workflow will run on schedule and fail with a connection error on every step — that's expected, not a bug, and isn't something to "fix" locally. You can also trigger it manually (`workflow_dispatch`, the "Run workflow" button in the Actions tab) to confirm it reaches your deployed API once one exists.
+**This scheduling only takes effect once the API is actually deployed and reachable at `PORAC_API_BASE_URL`.** Until then, the workflow runs on schedule but **skips calling any endpoint** — it checks for both required values first and exits green, naming whichever is missing, rather than attempting real requests that would fail with a connection error. That's expected, not a bug, and isn't something to "fix" locally. You can also trigger it manually (`workflow_dispatch`, the "Run workflow" button in the Actions tab) to confirm it reaches your deployed API once one exists.
 
 ### Deployment target
 

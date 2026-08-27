@@ -11,7 +11,7 @@
 - **No root typecheck script exists.** `pnpm exec tsc --noEmit` has to be typed from memory; it is not in `package.json`.
 - **`pnpm --prefix api lint` runs with `--fix`**, so it silently modifies files — surprising if you expected a read-only check.
 
-CI runs API build → API tests → root lint → root build. It does **not** run a typecheck step, and does not lint the API.
+CI now runs two parallel jobs: Frontend (`tsc --noEmit`, lint, build) and API (`verify:build-recovery`, build, unit tests) — see `docs/testing.md` §1. It does **not** lint the API (the API's lint script runs with `--fix`, unsuitable for a CI check as written).
 
 ## Problem
 
@@ -26,7 +26,7 @@ Two parts, the first mandatory:
 ```
 pnpm exec tsc --noEmit          # root types
 pnpm lint                       # root lint
-pnpm --prefix api test          # 36 spec files, no DB needed
+pnpm --prefix api test          # the current Jest suite (46 spec files), no DB needed
 pnpm --prefix api build         # nest build
 pnpm build                      # next build
 # then targeted Playwright specs for what you touched
@@ -42,7 +42,7 @@ pnpm build                      # next build
 ## Implementation notes
 
 - **Do not add `--fix` to any new script.** A verification command must not mutate the working tree.
-- Consider whether CI should also gain a typecheck step. `pnpm build` catches many type errors, but not all, and it is slower. Recommend, do not silently add.
+- CI already gained a typecheck step (`pnpm exec tsc --noEmit`, in the Frontend job) — this checklist should reflect that, not propose it as an open question.
 - Consider whether CI should lint the API too. It currently does not, and the API script's `--fix` makes it unsuitable for CI as written.
 
 ## Files likely involved
@@ -79,9 +79,10 @@ Add a pre-PR verification checklist for PORAC-SDSS.
 Read first: docs/testing.md §1, package.json (root), api/package.json,
 .github/workflows/ci.yml, CLAUDE.md (commands sections).
 
-Two known gaps to account for: there is no root typecheck script (tsc --noEmit
-must be typed manually), and `pnpm --prefix api lint` runs with --fix, so it
-MODIFIES files rather than just checking.
+Two things to account for: there is no root typecheck NPM SCRIPT (tsc --noEmit
+must be typed manually, even though CI already runs it directly as a step),
+and `pnpm --prefix api lint` runs with --fix, so it MODIFIES files rather than
+just checking.
 
 Part 1 (required): add an ordered, copy-pasteable pre-PR checklist to
 docs/testing.md, fastest to slowest:
@@ -91,8 +92,9 @@ docs/testing.md, fastest to slowest:
   pnpm --prefix api build
   pnpm build
   then targeted Playwright specs for whatever you touched
-Mark clearly which of these CI already runs and which it does not (CI runs API
-build, API tests, root lint, root build — no typecheck, no API lint).
+Mark clearly which of these CI already runs and which it does not (CI runs, as
+two parallel jobs: Frontend — typecheck, lint, build; API — build-recovery
+check, build, unit tests. No API lint).
 Call out the API lint --fix behavior where a reader will hit it.
 
 Part 2 (optional, drop if the team prefers docs-only): add a root `typecheck`

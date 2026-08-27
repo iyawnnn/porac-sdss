@@ -5,8 +5,17 @@ interface built on the existing Tailwind v4 + shadcn/Radix foundation.
 
 ## Status and authority
 
-**This document defines the target visual system. It is not yet implemented.** No
-application code has been changed to match it.
+**This document defines the target visual system.** §9's Phase 0 (light-mode token
+foundation + admin shell) has shipped: `app/globals.css` carries the brand-repoint
+`:root` block this phase specifies (`--primary`/`--sidebar-primary` → `--brand-solid`,
+`--ring`/`--sidebar-ring` → `--brand`, the warm-neutral palette, `--delta-*` tokens), and
+`components/layouts/AdminSidebar.tsx` consumes those tokens correctly (`bg-primary`/
+`text-primary-foreground`, `data-active:bg-sidebar-accent`, a brand-solid avatar fill).
+**Phases 1 and later are not yet implemented** — e.g. the shared `KpiCard`/`EmptyState`
+primitives §6 and §9 Phase 1 call for do not exist yet (`KpiCard` is still a private
+function inside `DashboardClient.tsx`; there is no shared `EmptyState` component), and
+§3.2's semantic-palette TBDs remain unresolved. Treat each phase's status independently
+rather than assuming the whole document is either fully shipped or fully pending.
 
 | Document | Role |
 |---|---|
@@ -532,17 +541,17 @@ Explicitly banned:
 Design sequencing only. This is **not** a product roadmap and queues no features;
 `docs/project-status.md` remains the sole roadmap authority.
 
-| Phase | Scope |
-|---|---|
-| **0** | Light-mode token foundation + admin shell (sidebar, header). A visual proof of concept — deliberately minimal, semantic palettes untouched. |
-| **1** | Shared primitives: semantic `Badge` variants, one `StatCard`, one `EmptyState`, `StatusPill` folded into `Badge`, the six duplicate color mappings collapsed onto tokens. Requires the §3.2 TBDs to be resolved first. |
-| **2** | Ticket queue — table density into the primitive, filter bar, pagination. |
-| **3** | Ticket detail — the six hand-rolled eyebrow cards onto `CardHeader`/`CardTitle`, priority breakdown, status tracker. |
-| **4** | Dashboard — KPI row, chart card chrome, supporting panels. |
-| **5** | Map surfaces — de-glass, control / legend / popup chrome. Highest Leaflet risk, so late. |
-| **6** | Remaining admin workspaces — flagged, work orders, reports, activity log, admin management. |
-| **7** | Citizen sweep — adopt the shared primitives, fix the auth accessibility floors, add mobile navigation, remove the gradient and glass panel. |
-| **8** | Dark mode, if approved — token values only, behind an explicit `[data-theme]` selector. |
+| Phase | Scope | Status |
+|---|---|---|
+| **0** | Light-mode token foundation + admin shell (sidebar, header). A visual proof of concept — deliberately minimal, semantic palettes untouched. | **Shipped** — see "Status and authority" above. |
+| **1** | Shared primitives: semantic `Badge` variants, one `StatCard`, one `EmptyState`, `StatusPill` folded into `Badge`, the six duplicate color mappings collapsed onto tokens. Requires the §3.2 TBDs to be resolved first. | Not started — no shared `StatCard`/`EmptyState` exists; `StatusPill` is still a standalone component, not folded into `Badge`. |
+| **2** | Ticket queue — table density into the primitive, filter bar, pagination. | **Substantially addressed**, but via a separate initiative (the "Precision Queue" rebuild, `docs/project-status.md` §3) that predates and doesn't use this phase's own Phase-1 primitives — it introduced its own plain-white card treatment, documented as a deliberate deviation in §5.8 below. Re-verify against §5.8 before assuming this phase still needs doing as originally scoped. |
+| **3** | Ticket detail — the six hand-rolled eyebrow cards onto `CardHeader`/`CardTitle`, priority breakdown, status tracker. | Not verified as part of this audit — re-check before starting. |
+| **4** | Dashboard — KPI row, chart card chrome, supporting panels. | **Partially done** — `DashboardClient.tsx` already uses the gray-frame `CardBodyPanel`/`CardHeaderRow` treatment (§5.8) and token-driven KPI deltas, but `KpiCard` itself is still a private, unextracted function (see §6). |
+| **5** | Map surfaces — de-glass, control / legend / popup chrome. Highest Leaflet risk, so late. | **Chrome-level work already done** — `MapFilterBar.tsx`/`MapLegend.tsx`/`MapControls.tsx` carry no glass and already use token-driven urgency colors. Remaining risk is scoped narrower than this phase implies: marker `divIcon`/heatmap color derivation in `MapClient.tsx`, not yet verified as token-sourced. |
+| **6** | Remaining admin workspaces — flagged, work orders, reports, activity log, admin management. | **Flagged Reports done** — rebuilt to the same Precision Queue grammar as Ticket Queue (`docs/project-status.md` §3). Work orders, reports, activity log, and admin management not yet addressed. |
+| **7** | Citizen sweep — adopt the shared primitives, fix the auth accessibility floors, add mobile navigation, remove the gradient and glass panel. | Not verified as part of this audit — re-check before starting. |
+| **8** | Dark mode, if approved — token values only, behind an explicit `[data-theme]` selector. | Not started; no dark mode exists (§3.3). |
 
 **Starting with phase 0 is deliberate.** The shell is the only surface every admin route
 inherits, it is already structurally correct (shadcn `SidebarProvider` / `SidebarInset`,

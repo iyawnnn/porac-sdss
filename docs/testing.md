@@ -185,7 +185,7 @@ pnpm exec playwright test -g "office scoping" -- --workers=1
 
 **Fast feedback with no browser and no database:**
 ```bash
-pnpm --prefix api test          # 36 spec files
+pnpm --prefix api test          # the current Jest suite (46 spec files, §1)
 pnpm exec tsc --noEmit
 ```
 
