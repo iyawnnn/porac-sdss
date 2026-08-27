@@ -1,13 +1,22 @@
 name: CI
 
+# Two-developer feature-branch -> dev -> main workflow: every PR into dev or
+# main, and every push to either, gets the same read-only checks. Frontend and
+# API run as separate parallel jobs so a failure in one is never mistaken for
+# the other, and so a contributor sees which half broke at a glance.
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
   pull_request:
-    branches: [main]
+    branches: [dev, main]
+
+# Least-privilege default — nothing in this workflow needs to write to the repo.
+permissions:
+  contents: read
 
 jobs:
-  build-and-test:
+  frontend:
+    name: Frontend (Next.js)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -15,34 +24,57 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        # No `version:` input — reads the packageManager field in root package.json.
+        # No `version:` input — reads the packageManager field in root
+        # package.json, the single source of truth for both apps (CLAUDE.md).
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
-          cache-dependency-path: |
-            pnpm-lock.yaml
-            api/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
-      - name: Install root dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install API dependencies
-        run: pnpm --prefix api install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
 
-      - name: Verify API build recovery
-        run: pnpm --prefix api run verify:build-recovery
-
-      - name: Build API
-        run: pnpm --prefix api build
-
-      - name: Test API
-        run: pnpm --prefix api test
-
-      - name: Lint root
+      - name: Lint
         run: pnpm lint
 
-      - name: Build root
+      - name: Build
         run: pnpm build
+
+  api:
+    name: API (NestJS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        # Same root packageManager field as the frontend job — the API
+        # deliberately does not declare its own pnpm/Node version.
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+          cache-dependency-path: api/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm --prefix api install --frozen-lockfile
+
+      # Regression test for the dist/tsbuildinfo desync bug documented in
+      # CLAUDE.md — must run before the real build, not after.
+      - name: Verify build recovery
+        run: pnpm --prefix api run verify:build-recovery
+
+      - name: Build
+        run: pnpm --prefix api build
+
+      - name: Unit tests
+        run: pnpm --prefix api test

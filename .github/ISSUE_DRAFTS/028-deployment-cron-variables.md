@@ -26,7 +26,7 @@ The workflow requires two repository-level configs that are not set:
 - `vars.PORAC_API_BASE_URL` — the deployed API origin, **no trailing slash**
 - `secrets.CRON_SECRET` — must match the deployed API's `CRON_SECRET` exactly
 
-Until then the workflow runs on schedule and fails on every step with a connection error. **That is expected, not a bug to fix locally** — but it does mean the four unique jobs are not running.
+Until then the workflow runs on schedule but **skips calling any endpoint** — its own "Check deployment configuration" step checks for both values first and exits green when either is missing, rather than attempting requests that would fail with a connection error. **That is expected, not a bug to fix locally** — but it does mean the four unique jobs are not running.
 
 ## Proposed scope
 

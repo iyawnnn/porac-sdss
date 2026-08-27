@@ -6,7 +6,7 @@
 
 ## Background
 
-`docs/testing.md` §1 and §9. `.github/workflows/ci.yml` currently runs five steps: API build-recovery check → API build → API Jest tests → root lint → root build.
+`docs/testing.md` §1 and §9. `.github/workflows/ci.yml` currently runs two parallel jobs: Frontend (typecheck, lint, build) and API (build-recovery check, build, unit tests).
 
 **Playwright does not run in CI.** It has no database and no running API, so the browser suite is a local-only gate. A green CI means "it compiles and the unit tests pass," not "the flows work."
 

@@ -126,7 +126,7 @@ All six sit behind `CronSecretGuard` and are called with `Authorization: Bearer 
 - [ ] Trigger the workflow manually once after deploying and confirm all six steps pass.
 - [ ] Decide whether a failed run should alert anyone. Today it fails silently apart from the Actions UI — see §9.
 
-Until the API is deployed and reachable, this workflow runs on schedule and fails on every step with a connection error. **That is expected, not a bug to fix locally.**
+Until the API is deployed and reachable, this workflow runs on schedule but **skips calling any endpoint** — `cron.yml`'s own "Check deployment configuration" step checks for both `vars.PORAC_API_BASE_URL` and `secrets.CRON_SECRET` first and exits green (not a connection-error failure) when either is missing, printing which one. **That is expected, not a bug to fix locally.**
 
 ---
 
@@ -155,8 +155,8 @@ Until the API is deployed and reachable, this workflow runs on schedule and fail
 
 Full reference: [`testing.md`](testing.md).
 
-- [ ] `pnpm --prefix api test` — 36 unit spec files, no database needed.
-- [ ] `pnpm exec tsc --noEmit`, `pnpm lint`, `pnpm build`, `pnpm --prefix api build`. These five are what CI already gates on; **CI does not run Playwright.**
+- [ ] `pnpm --prefix api test` — the current Jest suite (46 spec files, see [`testing.md`](testing.md) §1), no database needed.
+- [ ] `pnpm exec tsc --noEmit`, `pnpm lint`, `pnpm build` (root), and `pnpm --prefix api run verify:build-recovery`, `pnpm --prefix api build` (API). These, plus the Jest run above, are what CI already gates on — as two parallel jobs, Frontend and API (see [`testing.md`](testing.md) §1). **CI does not run Playwright.**
 - [ ] Targeted E2E on anything the change touched, especially `admin-rbac.spec.ts` and `admin-password.spec.ts` for auth work — neither creates reports, so both are safe to repeat.
 - [ ] **One** full Playwright run before deploying: `pnpm exec playwright test -- --workers=1`.
 

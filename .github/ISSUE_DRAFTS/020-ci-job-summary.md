@@ -6,7 +6,7 @@
 
 ## Background
 
-`.github/workflows/ci.yml` runs five steps: API build-recovery check → API build → API Jest tests → root lint → root build. Results are readable only by expanding individual step logs.
+`.github/workflows/ci.yml` runs two parallel jobs — Frontend (typecheck, lint, build) and API (build-recovery check, build, unit tests) — six checks total. Results are readable only by expanding individual step logs.
 
 ## Problem
 
@@ -61,12 +61,12 @@ Genuinely optional. If it starts requiring a custom parser or a new action depen
 ```
 Add a GitHub Actions job summary to PORAC-SDSS CI.
 
-Read first: .github/workflows/ci.yml (five steps: API build-recovery, API
-build, API Jest tests, root lint, root build), docs/testing.md §1.
+Read first: .github/workflows/ci.yml (two parallel jobs: Frontend — typecheck,
+lint, build; API — build-recovery, build, Jest tests), docs/testing.md §1.
 
 Write a job summary to $GITHUB_STEP_SUMMARY (Markdown, renders on the Actions
 run page — no external service needed) containing:
-- a small pass/fail table for each of the five steps
+- a small pass/fail table for each of the six checks, grouped by job
 - Jest results: total / passed / failed, and the NAMES of any failing tests
 - lint error and warning counts
 - build success/failure for API and root
