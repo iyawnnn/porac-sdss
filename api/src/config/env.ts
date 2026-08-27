@@ -30,6 +30,11 @@ const envSchema = z
     TARGET_MAX_LAT: z.coerce.number().default(15.16),
     TARGET_MIN_LNG: z.coerce.number().default(120.35),
     TARGET_MAX_LNG: z.coerce.number().default(120.62),
+    // DEMO-ONLY. Unset in every real environment. When present,
+    // WeatherService.getCurrentRain1hMm() returns this fixed value instead
+    // of live/cached OpenWeatherMap rainfall — see that file for the full
+    // rationale. Absent (the default): zero behavior change.
+    DEMO_FIXED_RAIN_MM: z.coerce.number().optional(),
   })
   .superRefine((data, ctx) => {
     // RESEND_API_KEY without EMAIL_FROM previously only failed later, inside

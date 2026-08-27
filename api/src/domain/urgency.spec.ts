@@ -3,10 +3,10 @@ import { computeUrgency, urgencyLevelFromScore } from './urgency';
 describe('urgencyLevelFromScore', () => {
   it('has deterministic thresholds', () => {
     expect(urgencyLevelFromScore(100)).toBe('HIGH');
-    expect(urgencyLevelFromScore(70)).toBe('HIGH');
-    expect(urgencyLevelFromScore(69)).toBe('MEDIUM');
-    expect(urgencyLevelFromScore(40)).toBe('MEDIUM');
-    expect(urgencyLevelFromScore(39)).toBe('LOW');
+    expect(urgencyLevelFromScore(80)).toBe('HIGH');
+    expect(urgencyLevelFromScore(79)).toBe('MEDIUM');
+    expect(urgencyLevelFromScore(50)).toBe('MEDIUM');
+    expect(urgencyLevelFromScore(49)).toBe('LOW');
     expect(urgencyLevelFromScore(0)).toBe('LOW');
   });
 });
@@ -76,6 +76,55 @@ describe('computeUrgency weighting (equal thirds, manuscript-required)', () => {
     };
     expect('citizen_severity' in params).toBe(false);
     expect('severity' in params).toBe(false);
+  });
+});
+
+describe('elevationFactor (elevation normalization, correctness fix)', () => {
+  const base = { elevMin: 0, elevMax: 100, memberCount: 1, rain1hMm: 0 };
+
+  it('elevation exactly at elevMin produces the maximum factor of 1', () => {
+    expect(computeUrgency({ ...base, elevationM: 0 }).elevationFactor).toBe(1);
+  });
+
+  it('elevation exactly at elevMax produces the minimum factor of 0', () => {
+    expect(computeUrgency({ ...base, elevationM: 100 }).elevationFactor).toBe(0);
+  });
+
+  it('elevation below elevMin clamps to 1 rather than exceeding it', () => {
+    expect(computeUrgency({ ...base, elevationM: -50 }).elevationFactor).toBe(1);
+  });
+
+  it('elevation above elevMax clamps to 0 rather than going negative', () => {
+    expect(computeUrgency({ ...base, elevationM: 250 }).elevationFactor).toBe(0);
+  });
+
+  it('null elevation (unseeded DEM lookup) falls back to the neutral midpoint, not maximum hazard', () => {
+    const u = computeUrgency({ ...base, elevationM: null });
+    expect(u.elevationFactor).toBeCloseTo(0.5, 10);
+    expect(u.elevationFactor).toBeLessThan(1);
+  });
+
+  it('non-finite elevation input (NaN, Infinity, -Infinity) falls back to the same neutral midpoint', () => {
+    for (const elevationM of [NaN, Infinity, -Infinity]) {
+      const u = computeUrgency({ ...base, elevationM });
+      expect(u.elevationFactor).toBeCloseTo(0.5, 10);
+      expect(Number.isFinite(u.urgencyScore)).toBe(true);
+      expect(Number.isFinite(u.priorityScore)).toBe(true);
+    }
+  });
+
+  it('degenerate elevMin === elevMax (no range to normalize against) falls back to the neutral midpoint instead of NaN/Infinity', () => {
+    const u = computeUrgency({ elevationM: 50, elevMin: 50, elevMax: 50, memberCount: 1, rain1hMm: 0 });
+    expect(u.elevationFactor).toBe(0.5);
+    expect(Number.isFinite(u.urgencyScore)).toBe(true);
+  });
+
+  it('priorityScore never exceeds 100 or falls below 0, including every invalid-elevation case above', () => {
+    for (const elevationM of [0, 100, -50, 250, null, NaN, Infinity, -Infinity]) {
+      const u = computeUrgency({ ...base, elevationM });
+      expect(u.priorityScore).toBeGreaterThanOrEqual(0);
+      expect(u.priorityScore).toBeLessThanOrEqual(100);
+    }
   });
 });
 

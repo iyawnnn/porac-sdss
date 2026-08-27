@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -374,6 +375,7 @@ export class TicketsService {
         AND (
           ${search}::text IS NULL
           OR b.name ILIKE '%' || ${search} || '%'
+          OR t.category ILIKE '%' || ${search} || '%'
           OR (${searchId}::int IS NOT NULL AND t.id = ${searchId}::int)
           OR EXISTS (
             SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title ILIKE '%' || ${search} || '%'
@@ -421,9 +423,18 @@ export class TicketsService {
       SELECT
         COUNT(*)::int AS all_active,
         COUNT(*) FILTER (WHERE t.urgency_band = 'High')::int AS high_urgency,
-        COUNT(*) FILTER (WHERE t.disputed_at IS NOT NULL)::int AS disputed,
         COUNT(*) FILTER (WHERE t.assigned_office = 'MEO')::int AS meo,
-        COUNT(*) FILTER (WHERE t.assigned_office = 'MDRRMO')::int AS mdrrmo
+        COUNT(*) FILTER (WHERE t.assigned_office = 'MDRRMO')::int AS mdrrmo,
+        -- Deliberately its own subquery, not a FILTER on the outer active-
+        -- status WHERE below: a dispute can only ever exist on a Resolved
+        -- ticket (disputeReport requires it), so filtering this count by
+        -- the same active-only WHERE as the other four columns would make
+        -- it permanently zero. Still office-scoped for RBAC.
+        (
+          SELECT COUNT(*)::int FROM tickets t2
+          WHERE t2.disputed_at IS NOT NULL
+            AND (${office}::text IS NULL OR t2.assigned_office = ${office}::office)
+        ) AS disputed
       FROM tickets t
       WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
         AND (${office}::text IS NULL OR t.assigned_office = ${office}::office)
@@ -555,7 +566,11 @@ export class TicketsService {
       FROM office_reassignments WHERE ticket_id = ${id} ORDER BY reassigned_at
     `;
     const referralEvents = await sql<
-      { metadata: { agency: string; note: string | null }; actor_name: string; created_at: string }[]
+      {
+        metadata: { agency: string; note: string | null };
+        actor_name: string;
+        created_at: string;
+      }[]
     >`
       SELECT metadata, actor_name, created_at FROM admin_audit_events
       WHERE target_type = 'ticket' AND target_id = ${id} AND action_type = 'ticket_referral_noted'
@@ -568,7 +583,9 @@ export class TicketsService {
       referred_at: e.created_at,
     }));
 
-    ticket.direct_responsibility = categoryRouting(ticket.category).directResponsibility;
+    ticket.direct_responsibility = categoryRouting(
+      ticket.category,
+    ).directResponsibility;
 
     return { ticket, reports, history, reassignments, referrals };
   }
@@ -669,14 +686,26 @@ export class TicketsService {
     }
 
     const emailRecipients = await sql.begin(async (tx) => {
-      await tx`
+      // Guarded on the status this request actually read: two requests
+      // racing off the same starting status (double-click, retried
+      // request, two admins) can no longer both succeed. The loser's
+      // WHERE clause matches zero rows — Postgres serializes concurrent
+      // UPDATEs to the same row, so the second one to actually execute
+      // re-evaluates this condition against whatever the first one just
+      // committed, not against the stale value read above.
+      const updateResult = await tx`
         UPDATE tickets SET
           status = ${nextStatus},
           resolution_image_url = COALESCE(${resolutionImageUrl}, resolution_image_url),
           resolution_notes = COALESCE(${resolutionNotes}, resolution_notes),
           updated_at = now()
-        WHERE id = ${ticketId}
+        WHERE id = ${ticketId} AND status = ${ticket.status}
       `;
+      if (updateResult.count === 0) {
+        throw new ConflictException(
+          `Ticket status already changed by another request (expected ${ticket.status})`,
+        );
+      }
       await tx`
         INSERT INTO status_history (ticket_id, status, admin_id, admin_name, changed_at)
         VALUES (${ticketId}, ${nextStatus}, ${admin.adminId}, ${admin.adminName}, now())
@@ -911,7 +940,11 @@ export class TicketsService {
         targetType: 'ticket',
         targetId: ticketId,
         targetSummary: `Ticket #${ticketId} (${ticket.category})`,
-        metadata: { from: ticket.status, to: 'Rejected', reason: trimmedReason },
+        metadata: {
+          from: ticket.status,
+          to: 'Rejected',
+          reason: trimmedReason,
+        },
       });
 
       const citizenRows = await tx<
@@ -1031,7 +1064,8 @@ export class TicketsService {
       if (next === 'Resolved') {
         skipped.push({
           id,
-          reason: 'Resolving needs a proof photo — open the ticket to resolve it.',
+          reason:
+            'Resolving needs a proof photo — open the ticket to resolve it.',
         });
         continue;
       }

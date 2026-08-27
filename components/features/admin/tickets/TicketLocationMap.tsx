@@ -41,8 +41,9 @@ export default function TicketLocationMap({
     <MapContainer center={[lat, lng]} zoom={15} className="h-full w-full">
       <MapResizeHandler />
       <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution="&copy; OpenStreetMap contributors"
+        className="map-tile-muted"
       />
       {barangayGeoJson && <GeoJSON data={barangayGeoJson} style={styleBarangayFeature} />}
       <Marker position={[lat, lng]} icon={bandMarkerIcon(urgencyBand, { pulse: true })} />

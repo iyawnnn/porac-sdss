@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { TicketsService } from './tickets.service';
 import type { Sql } from 'postgres';
 import type { ConfigService } from '@nestjs/config';
@@ -324,6 +328,33 @@ describe('admin audit logging for ticket mutations', () => {
     expect(input.targetType).toBe('ticket');
     expect(input.targetId).toBe(7);
     expect(input.metadata).toEqual({ from: 'Reported', to: 'Under Review' });
+  });
+
+  // Regression guard for the advanceStatus race: two requests reading the
+  // same starting status can no longer both succeed. The UPDATE is now
+  // guarded on the status this request actually read (WHERE status =
+  // <expected>) — a second, stale request finds that row already moved and
+  // its UPDATE matches zero rows, which is what `count: 0` simulates here.
+  it('rejects a stale advance when another request already changed the status, before any status_history/audit/notification write', async () => {
+    const { service, logInPgTx, createInTx } = makeService([
+      [{ status: 'In Progress', assigned_office: 'MEO', category: 'Flooding' }], // ticket lookup
+      Object.assign([], { count: 0 }), // UPDATE tickets — 0 rows matched, another request already advanced it
+    ]);
+
+    await expect(
+      service.advanceStatus(
+        7,
+        MEO_OFFICER as AdminSession,
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    // The conflict must short-circuit before every write that follows the
+    // UPDATE in the same transaction — no status_history row (there is no
+    // third mocked row for it to consume), no audit event, no notification.
+    expect(logInPgTx).not.toHaveBeenCalled();
+    expect(createInTx).not.toHaveBeenCalled();
   });
 
   it('logs ticket_reassigned inside the same transaction as the reassignment', async () => {

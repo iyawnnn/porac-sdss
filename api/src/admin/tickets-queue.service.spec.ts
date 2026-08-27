@@ -71,24 +71,25 @@ describe('TicketsService.getViewCounts office scoping', () => {
     mdrrmo: 0,
   };
 
-  // The office value is bound twice in the WHERE clause (the IS NULL test and
-  // the equality test), so both bindings are asserted.
+  // The office value is bound twice in the disputed subquery's own IS
+  // NULL/equality test, then twice more in the outer WHERE's — four total,
+  // so both places stay RBAC-scoped to the caller's office.
   it("binds an office admin's own office, so counts can never span both offices", async () => {
     const { service, calls } = makeService(ROW);
     await service.getViewCounts(MEO_OFFICER);
-    expect(calls[0]).toEqual(['MEO', 'MEO']);
+    expect(calls[0]).toEqual(['MEO', 'MEO', 'MEO', 'MEO']);
   });
 
   it('clamps an MDRRMO supervisor to MDRRMO', async () => {
     const { service, calls } = makeService(ROW);
     await service.getViewCounts(MDRRMO_SUPERVISOR);
-    expect(calls[0]).toEqual(['MDRRMO', 'MDRRMO']);
+    expect(calls[0]).toEqual(['MDRRMO', 'MDRRMO', 'MDRRMO', 'MDRRMO']);
   });
 
   it('binds null for a system admin, which is what widens the counts city-wide', async () => {
     const { service, calls } = makeService(ROW);
     await service.getViewCounts(SYSTEM_ADMIN);
-    expect(calls[0]).toEqual([null, null]);
+    expect(calls[0]).toEqual([null, null, null, null]);
   });
 
   it('maps the snake_case aggregate onto the camelCase response', async () => {
@@ -131,6 +132,30 @@ describe('TicketsService.getViewCounts office scoping', () => {
       ticketsServiceSource.indexOf('async getTicketsForExport('),
     );
     expect(body).toMatch(
+      /status IN \('Reported', 'Under Review', 'In Progress'\)/,
+    );
+  });
+
+  // Regression guard: a dispute can only ever exist on a Resolved ticket
+  // (ReportsService.disputeReport requires it), so the disputed count must
+  // never be filtered by the same active-status WHERE the other four
+  // columns use — that combination is impossible to satisfy and always
+  // returns zero, which is exactly the bug this guards against.
+  it('counts disputed tickets independently of the active-status filter', async () => {
+    const { service } = makeService({ ...ROW, disputed: 3 });
+    await expect(service.getViewCounts(SYSTEM_ADMIN)).resolves.toMatchObject({
+      disputed: 3,
+    });
+
+    const body = ticketsServiceSource.slice(
+      ticketsServiceSource.indexOf('async getViewCounts('),
+      ticketsServiceSource.indexOf('async getTicketsForExport('),
+    );
+    const disputedSubquery = body.slice(
+      body.indexOf('SELECT COUNT(*)::int FROM tickets t2'),
+      body.indexOf(') AS disputed'),
+    );
+    expect(disputedSubquery).not.toMatch(
       /status IN \('Reported', 'Under Review', 'In Progress'\)/,
     );
   });
@@ -315,9 +340,7 @@ describe('bulk route declaration order', () => {
   });
 
   it("declares bulk/advance-status before every ':id/...' POST route", () => {
-    const bulkIndex = controllerSource.indexOf(
-      "@Post('bulk/advance-status')",
-    );
+    const bulkIndex = controllerSource.indexOf("@Post('bulk/advance-status')");
     expect(bulkIndex).toBeGreaterThan(-1);
     for (const route of [
       "@Post(':id/status')",

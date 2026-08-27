@@ -22,6 +22,19 @@ export class WeatherService {
   // cold starts and is shared between the cron route and report submission,
   // instead of every cold start re-hitting the API.
   async getCurrentRain1hMm(): Promise<number> {
+    // DEMO-ONLY override. Unset (the default) in every real environment —
+    // this branch never runs and behavior is identical to before. When set
+    // (e.g. for a presentation), it short-circuits the cache/live-fetch
+    // logic below entirely, so a seeded HIGH/MEDIUM/LOW scenario computed
+    // at a fixed rainfall can never be silently rewritten by the live
+    // weather this method would otherwise fetch once the config table's
+    // ~10-minute cache expires. Does not touch the config table at all —
+    // there is nothing to revert here beyond unsetting the env var.
+    const demoFixedRain = this.config.get('DEMO_FIXED_RAIN_MM', {
+      infer: true,
+    });
+    if (demoFixedRain !== undefined) return demoFixedRain;
+
     const sql = this.pg;
 
     const [cached] = await sql<{ value: string; computed_at: string }[]>`
@@ -63,7 +76,9 @@ export class WeatherService {
   private async fetchRain1hMm(): Promise<number> {
     const apiKey = this.config.get('OPENWEATHERMAP_API_KEY', { infer: true });
     const url = `https://api.openweathermap.org/data/2.5/weather?lat=${MUNICIPALITY.centerLat}&lon=${MUNICIPALITY.centerLng}&appid=${apiKey}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (!res.ok) {
       throw new Error(`OpenWeatherMap request failed: ${res.status}`);
     }
