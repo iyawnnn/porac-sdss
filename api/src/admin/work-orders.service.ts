@@ -55,6 +55,15 @@ export interface WorkOrderRow {
   completed_at: Date | null;
 }
 
+// The list query's own row shape — adds the linked ticket's already-computed
+// urgency (never recomputed here) so the workspace can show it per row
+// without opening the ticket. get/create/update/setStatus return plain
+// WorkOrderRow; only list() joins tickets for this.
+export interface WorkOrderListRow extends WorkOrderRow {
+  priority_score: number | null;
+  urgency_level: string | null;
+}
+
 export interface WorkOrderFilters {
   office?: 'MEO' | 'MDRRMO';
   status?: WorkOrderStatus;
@@ -66,7 +75,7 @@ export interface WorkOrderFilters {
 }
 
 export interface PaginatedWorkOrders {
-  workOrders: WorkOrderRow[];
+  workOrders: WorkOrderListRow[];
   total: number;
   page: number;
   limit: number;
@@ -138,6 +147,15 @@ const SAFE_COLUMNS = {
   created_at: workOrders.createdAt,
   updated_at: workOrders.updatedAt,
   completed_at: workOrders.completedAt,
+};
+
+// list()-only column set: SAFE_COLUMNS plus the linked ticket's urgency,
+// joined in rather than recomputed. Not used by get/create/update/setStatus,
+// which don't need it.
+const LIST_COLUMNS = {
+  ...SAFE_COLUMNS,
+  priority_score: tickets.priorityScore,
+  urgency_level: tickets.urgencyLevel,
 };
 
 const PAGE_LIMITS = [10, 15, 25, 50] as const;
@@ -244,8 +262,12 @@ export class WorkOrdersService {
 
     const [rows, [{ total }]] = await Promise.all([
       this.db
-        .select(SAFE_COLUMNS)
+        .select(LIST_COLUMNS)
         .from(workOrders)
+        // Every work order FKs to a ticket (see migrate:work-orders), so an
+        // inner join never drops a row — same join TicketsService/
+        // getNeedsAttention already use for this table pair.
+        .innerJoin(tickets, eq(workOrders.ticketId, tickets.id))
         .where(where)
         .orderBy(desc(workOrders.createdAt))
         .limit(limit)

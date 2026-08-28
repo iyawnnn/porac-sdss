@@ -22,12 +22,21 @@ export class WorkOrdersController {
   constructor(private readonly workOrders: WorkOrdersService) {}
 
   @Get()
-  list(
+  async list(
     @Query() query: Record<string, string | undefined>,
     @CurrentAdmin() admin: AdminSession,
   ) {
     const filters = this.workOrders.parseQuery(query, admin);
-    return this.workOrders.list(filters);
+    // kpis is the same office-scoped WorkOrdersService.getOfficePerformanceCounts
+    // the Dashboard's Office Performance Summary already calls — reused here
+    // rather than a second endpoint, so the workspace's one request carries
+    // both the filtered rows and the (status/overdue-filter-independent)
+    // workload summary.
+    const [paginated, kpis] = await Promise.all([
+      this.workOrders.list(filters),
+      this.workOrders.getOfficePerformanceCounts(filters.office),
+    ]);
+    return { ...paginated, kpis };
   }
 
   @Get(':id')

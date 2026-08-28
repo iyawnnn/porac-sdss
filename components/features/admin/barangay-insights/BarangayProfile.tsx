@@ -5,6 +5,7 @@ import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyState } from "../shared/EmptyState";
 import { StatusPill } from "../shared/StatusPill";
 import { BarangayTrendChart } from "./BarangayTrendChart";
 import { CategoryBreakdownList } from "./CategoryBreakdownList";
@@ -136,7 +137,7 @@ export function BarangayProfile({
         </CardHeader>
         <CardContent className="p-0">
           {profile.recentTickets.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">No tickets recorded for this barangay yet.</p>
+            <EmptyState className="items-start p-4 text-left" title="No tickets recorded for this barangay yet." />
           ) : (
             <Table>
               <TableHeader className="bg-muted/40">

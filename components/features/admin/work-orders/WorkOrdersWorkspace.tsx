@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ClipboardListIcon, DownloadIcon } from "lucide-react";
-import type { PaginatedWorkOrders, WorkOrderRow, WorkOrderStatus } from "@/lib/types/admin-work-orders";
+import { AlertTriangle, CheckCircle2, ClipboardListIcon, DownloadIcon, Inbox, Wrench } from "lucide-react";
+import type { PaginatedWorkOrders, WorkOrderListRow, WorkOrderRow, WorkOrderStatus } from "@/lib/types/admin-work-orders";
 import { WORK_ORDER_STATUSES } from "@/lib/types/admin-work-orders";
+import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,11 +15,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { AdminErrorCard } from "../shared/AdminErrorCard";
+import { EmptyState } from "../shared/EmptyState";
+import { KpiCard } from "../shared/KpiCard";
 import { CreateWorkOrderDialog } from "./CreateWorkOrderDialog";
-import { WorkOrderStatusBadge } from "./WorkOrderStatusBadge";
 import { WorkOrderStatusSelect } from "./WorkOrderStatusSelect";
 import { WorkOrderAssigneeSelect } from "./WorkOrderAssigneeSelect";
 import { WorkOrderDueDateEditor } from "./WorkOrderDueDateEditor";
+
+// Shared with QueueRow's own "level" badge (Ticket Queue) so a row can never
+// disagree with how urgency reads there — one className map, not two.
+function UrgencyBadge({ priorityScore }: { priorityScore: number | null }) {
+  const badge = getUrgencyBadgeConfig(priorityScore);
+  return (
+    <span className={`inline-flex h-5 shrink-0 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${badge.className}`}>
+      {badge.label}
+    </span>
+  );
+}
 
 const STATUS_LABELS: Record<WorkOrderStatus, string> = {
   pending: "Pending",
@@ -122,12 +135,22 @@ export function WorkOrdersWorkspace({
     setQuery((q) => ({ ...q, ...patch, page: 1 }));
   }
 
+  // CreateWorkOrderDialog and the inline status/assignee/due-date widgets all
+  // return a plain WorkOrderRow (no linked-ticket urgency — that's a list-only
+  // join, see WorkOrdersService.list). Merging onto the existing row instead
+  // of replacing it keeps a row's urgency badge visible through an edit; a
+  // freshly created row simply has no urgency yet, until the list next
+  // refetches (e.g. a filter change).
   function handleCreated(created: WorkOrderRow) {
-    setData((d) => ({ ...d, workOrders: [created, ...d.workOrders], total: d.total + 1 }));
+    setData((d) => ({
+      ...d,
+      workOrders: [{ ...created, priority_score: null, urgency_level: null }, ...d.workOrders],
+      total: d.total + 1,
+    }));
   }
 
   function handleUpdated(updated: WorkOrderRow) {
-    setData((d) => ({ ...d, workOrders: d.workOrders.map((w) => (w.id === updated.id ? updated : w)) }));
+    setData((d) => ({ ...d, workOrders: d.workOrders.map((w) => (w.id === updated.id ? { ...w, ...updated } : w)) }));
   }
 
   function retry() {
@@ -158,6 +181,13 @@ export function WorkOrdersWorkspace({
             sessionOffice={sessionOffice === "MEO" || sessionOffice === "MDRRMO" ? sessionOffice : undefined}
           />
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard icon={Inbox} label="Pending" value={data.kpis.pendingWorkOrders.toLocaleString()} />
+        <KpiCard icon={Wrench} label="In Progress" value={data.kpis.inProgressWorkOrders.toLocaleString()} />
+        <KpiCard icon={AlertTriangle} label="Overdue" value={data.kpis.overdueWorkOrders.toLocaleString()} />
+        <KpiCard icon={CheckCircle2} label="Completed This Week" value={data.kpis.completedWorkOrdersThisWeek.toLocaleString()} />
       </div>
 
       <Card className="gap-0">
@@ -200,14 +230,18 @@ export function WorkOrdersWorkspace({
         <CardContent className="hidden min-w-0 p-0 md:block">
           <Table className="[&_td]:py-1.5 [&_th]:h-8">
             <TableHeader className="bg-muted/40">
+              {/* Urgency and Office each open a tier (State, Assignment) — a
+                  left rule on those two cells (mirrored on the body cells
+                  below) is the tier boundary; Created stays outside any tier,
+                  it's metadata, not identity/state/assignment. */}
               <TableRow>
                 <TableHead className="pl-6">Work Order</TableHead>
-                <TableHead>Ticket</TableHead>
-                <TableHead className="text-center">Office</TableHead>
-                <TableHead className="text-center">Assigned</TableHead>
+                <TableHead className="border-l text-center">Urgency</TableHead>
+                <TableHead className="text-center">Status</TableHead>
                 <TableHead className="text-center">Due</TableHead>
-                <TableHead className="text-center">Created</TableHead>
-                <TableHead className="pr-6 text-center">Status</TableHead>
+                <TableHead className="border-l text-center">Office</TableHead>
+                <TableHead className="text-center">Assigned</TableHead>
+                <TableHead className="pr-6 text-center">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -223,7 +257,9 @@ export function WorkOrdersWorkspace({
                 ))
               ) : data.workOrders.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell className="p-10 text-center" colSpan={7}><EmptyState /></TableCell>
+                  <TableCell className="p-0" colSpan={7}>
+                    <EmptyState description="Create one from a ticket, or search for one here." icon={ClipboardListIcon} title="No work orders match this filter." />
+                  </TableCell>
                 </TableRow>
               ) : (
                 data.workOrders.map((wo) => <WorkOrderDesktopRow key={wo.id} onUpdated={handleUpdated} workOrder={wo} />)
@@ -240,7 +276,7 @@ export function WorkOrdersWorkspace({
         ) : loading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton className="h-28 w-full" key={i} />)
         ) : data.workOrders.length === 0 ? (
-          <Card><CardContent className="flex flex-col items-center gap-1 p-8 text-center"><EmptyState /></CardContent></Card>
+          <Card><CardContent className="p-0"><EmptyState className="p-8" description="Create one from a ticket, or search for one here." icon={ClipboardListIcon} title="No work orders match this filter." /></CardContent></Card>
         ) : (
           data.workOrders.map((wo) => <WorkOrderCard key={wo.id} onUpdated={handleUpdated} workOrder={wo} />)
         )}
@@ -282,55 +318,54 @@ export function WorkOrdersWorkspace({
   );
 }
 
-function EmptyState() {
-  return (
-    <>
-      <ClipboardListIcon aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
-      <p className="mt-3 text-sm font-medium">No work orders match this filter.</p>
-      <p className="mt-1 text-sm text-muted-foreground">Create one from a ticket, or search for one here.</p>
-    </>
-  );
-}
-
-function WorkOrderDesktopRow({ workOrder, onUpdated }: { workOrder: WorkOrderRow; onUpdated: (w: WorkOrderRow) => void }) {
+function WorkOrderDesktopRow({ workOrder, onUpdated }: { workOrder: WorkOrderListRow; onUpdated: (w: WorkOrderRow) => void }) {
   return (
     <TableRow>
+      {/* Identity */}
       <TableCell className="max-w-56 pl-6">
         <p className="truncate font-medium">{workOrder.title}</p>
-        <p className="text-xs text-muted-foreground">Work order #{workOrder.id}</p>
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span>Work order #{workOrder.id}</span>
+          <span aria-hidden="true">·</span>
+          <Link className="text-brand-600 hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
+        </p>
       </TableCell>
-      <TableCell>
-        <Link className="text-brand-600 hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
-      </TableCell>
-      <TableCell className="text-center">{workOrder.assigned_office}</TableCell>
-      <TableCell className="text-center"><WorkOrderAssigneeSelect onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
+      {/* State */}
+      <TableCell className="border-l text-center"><UrgencyBadge priorityScore={workOrder.priority_score} /></TableCell>
+      <TableCell className="text-center"><WorkOrderStatusSelect onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
       <TableCell className="text-center"><WorkOrderDueDateEditor onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
-      <TableCell className="text-center text-xs text-muted-foreground">{formatDate(workOrder.created_at)}</TableCell>
-      <TableCell className="pr-6 text-center"><WorkOrderStatusSelect onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
+      {/* Assignment */}
+      <TableCell className="border-l text-center">{workOrder.assigned_office}</TableCell>
+      <TableCell className="text-center"><WorkOrderAssigneeSelect onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
+      <TableCell className="pr-6 text-center text-xs text-muted-foreground">{formatDate(workOrder.created_at)}</TableCell>
     </TableRow>
   );
 }
 
-function WorkOrderCard({ workOrder, onUpdated }: { workOrder: WorkOrderRow; onUpdated: (w: WorkOrderRow) => void }) {
+function WorkOrderCard({ workOrder, onUpdated }: { workOrder: WorkOrderListRow; onUpdated: (w: WorkOrderRow) => void }) {
   return (
     <Card>
-      <CardContent className="flex flex-col gap-2 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate font-medium">{workOrder.title}</p>
-            <p className="font-mono text-xs text-muted-foreground">#{workOrder.id}</p>
-          </div>
-          <WorkOrderStatusBadge status={workOrder.status} />
+      <CardContent className="flex flex-col gap-3 p-4">
+        {/* Identity */}
+        <div className="min-w-0">
+          <p className="truncate font-medium">{workOrder.title}</p>
+          <p className="flex flex-wrap items-center gap-1 font-mono text-xs text-muted-foreground">
+            <span>#{workOrder.id}</span>
+            <span aria-hidden="true">·</span>
+            <Link className="text-brand-600 hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          <Link className="text-brand-600 hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
-          {" · "}{workOrder.assigned_office}
-        </p>
+        {/* State */}
         <div className="flex flex-wrap items-center gap-2">
+          <UrgencyBadge priorityScore={workOrder.priority_score} />
           <WorkOrderStatusSelect onUpdated={onUpdated} workOrder={workOrder} />
+          <WorkOrderDueDateEditor onUpdated={onUpdated} workOrder={workOrder} />
+        </div>
+        {/* Assignment */}
+        <div className="flex flex-wrap items-center gap-2 border-t pt-2">
+          <Badge variant="secondary">{workOrder.assigned_office}</Badge>
           <WorkOrderAssigneeSelect onUpdated={onUpdated} workOrder={workOrder} />
         </div>
-        <WorkOrderDueDateEditor onUpdated={onUpdated} workOrder={workOrder} />
       </CardContent>
     </Card>
   );

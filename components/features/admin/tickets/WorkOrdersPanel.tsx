@@ -8,6 +8,7 @@ import { WorkOrderStatusSelect } from "@/components/features/admin/work-orders/W
 import { WorkOrderAssigneeSelect } from "@/components/features/admin/work-orders/WorkOrderAssigneeSelect";
 import { WorkOrderDueDateEditor } from "@/components/features/admin/work-orders/WorkOrderDueDateEditor";
 import { WorkOrderNotesEditor } from "@/components/features/admin/work-orders/WorkOrderNotesEditor";
+import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 
 // Internal-only panel — work orders (and their notes) never appear on any
 // citizen-facing route. Only rendered on the admin Ticket Detail page.
@@ -36,7 +37,7 @@ export function WorkOrdersPanel({
         <CreateWorkOrderDialog office={office} onCreated={handleCreated} ticketId={ticketId} />
       </div>
       {workOrders.length === 0 ? (
-        <p className="text-sm text-ink-400">No work orders yet for this ticket.</p>
+        <EmptyState className="items-start p-0 text-left" title="No work orders yet for this ticket." />
       ) : (
         <ul className="space-y-2">
           {workOrders.map((wo) => (

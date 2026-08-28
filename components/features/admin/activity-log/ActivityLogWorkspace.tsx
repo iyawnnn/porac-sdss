@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { AdminErrorCard } from "../shared/AdminErrorCard";
+import { EmptyState } from "../shared/EmptyState";
 
 const ACTION_LABELS: Record<AdminAuditActionType, string> = {
   admin_created: "Admin created",
@@ -212,12 +213,12 @@ export function ActivityLogWorkspace({
             ))}
           </CardContent>
         ) : data.events.length === 0 ? (
-          <CardContent className="flex flex-col items-center gap-2 p-10 text-center">
-            <ClipboardList aria-hidden="true" className="size-8 text-muted-foreground" />
-            <p className="text-sm font-medium">No activity recorded</p>
-            <p className="text-xs text-muted-foreground">
-              {hasActiveFilters ? "No events match the current filters." : "Administrative actions will appear here as they happen."}
-            </p>
+          <CardContent className="p-0">
+            <EmptyState
+              description={hasActiveFilters ? "No events match the current filters." : "Administrative actions will appear here as they happen."}
+              icon={ClipboardList}
+              title="No activity recorded"
+            />
           </CardContent>
         ) : (
           <>

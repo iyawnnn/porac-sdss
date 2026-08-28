@@ -93,6 +93,49 @@ test("a hand-crafted ?office=MDRRMO request from an MEO session is clamped to ME
   expect(body.office).toBe("MEO");
 });
 
+// --- Sorting ------------------------------------------------------------------
+
+async function totalColumnValues(page: import("@playwright/test").Page): Promise<number[]> {
+  const rows = page.getByRole("table").locator("tbody tr");
+  const count = await rows.count();
+  const values: number[] = [];
+  for (let i = 0; i < count; i++) {
+    values.push(Number(await rows.nth(i).locator("td").nth(1).innerText()));
+  }
+  return values;
+}
+
+test("clicking the Total header sorts descending, and a second click reverses to ascending", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto("/admin/barangay-insights");
+  await expect(page.getByRole("table")).toBeVisible();
+
+  const totalHeader = page.getByRole("button", { name: "Total" });
+  await totalHeader.click();
+  const descending = await totalColumnValues(page);
+  expect(descending).toEqual([...descending].sort((a, b) => b - a));
+
+  await totalHeader.click();
+  const ascending = await totalColumnValues(page);
+  expect(ascending).toEqual([...ascending].sort((a, b) => a - b));
+});
+
+test("search still composes with the active sort", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto("/admin/barangay-insights");
+  await page.getByRole("button", { name: "Total" }).click();
+
+  // "Man" narrows to a real, known subset (Mancatian, Manibaug Libutad,
+  // Manibaug Paralaya, Manibaug Pasig, Manuali) without ever matching all
+  // or none of the 29 barangays.
+  await page.getByLabel("Search barangays").fill("Man");
+  const nameLinks = page.getByRole("table").locator("tbody a");
+  await expect(nameLinks).toHaveCount(5);
+
+  const values = await totalColumnValues(page);
+  expect(values).toEqual([...values].sort((a, b) => b - a));
+});
+
 // --- Profile page ------------------------------------------------------------
 
 test("clicking a barangay opens its profile page with KPIs, category breakdown, trend, elevation, and recent tickets", async ({ page }) => {

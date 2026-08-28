@@ -1,11 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { formatDistributionPercent, normalizeDistribution } from "@/components/features/admin/dashboard/DistributionChartUtils";
-import { E2E_SYSTEM_ADMIN } from "./test-credentials";
+import { E2E_MDRRMO_ADMIN, E2E_MEO_ADMIN, E2E_SYSTEM_ADMIN, type E2EAdminAccount } from "./test-credentials";
 import { loginAdmin as sharedLoginAdmin } from "./helpers";
 
 test.setTimeout(60_000);
-async function loginAdmin(page: Page) {
-  await sharedLoginAdmin(page, E2E_SYSTEM_ADMIN);
+async function loginAdmin(page: Page, account: E2EAdminAccount = E2E_SYSTEM_ADMIN) {
+  await sharedLoginAdmin(page, account);
 }
 
 function cardFor(page: Page, title: string) {
@@ -116,12 +116,53 @@ test("Highest Urgency Actions renders at most 5 rows and its View all link uses 
   await expect(viewAll).toHaveAttribute("href", /\/admin\/tickets\?sort=priority_desc&status=active/);
 });
 
-test("legacy dashboard sections no longer render on /admin", async ({ page }) => {
+test("restored dashboard sections render from the existing dashboard response", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+
   await loginAdmin(page);
   await expect(page.getByRole("region", { name: "Quick actions" })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Map presets" })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Office performance summary" })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Dashboard analytics" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Office performance summary" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Dashboard analytics" })).toBeVisible();
+  await expect(page.getByText("Category Distribution", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ticket Status Distribution", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reports by Citizen Severity", { exact: true })).toBeVisible();
+  await expect(page.getByText("Department Workload", { exact: true })).toBeVisible();
+  await expect(page.getByText("MEO vs. MDRRMO", { exact: true })).toBeVisible();
+
+  const mapPresets = page.getByRole("region", { name: "Map presets" });
+  await expect(mapPresets).toBeVisible();
+  await expect(mapPresets.getByRole("link", { name: "Drainage Issues" })).toHaveAttribute(
+    "href",
+    "/admin/map?category=Drainage+%2F+Culvert+%2F+Manhole+Issue&office=MEO",
+  );
+  await expect(mapPresets.getByRole("link", { name: "Flooding Reports" })).toHaveAttribute(
+    "href",
+    "/admin/map?category=Localized+Flooding&office=MDRRMO",
+  );
+  await mapPresets.getByRole("link", { name: "Drainage Issues" }).click();
+  await expect(page).toHaveURL(/\/admin\/map\?category=Drainage\+%2F\+Culvert\+%2F\+Manhole\+Issue&office=MEO$/);
+  await page.getByRole("button", { name: "Filters 1", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Category" })).toContainText("Drainage / Culvert / Manhole Issue");
+
+  for (const account of [E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN]) {
+    await page.context().clearCookies();
+    await loginAdmin(page, account);
+
+    await expect(page.getByText(`${account.office} office summary`, { exact: true })).toBeVisible();
+    await expect(page.getByText("MEO vs. MDRRMO", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Department Workload", { exact: true })).toHaveCount(0);
+
+    const scopedMapPresets = page.getByRole("region", { name: "Map presets" });
+    const presetName = account.office === "MEO" ? "Drainage Issues" : "Flooding Reports";
+    const presetCategory = account.office === "MEO" ? "Drainage+%2F+Culvert+%2F+Manhole+Issue" : "Localized+Flooding";
+    await expect(scopedMapPresets.getByRole("link", { name: presetName })).toHaveAttribute(
+      "href",
+      `/admin/map?category=${presetCategory}`,
+    );
+  }
+
+  expect(consoleErrors).toEqual([]);
 });
 
 test("range filters, tables, and chart labels remain intact", async ({ page }) => {

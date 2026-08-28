@@ -58,6 +58,18 @@ Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[
 
 ## 3. Recently Completed Operational Features
 
+### Work Orders workspace hierarchy, urgency visibility, and scanning (GitHub #96) — **completed**
+
+`/admin/work-orders` gained a KPI strip, tiered identity/state/assignment row hierarchy, and per-row linked-ticket urgency — a presentation pass, not a filter or workflow change. See the GitHub issue for the full scope.
+
+**KPI strip.** Reuses the shared `KpiCard` (`components/features/admin/shared/KpiCard.tsx`) and the existing `WorkOrdersService.getOfficePerformanceCounts` — no new computation. `GET /admin/work-orders` now runs that call alongside `list()` and returns the four counts as a `kpis` field on the existing response, so the workspace needed no second request. The counts are office-scoped the same way as the Dashboard's Office Performance Summary (via `filters.office`), independent of the status/overdue filters — a workload summary, not a filtered count.
+
+**Ticket urgency per row.** `WorkOrdersService.list()` now inner-joins `tickets` (a work order's `ticket_id` is a non-nullable FK, so this never drops a row) to select `priority_score`/`urgency_level` alongside the existing columns — the same fields the Ticket Queue already returns, rendered through the same `getUrgencyBadgeConfig` helper so a row can never disagree with how urgency reads there. `get`/`create`/`update`/`setStatus` are unchanged and still return the plain (non-joined) row shape; the frontend merges each PATCH/status response onto the existing row rather than replacing it, so a row's urgency badge survives an inline edit instead of disappearing until the next refetch.
+
+**Hierarchy.** Desktop rows and mobile cards both now read in three tiers — identity (title, work order/ticket ids), state (urgency, status, due date), assignment (office, assignee) — using the existing inline widgets (`WorkOrderStatusSelect`, `WorkOrderAssigneeSelect`, `WorkOrderDueDateEditor`) unchanged. `CreateWorkOrderDialog`/`TicketComboboxSelect` were out of scope and untouched.
+
+**Bulk actions were evaluated and skipped.** Unlike Ticket Queue/Flagged Reports, there is no existing bulk-status or bulk-reassign endpoint for work orders (only bulk-*create*) — reusing those pages' "loop existing single-item endpoints" pattern here would mean building new client-side selection state, a bulk action bar, and a per-item fan-out loop from scratch, which is real new surface for a conditional, "if it fits cleanly" item. Left for a future issue if bulk operations are explicitly requested; see §5.
+
 ### Ticket Queue rebuild ("Precision Queue") — **completed**
 
 `/admin/tickets` rebuilt from a filter-bar-over-table page into a batch triage surface, to the Claude Design artboard "1a Precision queue". Behaviour is documented in [`features.md`](features.md) §3.2 and the visual rules in [`design-system.md`](design-system.md) §5.8.
@@ -316,6 +328,15 @@ A read-only recap of how a resolved report was closed, on the existing citizen r
 - Both use `unstable_retry()`, this build's recovering prop (re-fetches and re-renders the boundary's children), not `reset()` (clears state without re-fetching). The citizen boundaries still use `reset` — fixing that is a separate, already-tracked issue (#12/#45), not part of this change.
 - `settleAdminPage` (`e2e/helpers.ts`) is unchanged and stays as defense-in-depth for mid-run connection churn between navigations; its comment now reflects that the boundary exists.
 - No change to `lib/api-client.ts` retry counts or throw behavior — the throw was correct, the missing boundary was the bug.
+
+### Better Fallback UI When the API Is Unavailable (GitHub #64) — **completed**
+
+A UX polish pass on top of R10's boundaries (`app/error.tsx`, `app/admin/error.tsx`, `CitizenErrorState.tsx`) — no new subsystem, `lib/api-client.ts` untouched.
+
+- **Verified, not assumed, what production actually sends the client.** Built the app (`pnpm build`), ran a temporary `next start` pointed at an unreachable API port, and inspected the raw RSC payload for a Server-Component throw: it serializes as `{"digest":"..."}` with **no `message` key at all** — not merely a generic string, the field is absent. `lib/api-client.ts`'s distinguishable `network error reaching`/`-> <status>` message text therefore never reaches the client in production, confirming `node_modules/next/dist/docs/.../error.md`'s documented behavior against this exact installed version (`unstable_retry` added in v16.2.0). All three boundaries keep one honest, environment-independent generic message rather than a network-vs-server distinction that would only ever work in dev — each has a code comment recording why, with the verification method.
+- **Retry pending state.** All three boundaries now use `useTransition()` (the same `isPending`/`startTransition` pattern already used by `DashboardClient.tsx`'s range control) around `unstable_retry()` — the button reads "Retrying…" and is `disabled` until the transition settles, which also prevents duplicate-click retries. No artificial delay, no new dependency.
+- **Digest correlation.** `error.digest` is `console.error`-logged on mount (pairs with Next's own server-side `⨯ Error:` log line and `api-client.ts`'s existing `[api-client] request to ... failed:` log — no new logging architecture) and shown as a short "Reference: &lt;digest&gt;" line in the UI — enough for a citizen or admin to quote back without exposing a stack trace.
+- **Secondary navigation, one per boundary.** `app/admin/error.tsx`'s secondary link changed from `/admin` (dashboard) to `/admin/login` — if the API is genuinely down, `/admin` would just re-throw into the same boundary via `AdminLayout`'s own `getAdminSessionFromApi()` call, where `/admin/login` at least gives a different destination to try. `CitizenErrorState` (shared by all six citizen route boundaries) now links to `/reports` instead of each route's previous bespoke `backHref`/`backLabel` (e.g. "Back to Dashboard", "Back to My Reports") — standardized to one canonical citizen destination, matching how the admin boundary is now equally fixed rather than page-specific. The root `app/error.tsx` deliberately keeps its neutral `/` ("Go Home") link unchanged: it's the only boundary that can catch a throw from *either* the admin or the citizen layout (`error.js` doesn't wrap the `layout.js` above it in the same segment), so it can't safely assume either audience-specific destination.
 
 ### Baseline HTTP Security Response Headers (R2) — **completed**
 

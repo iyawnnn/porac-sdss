@@ -5,6 +5,7 @@ import type { AdminTicketRow } from "@/lib/types/admin-tickets";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AdminErrorCard } from "../../shared/AdminErrorCard";
+import { EmptyState } from "../../shared/EmptyState";
 import { TABLE_HEAD_CLASS } from "../../shared/tableHead";
 import {
   alignClass,
@@ -119,7 +120,7 @@ export function QueueTable({
         {loading ? (
           <SkeletonRows columnCount={columns.length} gridTemplateColumns={gridTemplateColumns} rows={skeletonRows} />
         ) : tickets.length === 0 ? (
-          <EmptyState />
+          <EmptyState description="Try widening your search or clearing filters." icon={SearchXIcon} title="No tickets match this filter." />
         ) : (
           tickets.map((ticket) => (
             <QueueRow
@@ -150,7 +151,7 @@ export function QueueTable({
             </div>
           ))
         ) : tickets.length === 0 ? (
-          <EmptyState />
+          <EmptyState description="Try widening your search or clearing filters." icon={SearchXIcon} title="No tickets match this filter." />
         ) : (
           tickets.map((ticket) => (
             <MobileRow
@@ -190,16 +191,6 @@ function SkeletonRows({
         </div>
       ))}
     </>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="p-10 text-center">
-      <SearchXIcon aria-hidden="true" className="mx-auto size-5 text-muted-foreground" />
-      <p className="mt-3 text-sm font-medium">No tickets match this filter.</p>
-      <p className="mt-1 text-sm text-muted-foreground">Try widening your search or clearing filters.</p>
-    </div>
   );
 }
 
