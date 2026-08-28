@@ -16,10 +16,25 @@ export interface WorkOrderRow {
   completed_at: string | null;
 }
 
+// The list endpoint's own row shape — adds the linked ticket's
+// already-computed urgency, joined server-side, never recomputed here.
+export interface WorkOrderListRow extends WorkOrderRow {
+  priority_score: number | null;
+  urgency_level: string | null;
+}
+
+export interface WorkOrderPerformanceCounts {
+  pendingWorkOrders: number;
+  inProgressWorkOrders: number;
+  overdueWorkOrders: number;
+  completedWorkOrdersThisWeek: number;
+}
+
 export interface PaginatedWorkOrders {
-  workOrders: WorkOrderRow[];
+  workOrders: WorkOrderListRow[];
   total: number;
   page: number;
   limit: number;
   totalPages: number;
+  kpis: WorkOrderPerformanceCounts;
 }

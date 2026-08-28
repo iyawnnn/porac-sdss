@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
-import { BarChart3, ClipboardList, FileText, Inbox, Ticket } from "lucide-react";
+import { BarChart3, Building2, ChartPie, ClipboardList, FileText, Gauge, Inbox, MapPinned, Shapes, Ticket } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, XAxis, YAxis } from "recharts";
 import { DASHBOARD_RANGES, type BarangayRiskRow, type CategoryDistributionRow, type CountTrendRow, type DashboardDeltas, type DashboardKpis, type DashboardRange, type DistributionRow, type IncidentTrendRow, type OfficePerformanceSummary as OfficePerformanceSummaryData, type NeedsAttention as NeedsAttentionData } from "@/lib/types/admin-dashboard";
 import type { AdminTicketRow } from "@/lib/types/admin-tickets";
@@ -20,28 +20,78 @@ import { TABLE_HEAD_CLASS } from "../shared/tableHead";
 import { StatusPill } from "../shared/StatusPill";
 import { DeltaIndicator, KpiCard } from "../shared/KpiCard";
 import { EmptyState } from "../shared/EmptyState";
+import type { DistributionChartItem } from "./DistributionChartUtils";
+import { DepartmentWorkloadComparison } from "./DepartmentWorkloadComparison";
+import { DistributionDonutChart } from "./DistributionDonutChart";
+import { MapPresets } from "./MapPresets";
 import { NeedsAttention } from "./NeedsAttention";
+import { OfficePerformanceSummary } from "./OfficePerformanceSummary";
+import { SeverityRadialChart } from "./SeverityRadialChart";
 
 const SEP = "·";
+const STATUS_ORDER = ["Reported", "Under Review", "In Progress", "Resolved", "Rejected"] as const;
+const SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"] as const;
+const DEPARTMENT_ORDER = ["MEO", "MDRRMO"] as const;
 // Neutral by design — see the --chart-* block in app/globals.css for why the
 // trend series does not use brand orange (or the legacy brand blue it read
 // before): brand is chrome, never data.
 const trendChartConfig = { reports: { label: "Submitted reports", color: "var(--chart-bar-peak)" } } satisfies ChartConfig;
+const categoryChartConfig = {
+  "category-1": { color: "var(--chart-1)" },
+  "category-2": { color: "var(--chart-2)" },
+  "category-3": { color: "var(--chart-3)" },
+  "category-4": { color: "var(--chart-4)" },
+  "category-5": { color: "var(--chart-5)" },
+  "other-categories": { label: "Other categories", color: "var(--muted-foreground)" },
+} satisfies ChartConfig;
+const statusChartConfig = {
+  reported: { label: "Reported", color: "var(--color-lifecycle-reported)" },
+  "under-review": { label: "Under Review", color: "var(--color-lifecycle-under-review)" },
+  "in-progress": { label: "In Progress", color: "var(--color-lifecycle-in-progress)" },
+  resolved: { label: "Resolved", color: "var(--color-lifecycle-resolved)" },
+  rejected: { label: "Rejected", color: "var(--color-lifecycle-rejected)" },
+} satisfies ChartConfig;
+const severityChartConfig = {
+  critical: { label: "Critical", color: "var(--color-severity-critical)" },
+  high: { label: "High", color: "var(--color-severity-high)" },
+  medium: { label: "Medium", color: "var(--color-severity-medium)" },
+  low: { label: "Low", color: "var(--color-severity-low)" },
+} satisfies ChartConfig;
+const departmentChartConfig = {
+  meo: { label: "MEO", color: "var(--color-office-meo)" },
+  mdrrmo: { label: "MDRRMO", color: "var(--color-office-mdrrmo)" },
+} satisfies ChartConfig;
 
-// departmentWorkload/citizenSeverityDistribution/leaderboard/categories/
-// statusDistribution stay in the fetched payload and this type — the API
-// response and its shape are unchanged — even though none of them render
-// on the dashboard landing page anymore (see docs/design-system.md-era
-// Phase 3 correction: Barangay Activity, Category Distribution, Ticket
-// Status Distribution, Reports by Citizen Severity, Department Workload,
-// Office Performance Summary, Quick Actions, and Map Presets were removed
-// from this composition — their components/data remain intact, just
-// unreachable from /admin until a future task gives them a home).
+// leaderboard remains in the response for compatibility even though the
+// landing page does not currently render it. The restored sections below
+// continue to consume every other distribution field from this same payload.
 type DashboardData = { kpis: DashboardKpis; leaderboard: BarangayRiskRow[]; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; activeTicketTrend: CountTrendRow[]; pendingWorkOrderTrend: CountTrendRow[]; statusDistribution: DistributionRow[]; departmentWorkload: DistributionRow[] | null; citizenSeverityDistribution: DistributionRow[]; officePerformanceSummary: OfficePerformanceSummaryData; needsAttention: NeedsAttentionData; deltas?: DashboardDeltas; range?: DashboardRange };
 
 function numeric(value: number | string | null | undefined): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function formatShortDate(value: string): string { const date = new Date(value + "T00:00:00"); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
 function formatLongDate(value: string): string { const date = new Date(value + "T00:00:00"); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }); }
+function chartKey(label: string) { return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""); }
+function distributionItems(rows: DistributionRow[], labels: readonly string[]): DistributionChartItem[] { const counts = new Map(rows.map((row) => [row.label, numeric(row.count)])); return labels.map((label) => ({ key: chartKey(label), label, count: counts.get(label) ?? 0 })); }
+function categoryItems(rows: CategoryDistributionRow[]): DistributionChartItem[] {
+  const items = rows.map((row, index) => ({ key: `category-${index + 1}`, label: row.category, count: numeric(row.active_count) }));
+  const visibleCount = items.reduce((sum, item) => sum + item.count, 0);
+  const activeTotal = numeric(rows[0]?.active_total);
+  return activeTotal > visibleCount ? [...items, { key: "other-categories", label: "Other categories", count: activeTotal - visibleCount }] : items;
+}
+
+function AnalyticsCard({ title, icon: Icon, children }: { title: string; icon: typeof ChartPie; children: React.ReactNode }) {
+  return (
+    <Card className="@container gap-0 rounded-xl bg-muted pt-2 pb-5">
+      <CardHeader className="px-4 pb-2">
+        <CardHeaderRow>
+          <CardTitle className="text-xs font-medium text-muted-foreground">{title}</CardTitle>
+          <Icon aria-hidden="true" className="size-5 shrink-0 text-[var(--brand)]" />
+        </CardHeaderRow>
+      </CardHeader>
+      <CardBodyPanel className="flex min-h-0 flex-1">{children}</CardBodyPanel>
+    </Card>
+  );
+}
 
 // Dark charcoal pill, matching the approved reference composition. Uses the
 // charcoal --chart-bar-peak rather than a surface token because it floats
@@ -219,6 +269,12 @@ export function DashboardClient({ initialData, topPriorityTickets, adminName }: 
   const activeTicketSeries = (data.activeTicketTrend ?? []).map((row) => ({ date: row.date, value: numeric(row.count) }));
   const pendingWorkOrderSeries = (data.pendingWorkOrderTrend ?? []).map((row) => ({ date: row.date, value: numeric(row.count) }));
   const reportSeries = trend.map((row) => ({ date: row.date, value: row.reports }));
+  const categories = categoryItems(data.categories);
+  const statuses = distributionItems(data.statusDistribution, STATUS_ORDER);
+  const severities = distributionItems(data.citizenSeverityDistribution, SEVERITY_ORDER);
+  const departments = data.departmentWorkload ? distributionItems(data.departmentWorkload, DEPARTMENT_ORDER) : null;
+  const isSystemAdmin = data.officePerformanceSummary.scope === "ALL";
+  const office = data.officePerformanceSummary.scope === "ALL" ? undefined : data.officePerformanceSummary.scope;
   async function updateRange(nextRange: DashboardRange) { if (nextRange === range) return; const id = requestId.current + 1; requestId.current = id; setRange(nextRange); setRangeError(null); try { const response = await fetch("/api/admin/dashboard?range=" + nextRange, { cache: "no-store" }); if (!response.ok) throw new Error(); const nextData = await response.json() as DashboardData; if (requestId.current === id) startTransition(() => setData(nextData)); } catch { if (requestId.current === id) { setRange(initialData.range ?? 30); setRangeError("Unable to update the incident report range. Showing the previous range."); } } }
   return <div className="flex min-w-0 flex-col gap-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -268,5 +324,38 @@ export function DashboardClient({ initialData, topPriorityTickets, adminName }: 
     </div>
 
     <HighestUrgencyActionsTable tickets={topPriorityTickets} />
+
+    <div className="flex min-w-0 flex-col gap-3">
+      <OfficePerformanceSummary summary={data.officePerformanceSummary} />
+
+      <section aria-label="Dashboard analytics" className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2" role="region">
+        <AnalyticsCard icon={Shapes} title="Category Distribution">
+          <DistributionDonutChart ariaLabel="Active ticket category distribution" config={categoryChartConfig} description="Active tickets grouped by hazard category." items={categories} />
+        </AnalyticsCard>
+        <AnalyticsCard icon={ChartPie} title="Ticket Status Distribution">
+          <DistributionDonutChart ariaLabel="Ticket status distribution" config={statusChartConfig} description="All tickets grouped by lifecycle status." items={statuses} />
+        </AnalyticsCard>
+        <AnalyticsCard icon={Gauge} title="Reports by Citizen Severity">
+          <SeverityRadialChart ariaLabel="Reports by citizen severity" config={severityChartConfig} description="Citizen-selected severity in the latest 30 days; not system urgency." items={severities} />
+        </AnalyticsCard>
+        {departments && (
+          <AnalyticsCard icon={Building2} title="Department Workload">
+            <DepartmentWorkloadComparison ariaLabel="Department workload" config={departmentChartConfig} description="Active tickets assigned to MEO and MDRRMO." items={departments} />
+          </AnalyticsCard>
+        )}
+      </section>
+
+      <Card className="gap-0 rounded-xl bg-muted pt-2 pb-5">
+        <CardHeader className="px-4 pb-2">
+          <CardHeaderRow>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Map Presets</CardTitle>
+            <MapPinned aria-hidden="true" className="size-5 shrink-0 text-[var(--brand)]" />
+          </CardHeaderRow>
+        </CardHeader>
+        <CardBodyPanel className="p-4">
+          <MapPresets isSystemAdmin={isSystemAdmin} office={office} />
+        </CardBodyPanel>
+      </Card>
+    </div>
   </div>;
 }

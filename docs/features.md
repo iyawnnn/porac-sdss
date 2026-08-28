@@ -268,6 +268,8 @@ Two independent auth systems; two independent sets of API routes. No citizen-fac
 
 A transient Next → NestJS connection failure during server rendering (e.g. an API restart) no longer replaces the whole admin or citizen app with the framework's default error screen. `app/error.tsx` catches the failure at the root, above both the admin and citizen layouts; `app/admin/error.tsx` gives admin pages the same page-level recovery the six citizen `error.tsx` boundaries already had. Both retry via re-fetching rather than a plain reset, so a working "Try Again" click actually recovers the page once the API is back.
 
+The retry button shows a "Retrying…" pending state and is disabled while a retry is in flight, so a slow retry doesn't look like a dead button. Each boundary offers one secondary navigation action alongside retry: the admin boundary links to `/admin/login`, the citizen boundary (`CitizenErrorState`) links to `/reports`, and the audience-neutral root boundary keeps a plain `/` link since it can catch a throw from either layout. User-facing copy stays one generic, honest message in both environments — a production build serializes a Server Component error's `digest` with no `message` field at all, so a "network unreachable" vs. "API errored" distinction is not reliably readable client-side; `error.digest` is still logged to the server console (and shown as a short reference line) for correlating a report with server logs.
+
 ---
 
 ## 6. Not included / pending

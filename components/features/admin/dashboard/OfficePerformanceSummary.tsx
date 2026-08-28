@@ -1,7 +1,8 @@
 import type { OfficePerformanceCounts, OfficePerformanceSummary as OfficePerformanceSummaryData } from "@/lib/types/admin-dashboard";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CardBodyPanel } from "../shared/CardBodyPanel";
 
 const METRICS: { key: keyof OfficePerformanceCounts; label: string }[] = [
   { key: "pendingWorkOrders", label: "Pending Work Orders" },
@@ -53,12 +54,12 @@ export function OfficePerformanceSummary({ summary }: { summary: OfficePerforman
   // substring-matching getByText in the same page.
   const scopeLabel = summary.scope === "ALL" ? "City-wide summary" : `${summary.scope} office summary`;
   return (
-    <Card aria-label="Office performance summary" role="region">
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-        <CardTitle>Office Performance Summary</CardTitle>
+    <Card aria-label="Office performance summary" className="gap-0 rounded-xl bg-muted pt-2 pb-5" role="region">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 px-4 pb-2">
+        <CardTitle className="text-xs font-medium text-muted-foreground">Office Performance Summary</CardTitle>
         <Badge variant="secondary">{scopeLabel}</Badge>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardBodyPanel className="flex flex-col gap-4 p-4">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {METRICS.map((metric) => <MetricTile counts={summary} key={metric.key} metric={metric} />)}
         </div>
@@ -68,7 +69,7 @@ export function OfficePerformanceSummary({ summary }: { summary: OfficePerforman
             <ComparisonTable byOffice={summary.byOffice} />
           </div>
         )}
-      </CardContent>
+      </CardBodyPanel>
     </Card>
   );
 }
