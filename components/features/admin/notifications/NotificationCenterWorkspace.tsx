@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AdminErrorCard } from "../shared/AdminErrorCard";
+import { EmptyState } from "../shared/EmptyState";
 
 const PAGE_LIMIT = 20;
 
@@ -186,11 +187,7 @@ export function NotificationCenterWorkspace({
               ))}
             </div>
           ) : items.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 p-10 text-center">
-              <BellOff aria-hidden="true" className="size-8 text-muted-foreground" />
-              <p className="text-sm font-medium">No notifications match this filter.</p>
-              <p className="text-sm text-muted-foreground">Try a different status or type filter.</p>
-            </div>
+            <EmptyState description="Try a different status or type filter." icon={BellOff} title="No notifications match this filter." />
           ) : (
             <ul aria-label="Notification history" className="divide-y">
               {items.map((notification) => (

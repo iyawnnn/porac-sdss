@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyState } from "../shared/EmptyState";
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   officer: "Officer",
@@ -423,7 +424,7 @@ export function AdminManagementWorkspace({
       </div>
 
       {admins.length === 0 ? (
-        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">No administrator accounts yet.</CardContent></Card>
+        <Card><CardContent className="p-0"><EmptyState className="p-8" title="No administrator accounts yet." /></CardContent></Card>
       ) : (
         <>
           <Card className="hidden overflow-hidden sm:block">

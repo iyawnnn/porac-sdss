@@ -5,6 +5,7 @@ import type { ModerationQueueRow } from "@/lib/types/admin-moderation";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AdminErrorCard } from "../../shared/AdminErrorCard";
+import { EmptyState } from "../../shared/EmptyState";
 import { TABLE_HEAD_CLASS } from "../../shared/tableHead";
 import {
   alignClass,
@@ -114,7 +115,7 @@ export function FlaggedTable({
               rows={skeletonRows}
             />
           ) : reports.length === 0 ? (
-            <EmptyState />
+            <EmptyState description="Try widening your search or clearing filters." icon={ShieldAlertIcon} title="No flagged reports match this filter." />
           ) : (
             reports.map((report) => (
               <FlaggedRow
@@ -147,7 +148,7 @@ export function FlaggedTable({
             </div>
           ))
         ) : reports.length === 0 ? (
-          <EmptyState />
+          <EmptyState description="Try widening your search or clearing filters." icon={ShieldAlertIcon} title="No flagged reports match this filter." />
         ) : (
           reports.map((report) => (
             <MobileRow
@@ -187,18 +188,6 @@ function SkeletonRows({
         </div>
       ))}
     </>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="p-10 text-center">
-      <ShieldAlertIcon aria-hidden="true" className="mx-auto size-5 text-muted-foreground" />
-      <p className="mt-3 text-sm font-medium">No flagged reports match this filter.</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Try widening your search or clearing filters.
-      </p>
-    </div>
   );
 }
 

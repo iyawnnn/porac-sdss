@@ -1,5 +1,6 @@
 import type { BarangayCategoryRow } from "@/lib/types/admin-barangay-insights";
 import { formatDistributionPercent } from "../dashboard/DistributionChartUtils";
+import { EmptyState } from "../shared/EmptyState";
 
 // A plain ranked list rather than a donut chart — categories are a dynamic,
 // open-ended set (TICKET_CATEGORIES has 11 values) with no existing
@@ -10,7 +11,7 @@ export function CategoryBreakdownList({ categories }: { categories: BarangayCate
   const total = categories.reduce((sum, c) => sum + c.count, 0);
 
   if (categories.length === 0) {
-    return <p className="p-4 text-sm text-muted-foreground">No tickets recorded for this barangay yet.</p>;
+    return <EmptyState className="items-start p-4 text-left" title="No tickets recorded for this barangay yet." />;
   }
 
   return (

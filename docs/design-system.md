@@ -11,11 +11,12 @@ foundation + admin shell) has shipped: `app/globals.css` carries the brand-repoi
 `--ring`/`--sidebar-ring` → `--brand`, the warm-neutral palette, `--delta-*` tokens), and
 `components/layouts/AdminSidebar.tsx` consumes those tokens correctly (`bg-primary`/
 `text-primary-foreground`, `data-active:bg-sidebar-accent`, a brand-solid avatar fill).
-**Phases 1 and later are not yet implemented** — e.g. the shared `KpiCard`/`EmptyState`
-primitives §6 and §9 Phase 1 call for do not exist yet (`KpiCard` is still a private
-function inside `DashboardClient.tsx`; there is no shared `EmptyState` component), and
-§3.2's semantic-palette TBDs remain unresolved. Treat each phase's status independently
-rather than assuming the whole document is either fully shipped or fully pending.
+**Phases 1 and later are not yet implemented** — e.g. of the shared `KpiCard`/`EmptyState`
+primitives §6 and §9 Phase 1 call for, `KpiCard` has been extracted to
+`components/features/admin/shared/KpiCard.tsx` but there is still no shared `EmptyState`
+component, and §3.2's semantic-palette TBDs remain unresolved. Treat each phase's status
+independently rather than assuming the whole document is either fully shipped or fully
+pending.
 
 | Document | Role |
 |---|---|
@@ -547,7 +548,7 @@ Design sequencing only. This is **not** a product roadmap and queues no features
 | **1** | Shared primitives: semantic `Badge` variants, one `StatCard`, one `EmptyState`, `StatusPill` folded into `Badge`, the six duplicate color mappings collapsed onto tokens. Requires the §3.2 TBDs to be resolved first. | Not started — no shared `StatCard`/`EmptyState` exists; `StatusPill` is still a standalone component, not folded into `Badge`. |
 | **2** | Ticket queue — table density into the primitive, filter bar, pagination. | **Substantially addressed**, but via a separate initiative (the "Precision Queue" rebuild, `docs/project-status.md` §3) that predates and doesn't use this phase's own Phase-1 primitives — it introduced its own plain-white card treatment, documented as a deliberate deviation in §5.8 below. Re-verify against §5.8 before assuming this phase still needs doing as originally scoped. |
 | **3** | Ticket detail — the six hand-rolled eyebrow cards onto `CardHeader`/`CardTitle`, priority breakdown, status tracker. | Not verified as part of this audit — re-check before starting. |
-| **4** | Dashboard — KPI row, chart card chrome, supporting panels. | **Partially done** — `DashboardClient.tsx` already uses the gray-frame `CardBodyPanel`/`CardHeaderRow` treatment (§5.8) and token-driven KPI deltas, but `KpiCard` itself is still a private, unextracted function (see §6). |
+| **4** | Dashboard — KPI row, chart card chrome, supporting panels. | **Partially done** — `DashboardClient.tsx` already uses the gray-frame `CardBodyPanel`/`CardHeaderRow` treatment (§5.8) and token-driven KPI deltas, and `KpiCard` is now a shared component (`components/features/admin/shared/KpiCard.tsx`, see §6). |
 | **5** | Map surfaces — de-glass, control / legend / popup chrome. Highest Leaflet risk, so late. | **Chrome-level work already done** — `MapFilterBar.tsx`/`MapLegend.tsx`/`MapControls.tsx` carry no glass and already use token-driven urgency colors. Remaining risk is scoped narrower than this phase implies: marker `divIcon`/heatmap color derivation in `MapClient.tsx`, not yet verified as token-sourced. |
 | **6** | Remaining admin workspaces — flagged, work orders, reports, activity log, admin management. | **Flagged Reports done** — rebuilt to the same Precision Queue grammar as Ticket Queue (`docs/project-status.md` §3). Work orders, reports, activity log, and admin management not yet addressed. |
 | **7** | Citizen sweep — adopt the shared primitives, fix the auth accessibility floors, add mobile navigation, remove the gradient and glass panel. | Not verified as part of this audit — re-check before starting. |
@@ -561,7 +562,7 @@ colors that must then be un-hardcoded.
 
 Deferred structural work, tracked but explicitly not bundled with visual phases: the
 duplicated desktop-table / mobile-card-list scaffold across four workspaces; the nested
-`<main>` in the admin layout; `AdminHeader`'s `pageLabel()` route-coverage bug.
+`<main>` in the admin layout.
 
 ---
 

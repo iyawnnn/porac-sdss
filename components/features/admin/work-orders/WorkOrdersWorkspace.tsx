@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { AdminErrorCard } from "../shared/AdminErrorCard";
+import { EmptyState } from "../shared/EmptyState";
 import { CreateWorkOrderDialog } from "./CreateWorkOrderDialog";
 import { WorkOrderStatusBadge } from "./WorkOrderStatusBadge";
 import { WorkOrderStatusSelect } from "./WorkOrderStatusSelect";
@@ -223,7 +224,9 @@ export function WorkOrdersWorkspace({
                 ))
               ) : data.workOrders.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell className="p-10 text-center" colSpan={7}><EmptyState /></TableCell>
+                  <TableCell className="p-0" colSpan={7}>
+                    <EmptyState description="Create one from a ticket, or search for one here." icon={ClipboardListIcon} title="No work orders match this filter." />
+                  </TableCell>
                 </TableRow>
               ) : (
                 data.workOrders.map((wo) => <WorkOrderDesktopRow key={wo.id} onUpdated={handleUpdated} workOrder={wo} />)
@@ -240,7 +243,7 @@ export function WorkOrdersWorkspace({
         ) : loading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton className="h-28 w-full" key={i} />)
         ) : data.workOrders.length === 0 ? (
-          <Card><CardContent className="flex flex-col items-center gap-1 p-8 text-center"><EmptyState /></CardContent></Card>
+          <Card><CardContent className="p-0"><EmptyState className="p-8" description="Create one from a ticket, or search for one here." icon={ClipboardListIcon} title="No work orders match this filter." /></CardContent></Card>
         ) : (
           data.workOrders.map((wo) => <WorkOrderCard key={wo.id} onUpdated={handleUpdated} workOrder={wo} />)
         )}
@@ -279,16 +282,6 @@ export function WorkOrdersWorkspace({
         )}
       </div>
     </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <>
-      <ClipboardListIcon aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
-      <p className="mt-3 text-sm font-medium">No work orders match this filter.</p>
-      <p className="mt-1 text-sm text-muted-foreground">Create one from a ticket, or search for one here.</p>
-    </>
   );
 }
 

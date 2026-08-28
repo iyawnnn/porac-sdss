@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
-import { ArrowDownRight, ArrowUpRight, BarChart3, ClipboardList, FileText, Inbox, Ticket } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ReferenceLine, XAxis, YAxis } from "recharts";
-import { DASHBOARD_RANGES, type BarangayRiskRow, type CategoryDistributionRow, type CountTrendRow, type DashboardDeltas, type DashboardKpis, type DashboardRange, type DistributionRow, type IncidentTrendRow, type KpiDelta, type OfficePerformanceSummary as OfficePerformanceSummaryData, type NeedsAttention as NeedsAttentionData } from "@/lib/types/admin-dashboard";
+import { BarChart3, ClipboardList, FileText, Inbox, Ticket } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, XAxis, YAxis } from "recharts";
+import { DASHBOARD_RANGES, type BarangayRiskRow, type CategoryDistributionRow, type CountTrendRow, type DashboardDeltas, type DashboardKpis, type DashboardRange, type DistributionRow, type IncidentTrendRow, type OfficePerformanceSummary as OfficePerformanceSummaryData, type NeedsAttention as NeedsAttentionData } from "@/lib/types/admin-dashboard";
 import type { AdminTicketRow } from "@/lib/types/admin-tickets";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,8 @@ import { CardBodyPanel } from "../shared/CardBodyPanel";
 import { CardHeaderRow } from "../shared/CardHeaderRow";
 import { TABLE_HEAD_CLASS } from "../shared/tableHead";
 import { StatusPill } from "../shared/StatusPill";
+import { DeltaIndicator, KpiCard } from "../shared/KpiCard";
+import { EmptyState } from "../shared/EmptyState";
 import { NeedsAttention } from "./NeedsAttention";
 
 const SEP = "·";
@@ -25,10 +27,6 @@ const SEP = "·";
 // trend series does not use brand orange (or the legacy brand blue it read
 // before): brand is chrome, never data.
 const trendChartConfig = { reports: { label: "Submitted reports", color: "var(--chart-bar-peak)" } } satisfies ChartConfig;
-// KPI sparklines share one series key ("value") so the three cards can feed
-// KpiCard from differently-named API fields without three near-identical
-// configs — the label is generic because each card's own heading names it.
-const sparklineChartConfig = { value: { label: "Recent trend", color: "var(--chart-bar-peak)" } } satisfies ChartConfig;
 
 // departmentWorkload/citizenSeverityDistribution/leaderboard/categories/
 // statusDistribution stay in the fetched payload and this type — the API
@@ -102,7 +100,8 @@ function RangeControl({ range, isUpdating, onChange }: { range: DashboardRange; 
 }
 
 // All three KPI cards share one anatomy: a compact header (label + icon),
-// then a body with the metric lower-left and a sparkline lower-right.
+// then a body with the metric lower-left and a sparkline lower-right — see
+// KpiCard in ../shared/KpiCard.tsx.
 //
 // Every sparkline is real server-reconstructed history, never a projection
 // of the headline number: Reports This Month reads data.incidentTrend,
@@ -111,95 +110,6 @@ function RangeControl({ range, isUpdating, onChange }: { range: DashboardRange; 
 // on each — notably that work-order history only exists from its migration
 // forward, so that series is short until it accumulates. sparkline stays
 // optional so a card can still render honestly if a series is ever absent.
-// Week-over-week delta shown beside each headline number.
-//
-// Colored purely by the sign of the change: up is green, down is red, on
-// every card. This is a deliberate reversal of an earlier revision that
-// colored by judgement (a rise in Active Tickets or Pending Work Orders
-// rendered red, on the grounds that a growing hazard backlog is bad news).
-// It was changed on request. The consequence is intended and worth knowing
-// when reading these cards: a growing backlog now reads green.
-//
-// Never color-only (docs/design-system.md anti-patterns): the arrow glyph
-// and the signed number both carry the direction independently of hue.
-// `stacked` drops the "vs last week" qualifier onto its own line beneath the
-// figure, which is the KPI cards' arrangement. The Incident Reports card
-// keeps the default inline reading, where the indicator sits beside the range
-// total in a single row and a two-line block would misalign against it — so
-// this stays a variant rather than a change to every caller.
-function DeltaIndicator({ delta, stacked = false }: { delta: KpiDelta | null | undefined; stacked?: boolean }) {
-  const qualifier = <span className={stacked ? "block font-normal text-muted-foreground" : "font-normal text-muted-foreground"}>{stacked ? "vs last week" : " vs last week"}</span>;
-
-  // A missing delta is a real state, not an error — Pending Work Orders has
-  // no honest baseline until work_order_status_history reaches back a week
-  // (see getKpiDeltas). Show a dash, never a fabricated 0%.
-  if (!delta) return <span className="shrink-0 text-xs text-muted-foreground" title="Not enough history to compare yet">{stacked ? <>—{qualifier}</> : <>— vs last week</>}</span>;
-
-  const { changeAbs, changePct } = delta;
-  const rising = changeAbs > 0;
-  const flat = changeAbs === 0;
-  const tone = flat ? "var(--delta-flat)" : rising ? "var(--delta-up)" : "var(--delta-down)";
-  // changePct is null when the baseline was 0 — "+infinity%" helps nobody,
-  // so fall back to the absolute change, which is always well defined.
-  const magnitude = changePct === null
-    ? `${rising ? "+" : ""}${changeAbs.toLocaleString()}`
-    : `${changePct > 0 ? "+" : ""}${changePct.toFixed(1)}%`;
-  const Arrow = rising ? ArrowUpRight : ArrowDownRight;
-
-  // Stacked keeps the arrow+figure on their own flex row so the tone color
-  // stays scoped to them; the qualifier below is always muted, never tinted,
-  // because it is a constant label and not part of the signal.
-  if (stacked) {
-    return (
-      <span className="shrink-0 text-xs font-medium tabular-nums">
-        <span className="flex items-center gap-0.5" style={{ color: tone }}>
-          {!flat && <Arrow aria-hidden="true" className="size-3.5 shrink-0" />}
-          {magnitude}
-        </span>
-        {qualifier}
-      </span>
-    );
-  }
-
-  return (
-    <span className="flex shrink-0 items-center gap-0.5 text-xs font-medium tabular-nums" style={{ color: tone }}>
-      {!flat && <Arrow aria-hidden="true" className="size-3.5 shrink-0" />}
-      {magnitude}
-      {qualifier}
-    </span>
-  );
-}
-
-// The header icon is --brand (#ff7a00, the guidelines' orange) rather than
-// --brand-solid. It is aria-hidden and sits beside a visible text label, so
-// it is decorative and outside WCAG 1.4.11 — which is what lets it use the
-// 2.61:1 brand orange instead of the deepened AA-safe shade. Any icon that
-// ever becomes the sole carrier of meaning has to move to --brand-solid.
-function KpiCard({ label, value, icon: Icon, sparkline, delta }: { label: string; value: string; icon: typeof Ticket; sparkline?: { date: string; value: number }[]; delta?: KpiDelta | null }) {
-  return (
-    <Card className="gap-0 rounded-xl bg-muted pt-2 pb-5">
-      <CardHeader className="px-4 pb-2">
-        <CardHeaderRow>
-          <CardTitle className="text-xs font-medium text-muted-foreground">{label}</CardTitle>
-          <Icon aria-hidden="true" className="size-5 shrink-0 text-[var(--brand)]" />
-        </CardHeaderRow>
-      </CardHeader>
-      <CardBodyPanel className="flex items-end justify-between gap-3 px-4 pt-3 pb-4">
-        <div className="min-w-0 space-y-0.5">
-          <p className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">{value}</p>
-          <DeltaIndicator delta={delta} stacked />
-        </div>
-        {sparkline && sparkline.length > 0 && (
-          <ChartContainer className="h-9 w-24 shrink-0" config={sparklineChartConfig}>
-            <AreaChart data={sparkline} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-              <Area dataKey="value" dot={false} fill="var(--chart-bar-peak)" fillOpacity={0.08} isAnimationActive={false} stroke="var(--chart-bar-peak)" strokeWidth={1.5} type="monotone" />
-            </AreaChart>
-          </ChartContainer>
-        )}
-      </CardBodyPanel>
-    </Card>
-  );
-}
 
 // The dashboard-landing action queue — capped and compact, deliberately not
 // a second Ticket Queue. Ranked by priority_score (Hazard Urgency Score);
@@ -253,7 +163,7 @@ function HighestUrgencyActionsTable({ tickets }: { tickets: AdminTicketRow[] | n
             {tickets === null ? (
               <TableRow className="hover:bg-transparent"><TableCell className="p-6 text-center text-sm text-muted-foreground" colSpan={5}>Unable to load priority actions right now.</TableCell></TableRow>
             ) : tickets.length === 0 ? (
-              <TableRow className="hover:bg-transparent"><TableCell className="p-6 text-center text-sm text-muted-foreground" colSpan={5}>No active tickets right now.</TableCell></TableRow>
+              <TableRow className="hover:bg-transparent"><TableCell className="p-0" colSpan={5}><EmptyState className="p-6" title="No active tickets right now." /></TableCell></TableRow>
             ) : (
               tickets.map((ticket) => {
                 const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
