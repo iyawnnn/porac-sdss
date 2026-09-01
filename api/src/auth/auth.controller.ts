@@ -138,25 +138,35 @@ export class AuthController {
     return { ok: true };
   }
 
-  // Tries the admin cookie first, then the citizen cookie — needed by SSR
-  // layouts (Phase 8) that today call getAdminSession()/getCitizenSession()
-  // locally and don't know in advance which kind of session a given page
-  // expects.
+  // Resolves BOTH cookies independently — needed by SSR layouts (Phase 8)
+  // that call getAdminSession()/getCitizenSession() and don't know in
+  // advance which kind of session a given page expects.
+  //
+  // Deliberately not "admin first, else citizen": the two auth systems are
+  // independent (see session.service.ts), so one browser can legitimately
+  // hold both cookies — e.g. a staff member opening the citizen portal in
+  // the same browser they're already signed into /admin with. Collapsing
+  // that to a single admin-first principal made every citizen page's
+  // getCitizenSessionFromApi() come back null for that browser, so
+  // /dashboard, /map and /reports rendered "Sign in to continue" even
+  // though proxy.ts (which checks only the citizen cookie) had already let
+  // the request through. 401 only when neither cookie resolves.
   @Get('auth/me')
   async me(@Req() req: Request) {
     const adminToken = req.cookies?.[SESSION_COOKIE] as string | undefined;
-    if (adminToken) {
-      const session = await this.sessions.verifyAdminSession(adminToken);
-      if (session) return { type: 'admin' as const, session };
-    }
-
     const citizenToken = req.cookies?.[CITIZEN_SESSION_COOKIE] as
-      string | undefined;
-    if (citizenToken) {
-      const session = await this.sessions.verifyCitizenSession(citizenToken);
-      if (session) return { type: 'citizen' as const, session };
-    }
+      | string
+      | undefined;
 
-    throw new UnauthorizedException();
+    const admin = adminToken
+      ? await this.sessions.verifyAdminSession(adminToken)
+      : null;
+    const citizen = citizenToken
+      ? await this.sessions.verifyCitizenSession(citizenToken)
+      : null;
+
+    if (!admin && !citizen) throw new UnauthorizedException();
+
+    return { admin, citizen };
   }
 }

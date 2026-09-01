@@ -58,6 +58,12 @@ Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[
 
 ## 3. Recently Completed Operational Features
 
+### Dual-session `GET /auth/me` (citizen pages blocked for admin-signed-in browsers) — **completed**
+
+**Bug.** Any browser holding a valid admin cookie *and* a valid citizen cookie was locked out of every citizen page. `GET /auth/me` returned a single `{ type, session }` principal resolved admin-first, so `getCitizenSessionFromApi()` came back `null` and `/dashboard`, `/map` and `/reports` rendered `CitizenUnauthorized` ("Sign in to continue"). `proxy.ts` checks only the citizen cookie, so it admitted the request instead of redirecting — which is why the failure surfaced as a dead-end page rather than a login redirect. Most visible via "Continue with Google" (staff testing the citizen portal in the browser they administer from), but not OAuth-specific: password login hit it identically.
+
+**Fix.** `AuthController.me()` now resolves both cookies independently and returns `{ admin: AdminSession | null, citizen: CitizenSession | null }`, 401 only when neither resolves; `lib/api-client.ts`'s two helpers each read their own field. Covered by four regression cases in `api/src/auth/auth.controller.spec.ts`. The three E2E call sites that read `body.session.adminId` now read `body.admin.adminId`. See `docs/security.md` §2.1.
+
 ### Work Orders workspace hierarchy, urgency visibility, and scanning (GitHub #96) — **completed**
 
 `/admin/work-orders` gained a KPI strip, tiered identity/state/assignment row hierarchy, and per-row linked-ticket urgency — a presentation pass, not a filter or workflow change. See the GitHub issue for the full scope.
