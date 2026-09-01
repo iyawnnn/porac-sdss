@@ -604,7 +604,7 @@ async function currentAdminId(page: Page): Promise<number> {
   return page.evaluate(async () => {
     const res = await fetch("/api/auth/me");
     const body = await res.json();
-    return body.session.adminId as number;
+    return body.admin.adminId as number;
   });
 }
 
@@ -720,7 +720,7 @@ test("system admin's My Assignments means work assigned to their own account, no
   const headers = { ...sessionCookieHeader(cookies) };
   const myId = await page.evaluate(async () => {
     const res = await fetch("/api/auth/me");
-    return (await res.json()).session.adminId as number;
+    return (await res.json()).admin.adminId as number;
   });
   const res = await page.request.get("/api/admin/work-orders?assignedAdminId=me&status=all&limit=50", { headers });
   const body = await res.json();
