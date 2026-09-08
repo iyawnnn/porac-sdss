@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Building2, ClipboardList, FileBarChart2, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, Wrench, type LucideIcon } from "lucide-react";
+import { Bell, Building2, ClipboardList, FileBarChart2, Inbox, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, Wrench, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
 import { isFocal, isSystemAdmin } from "@/lib/utils/adminScope";
@@ -17,11 +17,18 @@ interface NavItem { href: string; label: string; icon: LucideIcon; }
 // longer has routine operational access at all (backend-enforced via
 // OperationalStaffGuard on every operational controller; see
 // api/src/common/guards/operational-staff.guard.ts), so it must not see
-// Dashboard/Ticket Queue/Work Orders/etc. in the sidebar either. focal has
-// no real Intake implementation yet (that's Batch 2) — it gets a neutral,
-// non-operational landing rather than a sidebar that promises pages that
-// don't exist. This is UI convenience only; the backend guards are what
-// actually enforce these boundaries.
+// Dashboard/Ticket Queue/Work Orders/etc. in the sidebar either.
+//
+// Batch 2 (Focal intake): focal gets its real workspace — Dashboard, Intake
+// Queue, and Notifications (the generic /notifications endpoint is already
+// principal/role-aware and safe for focal as-is, see
+// NotificationsService.scopeFilter). Interactive Map and Flagged Reports
+// are deliberately NOT included yet: both are backed by
+// OperationalStaffGuard-protected endpoints, and building a Focal-safe
+// equivalent from the intake API alone is out of scope for this batch (see
+// the Batch 2 report's "intentionally deferred" section). This is UI
+// convenience only; the backend guards are what actually enforce these
+// boundaries.
 function buildNavSections(session: Pick<AdminSession, "role">): { heading: string; items: NavItem[] }[] {
   if (isSystemAdmin(session)) {
     return [
@@ -33,6 +40,13 @@ function buildNavSections(session: Pick<AdminSession, "role">): { heading: strin
   }
   if (isFocal(session)) {
     return [
+      { heading: "Main", items: [
+        { href: "/admin/focal", label: "Dashboard", icon: LayoutDashboard },
+        { href: "/admin/focal/intake", label: "Intake Queue", icon: Inbox },
+      ] },
+      { heading: "Management", items: [
+        { href: "/admin/notifications", label: "Notifications", icon: Bell },
+      ] },
       { heading: "Account", items: [
         { href: "/admin/account", label: "Account & Security", icon: ShieldUser },
       ] },
@@ -76,8 +90,14 @@ function footerSubtitle(session: Pick<AdminSession, "role" | "office">): string 
   return `My Office: ${session.office}`;
 }
 
+// "/admin" and "/admin/focal" are both dashboard-root hrefs whose own path
+// is a strict prefix of a sibling nav item's path ("/admin/focal/intake"),
+// so both need exact-match only — otherwise Dashboard would show active
+// while viewing Intake Queue.
+const EXACT_MATCH_ONLY_HREFS = new Set(["/admin", "/admin/focal"]);
+
 function isActivePath(pathname: string, href: string): boolean {
-  return href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+  return EXACT_MATCH_ONLY_HREFS.has(href) ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -20,6 +21,7 @@ import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
   assertOfficeAccess,
+  isFocal,
 } from '../common/authz/admin-scope';
 import {
   ALL_CATEGORIES,
@@ -785,6 +787,13 @@ export class TicketsService {
     return { status: nextStatus };
   }
 
+  // Shared by operational reassignment (own-office admins, any ticket
+  // state — unchanged) and Focal's early-intake Forward (Step 14 of the
+  // Batch 2 design): same reassignment mechanism, same office_reassignments/
+  // audit write — only the authorization gate differs, and Focal's gate is
+  // strictly narrower (Reported + no active work order) than an operational
+  // admin's. This is the one place both callers' authorization is checked,
+  // so a future caller can't accidentally skip the safety rule.
   async reassignOffice(
     ticketId: number,
     admin: AdminSession,
@@ -792,12 +801,36 @@ export class TicketsService {
   ): Promise<{ assignedOffice: 'MEO' | 'MDRRMO' }> {
     const sql = this.pg;
     const [ticket] = await sql<
-      { assigned_office: 'MEO' | 'MDRRMO'; category: string }[]
+      { assigned_office: 'MEO' | 'MDRRMO'; category: string; status: string }[]
     >`
-      SELECT assigned_office, category FROM tickets WHERE id = ${ticketId}
+      SELECT assigned_office, category, status FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
-    assertOfficeAccess(admin, ticket.assigned_office);
+
+    if (isFocal(admin)) {
+      // Focal may only forward a report before operational work has begun
+      // — the ticket must still be at its initial Reported state, with no
+      // work order already in progress. Checked immediately before the
+      // mutation (not pre-validated by the caller) so a race with an
+      // operational admin who has already started work loses safely.
+      if (ticket.status !== 'Reported') {
+        throw new ForbiddenException(
+          'This report can no longer be forwarded by Focal — operational review has already started.',
+        );
+      }
+      const [{ count: activeWorkOrderCount }] = await sql<{ count: number }[]>`
+        SELECT count(*)::int AS count FROM work_orders
+        WHERE ticket_id = ${ticketId} AND status IN ('pending', 'in_progress')
+      `;
+      if (activeWorkOrderCount > 0) {
+        throw new ForbiddenException(
+          'This report can no longer be forwarded by Focal — a work order is already active.',
+        );
+      }
+    } else {
+      assertOfficeAccess(admin, ticket.assigned_office);
+    }
+
     if (ticket.assigned_office === toOffice) {
       throw new BadRequestException(
         `Ticket is already assigned to ${toOffice}`,

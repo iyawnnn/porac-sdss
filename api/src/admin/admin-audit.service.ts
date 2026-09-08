@@ -29,7 +29,14 @@ export type AdminAuditActionType =
   | 'work_order_updated'
   | 'work_order_status_changed'
   | 'work_order_completed'
-  | 'work_order_cancelled';
+  | 'work_order_cancelled'
+  // report_forwarded is deliberately absent — Forward's audit trail already
+  // comes from reassignOffice's own 'ticket_reassigned' event (actor=focal)
+  // plus the report_intake_actions 'forwarded' row; a third audit event for
+  // the same action would be redundant. See FocalIntakeService.forward.
+  | 'report_acknowledged'
+  | 'report_screened'
+  | 'report_escalated';
 
 export type AdminAuditTargetType = 'admin' | 'ticket' | 'report' | 'work_order';
 
@@ -104,6 +111,9 @@ const ACTION_TYPES: AdminAuditActionType[] = [
   'work_order_status_changed',
   'work_order_completed',
   'work_order_cancelled',
+  'report_acknowledged',
+  'report_screened',
+  'report_escalated',
 ];
 const TARGET_TYPES: AdminAuditTargetType[] = ['admin', 'ticket', 'report', 'work_order'];
 

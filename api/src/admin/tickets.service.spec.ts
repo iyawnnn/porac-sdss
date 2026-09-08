@@ -374,6 +374,49 @@ describe('admin audit logging for ticket mutations', () => {
     expect(input.metadata).toEqual({ from: 'MEO', to: 'MDRRMO' });
   });
 
+  // Batch 2 (Focal intake): reassignOffice gains a Focal-specific
+  // authorization branch (early-intake Forward) alongside the existing
+  // assertOfficeAccess path for operational staff — same reassignment
+  // mechanism, same office_reassignments/audit write, different gate.
+  const FOCAL = { role: 'focal', office: 'MDRRMO' } as AdminSession;
+
+  it('allows Focal to reassign a Reported ticket with no active work order', async () => {
+    const { service, logInPgTx } = makeService([
+      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
+      [{ count: 0 }], // active work-order count
+      [{}], // UPDATE tickets
+      [{}], // INSERT office_reassignments
+    ]);
+
+    const result = await service.reassignOffice(11, FOCAL, 'MDRRMO');
+    expect(result).toEqual({ assignedOffice: 'MDRRMO' });
+    expect(logInPgTx).toHaveBeenCalledTimes(1);
+    expect(logInPgTx.mock.calls[0][1].actionType).toBe('ticket_reassigned');
+  });
+
+  it('rejects Focal reassigning a ticket that already left Reported (Under Review)', async () => {
+    const { service, logInPgTx } = makeService([
+      [{ status: 'Under Review', assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
+    ]);
+
+    await expect(service.reassignOffice(12, FOCAL, 'MDRRMO')).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(logInPgTx).not.toHaveBeenCalled();
+  });
+
+  it('rejects Focal reassigning a Reported ticket that already has an active work order', async () => {
+    const { service, logInPgTx } = makeService([
+      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
+      [{ count: 1 }], // active work-order count
+    ]);
+
+    await expect(service.reassignOffice(13, FOCAL, 'MDRRMO')).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(logInPgTx).not.toHaveBeenCalled();
+  });
+
   it('logs ticket_referral_noted without mutating the ticket row', async () => {
     const { service, logInPgTx } = makeService([
       [{ assigned_office: 'MEO', category: 'Leaking Pipe' }], // ticket lookup

@@ -9,6 +9,8 @@ import { AdminUserMenu } from "@/components/layouts/AdminUserMenu";
 import { NotificationBell } from "@/components/layouts/NotificationBell";
 
 function pageLabel(pathname: string): string {
+  if (pathname.startsWith("/admin/focal/intake")) return "Intake Queue";
+  if (pathname === "/admin/focal") return "Dashboard";
   if (pathname.startsWith("/admin/tickets")) return "Ticket Queue";
   if (pathname.startsWith("/admin/map")) return "Interactive Map";
   if (pathname.startsWith("/admin/barangay-insights")) return "Barangay Insights";
