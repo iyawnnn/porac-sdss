@@ -384,6 +384,59 @@ export const reportIntakeActions = pgTable('report_intake_actions', {
     .defaultNow(),
 });
 
+// Batch 3: the human decision-support layer alongside the two system-
+// generated ones (tickets.priority_score/urgency_level = Hazard Urgency,
+// tickets.priority_index = Operational Priority — neither touched here).
+// ONE CURRENT assessment per ticket (ticket_id UNIQUE), not a revision-
+// history table — the approved initial model deliberately keeps this
+// simple; a later batch can add versioning if the operational need proves
+// out. observed_conditions/safety_implications/recommended_action/
+// temporary_mitigation are the substantive fields (NOT NULL, default ''
+// rather than a DB-level required constraint — the service layer enforces
+// "not fully blank," not "every field filled," per the approved design).
+// deferment_reason/referral_reason/remarks are genuinely optional and stay
+// nullable. operational_constraints is a plain text[] over the fixed
+// OPERATIONAL_CONSTRAINTS vocabulary (validated in the service layer, not
+// a join table — mirrors reports.flags above) — never a numeric field:
+// this table has no score/level/band column anywhere, by design.
+//
+// Two actor snapshots, not one: assessed_by_* captures who FIRST created
+// this record and never changes on edit (mirrors "original assessment
+// metadata" being preserved); updated_by_* captures whoever most recently
+// edited it, which matters specifically for the office-transfer case (ticket
+// reassigned MEO -> MDRRMO: MDRRMO can edit the existing assessment, and
+// updated_by_* is how the record shows that happened without losing who
+// created it originally). Both are FK-less, following the existing
+// status_history/office_reassignments/report_acknowledgments convention.
+export const operationalAssessments = pgTable('operational_assessments', {
+  id: serial('id').primaryKey(),
+  ticketId: integer('ticket_id')
+    .notNull()
+    .references(() => tickets.id)
+    .unique(),
+  assessedByAdminId: integer('assessed_by_admin_id'),
+  assessedByName: text('assessed_by_name'),
+  observedConditions: text('observed_conditions').notNull().default(''),
+  safetyImplications: text('safety_implications').notNull().default(''),
+  operationalConstraints: text('operational_constraints')
+    .array()
+    .notNull()
+    .default([]),
+  recommendedAction: text('recommended_action').notNull().default(''),
+  temporaryMitigation: text('temporary_mitigation').notNull().default(''),
+  defermentReason: text('deferment_reason'),
+  referralReason: text('referral_reason'),
+  remarks: text('remarks'),
+  assessedAt: timestamp('assessed_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedByAdminId: integer('updated_by_admin_id'),
+  updatedByName: text('updated_by_name'),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const verifications = pgTable('verifications', {
   id: serial('id').primaryKey(),
   ticketId: integer('ticket_id')

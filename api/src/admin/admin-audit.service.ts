@@ -36,7 +36,9 @@ export type AdminAuditActionType =
   // the same action would be redundant. See FocalIntakeService.forward.
   | 'report_acknowledged'
   | 'report_screened'
-  | 'report_escalated';
+  | 'report_escalated'
+  | 'operational_assessment_created'
+  | 'operational_assessment_updated';
 
 export type AdminAuditTargetType = 'admin' | 'ticket' | 'report' | 'work_order';
 
@@ -114,6 +116,8 @@ const ACTION_TYPES: AdminAuditActionType[] = [
   'report_acknowledged',
   'report_screened',
   'report_escalated',
+  'operational_assessment_created',
+  'operational_assessment_updated',
 ];
 const TARGET_TYPES: AdminAuditTargetType[] = ['admin', 'ticket', 'report', 'work_order'];
 

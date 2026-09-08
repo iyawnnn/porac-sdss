@@ -10,6 +10,7 @@ import type {
   TicketReassignmentRow,
   TicketReferralRow,
   TicketPriorityContext,
+  OperationalAssessment,
 } from "@/lib/types/admin-tickets";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
 import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
@@ -26,6 +27,7 @@ import { AssignmentPanel } from "@/components/features/admin/tickets/AssignmentP
 import { ReferralPanel } from "@/components/features/admin/tickets/ReferralPanel";
 import { RejectTicketPanel } from "@/components/features/admin/tickets/RejectTicketPanel";
 import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersPanel";
+import { OperationalAssessmentPanel } from "@/components/features/admin/tickets/OperationalAssessmentPanel";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
 import { HorizontalStatusTracker } from "@/components/features/admin/tickets/HorizontalStatusTracker";
 import { TicketDetailSkeleton } from "@/components/features/admin/tickets/TicketDetailSkeleton";
@@ -57,6 +59,7 @@ interface TicketDetailResponse {
   history: TicketStatusHistoryRow[];
   reassignments: TicketReassignmentRow[];
   referrals: TicketReferralRow[];
+  operationalAssessment: OperationalAssessment | null;
 }
 
 async function TicketDetailData({ ticketId, from }: { ticketId: number; from: string | undefined }) {
@@ -88,7 +91,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
   }
   if (!data) notFound();
 
-  const { ticket, reports, history, reassignments, referrals } = data;
+  const { ticket, reports, history, reassignments, referrals, operationalAssessment } = data;
 
   // Only trust a same-origin queue URL forwarded from the ticket list —
   // never redirect off /admin/tickets based on an arbitrary query param.
@@ -201,6 +204,12 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           <Card>
             <CardContent className="p-4">
               <WorkOrdersPanel initialWorkOrders={workOrders} office={ticket.assigned_office as "MEO" | "MDRRMO"} ticketId={ticket.id} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <OperationalAssessmentPanel assessment={operationalAssessment} ticketId={ticket.id} />
             </CardContent>
           </Card>
 
