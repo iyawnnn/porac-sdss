@@ -1,5 +1,6 @@
 import { Controller, Get, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
+import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { resolveOfficeScope } from '../common/authz/admin-scope';
@@ -15,7 +16,7 @@ function parseOfficeParam(value: string | undefined): 'MEO' | 'MDRRMO' | 'all' |
 // Barangay identity itself isn't office-owned (unlike a ticket or work
 // order), so any admin may view any barangay's profile; only the
 // ticket-derived numbers on it are office-scoped.
-@UseGuards(AdminSessionGuard)
+@UseGuards(AdminSessionGuard, OperationalStaffGuard)
 @Controller('admin/barangay-insights')
 export class BarangayInsightsController {
   constructor(private readonly barangayInsights: BarangayInsightsService) {}

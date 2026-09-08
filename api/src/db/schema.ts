@@ -42,11 +42,18 @@ export const ticketStatusEnum = pgEnum('ticket_status', [
 ]);
 export const officeEnum = pgEnum('office', ['MEO', 'MDRRMO']);
 // 'system_admin' has no office of its own (admins.office is nullable for
-// exactly this role) — it bypasses office scoping instead of belonging to
-// a third office value. See api/src/common/authz/admin-scope.ts.
+// exactly this role) — it no longer has routine operational access either
+// (Batch 1, five-role RBAC), it bypasses office scoping instead of
+// belonging to a third office value. 'focal' always has office = 'MDRRMO'
+// (organizationally MDRRMO/QRT) but is also not routine operational staff.
+// See api/src/common/authz/admin-scope.ts's isOperationalStaff — the
+// allowlist of exactly officer/supervisor — and drizzle/
+// 0030_admin_focal_role.sql for the additive enum migration this type must
+// stay in sync with.
 export const adminRoleEnum = pgEnum('admin_role', [
   'officer',
   'supervisor',
+  'focal',
   'system_admin',
 ]);
 // 'facebook' is retained in the enum only because Postgres can't cheaply

@@ -5,27 +5,38 @@ import { usePathname } from "next/navigation";
 import { Bell, Building2, ClipboardList, FileBarChart2, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, Wrench, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
-import { isSystemAdmin } from "@/lib/utils/adminScope";
+import { isFocal, isSystemAdmin } from "@/lib/utils/adminScope";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail, useSidebar } from "@/components/ui/sidebar";
 import { AdminSearch } from "@/components/layouts/AdminSearch";
 import { AdminSidebarTrigger } from "@/components/layouts/AdminSidebarTrigger";
 
 interface NavItem { href: string; label: string; icon: LucideIcon; }
 
-// Admin Management and the Activity Log are System Administrator only —
-// backend-enforced via SystemAdminGuard on every /admin/admins and
-// /admin/activity-log route, this is just the matching UI hide (never the
-// actual gate). See api/src/common/guards/system-admin.guard.ts.
-function buildNavSections(systemAdmin: boolean): { heading: string; items: NavItem[] }[] {
-  const managementItems: NavItem[] = [
-    { href: "/admin/work-orders", label: "Work Orders", icon: Wrench },
-    { href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert },
-    { href: "/admin/reports", label: "Reports & Exports", icon: FileBarChart2 },
-    { href: "/admin/notifications", label: "Notifications", icon: Bell },
-  ];
-  if (systemAdmin) {
-    managementItems.push({ href: "/admin/admins", label: "Admin Management", icon: ShieldUser });
-    managementItems.push({ href: "/admin/activity-log", label: "Activity Log", icon: ClipboardList });
+// Batch 1 (five-role RBAC): navigation is now role-partitioned, not just
+// "operational plus two extra System Administrator items" — system_admin no
+// longer has routine operational access at all (backend-enforced via
+// OperationalStaffGuard on every operational controller; see
+// api/src/common/guards/operational-staff.guard.ts), so it must not see
+// Dashboard/Ticket Queue/Work Orders/etc. in the sidebar either. focal has
+// no real Intake implementation yet (that's Batch 2) — it gets a neutral,
+// non-operational landing rather than a sidebar that promises pages that
+// don't exist. This is UI convenience only; the backend guards are what
+// actually enforce these boundaries.
+function buildNavSections(session: Pick<AdminSession, "role">): { heading: string; items: NavItem[] }[] {
+  if (isSystemAdmin(session)) {
+    return [
+      { heading: "System Administration", items: [
+        { href: "/admin/admins", label: "Admin Management", icon: ShieldUser },
+        { href: "/admin/activity-log", label: "Activity Log", icon: ClipboardList },
+      ] },
+    ];
+  }
+  if (isFocal(session)) {
+    return [
+      { heading: "Account", items: [
+        { href: "/admin/account", label: "Account & Security", icon: ShieldUser },
+      ] },
+    ];
   }
   return [
     { heading: "Main", items: [
@@ -34,7 +45,12 @@ function buildNavSections(systemAdmin: boolean): { heading: string; items: NavIt
       { href: "/admin/map", label: "Interactive Map", icon: Map },
       { href: "/admin/barangay-insights", label: "Barangay Insights", icon: Building2 },
     ] },
-    { heading: "Management", items: managementItems },
+    { heading: "Management", items: [
+      { href: "/admin/work-orders", label: "Work Orders", icon: Wrench },
+      { href: "/admin/flagged", label: "Flagged Reports", icon: ShieldAlert },
+      { href: "/admin/reports", label: "Reports & Exports", icon: FileBarChart2 },
+      { href: "/admin/notifications", label: "Notifications", icon: Bell },
+    ] },
   ];
 }
 
@@ -47,6 +63,17 @@ function initialsOf(name: string): string {
   const first = parts[0]?.[0] ?? "";
   const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
   return (first + last).toUpperCase();
+}
+
+// Never "All Offices" for system_admin — that phrasing implies operational
+// authority it no longer has (Batch 1). Focal also gets its own wording
+// rather than "My Office: MDRRMO", since that would read as operational
+// office membership rather than the organizational-only relationship it
+// actually has to MDRRMO.
+function footerSubtitle(session: Pick<AdminSession, "role" | "office">): string {
+  if (isSystemAdmin(session)) return "System Administrator / MIS";
+  if (isFocal(session)) return "Central Monitoring / Focal Personnel";
+  return `My Office: ${session.office}`;
 }
 
 function isActivePath(pathname: string, href: string): boolean {
@@ -74,7 +101,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 
 export default function AdminSidebar({ session }: { session: AdminSession }) {
   const pathname = usePathname();
-  const navSections = buildNavSections(isSystemAdmin(session));
+  const navSections = buildNavSections(session);
   return (
     <Sidebar className={cn("*:data-[slot=sidebar-inner]:bg-background", "transition-[left,right,top,width]")} collapsible="offcanvas" variant="sidebar">
       <SidebarHeader className="h-(--app-header-height,3rem) flex-row items-center justify-between gap-2 border-b border-sidebar-border px-3">
@@ -100,10 +127,10 @@ export default function AdminSidebar({ session }: { session: AdminSession }) {
           <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">{initialsOf(session.adminName)}</span>
           <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
             <p className="truncate text-xs font-medium text-sidebar-foreground">{session.adminName}</p>
-            <p className="truncate text-[11px] text-sidebar-foreground/60">{isSystemAdmin(session) ? "All Offices" : `My Office: ${session.office}`}</p>
+            <p className="truncate text-[11px] text-sidebar-foreground/60">{footerSubtitle(session)}</p>
           </div>
         </div>
-        <p className="sr-only">Signed in as {session.adminName} {"\u00b7"} {isSystemAdmin(session) ? "System Administrator" : session.office}</p>
+        <p className="sr-only">Signed in as {session.adminName} {"\u00b7"} {footerSubtitle(session)}</p>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

@@ -86,15 +86,20 @@ describe('TicketsService.getViewCounts office scoping', () => {
     expect(calls[0]).toEqual(['MDRRMO', 'MDRRMO', 'MDRRMO', 'MDRRMO']);
   });
 
-  it('binds null for a system admin, which is what widens the counts city-wide', async () => {
-    const { service, calls } = makeService(ROW);
-    await service.getViewCounts(SYSTEM_ADMIN);
-    expect(calls[0]).toEqual([null, null, null, null]);
+  // Batch 1 (five-role RBAC): system_admin no longer has routine
+  // operational access — resolveOfficeScope now rejects it outright rather
+  // than widening to city-wide. See admin-scope.spec.ts for the helper's
+  // own tests; this is the regression guard at the consuming service.
+  it('rejects a system admin outright rather than widening the counts city-wide', async () => {
+    const { service } = makeService(ROW);
+    await expect(service.getViewCounts(SYSTEM_ADMIN)).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   it('maps the snake_case aggregate onto the camelCase response', async () => {
     const { service } = makeService(ROW);
-    await expect(service.getViewCounts(SYSTEM_ADMIN)).resolves.toEqual({
+    await expect(service.getViewCounts(MEO_OFFICER)).resolves.toEqual({
       allActive: 159,
       highUrgency: 4,
       disputed: 1,
@@ -105,7 +110,7 @@ describe('TicketsService.getViewCounts office scoping', () => {
 
   it('returns zeros rather than undefined when the aggregate yields no row', async () => {
     const { service } = makeService(undefined);
-    await expect(service.getViewCounts(SYSTEM_ADMIN)).resolves.toEqual({
+    await expect(service.getViewCounts(MEO_OFFICER)).resolves.toEqual({
       allActive: 0,
       highUrgency: 0,
       disputed: 0,
@@ -143,7 +148,7 @@ describe('TicketsService.getViewCounts office scoping', () => {
   // returns zero, which is exactly the bug this guards against.
   it('counts disputed tickets independently of the active-status filter', async () => {
     const { service } = makeService({ ...ROW, disputed: 3 });
-    await expect(service.getViewCounts(SYSTEM_ADMIN)).resolves.toMatchObject({
+    await expect(service.getViewCounts(MEO_OFFICER)).resolves.toMatchObject({
       disputed: 3,
     });
 
