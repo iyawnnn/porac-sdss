@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminsService } from './admins.service';
@@ -133,6 +133,71 @@ describe('AdminsService', () => {
           ACTOR,
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    // Batch 1 (five-role RBAC): focal is always MDRRMO (organizationally
+    // MDRRMO/QRT) — MEO, or no office at all, is a contradictory combination.
+    it('rejects focal with office MEO', async () => {
+      const db = makeDb();
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+      await expect(
+        service.create(
+          {
+            email: 'a@b.com',
+            password: 'longenoughpassword',
+            firstName: 'A',
+            lastName: 'B',
+            role: 'focal',
+            office: 'MEO',
+          },
+          ACTOR,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects focal with no office', async () => {
+      const db = makeDb();
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+      await expect(
+        service.create(
+          {
+            email: 'a@b.com',
+            password: 'longenoughpassword',
+            firstName: 'A',
+            lastName: 'B',
+            role: 'focal',
+            office: null,
+          },
+          ACTOR,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('creates a focal admin pinned to MDRRMO', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(chain([])); // no existing email
+      const insertedRow = fullAdminRow({ id: 43, role: 'focal', office: 'MDRRMO' });
+      db.insert.mockReturnValueOnce(chain(insertedRow));
+      const { audit, logInTx } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      const result = await service.create(
+        {
+          email: 'focal@example.com',
+          password: 'longenoughpassword',
+          firstName: 'Diana',
+          lastName: 'Torres',
+          role: 'focal',
+          office: 'MDRRMO',
+        },
+        ACTOR,
+      );
+
+      expect(result.role).toBe('focal');
+      expect(result.office).toBe('MDRRMO');
+      expect(logInTx).toHaveBeenCalledTimes(1);
     });
 
     it('rejects a duplicate email without inserting', async () => {
@@ -401,21 +466,37 @@ describe('AdminsService', () => {
       const { audit } = makeAudit();
       const service = new AdminsService(db, audit);
 
-      const [row] = await service.listDirectory(SYSTEM_ADMIN, undefined);
+      const [row] = await service.listDirectory(MEO_OFFICER, undefined);
       expect(Object.keys(row).sort()).toEqual(['email', 'id', 'name', 'office', 'role'].sort());
       expect(row.name).toBe('Jane Doe');
     });
 
-    it('a system admin with no filter sees every office (city-wide)', async () => {
+    // Batch 1 (five-role RBAC): the work-order assignee directory is
+    // routine operational scaffolding — system_admin no longer has any
+    // access to it, city-wide or otherwise.
+    it('rejects a system admin caller outright — no more city-wide directory view', async () => {
       const db = makeDb();
-      db.select.mockReturnValueOnce(
-        chain([directoryRow({ id: 1, office: 'MEO' }), directoryRow({ id: 2, office: 'MDRRMO' })]),
-      );
       const { audit } = makeAudit();
       const service = new AdminsService(db, audit);
 
-      const rows = await service.listDirectory(SYSTEM_ADMIN, undefined);
-      expect(rows.map((r) => r.office)).toEqual(['MEO', 'MDRRMO']);
+      await expect(service.listDirectory(SYSTEM_ADMIN, undefined)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(db.select).not.toHaveBeenCalled();
+    });
+
+    // Focal carries office: 'MDRRMO' but is not operational staff — it must
+    // be rejected the same way system_admin is, not silently scoped to MDRRMO.
+    it('rejects a focal caller outright, despite carrying office=MDRRMO', async () => {
+      const db = makeDb();
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+      const FOCAL = { role: 'focal', office: 'MDRRMO' } as Pick<AdminSession, 'role' | 'office'>;
+
+      await expect(service.listDirectory(FOCAL, undefined)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(db.select).not.toHaveBeenCalled();
     });
 
     it('an MEO officer is clamped to MEO regardless of the office query param', async () => {
@@ -440,17 +521,27 @@ describe('AdminsService', () => {
       expect(rows.every((r) => r.office === 'MDRRMO')).toBe(true);
     });
 
-    it('excludes system_admin-role rows even for a system admin caller (they have no office to be assigned within)', async () => {
+    // Batch 1 (five-role RBAC) safety fix: the old filter excluded only
+    // role !== 'system_admin' (a denylist of one value) — a new role like
+    // 'focal' would have silently passed through and become an eligible
+    // work-order assignee. The directory is now an explicit allowlist of
+    // officer/supervisor, so it excludes both system_admin and focal rows
+    // even when the underlying query somehow returned them.
+    it('excludes both system_admin- and focal-role rows via an explicit officer/supervisor allowlist', async () => {
       const db = makeDb();
       db.select.mockReturnValueOnce(
-        chain([directoryRow({ id: 1, role: 'officer' }), directoryRow({ id: 2, role: 'system_admin', office: null })]),
+        chain([
+          directoryRow({ id: 1, role: 'officer' }),
+          directoryRow({ id: 2, role: 'system_admin', office: null }),
+          directoryRow({ id: 3, role: 'focal', office: 'MDRRMO' }),
+          directoryRow({ id: 4, role: 'supervisor' }),
+        ]),
       );
       const { audit } = makeAudit();
       const service = new AdminsService(db, audit);
 
-      const rows = await service.listDirectory(SYSTEM_ADMIN, undefined);
-      expect(rows).toHaveLength(1);
-      expect(rows[0].role).toBe('officer');
+      const rows = await service.listDirectory(MEO_OFFICER, undefined);
+      expect(rows.map((r) => r.role).sort()).toEqual(['officer', 'supervisor']);
     });
   });
 });

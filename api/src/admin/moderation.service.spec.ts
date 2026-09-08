@@ -135,16 +135,19 @@ describe('parseModerationQuery', () => {
     ).toBe('MEO');
   });
 
-  it('defaults a system admin to city-wide (no office filter)', () => {
-    expect(
-      service.parseModerationQuery({}, SYSTEM_ADMIN).office,
-    ).toBeUndefined();
+  // Batch 1 (five-role RBAC): system_admin no longer has routine
+  // operational access — resolveOfficeScope now rejects it outright rather
+  // than widening to city-wide or honoring a requested office.
+  it('rejects a system admin outright rather than defaulting to city-wide', () => {
+    expect(() => service.parseModerationQuery({}, SYSTEM_ADMIN)).toThrow(
+      ForbiddenException,
+    );
   });
 
-  it('lets a system admin request a specific office', () => {
-    expect(
-      service.parseModerationQuery({ office: 'MDRRMO' }, SYSTEM_ADMIN).office,
-    ).toBe('MDRRMO');
+  it('rejects a system admin even when a specific office is requested', () => {
+    expect(() =>
+      service.parseModerationQuery({ office: 'MDRRMO' }, SYSTEM_ADMIN),
+    ).toThrow(ForbiddenException);
   });
 
   it.each([
@@ -447,16 +450,19 @@ describe('moderateReport transitions', () => {
     expect(result.status).toBe('dismissed');
   });
 
-  it('allows a system admin to moderate a report from any office', async () => {
+  // Batch 1 (five-role RBAC): system_admin no longer has routine
+  // operational access — assertOfficeAccess now rejects it outright rather
+  // than bypassing the office check.
+  it('rejects a system admin from moderating a report — no more city-wide bypass', async () => {
     const { sql } = makeFakeSql([
       [{ assigned_office: 'MDRRMO' }], // report -> ticket office lookup
-      [{ ticket_id: 5, citizen_id: 9, title: 'Pothole on Main St' }], // UPDATE reports
     ]);
     const { notifications } = makeNotificationsMock();
     const { audit } = makeAuditMock();
     const service = new ModerationService(sql, notifications, audit);
 
-    const result = await service.moderateReport(1, 'dismiss', SYSTEM_ADMIN);
-    expect(result.status).toBe('dismissed');
+    await expect(
+      service.moderateReport(1, 'dismiss', SYSTEM_ADMIN),
+    ).rejects.toThrow(ForbiddenException);
   });
 });

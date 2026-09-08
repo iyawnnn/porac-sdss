@@ -1,4 +1,4 @@
-export type AdminRole = "officer" | "supervisor" | "system_admin";
+export type AdminRole = "officer" | "supervisor" | "focal" | "system_admin";
 export type AdminOffice = "MEO" | "MDRRMO";
 
 export interface AdminAccountRow {

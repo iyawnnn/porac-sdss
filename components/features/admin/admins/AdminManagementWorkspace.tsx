@@ -23,8 +23,23 @@ import { EmptyState } from "../shared/EmptyState";
 const ROLE_LABELS: Record<AdminRole, string> = {
   officer: "Officer",
   supervisor: "Supervisor",
+  focal: "Central Monitoring / Focal Personnel",
   system_admin: "System Administrator",
 };
+
+// focal's office is fixed to MDRRMO (organizationally MDRRMO/QRT) and
+// system_admin's is fixed to null — neither is a free choice, unlike
+// officer/supervisor. Mirrors AdminsService.assertRoleOfficeCombination on
+// the backend, which remains the authoritative check regardless of what
+// this picks. `hasFixedOffice` distinguishes "fixed to null" from "not
+// fixed" — a plain `?? draft.office` fallback would wrongly treat
+// system_admin's fixed null as "no fixed value" and fall through.
+function hasFixedOffice(role: AdminRole): boolean {
+  return role === "system_admin" || role === "focal";
+}
+function fixedOfficeForRole(role: AdminRole): AdminOffice | null {
+  return role === "focal" ? "MDRRMO" : null;
+}
 
 function formatCreatedDate(value: string): string {
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -60,7 +75,7 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
         email: draft.email,
         password: draft.password,
         role: draft.role,
-        office: draft.role === "system_admin" ? null : draft.office,
+        office: hasFixedOffice(draft.role) ? fixedOfficeForRole(draft.role) : draft.office,
       }),
     });
 
@@ -121,6 +136,7 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
                 <SelectContent>
                   <SelectItem value="officer">Officer</SelectItem>
                   <SelectItem value="supervisor">Supervisor</SelectItem>
+                  <SelectItem value="focal">Central Monitoring / Focal Personnel</SelectItem>
                   <SelectItem value="system_admin">System Administrator</SelectItem>
                 </SelectContent>
               </Select>
@@ -128,9 +144,9 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-office">Office</label>
               <Select
-                disabled={draft.role === "system_admin"}
+                disabled={hasFixedOffice(draft.role)}
                 onValueChange={(v) => setDraft((d) => ({ ...d, office: v as AdminOffice }))}
-                value={draft.role === "system_admin" ? "" : draft.office}
+                value={hasFixedOffice(draft.role) ? (fixedOfficeForRole(draft.role) ?? "") : draft.office}
               >
                 <SelectTrigger aria-label="Office" id="admin-office"><SelectValue placeholder="—" /></SelectTrigger>
                 <SelectContent>
@@ -155,7 +171,7 @@ function RoleOfficeEditor({ admin, onUpdated }: { admin: AdminAccountRow; onUpda
   const [office, setOffice] = useState<AdminOffice>(admin.office ?? "MEO");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const dirty = role !== admin.role || (role !== "system_admin" && office !== (admin.office ?? "MEO"));
+  const dirty = role !== admin.role || (!hasFixedOffice(role) && office !== (admin.office ?? "MEO"));
 
   async function handleSave() {
     setSaving(true);
@@ -163,7 +179,7 @@ function RoleOfficeEditor({ admin, onUpdated }: { admin: AdminAccountRow; onUpda
     const res = await fetch(`/api/admin/admins/${admin.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role, office: role === "system_admin" ? null : office }),
+      body: JSON.stringify({ role, office: hasFixedOffice(role) ? fixedOfficeForRole(role) : office }),
     });
     if (res.ok) {
       onUpdated((await res.json()) as AdminAccountRow);
@@ -182,10 +198,15 @@ function RoleOfficeEditor({ admin, onUpdated }: { admin: AdminAccountRow; onUpda
           <SelectContent>
             <SelectItem value="officer">Officer</SelectItem>
             <SelectItem value="supervisor">Supervisor</SelectItem>
+            <SelectItem value="focal">Central Monitoring / Focal Personnel</SelectItem>
             <SelectItem value="system_admin">System Administrator</SelectItem>
           </SelectContent>
         </Select>
-        <Select disabled={role === "system_admin"} onValueChange={(v) => setOffice(v as AdminOffice)} value={role === "system_admin" ? "" : office}>
+        <Select
+          disabled={hasFixedOffice(role)}
+          onValueChange={(v) => setOffice(v as AdminOffice)}
+          value={hasFixedOffice(role) ? (fixedOfficeForRole(role) ?? "") : office}
+        >
           <SelectTrigger aria-label={`Office for ${admin.first_name} ${admin.last_name}`} className="h-8 w-28" size="sm"><SelectValue placeholder="—" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="MEO">MEO</SelectItem>

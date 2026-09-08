@@ -7,16 +7,34 @@ async function main() {
 
   if (!email || !password || !officeArg || !role) {
     console.error(
-      "Usage: tsx scripts/seed-admin.ts <email> <password> <MEO|MDRRMO|-> <officer|supervisor|system_admin> [firstName] [lastName]\n" +
-        "  Use '-' for office when role is system_admin (system admins have no office)."
+      "Usage: tsx scripts/seed-admin.ts <email> <password> <MEO|MDRRMO|-> <officer|supervisor|focal|system_admin> [firstName] [lastName]\n" +
+        "  Use '-' for office when role is system_admin (system admins have no office).\n" +
+        "  focal must always be seeded with office MDRRMO (organizationally MDRRMO/QRT)."
     );
+    process.exit(1);
+  }
+  if (
+    role !== "officer" &&
+    role !== "supervisor" &&
+    role !== "focal" &&
+    role !== "system_admin"
+  ) {
+    console.error("role must be officer, supervisor, focal, or system_admin.");
     process.exit(1);
   }
   if (role === "system_admin" && officeArg !== "-") {
     console.error("system_admin must be seeded with office '-' (no office).");
     process.exit(1);
   }
-  if (role !== "system_admin" && officeArg !== "MEO" && officeArg !== "MDRRMO") {
+  if (role === "focal" && officeArg !== "MDRRMO") {
+    console.error("focal must be seeded with office MDRRMO.");
+    process.exit(1);
+  }
+  if (
+    (role === "officer" || role === "supervisor") &&
+    officeArg !== "MEO" &&
+    officeArg !== "MDRRMO"
+  ) {
     console.error("office must be MEO or MDRRMO for officer/supervisor.");
     process.exit(1);
   }
@@ -33,7 +51,7 @@ async function main() {
       email,
       passwordHash,
       office,
-      role: role as "officer" | "supervisor" | "system_admin",
+      role: role as "officer" | "supervisor" | "focal" | "system_admin",
       firstName: firstName ?? "Test",
       lastName: lastName ?? "Admin",
     })
@@ -42,7 +60,7 @@ async function main() {
       set: {
         passwordHash,
         office,
-        role: role as "officer" | "supervisor" | "system_admin",
+        role: role as "officer" | "supervisor" | "focal" | "system_admin",
         firstName: firstName ?? "Test",
         lastName: lastName ?? "Admin",
       },

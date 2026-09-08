@@ -18,6 +18,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RecomputeService } from '../domain/recompute.service';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
+import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { BULK_MAX_TICKETS, TicketsService } from './tickets.service';
@@ -47,7 +48,7 @@ function parseTicketIds(value: unknown): number[] {
   return [...new Set(ids)];
 }
 
-@UseGuards(AdminSessionGuard)
+@UseGuards(AdminSessionGuard, OperationalStaffGuard)
 @Controller('admin/tickets')
 export class TicketsController {
   constructor(
