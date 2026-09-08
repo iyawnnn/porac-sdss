@@ -99,11 +99,16 @@ describe('notification wiring stays inside the submit transaction', () => {
     'utf8',
   );
 
-  it('uses createInTx (not the standalone create()) for the new-ticket, merge, and dispute paths', () => {
+  it('uses createInTx (not the standalone create()) for the new-ticket, merge, dispute, and Focal-fan-out paths', () => {
+    // 5, not 4: citizen ack (new-ticket) + admin office notification
+    // (new-ticket) + citizen ack (merge) + dispute + notifyFocalIntake's
+    // own single createInTx call site (shared by both the new-ticket and
+    // merge branches, which call the method rather than duplicating the
+    // notification inline — see the next describe block).
     const matches = reportsServiceSource.match(
       /this\.notifications\.createInTx\(tx,/g,
     );
-    expect(matches).toHaveLength(4);
+    expect(matches).toHaveLength(5);
   });
 
   it('does not call the standalone create() from submit()', () => {
@@ -120,7 +125,7 @@ describe('new-report admin notification wiring', () => {
   it('creates exactly one citizen acknowledgement and one office-targeted admin notification for a new ticket', () => {
     expect(
       reportsServiceSource.match(/this\.notifications\.createInTx\(tx,/g),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
     expect(reportsServiceSource).toMatch(
       /recipientType: 'admin',[\s\S]*?recipientOffice: office,[\s\S]*?type: 'new_citizen_report',[\s\S]*?title: 'New citizen report'/,
     );
@@ -143,6 +148,47 @@ describe('new-report admin notification wiring', () => {
     expect(mergeBranch).toContain("type: 'report_merged'");
     expect(mergeBranch).not.toContain("type: 'new_citizen_report'");
     expect(mergeBranch).not.toContain("title: 'New citizen report'");
+  });
+
+  it('citizen receipt wording does not claim Under Review at submission time', () => {
+    expect(reportsServiceSource).not.toMatch(/now under review/i);
+    expect(reportsServiceSource).toMatch(
+      /Your report has been received and routed for municipal review\./,
+    );
+  });
+});
+
+// Batch 2 (Focal intake): Focal has municipality-wide intake visibility, so
+// every new report — whether it starts a new ticket or merges into an
+// existing one — must notify active Focal accounts directly. Source-text
+// assertions, same rationale as the blocks above (no DB test harness).
+describe('Focal intake fan-out wiring (new report notifications)', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+
+  it('calls notifyFocalIntake from both the new-ticket and merge branches', () => {
+    const matches = reportsServiceSource.match(/this\.notifyFocalIntake\(tx,/g);
+    expect(matches).toHaveLength(2);
+  });
+
+  it('fans out to active focal admins by direct recipientId, never recipientOffice', () => {
+    const method = reportsServiceSource.slice(
+      reportsServiceSource.indexOf('private async notifyFocalIntake('),
+      reportsServiceSource.indexOf('async getMyReports('),
+    );
+    expect(method).toMatch(/role = 'focal' AND is_active = true/);
+    expect(method).toMatch(/recipientId: admin\.id/);
+    expect(method).not.toMatch(/recipientOffice/);
+  });
+
+  it("uses its own notification type, distinct from the office-wide 'new_citizen_report'", () => {
+    const method = reportsServiceSource.slice(
+      reportsServiceSource.indexOf('private async notifyFocalIntake('),
+      reportsServiceSource.indexOf('async getMyReports('),
+    );
+    expect(method).toMatch(/type: 'new_intake_report'/);
   });
 });
 
@@ -244,6 +290,30 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
   it("getMyReportDetail exposes disputed_at and resolution_confirmed_at so the UI can hide the feedback prompt once already resolved-feedback'd", () => {
     expect(getMyReportDetail).toContain('t.disputed_at');
     expect(getMyReportDetail).toContain('t.resolution_confirmed_at');
+  });
+
+  // Batch 2 (Focal intake): the citizen timeline needs to know whether/when
+  // Focal acknowledged this specific report — sourced directly from
+  // report_acknowledgments.acknowledged_at (never derived from the first
+  // intake action; see FocalIntakeService.deriveIntakeState's own docblock
+  // for why those are deliberately different sources of truth).
+  it('getMyReportDetail sources acknowledgedAt directly from report_acknowledgments, via LEFT JOIN so an unacknowledged report still returns', () => {
+    expect(getMyReportDetail).toMatch(
+      /LEFT JOIN report_acknowledgments ra ON ra\.report_id = r\.id/,
+    );
+    expect(getMyReportDetail).toContain('ra.acknowledged_at');
+  });
+
+  // Note: methodBody's slice runs up to the next `\n  async `, which also
+  // sweeps up disputeReport's own leading docblock comment (a pre-existing
+  // quirk of this helper, not something to fix here) — so this assertion
+  // deliberately checks only fields the SQL template itself could contain,
+  // not words that might legitimately appear in a neighboring comment.
+  it('getMyReportDetail never exposes Focal-internal intake data (actions, remarks, actor identity)', () => {
+    expect(getMyReportDetail).not.toContain('report_intake_actions');
+    expect(getMyReportDetail).not.toContain('acknowledged_by_admin_id');
+    expect(getMyReportDetail).not.toContain('acknowledged_by_name');
+    expect(getMyReportDetail).not.toContain('ra.remarks');
   });
 });
 

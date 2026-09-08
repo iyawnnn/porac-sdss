@@ -45,6 +45,10 @@ export interface MyReportDetail {
   resolution_image_url: string | null;
   disputed_at: string | null;
   resolution_confirmed_at: string | null;
+  // Sourced directly from report_acknowledgments.acknowledged_at — null
+  // means Focal (Central Monitoring) has not yet acknowledged this specific
+  // report. See ReportTimeline.tsx's "acknowledged" event kind.
+  acknowledged_at: string | null;
   is_merged: boolean;
 }
 

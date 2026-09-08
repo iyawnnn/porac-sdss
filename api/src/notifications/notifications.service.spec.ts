@@ -60,7 +60,30 @@ function makeDb(overrides: {
 }
 
 const citizenPrincipal: NotificationPrincipal = { type: 'citizen', citizenId: 1 };
-const adminPrincipal: NotificationPrincipal = { type: 'admin', adminId: 5, office: 'MEO' };
+const adminPrincipal: NotificationPrincipal = {
+  type: 'admin',
+  adminId: 5,
+  office: 'MEO',
+  role: 'officer',
+};
+const supervisorPrincipal: NotificationPrincipal = {
+  type: 'admin',
+  adminId: 6,
+  office: 'MDRRMO',
+  role: 'supervisor',
+};
+const focalPrincipal: NotificationPrincipal = {
+  type: 'admin',
+  adminId: 7,
+  office: 'MDRRMO',
+  role: 'focal',
+};
+const systemAdminPrincipal: NotificationPrincipal = {
+  type: 'admin',
+  adminId: 8,
+  office: null,
+  role: 'system_admin',
+};
 
 describe('NotificationsService.createInTx', () => {
   it('inserts via the provided raw-tx client, not the standalone Drizzle client', async () => {
@@ -190,6 +213,70 @@ describe('NotificationsService.listForPrincipal', () => {
 
     expect(readAtCalled(drizzleOrm.isNull)).toBe(true);
     expect(typeCalledWith(drizzleOrm.eq, 'work_order_assigned')).toBe(true);
+  });
+});
+
+// Batch 2 (Focal intake): the latent bug where `principal.office === null`
+// was treated as "show every office-wide notification" (so system_admin
+// silently received all MEO+MDRRMO office traffic) is fixed here — office-
+// wide matching is now keyed on isOperationalStaff(role), not on office
+// being non-null. Focal carries office: 'MDRRMO' but must not inherit
+// MDRRMO's office-wide operational notifications either.
+describe('NotificationsService scopeFilter — role-aware office matching', () => {
+  function officeEqCalled(mock: jest.Mock, value: string): boolean {
+    return mock.mock.calls.some(
+      ([col, v]) =>
+        (col as { name?: string })?.name === 'recipient_office' && v === value,
+    );
+  }
+  function officeIsNotNullCalled(mock: jest.Mock): boolean {
+    return mock.mock.calls.some(
+      ([col]) => (col as { name?: string })?.name === 'recipient_office',
+    );
+  }
+
+  it('an officer matches their own office (recipient_office = MEO)', async () => {
+    drizzleOrm.eq.mockClear();
+    const select = jest.fn().mockReturnValue(chain([]));
+    const service = new NotificationsService(makeDb({ select }));
+
+    await service.listForPrincipal(adminPrincipal, {});
+    expect(officeEqCalled(drizzleOrm.eq, 'MEO')).toBe(true);
+  });
+
+  it('a supervisor matches their own office (recipient_office = MDRRMO)', async () => {
+    drizzleOrm.eq.mockClear();
+    const select = jest.fn().mockReturnValue(chain([]));
+    const service = new NotificationsService(makeDb({ select }));
+
+    await service.listForPrincipal(supervisorPrincipal, {});
+    expect(officeEqCalled(drizzleOrm.eq, 'MDRRMO')).toBe(true);
+  });
+
+  it('focal does NOT match MDRRMO office-wide notifications, despite office=MDRRMO', async () => {
+    drizzleOrm.eq.mockClear();
+    drizzleOrm.isNotNull.mockClear();
+    const select = jest.fn().mockReturnValue(chain([]));
+    const service = new NotificationsService(makeDb({ select }));
+
+    await service.listForPrincipal(focalPrincipal, {});
+    expect(officeEqCalled(drizzleOrm.eq, 'MDRRMO')).toBe(false);
+    expect(officeIsNotNullCalled(drizzleOrm.isNotNull)).toBe(false);
+  });
+
+  it('system_admin does NOT receive any office-wide notifications (the fixed bug — no more isNotNull(recipient_office) bypass)', async () => {
+    drizzleOrm.eq.mockClear();
+    drizzleOrm.isNotNull.mockClear();
+    const select = jest.fn().mockReturnValue(chain([]));
+    const service = new NotificationsService(makeDb({ select }));
+
+    await service.listForPrincipal(systemAdminPrincipal, {});
+    expect(officeIsNotNullCalled(drizzleOrm.isNotNull)).toBe(false);
+    expect(
+      drizzleOrm.eq.mock.calls.some(
+        ([col]) => (col as { name?: string })?.name === 'recipient_office',
+      ),
+    ).toBe(false);
   });
 });
 

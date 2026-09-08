@@ -335,6 +335,55 @@ export const officeReassignments = pgTable('office_reassignments', {
     .defaultNow(),
 });
 
+// Central Monitoring / Focal Personnel's intake acknowledgment — REPORT-
+// level, not ticket-level: a ticket with 3 merged reports gets 3
+// independent acknowledgment rows, since each citizen's own submission
+// needs its own "municipal monitoring has seen this" event (see
+// docs/database.md and FocalIntakeService). report_id UNIQUE enforces
+// acknowledge-once at the database layer — the service maps the resulting
+// unique-violation to a 409, never a silent second row. FK-less
+// acknowledged_by_admin_id + acknowledged_by_name snapshot mirrors
+// status_history/office_reassignments above (actor identity can outlive/
+// change independent of this row).
+export const reportAcknowledgments = pgTable('report_acknowledgments', {
+  id: serial('id').primaryKey(),
+  reportId: integer('report_id')
+    .notNull()
+    .references(() => reports.id)
+    .unique(),
+  acknowledgedByAdminId: integer('acknowledged_by_admin_id'),
+  acknowledgedByName: text('acknowledged_by_name'),
+  remarks: text('remarks'),
+  acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Append-only Focal intake activity trail — screened/forwarded/escalated.
+// Deliberately NOT a mutable "intake status" column: the citizen-/admin-
+// facing "New | Acknowledged | Screened | Forwarded | Escalated" display
+// state is always DERIVED at query time from this table plus
+// report_acknowledgments (see FocalIntakeService.deriveIntakeState), never
+// persisted as its own state machine — this is what keeps these concepts
+// from ever becoming a second TicketStatus. action_type is plain text
+// (validated against a TS union in the service layer, not a pg enum) for
+// the same reason notifications.type/admin_audit_events.action_type are
+// text — a still-evolving vocabulary that shouldn't need an enum-widening
+// migration for its next value.
+export const reportIntakeActions = pgTable('report_intake_actions', {
+  id: serial('id').primaryKey(),
+  reportId: integer('report_id')
+    .notNull()
+    .references(() => reports.id),
+  actionType: text('action_type').notNull(),
+  actorAdminId: integer('actor_admin_id'),
+  actorName: text('actor_name'),
+  remarks: text('remarks'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const verifications = pgTable('verifications', {
   id: serial('id').primaryKey(),
   ticketId: integer('ticket_id')

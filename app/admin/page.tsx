@@ -64,18 +64,20 @@ async function DashboardData() {
   return <DashboardClient adminName={adminName} initialData={dashboardResult.value} topPriorityTickets={topPriorityTickets} />;
 }
 
-// Batch 1 (five-role RBAC): the operational Dashboard endpoint now 403s for
+// Batch 1/2 (five-role RBAC): the operational Dashboard endpoint 403s for
 // system_admin and focal (see DashboardController's OperationalStaffGuard),
 // so this page must route them elsewhere before ever calling it — hitting
 // the guarded endpoint and rendering DashboardError would be technically
 // correct but a confusing landing experience for a role that was never
-// meant to see an operational dashboard at all. This redirect is a UX
-// convenience only; the backend guard remains the actual security boundary
-// regardless of what this page does.
+// meant to see an operational dashboard at all. focal lands on its own real
+// Dashboard (/admin/focal, backed by FocalIntakeService via FocalGuard, not
+// this operational one). This redirect is a UX convenience only; the
+// backend guards remain the actual security boundary regardless of what
+// this page does.
 export default async function AdminDashboardPage() {
   const session = await getAdminSessionFromApi();
   if (session?.role === "system_admin") redirect("/admin/admins");
-  if (session?.role === "focal") redirect("/admin/account");
+  if (session?.role === "focal") redirect("/admin/focal");
 
   return <Suspense fallback={<DashboardSkeleton />}><DashboardData /></Suspense>;
 }
