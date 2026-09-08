@@ -22,6 +22,10 @@ import { OperationalStaffGuard } from '../common/guards/operational-staff.guard'
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { BULK_MAX_TICKETS, TicketsService } from './tickets.service';
+import {
+  OperationalAssessmentService,
+  type OperationalAssessmentInput,
+} from './operational-assessment.service';
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|png|webp)$/;
@@ -54,6 +58,7 @@ export class TicketsController {
   constructor(
     private readonly tickets: TicketsService,
     private readonly recompute: RecomputeService,
+    private readonly assessments: OperationalAssessmentService,
   ) {}
 
   @Get()
@@ -99,7 +104,22 @@ export class TicketsController {
     await this.recompute.recomputeActiveTicketUrgency();
     const detail = await this.tickets.getTicketDetail(id, admin);
     if (!detail) throw new NotFoundException();
-    return detail;
+    // Folded into the existing detail response rather than a second
+    // frontend fetch (Batch 3 §13) — a plain read, no extra authorization
+    // check needed here since getTicketDetail above already enforced
+    // assertOfficeAccess for this exact ticket/admin pair.
+    const operationalAssessment = await this.assessments.getForTicket(id);
+    return { ...detail, operationalAssessment };
+  }
+
+  @Post(':id/assessment')
+  async saveAssessment(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+    @Body() body: OperationalAssessmentInput,
+  ) {
+    const assessment = await this.assessments.upsert(id, admin, body);
+    return { ok: true, assessment };
   }
 
   @Get(':id/priority-context')

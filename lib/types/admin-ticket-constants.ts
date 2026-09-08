@@ -47,3 +47,37 @@ export const LEGACY_TICKET_CATEGORIES = [
   "Other",
 ] as const;
 export const ALL_TICKET_CATEGORIES = [...TICKET_CATEGORIES, ...LEGACY_TICKET_CATEGORIES] as const;
+
+// Deliberate duplicate of api/src/contracts/schemas.ts's OPERATIONAL_CONSTRAINTS
+// (Batch 3: Operational Assessment) — same lib/<->api boundary rationale as
+// TICKET_CATEGORIES above. Order matches the approved form layout.
+export const OPERATIONAL_CONSTRAINTS = [
+  "weather",
+  "manpower",
+  "equipment",
+  "materials",
+  "funding",
+  "approvals",
+  "procurement",
+  "jurisdiction",
+  "safety",
+  "external_coordination",
+  "technical_feasibility",
+  "other",
+] as const;
+export type OperationalConstraint = (typeof OPERATIONAL_CONSTRAINTS)[number];
+
+export const OPERATIONAL_CONSTRAINT_LABEL: Record<OperationalConstraint, string> = {
+  weather: "Weather",
+  manpower: "Manpower",
+  equipment: "Equipment",
+  materials: "Materials",
+  funding: "Funding",
+  approvals: "Approvals",
+  procurement: "Procurement",
+  jurisdiction: "Jurisdiction",
+  safety: "Safety",
+  external_coordination: "External Coordination",
+  technical_feasibility: "Technical Feasibility",
+  other: "Other",
+};
