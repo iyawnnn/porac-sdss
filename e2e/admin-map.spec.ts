@@ -99,23 +99,27 @@ test("the real security boundary is the API, not the UI: a hand-crafted request 
   expect(tickets.every((t) => t.assigned_office === "MEO")).toBe(true);
 });
 
-test("system admin can filter the map by office via the query param", async ({ page }) => {
+// Batch 6 (five-role E2E reconciliation): these two tests used to exercise
+// the map's office picker/filter as system_admin — a control that only
+// ever rendered for system_admin's city-wide map view. Batch 1 of the
+// five-role architecture removed system_admin's operational Map access
+// entirely on the backend (OperationalStaffGuard denies GET
+// /admin/tickets/geo), but this batch found the frontend page itself had
+// NOT been updated to match: app/admin/map/page.tsx makes no server-side
+// API call of its own (unlike every sibling operational page), so it kept
+// rendering the full interactive map shell — including a still-clickable
+// Office picker — with only a small inline "Tickets Unavailable" banner
+// where pins would be. No data actually leaked (the API stayed guarded),
+// but the page presented an operational surface to a denied role. Fixed
+// in app/admin/map/page.tsx (an explicit system_admin denial, matching the
+// AdminErrorCard pattern Work Orders/Ticket Queue/Reports already use) —
+// this test pins that fix.
+test("system admin cannot reach the Interactive Map at all", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/map?office=MDRRMO");
-  await waitForMapReady(page);
-
-  const officeGroup = page.getByRole("group", { name: "Office" });
-  await expect(officeGroup.getByRole("button", { name: "MDRRMO" })).toHaveAttribute("aria-current", "true");
-});
-
-test("system admin switching the office control updates the URL", async ({ page }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  await page.goto("/admin/map");
-  await waitForMapReady(page);
-
-  const officeGroup = page.getByRole("group", { name: "Office" });
-  await officeGroup.getByRole("button", { name: "MEO" }).click();
-  await expect(page).toHaveURL(/[?&]office=MEO/);
+  await expect(page.getByText("Interactive Map Unavailable")).toBeVisible();
+  await expect(page.locator(".leaflet-container")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Office" })).toHaveCount(0);
 });
 
 test("MDRRMO office admin sees their own fixed office badge on the map", async ({ page }) => {

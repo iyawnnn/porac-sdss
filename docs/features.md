@@ -10,15 +10,16 @@ It deliberately does not cover: **setup and environment** (see [`README.md`](../
 
 ## 1. Audience model
 
-Three principal types, structurally separate:
+Four principal types, structurally separate (five-role architecture — Batches 1–5):
 
 | Principal | Signs in at | Sees |
 |---|---|---|
 | **Citizen** | `/login`, `/signup` | Only their own reports, plus a city-wide ticket map |
-| **MEO / MDRRMO office admin** (`officer` or `supervisor`) | `/admin/login` | Only their own office's tickets, work orders, and counts |
-| **System Administrator** | `/admin/login` | City-wide across both offices, plus admin management and the activity log |
+| **MEO / MDRRMO office admin** (`officer` or `supervisor`) | `/admin/login` | Only their own office's tickets, work orders, counts, and Operational Assessment |
+| **Focal Personnel** (`focal`, always `office: 'MDRRMO'` organizationally) | `/admin/login` | Municipality-wide incoming-report intake (both offices) — never the operational Ticket Queue, Work Orders, or Operational Assessment; see §3.11 |
+| **System Administrator / MIS** (`system_admin`) | `/admin/login` | Admin management and the activity log only — **no routine operational access at all**, and no Focal Intake access either |
 
-Citizen and admin sessions are independent and cannot cross over — a citizen account can never reach an `/admin/*` API route, and vice versa. There is **no guest/anonymous reporting**; a citizen account is required to submit. See [`security.md`](security.md) §2–§3.
+Citizen and admin sessions are independent and cannot cross over — a citizen account can never reach an `/admin/*` API route, and vice versa. There is **no guest/anonymous reporting**; a citizen account is required to submit. See [`security.md`](security.md) §2–§3 for the guards enforcing this (`OperationalStaffGuard`, `FocalGuard`, `SystemAdminGuard`) — each of the four admin-side roles is denied the other three's surfaces server-side, not merely hidden from navigation.
 
 **Office routing is automatic, by category** (`api/src/common/utils/office.ts`), and every category also carries a **direct responsibility** flag distinguishing "this office owns fixing it" from "this office holds custody for triage, but the real work belongs to an external agency". A Phase 3 follow-up (manuscript alignment) replaced the citizen-selectable category list with a more explicit 12-item set; the table below is what a **new** report can be filed as today:
 
@@ -125,9 +126,10 @@ Covered by `e2e/admin-tickets.spec.ts` (~21 tests) and `api/src/admin/tickets-qu
 - **Header** — ticket ID, assigned office, status pill, urgency badge.
 - **Status tracker** — a single "Advance to *next*" control walking `Reported → Under Review → In Progress → Resolved`. The final step opens a **resolve dialog** requiring completion notes and accepting a resolution photo; once set, a "Before & after resolution" card renders. There is no further transition after `Resolved` through this control.
 - **Reject action** (Phase 4 workflow completeness) — a separate "Reject" panel, visible only while the ticket is `Reported`, `Under Review`, or `In Progress`, offered alongside the status tracker rather than as a step within it — rejection is an alternative terminal outcome, not the next rung of the ladder. Requires a reason (same required/trimmed/length-bounded validation as a citizen dispute reason); the reason is recorded in the `ticket_rejected` `admin_audit_events` row's metadata, **not** a new ticket column. Sets `status = 'Rejected'`, writes `status_history`, notifies the citizen in-app and by email (reason included in both) where an email provider is configured, and — once rejected — permanently hides the reject action and shows "This ticket was rejected." in the status tracker. `Resolved` and `Rejected` tickets cannot be rejected again (already terminal). See `docs/database.md`'s `admin_audit_events` section for exactly where the reason lives.
-- **Assignment panel** — reassign to the other office, audited. Available to **any admin who can access the ticket**, not System Administrators only: the endpoint uses `assertOfficeAccess` against the ticket's *current* office, and `AssignmentPanel.tsx` carries no role gate. For an office admin this is a one-way hand-off — after reassigning, the ticket belongs to the other office and they can no longer open it. System Administrators can move a ticket in either direction.
-- **Urgency decomposition** — the three factors with their explicit ⅓ weights and per-factor contributions, not just a final number.
-- **Priority breakdown** — the separate workflow-priority formula (§6.1).
+- **Assignment panel** — reassign to the other office, audited. Available to any **office admin who can access the ticket** (`officer`/`supervisor` of the ticket's current office; `assertOfficeAccess` re-derives that office fresh on every call) — System Administrators cannot reach Ticket Detail at all (Batch 1 removed `system_admin`'s operational access entirely; `OperationalStaffGuard` denies it before this page's own API calls even run). Focal Personnel can also trigger the *same* `reassignOffice` call, but only through the separate Focal Intake Forward action (§3.11) and only under a narrower rule (`Reported` status, no active Work Order) — never from this panel, which Focal cannot reach either.
+- **Hazard Urgency card** ("System generated") — the three environmental/spatial factors with their explicit ⅓ weights and per-factor contributions, not just a final number.
+- **Operational Priority card** ("System generated") — the separate workflow-priority formula (§6.1); labeled "Operational Priority", never bare "Priority", to stay distinct from Hazard Urgency above and from the Operational Assessment card below.
+- **Operational Assessment card** ("Human assessment", five-role Batch 3) — the third decision-support layer, structurally distinct from the two above: MEO/MDRRMO's own office can add/edit one current assessment per ticket (observed conditions, safety implications, operational constraints, recommended action, temporary mitigation, optional deferment/referral reason, optional remarks). Authorization follows *current* ticket ownership, so a ticket reassigned to the other office transfers edit rights with it while preserving who originally created the assessment. There is no score, level, or band anywhere in this card — saving it never changes `tickets.status`.
 - **Evidence & reports** — every merged citizen report with its photo, and its integrity flags.
 - **Location** — map, barangay, coordinates, elevation.
 - **Work Orders panel** — create and manage work orders inline (§3.4).
@@ -171,7 +173,7 @@ Leaflet map with ticket pins, a barangay choropleth, and a heatmap layer driven 
 
 ### 3.8 Notification Center (`/admin/notifications`)
 
-Full history behind the bell, with cursor pagination and read/unread plus type filters. Available to all three roles; each admin sees only their own and their office's rows. Admin-facing types include `new_citizen_report`, `ticket_critical`, `ticket_disputed`, `ticket_escalation`, `work_order_created`, and `work_order_assigned`.
+Full history behind the bell, with cursor pagination and read/unread plus type filters. Available to all four admin-side roles; each admin sees only their own direct notifications plus — for officer/supervisor only — their office's office-wide rows (five-role Batch 4 fix: office-wide matching now requires `isOperationalStaff`, not merely a non-null `office`, so `system_admin` no longer sees every office's traffic and `focal` never inherits MDRRMO's office-wide operational stream despite organizationally carrying that office value). Admin-facing types include `new_citizen_report`, `ticket_critical`, `ticket_disputed`, `ticket_escalation`, `work_order_created`, `work_order_assigned`, and — Focal-specific — `new_intake_report` (direct, per-Focal-admin, never office-wide) and `report_escalated` (office-wide, to the ticket's *current* office).
 
 ### 3.9 Reports & Exports (`/admin/reports`)
 
@@ -184,6 +186,22 @@ Every export reuses the list endpoint's own filter parsing — `parseTicketQuery
 - **Admin Management** (`/admin/admins`) — create, edit role/office, deactivate and reactivate admin accounts. A lockout guard prevents deactivating the last active System Administrator.
 - **Activity Log** (`/admin/activity-log`) — the `admin_audit_events` trail, filterable by target type. See [`security.md`](security.md) §6.
 - **Own account** (`/admin/account`) — password management.
+
+### 3.11 Focal Personnel (`/admin/focal/*`) — five-role Batches 2/4
+
+A dedicated, municipality-wide intake-monitoring surface for Central Monitoring / Focal Personnel — deliberately **not** an all-office adaptation of the operational Ticket Queue (`admin/intake/*`, `FocalGuard`-only; officer/supervisor/`system_admin` are all rejected). Focal never mutates `tickets.status`, never Resolves/Rejects, never creates Work Orders, and never touches Operational Assessment.
+
+- **Dashboard** (`/admin/focal`) — KPI cards (New Reports / Unacknowledged / Needs Screening / Forwarded+Escalated) and a recent-incoming-reports list, sourced from live intake data, no fixtures.
+- **Intake Queue** (`/admin/focal/intake`) — every report routed to either MEO or MDRRMO, in one table (columns: Report, Location, Category, Routed To, Hazard Urgency, Intake State, Submitted, Action). Intake state (New/Acknowledged/Screened/Forwarded/Escalated) is derived at query time from `report_acknowledgments` + the latest `report_intake_actions` row — never a persisted column, so it can never become a second `TicketStatus`.
+- **Acknowledge** — a report-level "seen this" event (`report_acknowledgments`, `UNIQUE(report_id)` — a second attempt is a clean 409, not a silent duplicate). **Acknowledged ≠ Under Review**: the ticket's real status is untouched, and the citizen receives a separate, neutrally-worded notification ("Your report has been acknowledged by municipal monitoring") plus a dedicated `acknowledged` event on their report timeline (§2.3), never conflated with a status change.
+- **Initial Screening** — records only a recommendation (continue / forward / escalate) as a `report_intake_actions('screened')` row. Recording a "forward" or "escalate" recommendation does **not** execute either action itself — the dialog flow saves the screening first, then optionally opens the corresponding Forward/Escalate dialog; canceling that follow-up leaves the report in the Screened state.
+- **Forward** — reuses `TicketsService.reassignOffice` (the exact same mechanism the Assignment panel uses, §3.3) with a Focal-specific authorization branch: only while the ticket is still `Reported` and no Work Order has reached `pending`/`in_progress` on it. Writes the same `office_reassignments` row an office-admin reassignment would, plus a `report_intake_actions('forwarded')` row; ticket status is untouched.
+- **Escalate** — an attention signal only. Never changes Hazard Urgency, Operational Priority, ticket status, or office; notifies the ticket's *currently* responsible office (which may differ from the office at submission time, if already forwarded).
+- **Interactive Map** (`/admin/focal/map`, Batch 4) — municipality-wide incoming-report locations (report reference, category, barangay, coordinates, routed office, Hazard Urgency, intake state), from its own narrow `GET /admin/intake/geo` query — never the operational `/admin/tickets/geo` endpoint or its heatmap/clustering machinery. Read-only; no mutation controls.
+- **Flagged Reports** (`/admin/focal/intake?flagged=true`, Batch 4) — a filter on the same Intake Queue table, not a duplicated page. Focal can inspect integrity flags relevant to intake but cannot quarantine or otherwise perform operational moderation disposition (§3.5 stays `OperationalStaffGuard`-only).
+- **Notifications** (`/admin/notifications`) — the same shared Notification Center as every other admin role (§3.8), safe for Focal as-is since its scoping is already role-aware.
+
+New-report fan-out: every report routed to MEO or MDRRMO sends a direct, per-admin `new_intake_report` notification to each active Focal account (`ReportsService.notifyFocalIntake`) — never `recipientOffice: 'MDRRMO'`, which would incorrectly mix Focal-intake traffic into MDRRMO's own operational notification stream.
 
 ---
 

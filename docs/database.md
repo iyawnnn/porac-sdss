@@ -82,6 +82,30 @@ Two ORMs are in play (see `CLAUDE.md`'s Architecture section for the full ration
 - **Expected empty?** Normal to have very few or zero rows — reassignment is a rare admin action, not part of every ticket's lifecycle.
 - **Ownership:** Application (Drizzle).
 
+### `report_acknowledgments`
+- **Purpose:** Central Monitoring / Focal Personnel's report-level "seen this" event (five-role Batch 2) — deliberately report-level, not ticket-level: a ticket with 3 merged reports gets 3 independent acknowledgment rows, since each citizen's own submission needs its own acknowledgment. **`report_id` is `UNIQUE`** — the acknowledge-once enforcement is a real DB constraint, not just an app-level check; a second attempt hits the constraint and `FocalIntakeService.acknowledge` maps that to a 409, never a silent second row.
+- **Reads:** `FocalIntakeService.listIntake`/`getIntakeDetail` (derives presentation-only "Acknowledged" intake state), citizen `getMyReportDetail` (`acknowledged_at`, surfaced on the citizen timeline as its own event kind — never as a `TicketStatus`).
+- **Writes:** `FocalIntakeService.acknowledge` only.
+- **Expected empty?** Normal to be sparsely populated — one row per acknowledged report, not every report.
+- **Ownership:** Application (Drizzle).
+- **Note:** `acknowledged_by_admin_id`/`acknowledged_by_name` is the same FK-less actor-snapshot convention as `status_history.admin_id`/`office_reassignments.admin_id`. Acknowledging a report never touches `tickets.status` — see the in-schema docblock.
+
+### `report_intake_actions`
+- **Purpose:** Append-only Focal intake activity trail — screened/forwarded/escalated (five-role Batch 2). Never a mutable "intake status" column: the citizen-/admin-facing New/Acknowledged/Screened/Forwarded/Escalated display state is always *derived* at query time from this table plus `report_acknowledgments` (`FocalIntakeService.deriveIntakeState`), never persisted as its own state machine — this is what keeps intake state from ever becoming a second `TicketStatus`.
+- **Reads:** `FocalIntakeService.listIntake`/`getIntakeDetail`/`listIntakeGeo`.
+- **Writes:** `FocalIntakeService.screen`/`forward`/`escalate`.
+- **Expected empty?** Normal to be sparsely populated.
+- **Ownership:** Application (Drizzle).
+- **Note:** `action_type` is plain text (validated against a TS union in the service layer, not a pg enum), matching `notifications.type`/`admin_audit_events.action_type`'s existing convention for a still-evolving vocabulary. Screening a "forward" or "escalate" recommendation only ever writes a `'screened'` row here — it never executes the Forward/Escalate action itself (those stay separate, explicitly-called endpoints).
+
+### `operational_assessments`
+- **Purpose:** MEO/MDRRMO's human Operational Assessment (five-role Batch 3) — the third decision-support layer, alongside the two system-generated ones (Hazard Urgency = `tickets.priority_score`/`urgency_level`, Operational Priority = `tickets.priority_index`). **One current row per ticket — `ticket_id` is `UNIQUE`.** Deliberately not a revision-history table; a later save updates the existing row in place via `INSERT ... ON CONFLICT (ticket_id) DO UPDATE`, never a second row.
+- **Reads:** Folded into `GET /admin/tickets/:id`'s response (`operationalAssessment: null | {...}`) — no second frontend fetch.
+- **Writes:** `OperationalAssessmentService.upsert` only, via `POST /admin/tickets/:id/assessment`.
+- **Expected empty?** Normal to be empty until the first assessment is saved — not part of every ticket's lifecycle.
+- **Ownership:** Application (Drizzle).
+- **Note:** Two actor snapshots, not one — `assessed_by_admin_id`/`assessed_by_name`/`assessed_at` capture who *first created* the row and never change on edit; `updated_by_admin_id`/`updated_by_name`/`updated_at` capture whoever most recently edited it. This is what makes the office-transfer case legible (ticket reassigned MEO → MDRRMO: MDRRMO can edit the existing row, and `updated_by_*` shows that happened without losing who created it). The `ON CONFLICT DO UPDATE SET` clause deliberately omits `assessed_by_*`/`assessed_at`, so a conflicting write (either a genuine edit or two admins racing the first save) can never overwrite the original assessor. There is no score/level/band column anywhere in this table by design — `operational_constraints` is a plain `text[]` over a fixed vocabulary (validated in the service layer), the same pattern as `reports.flags`, never a numeric field.
+
 ### `work_orders`
 - **Purpose:** The actual field work MEO/MDRRMO staff must do to resolve a ticket — a ticket may have several work orders. Carries `title`, an internal `notes` progress trail, `assigned_office`/`assigned_admin_id`, its own `work_order_status` (`pending`/`in_progress`/`completed`/`cancelled` — deliberately not `ticket_status`, same reasoning `office_reassignments` doesn't reuse it), `due_date`, and `completed_at`. Advancing or completing a work order never mutates the linked ticket's own `status` — no safe automatic coupling rule exists yet (see [`project-status.md`](project-status.md)).
 - **Reads:** `/admin/work-orders` (list, office-scoped), the Work Orders panel on admin Ticket Detail.
@@ -277,6 +301,8 @@ See §E (System/admin security tables) — kept there since it's specifically pa
 
 - **`verifications` ≠ email/account verification.** See §D — it's a planned ticket-upvote feature, unrelated to identity verification.
 - **`urgency_score`/`urgency_band` ≠ `priority_score`/`urgency_level` ≠ `priority_index`.** All live on `tickets`, all sound similar, and are genuinely different things — see CLAUDE.md's "Terminology: Severity vs. Urgency vs. Priority" section for the authoritative explanation. Not repeated in full here to avoid the two documents drifting out of sync; when scoring changes, update CLAUDE.md first.
+- **Hazard Urgency / Operational Priority / Operational Assessment are three distinct decision-support layers**, not synonyms for "priority." Hazard Urgency (`priority_score`/`urgency_level`) and Operational Priority (`priority_index`) are both system-generated and both live on `tickets` — see the bullet above. Operational Assessment (`operational_assessments`, five-role Batch 3) is the third, human-entered layer and is structurally incapable of being a score: no numeric/level/band column exists anywhere in that table.
+- **`admins.role` (`admin_role` enum) has four values**, not three: `officer`, `supervisor`, `system_admin`, `focal` (five-role Batch 1). `focal` always carries `office = 'MDRRMO'` (organizational, not operational) — see `api/src/common/authz/admin-scope.ts`'s `isOperationalStaff`, which excludes `focal` despite that office value.
 
 ---
 
