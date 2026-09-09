@@ -125,7 +125,12 @@ test("office scope and sign-out remain functional", async ({ page }) => {
   await loginAdmin(page);
   // Office admins get a fixed, non-interactive office label, not a
   // switchable "view all offices" control — see AdminSidebar.tsx.
-  await expect(page.getByText(`My Office: ${E2E_MEO_ADMIN.office}`)).toBeVisible();
+  // exact: true — the sidebar's sr-only "Signed in as {name} · My Office:
+  // MEO" summary contains this exact string as a substring, which would
+  // otherwise make a non-exact getByText match both it and the intended
+  // visible label and violate Playwright's strict mode (same fix as
+  // e2e/admin-rbac.spec.ts's equivalent assertion).
+  await expect(page.getByText(`My Office: ${E2E_MEO_ADMIN.office}`, { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /View full city|View my office/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Open administrator menu" }).click();

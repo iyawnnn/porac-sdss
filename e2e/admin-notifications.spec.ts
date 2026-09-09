@@ -9,35 +9,58 @@ function sessionCookieHeader(cookies: { name: string; value: string }[]): Record
   return cookie ? { cookie: `${cookie.name}=${cookie.value}` } : {};
 }
 
-// Same "borrow a ticket via system admin, restore in afterAll" pattern as
-// e2e/admin-work-orders.spec.ts's ticketIdAsSystemAdmin — demo seed data
+// Same "borrow a ticket, restore in afterAll" pattern as
+// e2e/admin-work-orders.spec.ts's borrowTicketForOffice — demo seed data
 // (seed-diverse-reports.ts) doesn't guarantee an MDRRMO ticket exists, so
 // this reassigns one via the already-covered reassign endpoint rather than
 // depending on seed content this spec doesn't own.
+//
+// Batch 5 (five-role final integration): this used to look up/reassign
+// tickets via system_admin, which had city-wide operational access before
+// Batch 1. Batch 1 removed that entirely (OperationalStaffGuard denies
+// system_admin on every ticket route now — see admin-scope.ts), so the
+// original helper crashed here (a 403 body has no `.tickets`) on every run
+// once the integration database actually had Batch 1's guard in front of
+// it. The fix keeps the exact same "borrow, restore in afterAll" shape but
+// authenticates as the OWNING office's own admin at each step instead —
+// which is also just a more faithful test of the real permission model
+// (an office admin reassigning within their own authority), not a
+// workaround.
+const OFFICE_ADMIN = { MEO: E2E_MEO_ADMIN, MDRRMO: E2E_MDRRMO_ADMIN } as const;
 let borrowedTicket: { id: number; originalOffice: "MEO" | "MDRRMO" } | null = null;
 
 async function ticketIdAsSystemAdmin(browser: Browser, office: "MEO" | "MDRRMO"): Promise<number> {
   const context = await browser.newContext();
   const page = await context.newPage();
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await loginAs(page, OFFICE_ADMIN[office]);
   const cookies = await context.cookies();
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
 
-  const res = await context.request.get(`/api/admin/tickets?office=${office}&status=all&limit=1`, { headers });
+  const res = await context.request.get(`/api/admin/tickets?status=all&limit=1`, { headers });
   const body = await res.json();
   if (body.tickets.length > 0) {
     await context.close();
     return body.tickets[0].id as number;
   }
+  await context.close();
 
-  const anyTicket = await context.request.get(`/api/admin/tickets?office=all&status=all&limit=1`, { headers });
+  // This office has no ticket of its own yet — borrow one from the other
+  // office, authenticated as THAT office's admin (the only session with
+  // authority to reassign a ticket it currently owns).
+  const otherOffice = office === "MEO" ? "MDRRMO" : "MEO";
+  const otherContext = await browser.newContext();
+  const otherPage = await otherContext.newPage();
+  await loginAs(otherPage, OFFICE_ADMIN[otherOffice]);
+  const otherCookies = await otherContext.cookies();
+  const otherHeaders = { ...sessionCookieHeader(otherCookies), "content-type": "application/json" };
+  const anyTicket = await otherContext.request.get(`/api/admin/tickets?status=all&limit=1`, { headers: otherHeaders });
   const anyBody = await anyTicket.json();
   expect(anyBody.tickets.length).toBeGreaterThan(0);
   const ticket = anyBody.tickets[0] as { id: number; assigned_office: "MEO" | "MDRRMO" };
-  const reassign = await context.request.post(`/api/admin/tickets/${ticket.id}/reassign`, { headers, data: { toOffice: office } });
+  const reassign = await otherContext.request.post(`/api/admin/tickets/${ticket.id}/reassign`, { headers: otherHeaders, data: { toOffice: office } });
   expect(reassign.ok()).toBe(true);
   borrowedTicket = { id: ticket.id, originalOffice: ticket.assigned_office };
-  await context.close();
+  await otherContext.close();
   return ticket.id;
 }
 
@@ -45,7 +68,11 @@ test.afterAll(async ({ browser }) => {
   if (!borrowedTicket) return;
   const context = await browser.newContext();
   const page = await context.newPage();
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  // Restore via the office that currently holds it — it was moved TO
+  // borrowedTicket.originalOffice's counterpart, so the admin who can move
+  // it back is whichever office it's sitting in right now.
+  const currentOffice = borrowedTicket.originalOffice === "MEO" ? "MDRRMO" : "MEO";
+  await loginAs(page, OFFICE_ADMIN[currentOffice]);
   const cookies = await context.cookies();
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
   await context.request.post(`/api/admin/tickets/${borrowedTicket.id}/reassign`, {
@@ -130,7 +157,14 @@ test("MDRRMO admin sees an MDRRMO office-wide notification, MEO admin never sees
   await expect(page.getByText(title)).toHaveCount(0);
 });
 
-test("system admin sees office-wide notifications from both offices", async ({ page, browser }) => {
+// Batch 4 (five-role production alignment) deliberately removed this: MIS/
+// system_admin no longer inherits ANY office-wide operational notification
+// (office === null used to be treated as "show every office" — see
+// NotificationsService.scopeFilter's role-aware rewrite). This test
+// previously asserted the pre-Batch-4 bug as correct behavior and would
+// have silently kept passing against a regression — it now pins the fixed
+// behavior.
+test("system admin does NOT receive office-wide notifications from either office", async ({ page, browser }) => {
   const meoTicketId = await ticketIdAsSystemAdmin(browser, "MEO");
   const mdrrmoTicketId = await ticketIdAsSystemAdmin(browser, "MDRRMO");
 
@@ -143,8 +177,8 @@ test("system admin sees office-wide notifications from both offices", async ({ p
 
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/notifications");
-  await expect(page.getByText(meoTitle)).toBeVisible();
-  await expect(page.getByText(mdrrmoTitle)).toBeVisible();
+  await expect(page.getByText(meoTitle)).toHaveCount(0);
+  await expect(page.getByText(mdrrmoTitle)).toHaveCount(0);
 });
 
 // --- Unread/read state, mark read, mark all read -----------------------------

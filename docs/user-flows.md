@@ -8,16 +8,21 @@ Every flow below is implemented. Where something is pending or deliberately abse
 
 ---
 
-## The four roles
+## The five roles
+
+Five-role architecture (Batches 1–5) — Citizen plus four distinct admin-side roles, not "office admin vs. system admin" alone:
 
 | Role | Signs in at | Scope |
 |---|---|---|
 | **Citizen** | `/login`, `/signup` | Their own reports, plus a city-wide ticket map |
-| **MEO personnel** | `/admin/login` | MEO tickets and work orders only |
-| **MDRRMO personnel** | `/admin/login` | MDRRMO tickets and work orders only |
-| **System Administrator** | `/admin/login` | City-wide, plus admin management and the activity log |
+| **MEO personnel** | `/admin/login` | MEO tickets, work orders, and Operational Assessment only |
+| **MDRRMO personnel** | `/admin/login` | MDRRMO tickets, work orders, and Operational Assessment only |
+| **Focal Personnel** | `/admin/login` | Municipality-wide report intake (both offices) only — never the operational Ticket Queue, Work Orders, or Operational Assessment; see §5 (Focal flow) |
+| **System Administrator / MIS** | `/admin/login` | Admin management and the activity log only — **no operational access of any kind, and no Focal Intake access either** |
 
-**A note on `officer` vs `supervisor`:** both exist as roles and both must have an office, but **they carry no behavioral difference in the system today**. Every permission check distinguishes only *system admin* from *office admin*. The two office roles are a record-keeping distinction, not an access-control one. If a future requirement needs them to differ, that is new work.
+**A note on `officer` vs `supervisor`:** both exist as roles and both must have an office, but **they carry no behavioral difference in the system today**. Every permission check distinguishes *operational staff* (officer/supervisor) from *Focal* from *system admin* — three structurally separate allowlists, not one axis. The two office roles remain a record-keeping distinction, not an access-control one. If a future requirement needs them to differ, that is new work.
+
+**A note on `system_admin`'s scope:** it was city-wide operational plus administration until Batch 1 of the five-role architecture, which removed the operational half entirely — a genuine authority reduction, not a rename. System Administrator / MIS today reaches *only* Admin Management, the Activity Log, and its own Account & Security — see §4 below, rewritten to match.
 
 ---
 
@@ -60,6 +65,7 @@ Two situations get their own explanation on that page:
 
 - **Merged into an existing ticket.** If the report matched a nearby recent one, the page says *"Merged with an existing issue"* and *"Grouped with N other report(s)."* The citizen is told their report joined a group — not that it was rejected or ignored.
 - **Held for review (quarantined).** If an admin quarantines the report, the citizen sees a deliberately neutral banner: the report *"needs another look before it appears on the public map"*, and explicitly that **this does not affect the ticket's progress**. The admin's internal reasoning for the quarantine is never shown.
+- **Acknowledged by municipal monitoring** (five-role Batch 2). Once Focal Personnel acknowledges the report (§5), the timeline gains its own **"Acknowledged by municipal monitoring"** event, sourced from `report_acknowledgments.acknowledged_at` — a municipal-monitoring signal, not a ticket-status value. **Acknowledged ≠ Under Review**: the report's status line above can still read `Reported` at the same time the timeline shows it acknowledged, and that is correct, not a bug.
 
 ### 1.4 When the work is done
 
@@ -187,23 +193,23 @@ MDRRMO can likewise hand a ticket to MEO, one-way, with the same audit trail.
 
 ---
 
-## 4. System Administrator flow
+## 4. System Administrator / MIS flow
 
-Oversight and account administration — **not** a third operational desk.
+Account administration only — **not an operational desk of any kind.** This is the one flow that changed shape, not just gained a neighbor, when the five-role architecture landed: Batch 1 removed System Administrator's prior city-wide operational access entirely, as a genuine authority reduction (not a rename, and not something later batches walked back).
 
-### 4.1 City-wide visibility
+### 4.1 No operational visibility
 
-Every office-scoped surface gains an **office picker**, defaulting to all offices: dashboard, ticket queue, work orders, map, barangay insights, exports. The dashboard adds a **MEO vs MDRRMO comparison** that office admins never see.
+There is no office picker, no city-wide dashboard, no ticket queue, no work orders, no map, no barangay insights, no reports/exports, and no Focal Intake — visiting any of those routes as `system_admin` is rejected server-side (`OperationalStaffGuard`/`FocalGuard`) and the page renders its own "Unavailable" error state rather than any operational content. There is no "MEO vs MDRRMO comparison" dashboard widget anymore; it was part of the operational Dashboard this role no longer reaches.
 
-### 4.2 Ticket reassignment
+### 4.2 Ticket reassignment — not available
 
-System Administrators can reassign any ticket in either direction, without the one-way limitation office admins hit — because they can still see the ticket afterwards. This is the intended path for correcting a mis-routed ticket after the fact.
+System Administrators cannot reassign a ticket, view one, or reach `/admin/tickets/[id]` at all. Correcting a mis-routed ticket is now an **office-to-office action**: the owning office's own admin reassigns it away (§2.5/§3.4's Assignment panel), or Focal Personnel can Forward it early under the narrower rule in §5, if the ticket is still eligible. There is no "city-wide correction" path anymore.
 
 ### 4.3 Admin management (`/admin/admins`)
 
 Exclusive to this role:
 
-- **Create** an admin — email, name, role, office. `officer` and `supervisor` require an office; `system_admin` must have none.
+- **Create** an admin — email, name, role, office. `officer` and `supervisor` require an office (MEO or MDRRMO); `system_admin` must have none; `focal` must be MDRRMO (organizational, not operational — see The five roles above).
 - **Change** role or office.
 - **Deactivate / reactivate.** Deactivation is immediate and total: the admin cannot log in, and **any session they currently hold dies within the request cycle** rather than lingering until its 8-hour expiry. Reactivation restores access with the same password.
 - **Reset another admin's password**, which takes effect immediately and invalidates that admin's other sessions.
@@ -225,17 +231,40 @@ Three properties that matter for oversight:
 
 **Not audited:** CSV exports (read-only, with no single target to attach an event to) and login events. Login auditing is a known gap tracked in [`security-hardening-plan.md`](security-hardening-plan.md).
 
-### 4.5 What a System Administrator should not do
+### 4.5 What a System Administrator should not expect
 
-Not restrictions the code enforces — operational guidance:
-
-- **Do not use it as a daily triage account.** Its city-wide view makes office ownership ambiguous; work should be done from the office account that owns it, so the audit trail reflects who actually decided.
-- **Do not treat the office picker as an office assignment.** It is a view filter, nothing more.
-- **Keep the number of these accounts small.** They bypass every office boundary in the system.
+- **It cannot be used as a triage or intake account, even in an emergency.** This is now enforced server-side, not just discouraged — there is no operational surface to reach.
+- **It does not bypass office boundaries.** Post-Batch-1, it doesn't bypass anything operational; its authority is scoped to account/system administration only.
+- **Keep the number of these accounts small anyway.** They still administer every other admin account in the system, including creating/deactivating other System Administrators.
 
 ---
 
-## 5. End-to-end scenario
+## 5. Focal Personnel flow
+
+Central Monitoring / Focal Personnel — municipality-wide report intake, never operational execution. Full feature inventory in [`features.md`](features.md) §3.11; this is the narrative shape.
+
+### 5.1 What Focal is for
+
+Focal sits between the citizen's submission and the owning office's operational queue: a first-pass monitoring/screening desk that sees every incoming report from both MEO and MDRRMO in one place, before or alongside the owning office picking it up in their own Ticket Queue. **Focal does not own technical validation or operational response** — it never sets a ticket's status, never resolves or rejects, never creates a Work Order, and never touches Operational Assessment; those remain entirely the owning office's responsibility (§2–§3).
+
+### 5.2 Acknowledge, screen, forward or escalate
+
+1. **Acknowledge** — a one-time, report-level "seen this" event. Acknowledging is not a status change: the ticket's real lifecycle status is untouched, and the citizen sees a separate, neutral notification and timeline event (§1) — never anything implying "Under Review."
+2. **Initial Screening** — records a recommendation only (continue with the current office / forward / escalate). This never executes anything by itself; it is a note for the record.
+3. **Forward**, only while the ticket is still `Reported` and no Work Order has started — an early custody correction, using the same reassignment mechanism the owning office itself would use (§2.5/§3.4), not a separate path. Once operational work has begun, Focal can no longer move it — that correction becomes the owning office's own decision.
+4. **Escalate** — flags the report for the currently-responsible office's attention. Never changes Hazard Urgency, Operational Priority, status, or office by itself.
+
+### 5.3 Read-only situational awareness
+
+Focal's Interactive Map and Flagged Reports are both intake-scoped read views (§3.11) — useful for spotting geographic patterns or integrity concerns worth screening more carefully, not a parallel operational map or moderation queue. Neither exposes a mutation control.
+
+### 5.4 What Focal should not be asked to do
+
+- **Do not expect Focal to validate a report technically** (e.g. "is this pothole real/serious") — that is the owning office's Operational Assessment (§2.5/§3.4), a distinct, human-entered layer Focal cannot create or edit.
+- **Do not expect Focal to resolve a citizen's problem.** Acknowledgment and screening are monitoring signals, not case resolution.
+- **Do not give Focal an office-wide operational account as a workaround** for something it can't currently do — if a real gap exists, it belongs in [`project-status.md`](project-status.md) §4/§5 as a scoped requirement, not an ad hoc permission change.
+
+## 6. End-to-end scenario
 
 A flooded road in Barangay Cangatba, during the rainy season.
 
@@ -263,23 +292,25 @@ Maria's report page shows *"Merged with an existing issue — grouped with 3 oth
 
 ---
 
-## 6. Boundaries and data visibility
+## 7. Boundaries and data visibility
 
-The four rules that define who sees what. Enforcement details are in [`security.md`](security.md); this is what they mean in practice.
+The rules that define who sees what. Enforcement details are in [`security.md`](security.md); this is what they mean in practice.
 
 **1 — Citizens and admins are separate systems.** Not just separate pages: separate sessions, separate cookies, separate API routes. A citizen account cannot reach an admin route by any URL, and vice versa.
 
-**2 — Office scoping comes from the session, never the request.** An MEO admin who edits the URL to ask for MDRRMO data gets MEO data. Lists silently narrow; direct access to another office's ticket or work order returns 403. Tested in both directions.
+**2 — Office scoping comes from the session, never the request.** An MEO admin who edits the URL to ask for MDRRMO data gets MEO data. Lists silently narrow; direct access to another office's ticket or work order returns 403 — and this now includes after a reassignment, since the check always re-derives the resource's *current* office rather than a cached value. Tested in both directions.
 
-**3 — System Administrators see city-wide** — the only role that can, and the only role reaching Admin Management and the Activity Log.
+**3 — System Administrator / MIS sees neither office's operational data.** Since Batch 1, it is the *only* admin-side role with no operational scope at all — not even read-only, not even city-wide — and it reaches only Admin Management and the Activity Log. It is not a superset of the other roles; it is a structurally separate, narrower one.
 
-**4 — Internal content never reaches citizens.** Work orders, work-order notes, moderation reasoning, and a citizen's own dispute reason are staff-only. This is structural, not cosmetic: citizen response types have no work-order fields at all, and the CSV export never even selects the notes column. There is a regression test that plants a sentinel note and asserts it never appears on the citizen's page.
+**4 — Focal Personnel sees municipality-wide intake, never operational detail.** Focal is the one role that legitimately sees across both offices — but only through the dedicated Intake surface (§5), never the operational Ticket Queue, Work Orders, or Operational Assessment, and never MDRRMO's office-wide operational notification stream despite organizationally carrying that office.
 
-**Citizens do see** their own reports and, on the map, city-wide ticket pins. They see an urgency **band** on their report — a coarse Low/Medium/Critical label — but never the factor breakdown or the numeric scores.
+**5 — Internal content never reaches citizens.** Work orders, work-order notes, moderation reasoning, a citizen's own dispute reason, Focal intake actions/remarks, and Operational Assessment content are all staff-only. This is structural, not cosmetic: citizen response types have no work-order or intake-internal fields at all, and the CSV export never even selects the notes column. There is a regression test that plants a sentinel note and asserts it never appears on the citizen's page.
+
+**Citizens do see** their own reports and, on the map, city-wide ticket pins. They see an urgency **band** on their report — a coarse Low/Medium/Critical label — but never the factor breakdown, the numeric scores, Operational Priority, Operational Assessment, or Focal intake state. They do see a separate **acknowledgment** event on their own report's timeline (§1) once Focal has acknowledged it — this is not a ticket-status value and is never rendered as one.
 
 ---
 
-## 7. Pending and deferred
+## 8. Pending and deferred
 
 Not implemented. Listed so no one plans a workflow around them.
 

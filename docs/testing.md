@@ -74,7 +74,7 @@ Specs that need seeded data call `test.skip()` with a message naming this comman
 
 ### Credentials
 
-All E2E credentials live in **`e2e/test-credentials.ts`** — three admin accounts (`E2E_MEO_ADMIN`, `E2E_MDRRMO_ADMIN`, `E2E_SYSTEM_ADMIN`) and `E2E_CITIZEN_ACCOUNT`. That file is also imported by `api/scripts/seed/seed-e2e-admins.ts`, so the seeder and the specs can never disagree.
+All E2E credentials live in **`e2e/test-credentials.ts`** — four admin accounts (`E2E_MEO_ADMIN`, `E2E_MDRRMO_ADMIN`, `E2E_SYSTEM_ADMIN`, `E2E_FOCAL_ADMIN` — five-role Batch 5) and `E2E_CITIZEN_ACCOUNT`. That file is also imported by `api/scripts/seed/seed-e2e-admins.ts`, so the seeder and the specs can never disagree. `loginAdmin` (`e2e/helpers.ts`) is role-aware: it waits for each role's actual post-login landing page/heading (`/admin` for officer/supervisor, `/admin/focal` for focal, `/admin/admins` for system_admin) rather than assuming every role lands on the operational Dashboard — `system_admin` and `focal` never do, since Batch 1 removed system_admin's operational access and focal never had it.
 
 **Never hardcode an email or password in a new spec.** Import from this module. The shared password is overridable via `E2E_DEMO_PASSWORD` for rotation without a source edit.
 
@@ -212,6 +212,7 @@ Neither creates reports, so both are safe to repeat freely.
 - **Some specs skip rather than fail** when seed data is absent (`test.skip()` with a message naming `seed:diverse-reports`). This keeps reruns green on an already-exercised database, but it also means a fresh database silently loses coverage. Check for skips in the output, not just for failures.
 - **No coverage gate.** `pnpm --prefix api test:cov` exists but nothing enforces a threshold.
 - **No visual-regression testing.** Specs assert on roles and text, not screenshots or computed styles, so a purely visual regression will pass.
+- **`e2e/admin-work-orders.spec.ts` has ~10 tests assuming `system_admin` retains operational Work Order access** (view/act on any office's work orders, an office picker on `/admin/work-orders`), a permission model Batch 1 of the five-role architecture removed. This was discovered during Batch 5's live-database integration pass — the file's own shared ticket-borrowing helper crashed first on every run before Batch 5 fixed that helper, which is why these individually-stale assertions were never previously reached or caught. Deliberately **not** mass-edited in Batch 5 (out of proportion for a single regression fix); each needs the same "what does this role model actually allow now" rewrite `e2e/admin-notifications.spec.ts`'s analogous tests already got. Flagged here as a scoped follow-up, not fixed.
 
 ---
 

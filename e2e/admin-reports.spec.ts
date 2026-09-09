@@ -102,21 +102,29 @@ test("MDRRMO admin sees an office-scoped summary and no office picker on the rep
   await expect(page.getByRole("combobox", { name: "Office" })).toHaveCount(0);
 });
 
-test("system admin sees an office filter defaulting to city-wide on the reports page", async ({ page }) => {
+// Batch 6 (five-role E2E reconciliation): Reports & Exports' office filter/
+// city-wide summary and its underlying CSV endpoints were system_admin-only.
+// Batch 1 of the five-role architecture removed system_admin's operational
+// access entirely — confirmed live, both `/admin/reports` (renders "Reports
+// Summary Unavailable") and `GET /admin/reports/tickets.csv`/`work-orders.csv`
+// (403 "Operational staff access required") now reject it outright. There is
+// no reachable "city-wide export" capability left for any role to test.
+test("system admin cannot reach Reports & Exports, and its CSV endpoints deny system admin directly", async ({ page, request }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/reports");
-  await expect(page.getByText("City-wide summary", { exact: true })).toBeVisible();
-  const officeFilter = page.getByRole("combobox", { name: "Office", exact: true });
-  await expect(officeFilter).toBeVisible();
+  await expect(page.getByText("Reports Summary Unavailable")).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Office", exact: true })).toHaveCount(0);
 
-  await officeFilter.click();
-  await page.getByRole("option", { name: "MEO" }).click();
-  await expect(page.getByText("MEO office summary", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Export Tickets CSV" })).toHaveAttribute("href", /office=MEO/);
+  const cookies = await page.context().cookies();
+  const headers = sessionCookieHeader(cookies);
+  const ticketsCsv = await request.get("/api/admin/reports/tickets.csv?status=all", { headers });
+  expect(ticketsCsv.status()).toBe(403);
+  const workOrdersCsv = await request.get("/api/admin/reports/work-orders.csv", { headers });
+  expect(workOrdersCsv.status()).toBe(403);
 });
 
 test("ticket export URL on the reports page includes the selected filters", async ({ page }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/reports");
   await page.getByLabel("Ticket category", { exact: true }).click();
   await page.getByRole("option", { name: "Pothole / Road Surface Damage" }).click();
@@ -180,24 +188,13 @@ test("a hand-crafted ?office=MDRRMO ticket export request from an MEO session ne
   for (const row of rows.slice(1)) expect(row[officeIndex]).toBe("MEO");
 });
 
-test("system admin can export city-wide or filter the ticket export to one office", async ({ page, request }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  const cookies = await page.context().cookies();
-  const headers = sessionCookieHeader(cookies);
-
-  const allRes = await request.get("/api/admin/reports/tickets.csv?status=all", { headers });
-  expect(allRes.ok()).toBe(true);
-  const allRows = parseCsv(await allRes.text());
-  expect(allRows[0]).toContain("Ticket ID");
-
-  const meoRes = await request.get("/api/admin/reports/tickets.csv?status=all&office=MEO", { headers });
-  const meoRows = parseCsv(await meoRes.text());
-  const officeIndex = meoRows[0].indexOf("Assigned Office");
-  for (const row of meoRows.slice(1)) expect(row[officeIndex]).toBe("MEO");
-});
+// Batch 6: the "system admin exports city-wide" test was removed — that
+// capability no longer exists for any role (see the denial test above);
+// "a hand-crafted ?office=MDRRMO ... never returns MDRRMO rows" above
+// already covers the office-scoping half of what this test checked.
 
 test("ticket export filters (status, category) narrow the CSV output", async ({ page, request }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await loginAs(page, E2E_MEO_ADMIN);
   const cookies = await page.context().cookies();
   const res = await request.get("/api/admin/reports/tickets.csv?status=all&category=Pothole", {
     headers: sessionCookieHeader(cookies),
@@ -235,7 +232,7 @@ test("work order CSV export respects office scope", async ({ page, request }) =>
 });
 
 test("work order CSV export never includes a notes column", async ({ page, request }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await loginAs(page, E2E_MEO_ADMIN);
   const cookies = await page.context().cookies();
   const res = await request.get("/api/admin/reports/work-orders.csv", {
     headers: sessionCookieHeader(cookies),
@@ -245,7 +242,7 @@ test("work order CSV export never includes a notes column", async ({ page, reque
 });
 
 test("work order CSV export never leaks a note body, even though the column itself is absent", async ({ page, request }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await loginAs(page, E2E_MEO_ADMIN);
   const cookies = await page.context().cookies();
   const headers = sessionCookieHeader(cookies);
 
