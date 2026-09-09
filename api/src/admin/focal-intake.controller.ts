@@ -33,6 +33,15 @@ export class FocalIntakeController {
     return this.intake.listIntake();
   }
 
+  // Must stay declared above ':reportId' — Nest matches by declaration
+  // order, and ':reportId' would otherwise swallow the literal 'geo'
+  // segment first (same trap documented on TicketsController's bulk
+  // routes).
+  @Get('geo')
+  geo() {
+    return this.intake.listIntakeGeo();
+  }
+
   @Get(':reportId')
   async detail(@Param('reportId', ParseIntPipe) reportId: number) {
     const detail = await this.intake.getIntakeDetail(reportId);

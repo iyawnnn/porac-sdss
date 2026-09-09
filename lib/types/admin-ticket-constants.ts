@@ -1,7 +1,13 @@
 // Pure constants/types, safe to import from client components (no DB
 // import) — see lib/admin/tickets.ts for the server-only query functions.
 export type TicketStatus = "Reported" | "Under Review" | "In Progress" | "Resolved" | "Rejected";
-export type TicketSort = "priority_desc" | "priority_asc" | "newest";
+// 'priority_desc'/'priority_asc' are legacy key names (sort by Hazard
+// Urgency / priority_score) preserved verbatim for saved-view backward
+// compatibility. 'op_priority_desc'/'op_priority_asc' (Operational
+// Priority / priority_index — Batch 4) are canonical and 'op_priority_desc'
+// is now the queue's default. See api/src/admin/ticket-constants.ts (the
+// mirrored copy) for the full rationale.
+export type TicketSort = "priority_desc" | "priority_asc" | "op_priority_desc" | "op_priority_asc" | "newest";
 
 export const TICKET_STATUSES: TicketStatus[] = ["Reported", "Under Review", "In Progress", "Resolved", "Rejected"];
 export const PAGE_LIMITS = [10, 15, 25, 50] as const;

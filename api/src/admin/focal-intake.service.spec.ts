@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Sql } from 'postgres';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { FocalIntakeService, deriveIntakeState } from './focal-intake.service';
 import type { TicketsService } from './tickets.service';
 import type { NotificationsService } from './../notifications/notifications.service';
@@ -375,5 +377,59 @@ describe('FocalIntakeService.escalate', () => {
     // the returned detail are read straight off the ticket, unchanged.
     expect(result?.hazardUrgency.index).toBe(40);
     expect(result?.operationalPriority).toBe(90);
+  });
+});
+
+// Batch 4 (five-role production alignment): a Focal-safe read-only map
+// endpoint, built from the same intake source as listIntake() but geo-
+// enabled — never the operational GET /admin/tickets/geo endpoint (which
+// stays behind OperationalStaffGuard, untouched). Must expose only
+// intake-relevant fields: no Operational Assessment content, no Work Order
+// internals, no staff assignment, no status-mutation-sensitive data.
+describe('FocalIntakeService.listIntakeGeo', () => {
+  it('returns report-level points with coordinates and intake-relevant fields only', async () => {
+    const { service } = makeService([
+      [
+        {
+          report_id: 1,
+          category: 'Pothole',
+          barangay_name: 'Mitla Proper',
+          assigned_office: 'MEO',
+          hazard_urgency_index: 62,
+          hazard_urgency_level: 'MEDIUM',
+          acknowledged_at: null,
+          latest_action_type: null,
+          lat: 15.05,
+          lng: 120.54,
+        },
+      ],
+    ]);
+    const rows = await service.listIntakeGeo();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      reportId: 1,
+      reportReference: 'Report #1',
+      category: 'Pothole',
+      barangayName: 'Mitla Proper',
+      routedOffice: 'MEO',
+      lat: 15.05,
+      lng: 120.54,
+      intakeState: 'New',
+    });
+    expect(rows[0].hazardUrgency).toEqual({ index: 62, level: 'MEDIUM' });
+  });
+
+  it('never exposes Operational Assessment, Work Order, or staff-assignment fields', () => {
+    const source = readFileSync(
+      join(__dirname, 'focal-intake.service.ts'),
+      'utf8',
+    );
+    const methodBody = source.slice(
+      source.indexOf('async listIntakeGeo('),
+      source.indexOf('\n  async getIntakeDetail('),
+    );
+    expect(methodBody).not.toContain('operational_assessments');
+    expect(methodBody).not.toContain('work_orders');
+    expect(methodBody).not.toContain('assigned_admin');
   });
 });

@@ -3,7 +3,12 @@ import type { FocalIntakeRow } from "@/lib/types/admin-focal-intake";
 import { FocalIntakeQueue } from "@/components/features/admin/focal/FocalIntakeQueue";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
 
-export default async function FocalIntakeQueuePage() {
+export default async function FocalIntakeQueuePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ flagged?: string }>;
+}) {
+  const { flagged } = await searchParams;
   let rows: FocalIntakeRow[];
   try {
     rows = await apiGet<FocalIntakeRow[]>("/admin/intake");
@@ -17,5 +22,5 @@ export default async function FocalIntakeQueuePage() {
     );
   }
 
-  return <FocalIntakeQueue initialRows={rows} />;
+  return <FocalIntakeQueue initialFlaggedOnly={flagged === "true"} initialRows={rows} />;
 }

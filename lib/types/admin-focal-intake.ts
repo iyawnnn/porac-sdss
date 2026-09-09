@@ -39,3 +39,20 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
   linkedTicketReference: string;
   activity: IntakeActivityRow[];
 }
+
+// Batch 4's Focal-safe read-only map source (GET /admin/intake/geo) — a
+// deliberately narrow, separate shape from FocalIntakeRow/FocalIntakeDetail:
+// only what a map pin needs (never Operational Assessment content, Work
+// Order internals, or staff assignment). Mirrors
+// api/src/admin/focal-intake.service.ts's FocalIntakeGeoRow.
+export interface FocalIntakeGeoRow {
+  reportId: number;
+  reportReference: string;
+  category: string;
+  barangayName: string;
+  routedOffice: "MEO" | "MDRRMO";
+  hazardUrgency: { index: number | null; level: string | null };
+  lat: number;
+  lng: number;
+  intakeState: IntakeState;
+}

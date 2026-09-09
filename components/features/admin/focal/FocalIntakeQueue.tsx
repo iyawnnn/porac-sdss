@@ -2,13 +2,15 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { SearchIcon, SearchXIcon } from "lucide-react";
+import { SearchIcon, SearchXIcon, ShieldAlertIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { TABLE_HEAD_CLASS } from "@/components/features/admin/shared/tableHead";
+import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
 import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import type { FocalIntakeRow, IntakeState } from "@/lib/types/admin-focal-intake";
 
@@ -39,29 +41,48 @@ function formatSubmittedAgo(at: string): string {
 // adaptation of it. Filtering is client-side over the already-fetched
 // intake rows (the API itself has no office/status query params to widen —
 // see FocalIntakeService.listIntake).
-export function FocalIntakeQueue({ initialRows }: { initialRows: FocalIntakeRow[] }) {
+// Batch 4's Flagged Reports surface (§15) is deliberately not a separate
+// page/API — it's this exact table with `flaggedOnly` pre-set from the
+// nav link's `?flagged=true`, using the `flags` this component already
+// received on every row. Focal gets a read-only view of the same integrity
+// signals ReportsService.submit() writes for operational moderation
+// (FlagBadge is shared, not duplicated) — never quarantine/moderation
+// controls, which stay behind ModerationController's OperationalStaffGuard.
+export function FocalIntakeQueue({
+  initialRows,
+  initialFlaggedOnly = false,
+}: {
+  initialRows: FocalIntakeRow[];
+  initialFlaggedOnly?: boolean;
+}) {
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<StateFilter>("All");
   const [officeFilter, setOfficeFilter] = useState<OfficeFilter>("All");
   const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>("All");
+  const [flaggedOnly, setFlaggedOnly] = useState(initialFlaggedOnly);
 
   const reports = useMemo(() => {
     const query = search.trim().toLowerCase();
     return [...initialRows]
       .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
       .filter((report) => {
+        if (flaggedOnly && report.flags.length === 0) return false;
         if (stateFilter !== "All" && report.intakeState !== stateFilter) return false;
         if (officeFilter !== "All" && report.routedOffice !== officeFilter) return false;
         if (urgencyFilter !== "All" && report.hazardUrgency.level !== urgencyFilter) return false;
         return matchesSearch(report, query);
       });
-  }, [initialRows, search, stateFilter, officeFilter, urgencyFilter]);
+  }, [initialRows, search, stateFilter, officeFilter, urgencyFilter, flaggedOnly]);
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <div>
-        <h1 className="text-[24px] leading-8 font-semibold tracking-[-0.02em]">Intake Queue</h1>
-        <p className="mt-1 text-[13px] text-muted-foreground">Municipality-wide incoming reports awaiting acknowledgment, screening, or forwarding.</p>
+        <h1 className="text-[24px] leading-8 font-semibold tracking-[-0.02em]">{flaggedOnly ? "Flagged Reports" : "Intake Queue"}</h1>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          {flaggedOnly
+            ? "Incoming reports with integrity flags raised at intake."
+            : "Municipality-wide incoming reports awaiting acknowledgment, screening, or forwarding."}
+        </p>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -77,6 +98,16 @@ export function FocalIntakeQueue({ initialRows }: { initialRows: FocalIntakeRow[
               value={search}
             />
           </div>
+
+          <Button
+            className="h-8 text-[13px]"
+            onClick={() => setFlaggedOnly((v) => !v)}
+            size="sm"
+            variant={flaggedOnly ? "default" : "outline"}
+          >
+            <ShieldAlertIcon aria-hidden="true" className="size-3.5" />
+            Flagged only
+          </Button>
 
           <Select onValueChange={(v) => setStateFilter(v as StateFilter)} value={stateFilter}>
             <SelectTrigger aria-label="Filter by intake state" className="h-8 w-[168px] bg-card text-[13px]" size="sm">
@@ -141,6 +172,11 @@ export function FocalIntakeQueue({ initialRows }: { initialRows: FocalIntakeRow[
                     <TableCell className="max-w-48 py-2.5 pl-4">
                       <span className="block truncate font-medium">{report.reportReference}</span>
                       <span className="block font-mono text-xs text-muted-foreground">{report.ticketReference}</span>
+                      {report.flags.length > 0 && (
+                        <span className="mt-1 flex flex-wrap gap-1">
+                          {report.flags.map((flag) => <FlagBadge flag={flag} key={flag} />)}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="max-w-52 py-2.5">
                       <span className="block truncate">{report.barangayName}</span>

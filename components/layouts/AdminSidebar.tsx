@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Bell, Building2, ClipboardList, FileBarChart2, Inbox, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, Wrench, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
@@ -43,6 +43,8 @@ function buildNavSections(session: Pick<AdminSession, "role">): { heading: strin
       { heading: "Main", items: [
         { href: "/admin/focal", label: "Dashboard", icon: LayoutDashboard },
         { href: "/admin/focal/intake", label: "Intake Queue", icon: Inbox },
+        { href: "/admin/focal/map", label: "Interactive Map", icon: Map },
+        { href: "/admin/focal/intake?flagged=true", label: "Flagged Reports", icon: ShieldAlert },
       ] },
       { heading: "Management", items: [
         { href: "/admin/notifications", label: "Notifications", icon: Bell },
@@ -96,8 +98,20 @@ function footerSubtitle(session: Pick<AdminSession, "role" | "office">): string 
 // while viewing Intake Queue.
 const EXACT_MATCH_ONLY_HREFS = new Set(["/admin", "/admin/focal"]);
 
-function isActivePath(pathname: string, href: string): boolean {
-  return EXACT_MATCH_ONLY_HREFS.has(href) ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+// Flagged Reports (Batch 4) lives at the same path as Intake Queue,
+// distinguished only by ?flagged=true — usePathname() never carries the
+// query string, so both hrefs need their own comparison: a query-bearing
+// href requires an exact search-string match, and the plain Intake Queue
+// href must NOT also light up while viewing the flagged variant.
+function isActivePath(pathname: string, search: string, href: string): boolean {
+  const [hrefPath, hrefQuery] = href.split("?");
+  if (hrefQuery !== undefined) {
+    return pathname === hrefPath && search === hrefQuery;
+  }
+  if (hrefPath === "/admin/focal/intake" && search === "flagged=true") {
+    return false;
+  }
+  return EXACT_MATCH_ONLY_HREFS.has(hrefPath) ? pathname === hrefPath : pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
 }
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
@@ -121,6 +135,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 
 export default function AdminSidebar({ session }: { session: AdminSession }) {
   const pathname = usePathname();
+  const search = useSearchParams().toString();
   const navSections = buildNavSections(session);
   return (
     <Sidebar className={cn("*:data-[slot=sidebar-inner]:bg-background", "transition-[left,right,top,width]")} collapsible="offcanvas" variant="sidebar">
@@ -138,7 +153,7 @@ export default function AdminSidebar({ session }: { session: AdminSession }) {
         {navSections.map((section) => (
           <SidebarGroup key={section.heading}>
             <SidebarGroupLabel className="px-2 text-[11px] tracking-wide text-sidebar-foreground/55 group-data-[collapsible=icon]:pointer-events-none">{section.heading}</SidebarGroupLabel>
-            <SidebarMenu>{section.items.map((item) => <SidebarMenuItem key={item.href}><NavLink active={isActivePath(pathname, item.href)} item={item} /></SidebarMenuItem>)}</SidebarMenu>
+            <SidebarMenu>{section.items.map((item) => <SidebarMenuItem key={item.href}><NavLink active={isActivePath(pathname, search, item.href)} item={item} /></SidebarMenuItem>)}</SidebarMenu>
           </SidebarGroup>
         ))}
       </SidebarContent>

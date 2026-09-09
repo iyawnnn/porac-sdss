@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import type { AdminSession } from "@/lib/auth/session";
+import { isOperationalStaff, officeDisplay } from "@/lib/utils/adminScope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,7 +56,7 @@ export function AdminAccountSecurityPanel({ session }: { session: AdminSession |
             <p className="truncate font-medium">{session.adminName}</p>
             <p className="truncate text-sm text-muted-foreground">{session.email}</p>
           </div>
-          <Badge variant="outline">{session.office ?? "All Offices"} · {session.role}</Badge>
+          <Badge variant="outline">{officeDisplay(session)}{isOperationalStaff(session) ? ` · ${session.role}` : ""}</Badge>
         </CardContent>
       </Card>
 
