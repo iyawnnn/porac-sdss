@@ -33,7 +33,12 @@ export class NotificationsController {
     if (adminToken) {
       const session = await this.sessions.verifyAdminSession(adminToken);
       if (session) {
-        return { type: 'admin', adminId: session.adminId, office: session.office };
+        return {
+          type: 'admin',
+          adminId: session.adminId,
+          office: session.office,
+          role: session.role,
+        };
       }
     }
 

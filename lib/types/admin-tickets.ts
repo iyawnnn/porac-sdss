@@ -94,6 +94,29 @@ export interface TicketDetail {
   direct_responsibility: boolean;
 }
 
+// The third decision-support layer (Batch 3) — human-entered, never a
+// score/level/band. Mirrors api/src/admin/operational-assessment.service.ts's
+// OperationalAssessmentRow (already camelCase from that service's own
+// mapping, unlike the raw snake_case ticket/report rows below).
+export interface OperationalAssessment {
+  id: number;
+  ticketId: number;
+  assessedByAdminId: number | null;
+  assessedByName: string | null;
+  observedConditions: string;
+  safetyImplications: string;
+  operationalConstraints: string[];
+  recommendedAction: string;
+  temporaryMitigation: string;
+  defermentReason: string | null;
+  referralReason: string | null;
+  remarks: string | null;
+  assessedAt: string;
+  updatedByAdminId: number | null;
+  updatedByName: string | null;
+  updatedAt: string;
+}
+
 export interface TicketReport {
   id: number;
   title: string;

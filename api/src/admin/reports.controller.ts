@@ -1,6 +1,7 @@
 import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
+import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { ReportsService } from './reports.service';
@@ -15,7 +16,7 @@ function csvFilename(prefix: string): string {
 // inside TicketsService.parseTicketQuery / WorkOrdersService.parseQuery /
 // ModerationService.parseModerationQuery), just reshaped as a downloadable
 // file instead of a paginated JSON response.
-@UseGuards(AdminSessionGuard)
+@UseGuards(AdminSessionGuard, OperationalStaffGuard)
 @Controller('admin/reports')
 export class ReportsController {
   constructor(private readonly reports: ReportsService) {}

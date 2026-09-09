@@ -25,6 +25,9 @@ import { BarangayInsightsController } from './barangay-insights.controller';
 import { BarangayInsightsService } from './barangay-insights.service';
 import { SavedViewsController } from './saved-views.controller';
 import { SavedViewsService } from './saved-views.service';
+import { FocalIntakeController } from './focal-intake.controller';
+import { FocalIntakeService } from './focal-intake.service';
+import { OperationalAssessmentService } from './operational-assessment.service';
 
 // Eleven controllers sharing one module — they share nothing else, but
 // splitting into separate modules buys nothing (see blueprint §1). Each
@@ -61,6 +64,7 @@ import { SavedViewsService } from './saved-views.service';
     ReportsController,
     BarangayInsightsController,
     SavedViewsController,
+    FocalIntakeController,
   ],
   providers: [
     TicketsService,
@@ -74,6 +78,8 @@ import { SavedViewsService } from './saved-views.service';
     ReportsService,
     BarangayInsightsService,
     SavedViewsService,
+    FocalIntakeService,
+    OperationalAssessmentService,
   ],
 })
 export class AdminModule {}

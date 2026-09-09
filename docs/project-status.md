@@ -18,11 +18,13 @@ This file replaced two earlier documents that split the same material and each c
 
 ## 1. Current State Summary
 
-**Phase: polish, testing, security hardening, and deployment readiness.** Not feature development.
+**Phase: five-role architecture implemented and integration-verified; not yet deployed.** The system now has five roles, not three — see §2A for the full shipped inventory.
 
-- **No new product feature is currently queued.** The pipeline that Barangay Insights and then Notification Center filled is clear, and the most recent audit found no remaining unfinished item of real product weight outside what §5 already defers. The most recent shipped work is the Flagged Reports rebuild (§3), which — like the Ticket Queue rebuild before it — was a redesign of an existing surface plus the bulk-moderation capability it needed, not a new surface.
-- **Current work should focus on** reliability hardening, security hardening, test coverage, documentation accuracy, and deployment readiness — all of which are enumerated in §4.
-- **Do not treat an empty feature queue as licence to start something new.** Read §6 before proposing a feature. If a genuinely new feature is justified, it belongs in §4 with a stated reason, not started directly.
+- **The five-role production architecture (Focal Personnel + Operational Assessment) is implemented, unit-tested, and integration-verified** — five batches of work (RBAC foundation, Focal Intake, Operational Assessment, decision-support/navigation alignment, final integration QA), detailed in §2A. This supersedes the older "no new product feature is currently queued" framing below, which predates all five of those batches.
+- **Not yet deployed to the shared/demo database.** The four schema migrations this work requires (`migrate:admin-focal-role`, `migrate:report-acknowledgments`, `migrate:report-intake-actions`, `migrate:operational-assessments`) have been verified additive/safe and exercised end-to-end against a disposable Neon branch (see §2A), but deliberately **not** run against the shared `api/.env` database — see §4.0 for the exact deployment order.
+- Outside the five-role work, no other new product feature is currently queued — the pipeline that Barangay Insights and then Notification Center filled remains clear. The most recent non-five-role shipped work is the Flagged Reports rebuild (§3), a redesign of an existing surface, not a new one.
+- **Current work should focus on** running the outstanding migrations in a real deployment, reliability hardening, security hardening, test coverage, documentation accuracy, and deployment readiness — all of which are enumerated in §4.
+- **Do not treat this as licence to start a sixth feature batch.** Read §6 before proposing a feature. If a genuinely new feature is justified, it belongs in §4 with a stated reason, not started directly.
 - **Nothing has been deployed.** No hosting platform, production database, domain, or verified email sending domain exists yet — see [`deployment-readiness.md`](deployment-readiness.md).
 
 ---
@@ -48,11 +50,29 @@ Verified against the current tree, not assumed:
 
 **Platform**
 - Notifications (`api/src/notifications/`, `NotificationBell`)
-- RBAC + office scoping: `isSystemAdmin` / `resolveOfficeScope` / `assertOfficeAccess` in `api/src/common/authz/admin-scope.ts`, plus `AdminSessionGuard` / `SystemAdminGuard`
+- RBAC + office scoping (five roles — see §2A): `isSystemAdmin` / `isFocal` / `isOperationalStaff` / `resolveOfficeScope` / `assertOfficeAccess` in `api/src/common/authz/admin-scope.ts`, plus `AdminSessionGuard` / `SystemAdminGuard` / `OperationalStaffGuard` / `FocalGuard`
 - Deduplication, urgency triage, weather/DEM pipeline (see `PLAN.md` §6–§7 and [`triage-model.md`](triage-model.md))
 - `docs/database.md` per-table reference and the `city_boundary_osm` import
 
-Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[id]`, `/admin/map`, `/admin/barangay-insights`, `/admin/barangay-insights/[barangayId]`, `/admin/flagged`, `/admin/reports`, `/admin/notifications`, `/admin/admins`, `/admin/activity-log`, `/admin/account`, `/admin/login`, `/admin/work-orders`.
+Existing admin routes are exactly: `/admin`, `/admin/tickets`, `/admin/tickets/[id]`, `/admin/map`, `/admin/barangay-insights`, `/admin/barangay-insights/[barangayId]`, `/admin/flagged`, `/admin/reports`, `/admin/notifications`, `/admin/admins`, `/admin/activity-log`, `/admin/account`, `/admin/login`, `/admin/work-orders`, `/admin/focal`, `/admin/focal/intake`, `/admin/focal/intake/[reportId]`, `/admin/focal/map`.
+
+---
+
+## 2A. Five-Role Production Architecture (Focal Personnel + Operational Assessment) — implemented
+
+Five batches of work, each with its own PR against `main`, plus a sixth integration/QA pass (this entry). **Implemented and unit/E2E-tested; not yet run against the shared `api/.env` database** — see §4.0 for the exact deployment order before this is usable in that environment.
+
+**Roles.** `officer` | `supervisor` | `focal` | `system_admin` (`api/src/common/authz/admin-scope.ts`). `focal` always carries `office: 'MDRRMO'` organizationally but is never treated as MDRRMO operational staff (`isOperationalStaff` excludes it); `system_admin` always carries `office: null` and has no routine operational authority at all — both invariants are enforced in application code (`AdminsService`), not a DB constraint, and both guards (`OperationalStaffGuard`, `FocalGuard`) are independent, additive checks alongside the existing `SystemAdminGuard`.
+
+**Batch 1 — RBAC foundation.** Added the `focal` role; `OperationalStaffGuard` (officer/supervisor only) now gates every operational controller (Tickets, Work Orders, Dashboard, Map, Moderation, Reports); removed `system_admin`'s prior city-wide operational bypass entirely; fixed the Work Order assignee directory to allowlist officer/supervisor explicitly (`AdminsService.listDirectory`) rather than denylist one role.
+
+**Batch 2 — Focal Intake.** New `report_acknowledgments` (report-level, `UNIQUE(report_id)`, one 409 on a second attempt) and `report_intake_actions` (append-only screened/forwarded/escalated trail) tables. `FocalIntakeService`/`FocalIntakeController` (`admin/intake/*`, `FocalGuard`-only) give Focal a dedicated municipality-wide surface — never an adaptation of the operational Ticket Queue. Acknowledgment/screening/escalation never mutate `tickets.status` — "Acknowledged" is a presentation-only state derived at read time (`deriveIntakeState`), never persisted as a ticket-status value. Forward reuses `TicketsService.reassignOffice` with a Focal-specific authorization branch (Reported + no active Work Order) rather than a second reassignment implementation. Notification scoping bug fixed: office-wide matching now requires `isOperationalStaff`, not `office !== null` (previously let `system_admin` see every office's operational notifications). Real Focal Dashboard/Intake Queue/Intake Detail replace the Batch-1 placeholder landing.
+
+**Batch 3 — Operational Assessment.** New `operational_assessments` table (`UNIQUE(ticket_id)` — one current assessment per ticket, no revision history) — the third decision-support layer, human-entered, structurally distinct from the two system-generated ones (no score/level/band column anywhere in the table). `OperationalAssessmentService.upsert` reuses `assertOfficeAccess` exactly as every other ticket-scoped write does — current-office authorization, so a reassigned ticket's new owning office (not the original) can edit going forward, while the original creator (`assessed_by_*`/`assessed_at`) is preserved forever. A single atomic `INSERT ... ON CONFLICT (ticket_id) DO UPDATE ... RETURNING (xmax = 0) AS inserted` (added in a follow-up hardening pass) closes a concurrent-first-save race that a naive check-then-insert would have left open.
+
+**Batch 4 — Decision-support terminology + navigation alignment.** Canonical labels: **Hazard Urgency** (system-generated, `priority_score`/`urgency_level` — environmental/spatial, unchanged formula) vs. **Operational Priority** (system-generated, `priority_index` — administrative queue recommendation, unchanged formula) vs. **Operational Assessment** (human-entered, Batch 3). Ticket Queue's default sort changed from Hazard Urgency descending to Operational Priority descending (`op_priority_desc`); the legacy `priority_desc`/`priority_asc` sort values are preserved verbatim for saved-view backward compatibility, never repurposed. Real Focal Interactive Map (`GET /admin/intake/geo`, its own narrow query — never a relaxation of the operational `/admin/tickets/geo` endpoint) and Focal Flagged Reports (a filter on the existing Intake Queue, not a duplicated page) complete Focal's navigation to match the approved UX reference. Fixed three role-facing surfaces (`AdminUserMenu`, `AdminAccountSecurityPanel`, `ActivityLogWorkspace`) that still showed `"All Offices"` for `system_admin` after Batch 1 changed that wording in the sidebar but missed these three.
+
+**Batch 5 — Final integration/QA (this entry).** Verified the whole stack against a disposable Neon branch (`batch5-integration-test`, branched from the shared project's `production` branch, never mutated) rather than the shared `api/.env` database: ran all four outstanding migrations in dependency order, verified the real schema (enum values, `UNIQUE` constraints, FKs, indexes) with direct SQL, seeded one test account per role, and exercised the full Focal Intake lifecycle (acknowledge → screen → forward/escalate, including the 409-on-second-acknowledge and 403-on-active-work-order cases) and the Operational Assessment office-reassignment case (original assessor preserved, new office's edit recorded as latest editor) against real Postgres through the real HTTP pipeline — not fixtures. Found and fixed four real, previously-uncaught E2E defects, all dating from Batch 1's removal of `system_admin`'s city-wide operational access never being propagated into three pre-existing Playwright specs/helpers (`e2e/helpers.ts`'s `loginAdmin`, `e2e/admin-rbac.spec.ts`, `e2e/admin-notifications.spec.ts`) — see the Batch 5 report for the full list, including one large pre-existing gap (`e2e/admin-work-orders.spec.ts`) explicitly deferred rather than mass-edited. Added `e2e/admin-focal.spec.ts` (7 new automated scenarios) and an `E2E_FOCAL_ADMIN` test credential.
 
 ---
 
@@ -501,6 +521,19 @@ Reassignment is not System-Administrator-only: `TicketsController.reassign` sits
 ## 4. Current Queue
 
 All pending work. **None of it is a new product feature** — this is hardening, testing, documentation, and deployment readiness, consistent with §1.
+
+### 4.0 Five-role migrations — pending against the real target database
+
+Not run against the shared `api/.env` database (deliberately — see §2A). In dependency order, from `api/`:
+
+```
+pnpm migrate:admin-focal-role
+pnpm migrate:report-acknowledgments
+pnpm migrate:report-intake-actions
+pnpm migrate:operational-assessments
+```
+
+Each is additive (`ALTER TYPE ... ADD VALUE IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS`) — safe to run against a database already carrying real ticket/report/admin data, but they must run after the full baseline migration order in this file's CLAUDE.md-documented sequence (they all depend on `tickets`/`reports`/`admins` already existing; `operational_assessments` also FKs to `tickets`). After migrating: seed at least one `focal` admin (`pnpm seed:admin -- <email> <password> MDRRMO focal`) and one `system_admin`, then restart the API so `AdminModule`'s new controllers/guards are live.
 
 ### 4.1 Security hardening — pending
 

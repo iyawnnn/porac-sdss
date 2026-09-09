@@ -59,6 +59,31 @@ export const TICKET_REJECTION_REASON_MAX_LENGTH = 1000;
 export const MODERATION_NOTE_MAX_LENGTH = 1000;
 export const REFERRAL_AGENCY_MAX_LENGTH = 200;
 export const REFERRAL_NOTE_MAX_LENGTH = 1000;
+export const OPERATIONAL_ASSESSMENT_TEXT_MAX_LENGTH = 2000;
+export const OPERATIONAL_ASSESSMENT_REASON_MAX_LENGTH = 1000;
+export const OPERATIONAL_ASSESSMENT_REMARKS_MAX_LENGTH = 1000;
+
+// The responsible office's own vocabulary for why a hazard can't simply be
+// scheduled and fixed (Batch 3: Operational Assessment) — a fixed tag set,
+// not free text, so it stays queryable/filterable later without an NLP
+// pass. Deliberately no numeric weight anywhere near this: constraints
+// describe reality, they don't score it (see docs/database.md's
+// operational_assessments note).
+export const OPERATIONAL_CONSTRAINTS = [
+  'weather',
+  'manpower',
+  'equipment',
+  'materials',
+  'funding',
+  'approvals',
+  'procurement',
+  'jurisdiction',
+  'safety',
+  'external_coordination',
+  'technical_feasibility',
+  'other',
+] as const;
+export type OperationalConstraint = (typeof OPERATIONAL_CONSTRAINTS)[number];
 
 export const reportSchema = z.object({
   title: z.string().min(1).max(200),

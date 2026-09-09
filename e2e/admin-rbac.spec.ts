@@ -6,13 +6,27 @@ test.setTimeout(60_000);
 
 test("office admin sidebar shows a fixed office label, not an all-offices toggle", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  await expect(page.getByText("My Office: MEO")).toBeVisible();
+  // exact: true — the sidebar's sr-only "Signed in as {name} · My Office:
+  // MEO" summary (added for accessibility) contains this exact string as a
+  // substring, which would otherwise make a non-exact getByText match both
+  // it and the intended visible label and violate Playwright's strict mode.
+  await expect(page.getByText("My Office: MEO", { exact: true })).toBeVisible();
   await expect(page.getByText("All Offices")).toHaveCount(0);
 });
 
-test("system admin sidebar shows All Offices", async ({ page }) => {
+// Batch 1/4 (five-role RBAC): system_admin's sidebar footer reads "System
+// Administrator / MIS", never "All Offices" — that phrasing implied
+// operational authority the role no longer has (see AdminSidebar.tsx's
+// footerSubtitle and lib/utils/adminScope.ts's officeDisplay). This test
+// previously asserted the pre-Batch-1 wording and would have silently kept
+// passing against a regressed build — it now pins the current, correct copy
+// AND explicitly asserts "All Offices" is gone everywhere in the shell.
+test("system admin sidebar shows System Administrator / MIS, never All Offices", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
-  await expect(page.getByText("All Offices")).toBeVisible();
+  // exact: true — same sr-only "Signed in as {name} · System Administrator
+  // / MIS" substring collision as the MEO test above.
+  await expect(page.getByText("System Administrator / MIS", { exact: true })).toBeVisible();
+  await expect(page.getByText("All Offices")).toHaveCount(0);
   await expect(page.getByText(/^My Office:/)).toHaveCount(0);
 });
 
@@ -31,16 +45,19 @@ test("office admin ticket queue has no office picker, only a fixed office badge"
   await expect(page.getByLabel("Office", { exact: true })).toHaveText("My Office: MDRRMO");
 });
 
-test("system admin ticket queue has a real office picker with All offices", async ({ page }) => {
+// Batch 1 removed system_admin's operational Ticket Queue access entirely
+// (OperationalStaffGuard denies it server-side) — this test previously
+// asserted a city-wide office picker that no longer exists in the approved
+// five-role model. It never actually ran this far before Batch 5 (the
+// shared loginAdmin helper failed first on every system_admin login), so
+// this stale assumption was never caught. The page has no frontend
+// redirect guard of its own; it relies entirely on the backend 403,
+// rendered as the generic "Ticket Queue Unavailable" AdminErrorCard.
+test("system admin gets no operational Ticket Queue — backend denies it, no office picker is ever shown", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/tickets");
-  await page.getByRole("button", { name: /^Filters/ }).click();
-  const officeSelect = page.getByLabel("Office", { exact: true });
-  await expect(officeSelect).toBeVisible();
-  await officeSelect.click();
-  await expect(page.getByRole("option", { name: "All offices" })).toBeVisible();
-  await expect(page.getByRole("option", { name: "MEO", exact: true })).toBeVisible();
-  await expect(page.getByRole("option", { name: "MDRRMO", exact: true })).toBeVisible();
+  await expect(page.getByText("Ticket Queue Unavailable")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Filters/ })).toHaveCount(0);
 });
 
 test("office admin cannot open another office's ticket via a doctored URL", async ({ page, request }) => {

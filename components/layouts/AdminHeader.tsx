@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { AdminSession } from "@/lib/auth/session";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
@@ -8,7 +8,12 @@ import { AdminSidebarTrigger } from "@/components/layouts/AdminSidebarTrigger";
 import { AdminUserMenu } from "@/components/layouts/AdminUserMenu";
 import { NotificationBell } from "@/components/layouts/NotificationBell";
 
-function pageLabel(pathname: string): string {
+function pageLabel(pathname: string, search: string): string {
+  if (pathname.startsWith("/admin/focal/intake")) {
+    return search === "flagged=true" ? "Flagged Reports" : "Intake Queue";
+  }
+  if (pathname === "/admin/focal") return "Dashboard";
+  if (pathname === "/admin/focal/map") return "Interactive Map";
   if (pathname.startsWith("/admin/tickets")) return "Ticket Queue";
   if (pathname.startsWith("/admin/map")) return "Interactive Map";
   if (pathname.startsWith("/admin/barangay-insights")) return "Barangay Insights";
@@ -24,10 +29,11 @@ function pageLabel(pathname: string): string {
 
 export function AdminHeader({ session }: { session: AdminSession }) {
   const pathname = usePathname();
+  const search = useSearchParams().toString();
   return (
     <header className="sticky top-0 z-50 flex h-(--app-header-height) w-full shrink-0 items-center justify-between gap-2 border-b bg-background px-4 md:px-6">
       <div className="flex items-center gap-3"><AdminSidebarTrigger place="navbar" /></div>
-      <Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbPage className="text-sm font-semibold tracking-tight text-foreground">{pageLabel(pathname)}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
+      <Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbPage className="text-sm font-semibold tracking-tight text-foreground">{pageLabel(pathname, search)}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
       <div className="flex items-center gap-3">
         <NotificationBell />
         <Separator className="h-4 data-[orientation=vertical]:self-center" orientation="vertical" />

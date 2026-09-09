@@ -99,17 +99,19 @@ describe('parseTicketQuery office scoping', () => {
     ).toBe('MDRRMO');
   });
 
-  it('defaults a system admin to city-wide (no office filter)', () => {
-    expect(service.parseTicketQuery({}, SYSTEM_ADMIN).office).toBeUndefined();
-    expect(
-      service.parseTicketQuery({ office: 'all' }, SYSTEM_ADMIN).office,
-    ).toBeUndefined();
+  // Batch 1 (five-role RBAC): system_admin no longer has routine
+  // operational access — resolveOfficeScope now rejects it outright rather
+  // than widening to city-wide or honoring a requested office.
+  it('rejects a system admin outright rather than defaulting to city-wide', () => {
+    expect(() => service.parseTicketQuery({}, SYSTEM_ADMIN)).toThrow(
+      ForbiddenException,
+    );
   });
 
-  it('lets a system admin request a specific office', () => {
-    expect(
-      service.parseTicketQuery({ office: 'MDRRMO' }, SYSTEM_ADMIN).office,
-    ).toBe('MDRRMO');
+  it('rejects a system admin even when a specific office is requested', () => {
+    expect(() =>
+      service.parseTicketQuery({ office: 'MDRRMO' }, SYSTEM_ADMIN),
+    ).toThrow(ForbiddenException);
   });
 });
 
@@ -183,15 +185,14 @@ describe('cross-office access to single-resource ticket endpoints', () => {
     expect(detail?.ticket.assigned_office).toBe('MEO');
   });
 
-  it("allows a system admin to view any office's ticket detail", async () => {
-    const service = makeService([
-      [{ id: 1, assigned_office: 'MDRRMO' }],
-      [],
-      [],
-      [],
-    ]);
-    const detail = await service.getTicketDetail(1, SYSTEM_ADMIN);
-    expect(detail?.ticket.assigned_office).toBe('MDRRMO');
+  // Batch 1 (five-role RBAC): system_admin no longer has routine
+  // operational access — assertOfficeAccess now rejects it outright rather
+  // than bypassing the office check.
+  it('rejects a system admin from viewing ticket detail — no more city-wide bypass', async () => {
+    const service = makeService([[{ id: 1, assigned_office: 'MDRRMO' }]]);
+    await expect(service.getTicketDetail(1, SYSTEM_ADMIN)).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   it('computes direct_responsibility from category per the manuscript-aligned routing table', async () => {
@@ -371,6 +372,49 @@ describe('admin audit logging for ticket mutations', () => {
     expect(input.actionType).toBe('ticket_reassigned');
     expect(input.targetId).toBe(9);
     expect(input.metadata).toEqual({ from: 'MEO', to: 'MDRRMO' });
+  });
+
+  // Batch 2 (Focal intake): reassignOffice gains a Focal-specific
+  // authorization branch (early-intake Forward) alongside the existing
+  // assertOfficeAccess path for operational staff — same reassignment
+  // mechanism, same office_reassignments/audit write, different gate.
+  const FOCAL = { role: 'focal', office: 'MDRRMO' } as AdminSession;
+
+  it('allows Focal to reassign a Reported ticket with no active work order', async () => {
+    const { service, logInPgTx } = makeService([
+      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
+      [{ count: 0 }], // active work-order count
+      [{}], // UPDATE tickets
+      [{}], // INSERT office_reassignments
+    ]);
+
+    const result = await service.reassignOffice(11, FOCAL, 'MDRRMO');
+    expect(result).toEqual({ assignedOffice: 'MDRRMO' });
+    expect(logInPgTx).toHaveBeenCalledTimes(1);
+    expect(logInPgTx.mock.calls[0][1].actionType).toBe('ticket_reassigned');
+  });
+
+  it('rejects Focal reassigning a ticket that already left Reported (Under Review)', async () => {
+    const { service, logInPgTx } = makeService([
+      [{ status: 'Under Review', assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
+    ]);
+
+    await expect(service.reassignOffice(12, FOCAL, 'MDRRMO')).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(logInPgTx).not.toHaveBeenCalled();
+  });
+
+  it('rejects Focal reassigning a Reported ticket that already has an active work order', async () => {
+    const { service, logInPgTx } = makeService([
+      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
+      [{ count: 1 }], // active work-order count
+    ]);
+
+    await expect(service.reassignOffice(13, FOCAL, 'MDRRMO')).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(logInPgTx).not.toHaveBeenCalled();
   });
 
   it('logs ticket_referral_noted without mutating the ticket row', async () => {

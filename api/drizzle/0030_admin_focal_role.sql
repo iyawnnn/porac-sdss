@@ -1,0 +1,14 @@
+-- Adds the Central Monitoring / Focal Personnel role (Batch 1 of the
+-- five-role RBAC architecture — see api/src/common/authz/admin-scope.ts).
+-- Purely additive: existing officer/supervisor/system_admin rows are
+-- untouched, and no row is converted to focal by this migration. focal
+-- always carries office = 'MDRRMO' (organizationally MDRRMO/QRT) — that
+-- invariant is enforced in application code (AdminsService.create/update),
+-- not a database constraint, matching how the system_admin+null invariant
+-- from 0016_admin_system_role.sql is enforced.
+--
+-- ALTER TYPE ... ADD VALUE cannot run inside the same transaction as a
+-- statement that uses the new value, but it can share a transaction with
+-- unrelated DDL — this file has no other statement, so that constraint
+-- doesn't apply here regardless.
+ALTER TYPE admin_role ADD VALUE IF NOT EXISTS 'focal';

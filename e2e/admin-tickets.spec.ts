@@ -239,13 +239,18 @@ test("a doctored office query value does not widen an office admin's visibility"
   expect(allBody.tickets.every((t: { assigned_office: string }) => t.assigned_office === "MEO")).toBe(true);
 });
 
-test("system admin sees an office picker exposing a city-wide view", async ({ page }) => {
+// Batch 6 (five-role E2E reconciliation): the Ticket Queue's office picker/
+// city-wide view was system_admin-only. Batch 1 of the five-role
+// architecture removed system_admin's operational access entirely
+// (confirmed live in Batch 5: /admin/tickets renders "Ticket Queue
+// Unavailable" for it), so there is no reachable office picker left to test
+// for any role — office admins never had one (their own office is
+// implicit).
+test("system admin cannot reach the Ticket Queue at all", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/tickets");
-  await openQueueFilters(page);
-  const officePicker = page.getByLabel("Office", { exact: true });
-  await expect(officePicker).toBeVisible();
-  await expect(officePicker).toHaveText("All offices");
+  await expect(page.getByText("Ticket Queue Unavailable")).toBeVisible();
+  await expect(page.getByLabel("Office", { exact: true })).toHaveCount(0);
 });
 
 // --- 4. Queue to Detail navigation ------------------------------------------
@@ -351,16 +356,26 @@ test("advancing a ticket's status from the queue-linked detail page updates the 
 
 // --- 7. Office reassignment ---------------------------------------------------
 
-test("system admin can reassign a ticket's office through the UI, and office scoping still holds after restoring it", async ({ page, request, browser }) => {
+// Batch 6 (five-role E2E reconciliation): this used to reassign via
+// system_admin's unscoped access, then verify the restore with system_admin's
+// own "unscoped by explicit office" query — both of which Batch 1 of the
+// five-role architecture removed entirely (OperationalStaffGuard denies
+// system_admin on every ticket route now). The real value here — clicking
+// the actual Assignment panel UI control, not just hitting the reassign API
+// directly — is preserved by switching to the ticket's owning office at
+// each step: MEO does the UI reassignment, MDRRMO (the new owner) restores
+// it in the `finally`, and each office's own session verifies its own
+// office-scoped list afterward (neither can do an "unscoped" check anymore,
+// but own-office membership before/after is exactly what proves the
+// mechanic and the restore both worked).
+test("MEO admin can reassign a ticket's office through the UI, and office scoping still holds after restoring it", async ({ page, request, browser }) => {
   const citizenContext = await browser.newContext();
   const citizenPage = await citizenContext.newPage();
   await signupCitizen(citizenPage, "reassign");
   const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
   await citizenContext.close();
 
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  const sysCookies = await page.context().cookies();
-  const sysHeaders = { ...sessionCookieHeader(sysCookies), "content-type": "application/json" };
+  await loginAs(page, E2E_MEO_ADMIN);
 
   try {
     await page.goto(`/admin/tickets/${ticketId}`);
@@ -373,34 +388,34 @@ test("system admin can reassign a ticket's office through the UI, and office sco
   } finally {
     // Restore regardless of assertion outcome — this is a shared seeded
     // ticket, and reassignment (unlike status advancement) has a real
-    // revert endpoint, so there's no reason to leave it mutated.
+    // revert endpoint, so there's no reason to leave it mutated. The ticket
+    // is MDRRMO's by this point, so only an MDRRMO session has authority to
+    // move it back.
+    const mdrrmoContext = await browser.newContext();
+    const mdrrmoPage = await mdrrmoContext.newPage();
+    await loginAs(mdrrmoPage, E2E_MDRRMO_ADMIN);
+    const mdrrmoHeaders = { ...sessionCookieHeader(await mdrrmoContext.cookies()), "content-type": "application/json" };
     await request.post(`/api/admin/tickets/${ticketId}/reassign`, {
-      headers: sysHeaders,
+      headers: mdrrmoHeaders,
       data: { toOffice: "MEO" },
     });
+    await mdrrmoContext.close();
   }
 
-  // Confirm the restore actually took (system_admin's own unscoped query,
-  // by explicit office) and that a real MEO session still only sees its own
-  // office afterwards — a MEO session's own "MDRRMO" query is clamped to
-  // MEO by resolveOfficeScope (Phase 1 coverage), so it can't be used here
-  // to prove the ticket left MDRRMO; that has to be checked as system_admin.
-  const sysMeoRes = await request.get("/api/admin/tickets?office=MEO&status=all&limit=50", { headers: sysHeaders });
-  const sysMeoBody = await sysMeoRes.json();
-  expect(sysMeoBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(true);
-
-  const sysMdrrmoRes = await request.get("/api/admin/tickets?office=MDRRMO&status=all&limit=50", { headers: sysHeaders });
-  const sysMdrrmoBody = await sysMdrrmoRes.json();
-  expect(sysMdrrmoBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(false);
-
-  const meoContext = await browser.newContext();
-  const meoPage = await meoContext.newPage();
-  await loginAs(meoPage, E2E_MEO_ADMIN);
-  const meoCookies = await meoContext.cookies();
-  const meoRes = await request.get("/api/admin/tickets?office=MEO&status=all&limit=50", { headers: sessionCookieHeader(meoCookies) });
+  // Confirm the restore actually took: MEO's own list has it back, MDRRMO's
+  // own list no longer does.
+  const meoCookies = await page.context().cookies();
+  const meoRes = await request.get("/api/admin/tickets?status=all&limit=50", { headers: sessionCookieHeader(meoCookies) });
   const meoBody = await meoRes.json();
   expect(meoBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(true);
-  await meoContext.close();
+
+  const mdrrmoContext = await browser.newContext();
+  const mdrrmoPage = await mdrrmoContext.newPage();
+  await loginAs(mdrrmoPage, E2E_MDRRMO_ADMIN);
+  const mdrrmoRes = await request.get("/api/admin/tickets?status=all&limit=50", { headers: sessionCookieHeader(await mdrrmoContext.cookies()) });
+  const mdrrmoBody = await mdrrmoRes.json();
+  expect(mdrrmoBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(false);
+  await mdrrmoContext.close();
 });
 
 // Reassignment is NOT system-admin-only: TicketsController.reassign sits
@@ -454,23 +469,37 @@ test.describe.serial("MEO-initiated reassignment security", () => {
     expect(res.status()).toBe(403);
   });
 
+  // Batch 6: fetching ticket detail and the MEO directory used to go
+  // through system_admin's unscoped access, removed entirely by Batch 1.
+  // The ticket is MDRRMO's by this point in the serial block, so its own
+  // detail is only reachable via an MDRRMO session; the MEO admin lookup
+  // needs an MEO session specifically (resolveOfficeScope clamps any
+  // operational admin's ?office= to their own, so MDRRMO can never list
+  // MEO's directory). The Activity Log check is genuinely system_admin-only
+  // (SystemAdminGuard, untouched by the five-role work) and stays that way.
   test("the reassignment left correct office_reassignments and admin_audit_events rows", async ({ page, request }) => {
-    await loginAs(page, E2E_SYSTEM_ADMIN);
-    const headers = sessionCookieHeader(await page.context().cookies());
+    await loginAs(page, E2E_MDRRMO_ADMIN);
+    const mdrrmoHeaders = sessionCookieHeader(await page.context().cookies());
 
-    const detail = await (await request.get(`/api/admin/tickets/${ticketId}`, { headers })).json();
+    const detail = await (await request.get(`/api/admin/tickets/${ticketId}`, { headers: mdrrmoHeaders })).json();
     const reassignment = detail.reassignments.find(
       (r: { from_office: string; to_office: string }) => r.from_office === "MEO" && r.to_office === "MDRRMO",
     );
     expect(reassignment).toBeTruthy();
     expect(reassignment.admin_name).toBe(`${E2E_MEO_ADMIN.firstName} ${E2E_MEO_ADMIN.lastName}`);
 
-    const directory = await (await request.get("/api/admin/admins/directory?office=MEO", { headers })).json();
+    await page.context().clearCookies();
+    await loginAs(page, E2E_MEO_ADMIN);
+    const meoHeaders = sessionCookieHeader(await page.context().cookies());
+    const directory = await (await request.get("/api/admin/admins/directory?office=MEO", { headers: meoHeaders })).json();
     const meoAdmin = directory.find((a: { email: string }) => a.email === E2E_MEO_ADMIN.email);
     expect(meoAdmin).toBeTruthy();
 
+    await page.context().clearCookies();
+    await loginAs(page, E2E_SYSTEM_ADMIN);
+    const sysHeaders = sessionCookieHeader(await page.context().cookies());
     const audit = await (
-      await request.get("/api/admin/activity-log?actionType=ticket_reassigned&targetType=ticket&limit=25", { headers })
+      await request.get("/api/admin/activity-log?actionType=ticket_reassigned&targetType=ticket&limit=25", { headers: sysHeaders })
     ).json();
     const event = audit.events.find((e: { target_id: number }) => e.target_id === ticketId);
     expect(event).toBeTruthy();
