@@ -102,6 +102,31 @@ export interface FocalIntakeRow {
   intakeState: IntakeState;
 }
 
+interface RawIntakeGeoRow {
+  report_id: number;
+  category: string;
+  barangay_name: string;
+  assigned_office: 'MEO' | 'MDRRMO';
+  hazard_urgency_index: number | null;
+  hazard_urgency_level: string | null;
+  acknowledged_at: string | null;
+  latest_action_type: string | null;
+  lat: number;
+  lng: number;
+}
+
+export interface FocalIntakeGeoRow {
+  reportId: number;
+  reportReference: string;
+  category: string;
+  barangayName: string;
+  routedOffice: 'MEO' | 'MDRRMO';
+  hazardUrgency: { index: number | null; level: string | null };
+  lat: number;
+  lng: number;
+  intakeState: IntakeState;
+}
+
 export interface IntakeActivityRow {
   actionType: string;
   actorName: string | null;
@@ -182,6 +207,51 @@ export class FocalIntakeService {
       ORDER BY r.created_at DESC
     `;
     return rows.map(mapRow);
+  }
+
+  // Batch 4: a Focal-safe read-only map source — deliberately its own
+  // narrow query, not a reuse of the operational GET /admin/tickets/geo
+  // endpoint (which stays behind OperationalStaffGuard and is never
+  // relaxed for Focal). Only intake-relevant fields: report reference,
+  // category, barangay, coordinates, routed office, Hazard Urgency, and
+  // derived intake state — no Operational Assessment content, no Work
+  // Order internals, no staff assignment, no mutation controls.
+  async listIntakeGeo(): Promise<FocalIntakeGeoRow[]> {
+    const sql = this.pg;
+    const rows = await sql<RawIntakeGeoRow[]>`
+      SELECT
+        r.id AS report_id, t.category, b.name AS barangay_name,
+        t.assigned_office, t.priority_score AS hazard_urgency_index,
+        t.urgency_level AS hazard_urgency_level,
+        ra.acknowledged_at, latest.action_type AS latest_action_type,
+        ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng
+      FROM reports r
+      JOIN tickets t ON t.id = r.ticket_id
+      JOIN barangays b ON b.id = t.barangay_id
+      LEFT JOIN report_acknowledgments ra ON ra.report_id = r.id
+      LEFT JOIN LATERAL (
+        SELECT action_type FROM report_intake_actions
+        WHERE report_id = r.id ORDER BY created_at DESC LIMIT 1
+      ) latest ON true
+      ORDER BY r.created_at DESC
+    `;
+    return rows.map((row) => ({
+      reportId: row.report_id,
+      reportReference: `Report #${row.report_id}`,
+      category: row.category,
+      barangayName: row.barangay_name,
+      routedOffice: row.assigned_office,
+      hazardUrgency: {
+        index: row.hazard_urgency_index,
+        level: row.hazard_urgency_level,
+      },
+      lat: row.lat,
+      lng: row.lng,
+      intakeState: deriveIntakeState({
+        acknowledgedAt: row.acknowledged_at,
+        latestActionType: row.latest_action_type,
+      }),
+    }));
   }
 
   async getIntakeDetail(reportId: number): Promise<FocalIntakeDetail | null> {

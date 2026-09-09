@@ -33,7 +33,7 @@ function LegendBody() {
         </div>
       </section>
       <section>
-        <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Urgency (outer ring)</p>
+        <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Hazard Urgency (outer ring)</p>
         <div className="space-y-1.5">
           {URGENCY_BANDS.map((band) => (
             <div className="flex items-center gap-2" key={band}>
@@ -46,7 +46,7 @@ function LegendBody() {
           ))}
         </div>
       </section>
-      <p className="text-xs text-muted-foreground">Numbered circles are clusters; their ring shows the highest urgency inside.</p>
+      <p className="text-xs text-muted-foreground">Numbered circles are clusters; their ring shows the highest Hazard Urgency inside.</p>
     </div>
   );
 }

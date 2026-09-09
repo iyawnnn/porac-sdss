@@ -303,10 +303,18 @@ export class TicketsService {
       : undefined;
     const barangayId = query.barangayId ? Number(query.barangayId) : undefined;
     const disputed = query.disputed === 'true' ? true : undefined;
+    // Default is Operational Priority (priority_index) descending — the
+    // administrative queue recommendation, not the Hazard Urgency
+    // environmental score (Batch 4). Legacy 'priority_desc'/'priority_asc'
+    // are recognized verbatim (see ticket-constants.ts) so an existing
+    // saved view's stored sort keeps its exact prior meaning.
     const sort: TicketSort =
-      query.sort === 'priority_asc' || query.sort === 'newest'
+      query.sort === 'priority_asc' ||
+      query.sort === 'priority_desc' ||
+      query.sort === 'op_priority_asc' ||
+      query.sort === 'newest'
         ? query.sort
-        : 'priority_desc';
+        : 'op_priority_desc';
     const search = query.search?.trim() || undefined;
     const page = Math.max(1, Number(query.page) || 1);
     const limit = PAGE_LIMITS.includes(
@@ -340,12 +348,20 @@ export class TicketsService {
         : status === 'all'
           ? sql``
           : sql`AND t.status = ${status}::ticket_status`;
+    // Operational Priority (priority_index) descending is the default and
+    // canonical queue order (Batch 4) — Hazard Urgency (priority_score)
+    // sorting is kept available only under its legacy 'priority_desc'/
+    // 'priority_asc' names for saved-view backward compatibility.
     const orderBy =
       filters.sort === 'priority_asc'
         ? sql`t.priority_score ASC NULLS LAST, t.created_at DESC`
-        : filters.sort === 'newest'
-          ? sql`t.created_at DESC`
-          : sql`t.priority_score DESC NULLS LAST, t.created_at DESC`;
+        : filters.sort === 'priority_desc'
+          ? sql`t.priority_score DESC NULLS LAST, t.created_at DESC`
+          : filters.sort === 'op_priority_asc'
+            ? sql`t.priority_index ASC NULLS LAST, t.created_at DESC`
+            : filters.sort === 'newest'
+              ? sql`t.created_at DESC`
+              : sql`t.priority_index DESC NULLS LAST, t.created_at DESC`;
 
     const search = filters.search?.trim() || null;
     const searchId = search && /^\d+$/.test(search) ? Number(search) : null;

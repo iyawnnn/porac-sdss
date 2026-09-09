@@ -21,3 +21,16 @@ export function isFocal(session: Pick<AdminSession, "role">): boolean {
 export function isOperationalStaff(session: Pick<AdminSession, "role">): boolean {
   return session.role === "officer" || session.role === "supervisor";
 }
+
+// Batch 4 (five-role production alignment): the one shared "how do we
+// describe this admin's office" string — never "All Offices" for
+// system_admin, since that phrasing implies operational authority the role
+// no longer has (Batch 1 removed system_admin's office-wide operational
+// bypass entirely; see admin-scope.ts). Used anywhere an admin's own
+// office/role or another admin's office/role (e.g. an Activity Log actor)
+// is displayed, so this description can't drift between surfaces.
+export function officeDisplay(session: { role: string; office: string | null }): string {
+  if (session.role === "system_admin") return "System Administrator / MIS";
+  if (session.role === "focal") return "Central Monitoring / Focal Personnel";
+  return session.office ?? "Unassigned";
+}

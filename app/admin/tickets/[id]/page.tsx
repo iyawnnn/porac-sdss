@@ -359,6 +359,7 @@ function ScoringTab({
     <div className="space-y-5">
       <div>
         <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Hazard Urgency</p>
+        <p className="text-[11px] text-ink-400">System generated</p>
         <p className="mt-0.5 text-xs text-ink-400">Elevation + live rainfall + report-cluster density — computed, not citizen-reported.</p>
         <div className="mt-3 flex items-baseline gap-2">
           <span className="font-mono text-2xl font-semibold tabular-nums text-ink-900">{ticket.priority_score ?? "—"}</span>
@@ -391,7 +392,8 @@ function ScoringTab({
 
       {priorityContext && (
         <div className="border-t border-line-100 pt-4">
-          <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Operational Priority Index (how soon to act)</p>
+          <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Operational Priority (how soon to act)</p>
+          <p className="text-[11px] text-ink-400">System generated</p>
           <p className="mt-0.5 text-xs text-ink-400">Citizen-reported severity + ticket age + barangay density — a separate signal from Hazard Urgency above.</p>
           <div className="mt-3 flex items-baseline gap-2">
             <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
