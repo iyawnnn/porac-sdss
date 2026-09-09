@@ -4,6 +4,16 @@ import { loginAdmin as loginAs } from "./helpers";
 
 test.setTimeout(60_000);
 
+// Same pattern as the sessionCookieHeader helper in sibling specs (e.g.
+// admin-notifications.spec.ts) — the explicit Record<string, string> return
+// type is required so the `{}` branch widens correctly; an untyped inline
+// ternary infers `{ cookie: string } | {}`, which doesn't satisfy
+// Playwright's `headers?: Record<string, string>` param.
+function sessionCookieHeader(cookies: { name: string; value: string }[]): Record<string, string> {
+  const cookie = cookies.find((c) => c.name === "ac_admin_session");
+  return cookie ? { cookie: `${cookie.name}=${cookie.value}` } : {};
+}
+
 // Batch 5 (five-role final integration): the highest-value automated
 // coverage for the production Focal Intake surface — real HTTP pipeline,
 // real Postgres, real FocalGuard/OperationalStaffGuard enforcement. See
@@ -61,8 +71,7 @@ test("MEO/MDRRMO operational staff cannot reach Focal Intake", async ({ page }) 
 test("acknowledging a report does not change the ticket's Reported status", async ({ page, request }) => {
   await loginAs(page, E2E_FOCAL_ADMIN);
   const cookies = await page.context().cookies();
-  const sessionCookie = cookies.find((c) => c.name === "ac_admin_session");
-  const cookieHeader = sessionCookie ? { cookie: `${sessionCookie.name}=${sessionCookie.value}` } : {};
+  const cookieHeader = sessionCookieHeader(cookies);
 
   const intakeRes = await request.get("/api/admin/intake", { headers: cookieHeader });
   const rows: { reportId: number; ticketStatus: string; intakeState: string }[] = await intakeRes.json();
