@@ -11,12 +11,12 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
 import { admins } from '../db/schema';
 import type { AdminSession } from '../auth/session.service';
-import { resolveOfficeScope } from '../common/authz/admin-scope';
+import { isOperationalStaff, resolveOfficeScope } from '../common/authz/admin-scope';
 import { AdminAuditService } from './admin-audit.service';
 
-export type AdminRole = 'officer' | 'supervisor' | 'system_admin';
+export type AdminRole = 'officer' | 'supervisor' | 'focal' | 'system_admin';
 export type AdminOffice = 'MEO' | 'MDRRMO';
-const ADMIN_ROLES: AdminRole[] = ['officer', 'supervisor', 'system_admin'];
+const ADMIN_ROLES: AdminRole[] = ['officer', 'supervisor', 'focal', 'system_admin'];
 
 export interface AdminAccountRow {
   id: number;
@@ -53,16 +53,20 @@ export interface AdminDirectoryRow {
 }
 
 // Shared by create and update — an admin's role and office must always
-// agree: system_admin implies no office, officer/supervisor implies exactly
-// one. There is no "clamp" here (unlike ticket/report office scoping) —
-// an invalid combination is always a hard rejection.
+// agree: system_admin implies no office, focal implies exactly MDRRMO
+// (organizationally MDRRMO/QRT — not a free choice), officer/supervisor
+// implies exactly one office. There is no "clamp" here (unlike ticket/
+// report office scoping) — an invalid combination is always a hard
+// rejection. This is the one place the role↔office invariant is enforced,
+// per the Batch 1 design: centralize it rather than duplicating
+// inconsistent conditionals across create()/update().
 function assertRoleOfficeCombination(
   role: unknown,
   office: unknown,
 ): { role: AdminRole; office: AdminOffice | null } {
   if (typeof role !== 'string' || !ADMIN_ROLES.includes(role as AdminRole)) {
     throw new BadRequestException(
-      'role must be officer, supervisor, or system_admin.',
+      'role must be officer, supervisor, focal, or system_admin.',
     );
   }
   if (role === 'system_admin') {
@@ -70,6 +74,12 @@ function assertRoleOfficeCombination(
       throw new BadRequestException('system_admin must not have an office.');
     }
     return { role, office: null };
+  }
+  if (role === 'focal') {
+    if (office !== 'MDRRMO') {
+      throw new BadRequestException('focal must have office MDRRMO.');
+    }
+    return { role, office: 'MDRRMO' };
   }
   if (office !== 'MEO' && office !== 'MDRRMO') {
     throw new BadRequestException(
@@ -95,12 +105,14 @@ export class AdminsService {
 
   // Office-scoped read used by the Work Orders assignment picker — distinct
   // from list() above (System-Administrator-only, unscoped, full account
-  // shape). Reuses resolveOfficeScope so an office admin can never widen
-  // this past their own office via ?office=, the same clamp every other
-  // office-scoped list endpoint applies. Only active officer/supervisor
-  // accounts are returned: system_admin rows have office: null and could
-  // never pass a work order's "assignee must belong to this office" check,
-  // and an inactive admin should never be assignable to new work.
+  // shape). Reuses resolveOfficeScope, which now rejects any non-
+  // operational-staff caller outright (Batch 1) — this endpoint is routine
+  // operational scaffolding, not something focal or system_admin can call
+  // at all. The role filter below is a defense-in-depth *allowlist* of
+  // officer/supervisor (not a denylist of one excluded role), so a future
+  // role addition can never silently become directory-eligible the way an
+  // exclusion list would allow — see the Batch 1 work-order-assignee
+  // safety fix this replaces.
   async listDirectory(
     admin: Pick<AdminSession, 'role' | 'office'>,
     requestedOffice: 'MEO' | 'MDRRMO' | 'all' | undefined,
@@ -125,7 +137,7 @@ export class AdminsService {
       .orderBy(asc(admins.firstName), asc(admins.lastName));
 
     return rows
-      .filter((row) => row.role !== 'system_admin')
+      .filter((row) => isOperationalStaff({ role: row.role }))
       .map((row) => ({
         id: row.id,
         name: `${row.firstName} ${row.lastName}`,

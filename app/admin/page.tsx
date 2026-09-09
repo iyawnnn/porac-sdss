@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
 import type {
   BarangayRiskRow,
@@ -63,6 +64,20 @@ async function DashboardData() {
   return <DashboardClient adminName={adminName} initialData={dashboardResult.value} topPriorityTickets={topPriorityTickets} />;
 }
 
-export default function AdminDashboardPage() {
+// Batch 1/2 (five-role RBAC): the operational Dashboard endpoint 403s for
+// system_admin and focal (see DashboardController's OperationalStaffGuard),
+// so this page must route them elsewhere before ever calling it — hitting
+// the guarded endpoint and rendering DashboardError would be technically
+// correct but a confusing landing experience for a role that was never
+// meant to see an operational dashboard at all. focal lands on its own real
+// Dashboard (/admin/focal, backed by FocalIntakeService via FocalGuard, not
+// this operational one). This redirect is a UX convenience only; the
+// backend guards remain the actual security boundary regardless of what
+// this page does.
+export default async function AdminDashboardPage() {
+  const session = await getAdminSessionFromApi();
+  if (session?.role === "system_admin") redirect("/admin/admins");
+  if (session?.role === "focal") redirect("/admin/focal");
+
   return <Suspense fallback={<DashboardSkeleton />}><DashboardData /></Suspense>;
 }

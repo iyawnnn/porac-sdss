@@ -80,11 +80,13 @@ Optional (`api/src/auth/oauth/`). Omitting the Google env vars disables the opti
 | `AdminSessionGuard` | Every `/admin/*` API route |
 | `CitizenSessionGuard` | Every citizen route (`/reports/mine`, account, etc.) |
 | `SystemAdminGuard` | Admin management and the activity log — System Administrator only |
+| `OperationalStaffGuard` | Every operational controller (Tickets, Work Orders, Dashboard, Map, Moderation, Reports) — officer/supervisor only; rejects both `focal` and `system_admin` |
+| `FocalGuard` | The Focal Intake surface (`admin/intake/*`) — `focal` only; rejects officer/supervisor and `system_admin` alike |
 | `CronSecretGuard` | All six `/cron/*` routes, via a shared bearer secret |
 | `RecentReauthGuard` | Step-up-sensitive citizen actions (§4.3) |
 | `OAuthRateLimitGuard` | OAuth start/callback, 10/min per IP |
 
-`api/src/common/guards/`.
+`api/src/common/guards/`. Five roles now exist (`officer`/`supervisor`/`focal`/`system_admin` — `officer` and `supervisor` are the two operational-staff ranks within MEO/MDRRMO, distinguished for future scoping but not by these guards). `OperationalStaffGuard`/`FocalGuard` are additive to `SystemAdminGuard`, not a replacement for it — `system_admin` has zero routine operational authority (Batch 1 removed its prior city-wide operational bypass entirely) and `focal`, despite always carrying `office: 'MDRRMO'` organizationally, is never treated as MDRRMO operational staff.
 
 The guards are the real gate. `proxy.ts` on the Next.js side performs page-level redirects (`/admin/*` → `/admin/login`, citizen pages → `/login`) purely for UX — it is **not** the security boundary, and the API rejects independently of it.
 
@@ -92,8 +94,8 @@ The guards are the real gate. `proxy.ts` on the Next.js side performs page-level
 
 Two helpers in `api/src/common/authz/admin-scope.ts`, used everywhere and never reimplemented inline:
 
-- **`resolveOfficeScope`** — derives the effective office **from the session**, not from the request. For an MEO or MDRRMO admin it silently clamps to their own office regardless of what `?office=` asks for. A System Administrator may legitimately request either office or city-wide. Used on list endpoints, where silently narrowing is better UX than a 403.
-- **`assertOfficeAccess`** — hard-rejects with **403** when a single resource belongs to another office. Used on reads and writes of individual tickets and work orders, where silence would be wrong.
+- **`resolveOfficeScope`** — derives the effective office **from the session**, not from the request. For an MEO or MDRRMO admin it silently clamps to their own office regardless of what `?office=` asks for. **Only operational staff (officer/supervisor) get an office scope at all** (Batch 1) — `focal` and `system_admin` are rejected outright with a 403, not silently narrowed; System Administrator's prior "either office or city-wide" access was a genuine bypass this removed, not a legitimate case to design around. Used on list endpoints, where silently narrowing an operational admin is better UX than a 403.
+- **`assertOfficeAccess`** — hard-rejects with **403** when a single resource belongs to another office, or when the caller isn't operational staff at all. Used on reads and writes of individual tickets, work orders, and Operational Assessments — including after an office reassignment, since it always re-derives the resource's *current* office rather than trusting a cached value, so custody transfer correctly revokes the old office's write access without any special-case code.
 
 Two properties worth stating explicitly:
 
@@ -208,7 +210,7 @@ A full Playwright run posts roughly 17 real reports (and creates a similar numbe
 
 ### 6.1 `admin_audit_events`
 
-An append-only trail of administrative actions: account create / role change / deactivate / reactivate, ticket status changes and reassignments, report moderation, work-order create / update / status change, and admin login/failed-login (`admin_login` / `admin_login_failed`).
+An append-only trail of administrative actions: account create / role change / deactivate / reactivate, ticket status changes and reassignments, report moderation, work-order create / update / status change, admin login/failed-login (`admin_login` / `admin_login_failed`), and — five-role Batches 2/3 — Focal's `report_acknowledged` / `report_screened` / `report_escalated` and `operational_assessment_created` / `operational_assessment_updated`. (`report_forwarded` is deliberately absent: Forward reuses `reassignOffice`, which already logs `ticket_reassigned`; a second event for the same action would be redundant — see `FocalIntakeService.forward`.)
 
 Three properties that matter:
 
@@ -251,7 +253,15 @@ Elevation is always computed server-side from the DEM by nearest-neighbour looku
 
 ### 7.4 Admin directory exposure is minimal
 
-`GET /admin/admins/directory` — reachable by MEO/MDRRMO so an assignee picker can be populated — returns only `{id, name, email, office, role}` for **active**, **officer/supervisor** accounts. Never password or session-security columns, never inactive rows, never System Administrator rows. The stricter `SystemAdminGuard` on `AdminsController` is unchanged.
+`GET /admin/admins/directory` — reachable by MEO/MDRRMO so an assignee picker can be populated — returns only `{id, name, email, office, role}` for **active**, **officer/supervisor** accounts. Never password or session-security columns, never inactive rows, never System Administrator or Focal rows — the `role` filter is an explicit officer/supervisor *allowlist* (`AdminsService.listDirectory`), not a denylist of `system_admin`/`focal`, precisely so a future role addition can't silently become assignee-eligible. `focal`'s `office` column is literally `'MDRRMO'`, so a naive office-only filter would incorrectly surface it when querying that office — the role filter is what actually excludes it. The stricter `SystemAdminGuard` on `AdminsController` is unchanged.
+
+### 7.5 Focal Intake and Operational Assessment content never reach citizens or MIS
+
+Five-role Batch 2/3 additions follow the same structural rule as §7.1:
+
+- No `api/src/citizens/*` response type includes `report_intake_actions`, `operational_assessments`, or intake-state fields — the citizen-visible `acknowledged_at` is the one exception, sourced directly from `report_acknowledgments.acknowledged_at`, never derived from an intake action.
+- `FocalIntakeService`'s responses never include Operational Assessment content, Work Order internals, or staff assignment data — only report reference, category, barangay, coordinates, routed office, Hazard Urgency, and derived intake state.
+- MIS (`system_admin`) gains no Focal Intake or Operational Assessment access merely by being an administrator — `FocalGuard`/`OperationalStaffGuard` reject it exactly as they reject each other's role. MIS's Activity Log can show that an acknowledgment/screening/forward/escalation/assessment action *occurred* (via the existing `admin_audit_events` action-type/summary fields every other audit entry already has), but never the underlying remarks or assessment text — no second, richer audit path exists for these action types.
 
 ---
 

@@ -8,7 +8,11 @@ import type { MyReportDetail, StatusHistoryStep } from "@/lib/types/citizens-rep
 // on MyReportDetail/StatusHistoryStep — no admin notes, raw flags, EXIF, or
 // internal scoring ever reach this component.
 
-type TimelineEventKind = "submitted" | "merged" | "status" | "quarantined" | "duplicate";
+// "acknowledged" is its own event kind, deliberately never merged into
+// "status" — Focal's acknowledgment is a municipal-monitoring event, not a
+// TicketStatus value, and must never render through the same code path as
+// one (see api/src/db/schema.ts's reportAcknowledgments docblock).
+type TimelineEventKind = "submitted" | "acknowledged" | "merged" | "status" | "quarantined" | "duplicate";
 
 interface TimelineEvent {
   key: string;
@@ -29,6 +33,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const KIND_STYLE: Record<TimelineEventKind, { dot: string; ink: string }> = {
   submitted: { dot: "var(--color-brand-500)", ink: "var(--color-ink-900)" },
+  acknowledged: { dot: "var(--color-brand-500)", ink: "var(--color-ink-900)" },
   merged: { dot: "var(--color-brand-500)", ink: "var(--color-ink-900)" },
   status: { dot: "var(--color-brand-500)", ink: "var(--color-ink-900)" },
   quarantined: { dot: "#B7791F", ink: "var(--color-ink-900)" },
@@ -36,7 +41,10 @@ const KIND_STYLE: Record<TimelineEventKind, { dot: string; ink: string }> = {
 };
 
 export function buildReportTimeline(
-  report: Pick<MyReportDetail, "created_at" | "is_merged" | "member_count" | "moderation_status" | "moderated_at" | "ticket_created_at">,
+  report: Pick<
+    MyReportDetail,
+    "created_at" | "is_merged" | "member_count" | "moderation_status" | "moderated_at" | "ticket_created_at" | "acknowledged_at"
+  >,
   history: StatusHistoryStep[],
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [
@@ -48,6 +56,16 @@ export function buildReportTimeline(
       timestamp: report.created_at,
     },
   ];
+
+  if (report.acknowledged_at) {
+    events.push({
+      key: "acknowledged",
+      kind: "acknowledged",
+      label: "Acknowledged by municipal monitoring",
+      detail: "Your report has been seen and recorded. This does not mean technical review has started.",
+      timestamp: report.acknowledged_at,
+    });
+  }
 
   if (report.is_merged) {
     events.push({
@@ -108,7 +126,10 @@ export default function ReportTimeline({
   report,
   history,
 }: {
-  report: Pick<MyReportDetail, "created_at" | "is_merged" | "member_count" | "moderation_status" | "moderated_at" | "ticket_created_at">;
+  report: Pick<
+    MyReportDetail,
+    "created_at" | "is_merged" | "member_count" | "moderation_status" | "moderated_at" | "ticket_created_at" | "acknowledged_at"
+  >;
   history: StatusHistoryStep[];
 }) {
   const events = buildReportTimeline(report, history);

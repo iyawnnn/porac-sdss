@@ -1,5 +1,6 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
+import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { AdminsService } from './admins.service';
@@ -10,7 +11,7 @@ import { AdminsService } from './admins.service';
 // 'admin/admins' path prefix is safe: AdminsController has no matching GET
 // route for ':something', so 'admin/admins/directory' only ever resolves
 // here.
-@UseGuards(AdminSessionGuard)
+@UseGuards(AdminSessionGuard, OperationalStaffGuard)
 @Controller('admin/admins')
 export class AdminDirectoryController {
   constructor(private readonly admins: AdminsService) {}

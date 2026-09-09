@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 import type { AdminAuditActionType, AdminAuditTargetType, PaginatedAdminAudit } from "@/lib/types/admin-audit";
+import { officeDisplay } from "@/lib/utils/adminScope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -87,6 +88,16 @@ function getPageNumbers(current: number, total: number): (number | "ellipsis")[]
 
 function formatTime(value: string): string {
   return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+// Batch 4: never "All Offices" for a system_admin actor (see
+// lib/utils/adminScope.ts's officeDisplay) — an Activity Log entry made by
+// MIS should read the same unambiguous way anywhere else that role's
+// office is shown.
+function actorOfficeLine(actorOffice: string | null, actorRole: string): string {
+  const display = officeDisplay({ role: actorRole, office: actorOffice });
+  const isOperational = actorRole === "officer" || actorRole === "supervisor";
+  return isOperational ? `${display} · ${actorRole}` : display;
 }
 
 export function ActivityLogWorkspace({
@@ -240,7 +251,7 @@ export function ActivityLogWorkspace({
                       <TableCell className="pl-6 text-xs text-muted-foreground whitespace-nowrap">{formatTime(event.created_at)}</TableCell>
                       <TableCell>
                         <p className="font-medium">{event.actor_name}</p>
-                        <p className="text-xs text-muted-foreground">{event.actor_office ?? "All Offices"} · {event.actor_role}</p>
+                        <p className="text-xs text-muted-foreground">{actorOfficeLine(event.actor_office, event.actor_role)}</p>
                       </TableCell>
                       <TableCell><Badge variant="outline">{ACTION_LABELS[event.action_type]}</Badge></TableCell>
                       <TableCell className="text-xs text-muted-foreground">{TARGET_LABELS[event.target_type]} #{event.target_id}</TableCell>
@@ -260,7 +271,7 @@ export function ActivityLogWorkspace({
                       <Badge variant="outline">{ACTION_LABELS[event.action_type]}</Badge>
                       <span className="text-xs text-muted-foreground">{formatTime(event.created_at)}</span>
                     </div>
-                    <p className="text-sm font-medium">{event.actor_name} <span className="text-xs font-normal text-muted-foreground">({event.actor_office ?? "All Offices"} · {event.actor_role})</span></p>
+                    <p className="text-sm font-medium">{event.actor_name} <span className="text-xs font-normal text-muted-foreground">({actorOfficeLine(event.actor_office, event.actor_role)})</span></p>
                     <p className="text-xs text-muted-foreground">{TARGET_LABELS[event.target_type]} #{event.target_id}</p>
                     <p className="text-sm">{event.target_summary}</p>
                   </CardContent>

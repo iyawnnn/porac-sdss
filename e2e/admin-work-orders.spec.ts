@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN, E2E_CITIZEN_ACCOUNT } from "./test-credentials";
+import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN, E2E_CITIZEN_ACCOUNT, type E2EAdminAccount } from "./test-credentials";
 import { loginAdmin as loginAs, loginCitizen } from "./helpers";
 
 test.setTimeout(60_000);
@@ -58,18 +58,26 @@ async function createDisposableTicket(browser: Browser, label: string): Promise<
 }
 
 // For MDRRMO-context tests: creates a disposable ticket (always MEO via
-// Pothole / Road Surface Damage routing) and reassigns it to MDRRMO as
-// system admin. Since the
-// ticket is test-owned and disposable, no afterAll restore is needed —
+// Pothole / Road Surface Damage routing) and reassigns it to MDRRMO. Since
+// the ticket is test-owned and disposable, no afterAll restore is needed —
 // unlike borrowing a shared seeded ticket, leaving it reassigned affects
 // nothing else in the suite.
+//
+// Batch 5: reassigns as the MEO admin, not system_admin. Batch 1 removed
+// system_admin's operational ticket access entirely (OperationalStaffGuard
+// now denies it on every ticket route), so the original system_admin
+// session here got a 403 the moment this ran against a database that
+// actually had Batch 1's guard migrated in. Only the ticket's OWNING
+// office (MEO, since it was just created via Pothole routing) has
+// authority to reassign it away — which is also the more accurate test of
+// the real permission model.
 async function createDisposableTicketForOffice(browser: Browser, office: "MEO" | "MDRRMO", label: string): Promise<number> {
   const ticketId = await createDisposableTicket(browser, label);
   if (office === "MEO") return ticketId;
 
   const context = await browser.newContext();
   const page = await context.newPage();
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await loginAs(page, E2E_MEO_ADMIN);
   const cookies = await context.cookies();
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
   const reassign = await context.request.post(`/api/admin/tickets/${ticketId}/reassign`, { headers, data: { toOffice: "MDRRMO" } });
@@ -125,10 +133,23 @@ async function openAssigneePicker(dialog: import("@playwright/test").Locator): P
   await trigger.press("Enter");
 }
 
-async function createWorkOrderAsSystemAdmin(browser: Browser, ticketId: number, title: string): Promise<{ id: number; assigned_office: string }> {
+// Batch 6 (five-role E2E reconciliation): was createWorkOrderAsSystemAdmin,
+// creating via system_admin's city-wide POST access. Batch 1 of the
+// five-role architecture removed that access entirely (OperationalStaffGuard
+// denies system_admin on every Work Order route), so every call site here
+// now authenticates as the ticket's OWNING office's own admin instead — the
+// only session that legitimately can create it, and arguably a more
+// faithful setup for tests whose actual point is "the *other* office is
+// denied access to it" anyway.
+async function createWorkOrderForOffice(
+  browser: Browser,
+  account: E2EAdminAccount,
+  ticketId: number,
+  title: string,
+): Promise<{ id: number; assigned_office: string }> {
   const context = await browser.newContext();
   const page = await context.newPage();
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await loginAs(page, account);
   const cookies = await context.cookies();
   const res = await context.request.post("/api/admin/work-orders", {
     headers: { ...sessionCookieHeader(cookies), "content-type": "application/json" },
@@ -150,11 +171,15 @@ test("Work Orders sidebar link is visible and navigates to the list page", async
   await expect(page.getByRole("heading", { name: "Work Orders" })).toBeVisible();
 });
 
-test("/admin/work-orders loads for a system admin with an office picker", async ({ page }) => {
+// Batch 6: Work Orders' office picker was system_admin-only. Batch 1 of the
+// five-role architecture removed system_admin's operational access
+// entirely, so this page now denies it outright — no picker is reachable
+// by any role (office admins never had one either).
+test("system admin cannot reach Work Orders at all", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/work-orders");
-  await expect(page.getByRole("heading", { name: "Work Orders" })).toBeVisible();
-  await expect(page.getByLabel("Office", { exact: true })).toBeVisible();
+  await expect(page.getByText("Work Orders Unavailable")).toBeVisible();
+  await expect(page.getByLabel("Office", { exact: true })).toHaveCount(0);
 });
 
 test("MEO office admin sees a fixed office badge, not a picker", async ({ page }) => {
@@ -227,13 +252,26 @@ test("MDRRMO office admin cannot create a work order on a MEO ticket (server-sid
   expect(res.status()).toBe(403);
 });
 
+// Batch 6: fetching "an MDRRMO admin's id" used to go through system_admin's
+// unscoped directory query. Batch 1 removed that entirely — resolveOfficeScope
+// now clamps ANY operational admin's ?office= to their own office regardless
+// of what they ask for, and system_admin is rejected outright — so the only
+// session that can legitimately list MDRRMO admins is an MDRRMO session
+// itself. The negative assertion this test cares about (MEO can't assign an
+// MDRRMO admin to an MEO work order) is unaffected by which session did the
+// lookup.
 test("assigning an admin from the other office is rejected with 400 and creates nothing", async ({ page, request }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await loginAs(page, E2E_MDRRMO_ADMIN);
+  const mdrrmoCookies = await page.context().cookies();
+  const directoryRes = await request.get("/api/admin/admins/directory?office=MDRRMO", {
+    headers: sessionCookieHeader(mdrrmoCookies),
+  });
+  const [mdrrmoAdmin] = await directoryRes.json();
+
+  await page.context().clearCookies();
+  await loginAs(page, E2E_MEO_ADMIN);
   const cookies = await page.context().cookies();
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
-
-  const directoryRes = await request.get("/api/admin/admins/directory?office=MDRRMO", { headers });
-  const [mdrrmoAdmin] = await directoryRes.json();
 
   const title = `E2E cross-office assignee ${Date.now()}`;
   const res = await request.post("/api/admin/work-orders", {
@@ -247,10 +285,15 @@ test("assigning an admin from the other office is rejected with 400 and creates 
   expect(listBody.workOrders.some((w: { title: string }) => w.title === title)).toBe(false);
 });
 
+// Batch 6: account creation/deactivation is genuinely system_admin's own
+// job (Admin Management, unaffected by Batch 1 — SystemAdminGuard was
+// never relaxed or tightened by the five-role work). Only the work-order
+// creation attempt itself needed to move off system_admin, since that part
+// requires the ticket's owning office (MEO).
 test("assigning a deactivated admin is rejected with 400 and creates nothing", async ({ page, request }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
-  const cookies = await page.context().cookies();
-  const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
+  const sysAdminCookies = await page.context().cookies();
+  const sysAdminHeaders = { ...sessionCookieHeader(sysAdminCookies), "content-type": "application/json" };
 
   // Same-office (MEO, matching sharedMeoTicketId) throwaway admin, so
   // "inactive" is the sole rejection reason — isolated from the cross-office
@@ -258,13 +301,18 @@ test("assigning a deactivated admin is rejected with 400 and creates nothing", a
   // removes it automatically; no manual cleanup needed.
   const email = `e2e-inactive-wo-${Date.now()}@porac.gov.ph`;
   const createAdminRes = await request.post("/api/admin/admins", {
-    headers,
+    headers: sysAdminHeaders,
     data: { email, password: "longenoughpassword", firstName: "Inactive", lastName: "Assignee", role: "officer", office: "MEO" },
   });
   expect(createAdminRes.ok()).toBe(true);
   const inactiveAdmin = await createAdminRes.json();
-  const deactivateRes = await request.post(`/api/admin/admins/${inactiveAdmin.id}/deactivate`, { headers });
+  const deactivateRes = await request.post(`/api/admin/admins/${inactiveAdmin.id}/deactivate`, { headers: sysAdminHeaders });
   expect(deactivateRes.ok()).toBe(true);
+
+  await page.context().clearCookies();
+  await loginAs(page, E2E_MEO_ADMIN);
+  const cookies = await page.context().cookies();
+  const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
 
   const title = `E2E inactive assignee ${Date.now()}`;
   const res = await request.post("/api/admin/work-orders", {
@@ -279,7 +327,7 @@ test("assigning a deactivated admin is rejected with 400 and creates nothing", a
 });
 
 test("MEO office admin cannot read, update, or change the status of an MDRRMO work order", async ({ page, request, browser }) => {
-  const created = await createWorkOrderAsSystemAdmin(browser, sharedMdrrmoTicketId, `E2E cross-office ${Date.now()}`);
+  const created = await createWorkOrderForOffice(browser, E2E_MDRRMO_ADMIN, sharedMdrrmoTicketId, `E2E cross-office ${Date.now()}`);
   expect(created.assigned_office).toBe("MDRRMO");
 
   await loginAs(page, E2E_MEO_ADMIN);
@@ -303,7 +351,7 @@ test("MEO office admin cannot read, update, or change the status of an MDRRMO wo
 });
 
 test("MDRRMO office admin cannot reach a MEO work order either (both offices are enforced, not just one)", async ({ page, request, browser }) => {
-  const created = await createWorkOrderAsSystemAdmin(browser, sharedMeoTicketId, `E2E cross-office ${Date.now()}`);
+  const created = await createWorkOrderForOffice(browser, E2E_MEO_ADMIN, sharedMeoTicketId, `E2E cross-office ${Date.now()}`);
   expect(created.assigned_office).toBe("MEO");
 
   await loginAs(page, E2E_MDRRMO_ADMIN);
@@ -314,7 +362,13 @@ test("MDRRMO office admin cannot reach a MEO work order either (both offices are
   expect(getRes.status()).toBe(403);
 });
 
-test("system admin can view and act on work orders from any office", async ({ page, request }) => {
+// Batch 6: system_admin acting on any office's work orders was exactly the
+// city-wide operational bypass Batch 1 of the five-role architecture
+// removed. There is no "act on work orders from any office" capability
+// left for any role to test — office admins are strictly own-office
+// (already covered by the cross-office 403 tests above), so this is now a
+// denial test instead.
+test("system admin cannot create or act on a work order in any office", async ({ page, request }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   const cookies = await page.context().cookies();
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
@@ -323,28 +377,34 @@ test("system admin can view and act on work orders from any office", async ({ pa
     headers,
     data: { ticketId: sharedMdrrmoTicketId, title: `E2E sysadmin ${Date.now()}`, notes: null, assignedAdminId: null, dueDate: null },
   });
-  expect(createRes.ok()).toBe(true);
-  const created = await createRes.json();
+  expect(createRes.status()).toBe(403);
 
-  const statusRes = await request.post(`/api/admin/work-orders/${created.id}/status`, { headers, data: { status: "completed" } });
-  expect(statusRes.ok()).toBe(true);
-  const updated = await statusRes.json();
-  expect(updated.status).toBe("completed");
-  expect(updated.completed_at).not.toBeNull();
+  const listRes = await request.get("/api/admin/work-orders?status=all&limit=1", { headers });
+  expect(listRes.status()).toBe(403);
 });
 
+// Batch 6: work-order creation/status-change must now come from the
+// ticket's owning office (MEO), not system_admin — but the audit trail
+// this test verifies is still exclusively MIS's own Activity Log
+// (SystemAdminGuard, untouched by the five-role work), so that half stays
+// on a system_admin session.
 test("audit events are written for work order creation and status changes", async ({ page, request }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  const cookies = await page.context().cookies();
-  const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
+  await loginAs(page, E2E_MEO_ADMIN);
+  const meoCookies = await page.context().cookies();
+  const meoHeaders = { ...sessionCookieHeader(meoCookies), "content-type": "application/json" };
 
   const title = `E2E audit ${Date.now()}`;
   const createRes = await request.post("/api/admin/work-orders", {
-    headers,
+    headers: meoHeaders,
     data: { ticketId: sharedMeoTicketId, title, notes: null, assignedAdminId: null, dueDate: null },
   });
   const created = await createRes.json();
-  await request.post(`/api/admin/work-orders/${created.id}/status`, { headers, data: { status: "cancelled" } });
+  await request.post(`/api/admin/work-orders/${created.id}/status`, { headers: meoHeaders, data: { status: "cancelled" } });
+
+  await page.context().clearCookies();
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  const cookies = await page.context().cookies();
+  const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
 
   const auditRes = await request.get(`/api/admin/activity-log?targetType=work_order&limit=50`, { headers });
   const auditBody = await auditRes.json();
@@ -424,29 +484,14 @@ test("MDRRMO office admin's assignee picker only offers MDRRMO admins", async ({
   await expect(page.getByRole("option", { name: "MEO Supervisor" })).toHaveCount(0);
 });
 
-test("system admin picks a work order office on the standalone list, then sees that office's admins", async ({ page }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  await page.goto("/admin/work-orders");
-
-  await page.getByRole("button", { name: "New Work Order" }).click();
-  const dialog = page.getByRole("dialog", { name: "New work order" });
-  // Before an office is picked, the assignee field has nothing to filter by.
-  await expect(dialog.getByLabel("Assigned admin")).toBeDisabled();
-
-  await dialog.getByLabel("Work order office").click();
-  await page.getByRole("option", { name: "MEO", exact: true }).click();
-  await dialog.getByLabel("Assigned admin").click();
-  await expect(page.getByRole("option", { name: "MEO Supervisor" })).toBeVisible();
-  await expect(page.getByRole("option", { name: "MDRRMO Supervisor" })).toHaveCount(0);
-
-  // Switching office clears the stale selection and refilters the options.
-  await page.keyboard.press("Escape");
-  await dialog.getByLabel("Work order office").click();
-  await page.getByRole("option", { name: "MDRRMO", exact: true }).click();
-  await dialog.getByLabel("Assigned admin").click();
-  await expect(page.getByRole("option", { name: "MDRRMO Supervisor" })).toBeVisible();
-  await expect(page.getByRole("option", { name: "MEO Supervisor" })).toHaveCount(0);
-});
+// Batch 6: removed — this tested the standalone "New Work Order" dialog's
+// office picker as system_admin, a control that only ever rendered for
+// system_admin's city-wide Work Orders view. Batch 1 of the five-role
+// architecture removed that access entirely (already covered by "system
+// admin cannot reach Work Orders at all" above), so the office-picker/
+// assignee-refiltering behavior this exercised is no longer reachable by
+// any role — office admins create work orders within their own office
+// implicitly, with no office picker in the dialog at all.
 
 test("creating a work order Unassigned / Office-wide leaves it unassigned, and the assignee appears once picked", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
@@ -546,18 +591,28 @@ test("edit a work order's internal progress notes from Ticket Detail", async ({ 
   await expect(item.getByText("Crew dispatched, drainage cleared halfway.")).toBeVisible();
 });
 
+// Batch 6: creating this work order used to go through system_admin,
+// unscoped to whichever office the citizen's own ticket happened to be
+// routed to. Batch 1 removed that access entirely, and unlike the other
+// fixtures in this file, this test deliberately uses a real citizen's
+// actual report/ticket rather than the fixed shared MEO/MDRRMO tickets — so
+// its office isn't known in advance. Using the report's own
+// `assigned_office` field to pick the matching operational admin keeps the
+// test's real intent (a citizen's own data, not a disposable fixture)
+// while working under a session that can legitimately create the order.
 test("work order notes never appear on the citizen's report tracking page", async ({ page, request, browser }) => {
   const citizenContext = await browser.newContext();
   const citizenPage = await citizenContext.newPage();
   await loginCitizen(citizenPage, E2E_CITIZEN_ACCOUNT);
   const reports = await citizenPage.evaluate(async () => {
     const res = await fetch("/api/reports/mine");
-    return (await res.json()) as { id: number; ticket_id: number }[];
+    return (await res.json()) as { id: number; ticket_id: number; assigned_office: "MEO" | "MDRRMO" }[];
   });
   test.skip(reports.length === 0, "citizen1 has no seeded reports — run `pnpm --prefix api seed:diverse-reports` first");
   const report = reports[0];
+  const officeAdmin = report.assigned_office === "MEO" ? E2E_MEO_ADMIN : E2E_MDRRMO_ADMIN;
 
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  await loginAs(page, officeAdmin);
   const cookies = await page.context().cookies();
   const createRes = await request.post("/api/admin/work-orders", {
     headers: { ...sessionCookieHeader(cookies), "content-type": "application/json" },
@@ -592,10 +647,15 @@ test("Needs Attention section on the admin dashboard is office-scoped and shows 
   await expect(section.getByTestId("needs-attention-rows").locator("> *")).toHaveCount(4);
 });
 
-test("system admin's Needs Attention section loads city-wide", async ({ page }) => {
+// Batch 6: "Needs Attention" is part of the operational Dashboard, which
+// Batch 1 of the five-role architecture removed system_admin's access to
+// entirely — /admin redirects it to /admin/admins server-side before this
+// section (or any Dashboard content) ever renders.
+test("system admin never sees the operational Dashboard, including Needs Attention", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin");
-  await expect(page.getByRole("region", { name: "Needs attention" })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/admins$/);
+  await expect(page.getByRole("region", { name: "Needs attention" })).toHaveCount(0);
 });
 
 // --- "My Assignments" personal quick filter -------------------------------
@@ -691,7 +751,7 @@ test("clearing My Assignments restores the broader work order list", async ({ pa
 });
 
 test("My Assignments preserves office scoping for MEO/MDRRMO admins", async ({ page, browser }) => {
-  const created = await createWorkOrderAsSystemAdmin(browser, sharedMdrrmoTicketId, `E2E my-assignments scope ${Date.now()}`);
+  const created = await createWorkOrderForOffice(browser, E2E_MDRRMO_ADMIN, sharedMdrrmoTicketId, `E2E my-assignments scope ${Date.now()}`);
   expect(created.assigned_office).toBe("MDRRMO");
 
   await loginAs(page, E2E_MEO_ADMIN);
@@ -707,24 +767,10 @@ test("My Assignments preserves office scoping for MEO/MDRRMO admins", async ({ p
   expect(body.workOrders.every((w: { assigned_office: string }) => w.assigned_office === "MEO")).toBe(true);
 });
 
-test("system admin's My Assignments means work assigned to their own account, not all offices", async ({ page }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  await page.goto("/admin/work-orders");
-  await page.waitForLoadState("networkidle");
-  const toggle = page.getByRole("button", { name: "My Assignments" });
-  await expect(toggle).toBeVisible();
-  await toggle.click();
-  await expect(page).toHaveURL(/[?&]assignedAdminId=me(&|$)/);
-
-  const cookies = await page.context().cookies();
-  const headers = { ...sessionCookieHeader(cookies) };
-  const myId = await page.evaluate(async () => {
-    const res = await fetch("/api/auth/me");
-    return (await res.json()).admin.adminId as number;
-  });
-  const res = await page.request.get("/api/admin/work-orders?assignedAdminId=me&status=all&limit=50", { headers });
-  const body = await res.json();
-  expect(
-    body.workOrders.every((w: { assigned_admin_id: number | null }) => w.assigned_admin_id === myId),
-  ).toBe(true);
-});
+// Batch 6: removed — "system admin's My Assignments" required visiting
+// /admin/work-orders, which Batch 1 of the five-role architecture made
+// unreachable for system_admin entirely (already covered by "system admin
+// cannot reach Work Orders at all" above). The underlying `assignedAdminId=me`
+// resolves-from-session behavior it checked is still covered for real
+// operational users by "My Assignments preserves office scoping for
+// MEO/MDRRMO admins" above.

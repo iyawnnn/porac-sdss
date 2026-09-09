@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
+import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { SavedViewsService, parseSavedViewSurface } from './saved-views.service';
@@ -17,7 +18,7 @@ import { SavedViewsService, parseSavedViewSurface } from './saved-views.service'
 // No SystemAdminGuard: a saved view is the caller's own private bookmark and
 // carries no office-scoped data of its own. SavedViewsService scopes every
 // statement on adminId, which is the authorization boundary here.
-@UseGuards(AdminSessionGuard)
+@UseGuards(AdminSessionGuard, OperationalStaffGuard)
 @Controller('admin/saved-views')
 export class SavedViewsController {
   constructor(private readonly savedViews: SavedViewsService) {}

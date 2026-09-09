@@ -2,6 +2,7 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { RecomputeService } from '../domain/recompute.service';
 import { WeatherService } from '../domain/weather.service';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
+import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { isSystemAdmin, resolveOfficeScope } from '../common/authz/admin-scope';
@@ -15,7 +16,7 @@ import { ModerationService } from './moderation.service';
 import { WorkOrdersService } from './work-orders.service';
 import type { OfficePerformanceCounts, OfficePerformanceSummary } from './dashboard.service';
 
-@UseGuards(AdminSessionGuard)
+@UseGuards(AdminSessionGuard, OperationalStaffGuard)
 @Controller('admin')
 export class DashboardController {
   constructor(

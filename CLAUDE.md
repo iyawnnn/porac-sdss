@@ -85,11 +85,17 @@ pnpm --prefix api migrate:ticket-resolution-confirmation  # tickets.resolution_c
 pnpm --prefix api migrate:admin-login-throttle      # admin_login_rate_limit_events (per-account failed-login throttling)
 pnpm --prefix api migrate:ticket-report-indexes     # B-tree indexes on tickets/reports hot-path columns (status, assigned_office, barangay_id, ticket_id, citizen_id, moderation_status)
 pnpm --prefix api migrate:citizen-login-signup-rate-limit  # citizen_login_rate_limit_events / citizen_signup_rate_limit_events
+pnpm --prefix api migrate:admin-focal-role          # admin_role enum gains 'focal' (five-role architecture, Batch 1)
+pnpm --prefix api migrate:report-acknowledgments    # report_acknowledgments, UNIQUE(report_id) — Focal Intake (Batch 2)
+pnpm --prefix api migrate:report-intake-actions     # report_intake_actions, append-only screened/forwarded/escalated trail (Batch 2)
+pnpm --prefix api migrate:operational-assessments   # operational_assessments, UNIQUE(ticket_id) — one current assessment per ticket (Batch 3)
 pnpm --prefix api verify:config                     # print computed elev_min/elev_max etc.
 pnpm --prefix api verify:city-boundary              # confirm city_boundary_osm is populated with valid geometry
-pnpm --prefix api seed:admin -- <email> <password> <MEO|MDRRMO|-> <officer|supervisor|system_admin>  # use '-' for office with system_admin
+pnpm --prefix api seed:admin -- <email> <password> <MEO|MDRRMO|-> <officer|supervisor|focal|system_admin>  # use '-' for office with system_admin; focal must be MDRRMO
 pnpm --prefix api seed:diverse-reports              # idempotent demo tickets/citizens
 ```
+
+All four five-role migrations are additive (`ALTER TYPE ... ADD VALUE IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS`) and safe to run against a database already carrying real data — see `docs/project-status.md` §2A/§4.0 and `docs/database.md`'s entries for each new table.
 
 These live in `api/scripts/{migrations,seed,verify}/` and run via `tsx --env-file=.env`, so env vars come from `api/.env` (direct, non-pooled Neon URL) — not the root `.env.local` (pooled URL) these scripts used before the move. `DATABASE_URL`, `CLOUDINARY_URL`, and `OPENWEATHERMAP_API_KEY` belong in `api/.env` **only** now — no root code or root script reads any of them (confirmed by repo-wide search), so do not tell a user to duplicate them into root `.env.local`. Root `.env.local` and `api/.env` share exactly one real secret: `JWT_SECRET` (see `api/.env.example`) — it must be byte-identical on both sides since both verify the same session cookies, but that is the only value the two files actually have in common.
 

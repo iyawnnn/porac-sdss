@@ -86,15 +86,20 @@ describe('TicketsService.getViewCounts office scoping', () => {
     expect(calls[0]).toEqual(['MDRRMO', 'MDRRMO', 'MDRRMO', 'MDRRMO']);
   });
 
-  it('binds null for a system admin, which is what widens the counts city-wide', async () => {
-    const { service, calls } = makeService(ROW);
-    await service.getViewCounts(SYSTEM_ADMIN);
-    expect(calls[0]).toEqual([null, null, null, null]);
+  // Batch 1 (five-role RBAC): system_admin no longer has routine
+  // operational access — resolveOfficeScope now rejects it outright rather
+  // than widening to city-wide. See admin-scope.spec.ts for the helper's
+  // own tests; this is the regression guard at the consuming service.
+  it('rejects a system admin outright rather than widening the counts city-wide', async () => {
+    const { service } = makeService(ROW);
+    await expect(service.getViewCounts(SYSTEM_ADMIN)).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   it('maps the snake_case aggregate onto the camelCase response', async () => {
     const { service } = makeService(ROW);
-    await expect(service.getViewCounts(SYSTEM_ADMIN)).resolves.toEqual({
+    await expect(service.getViewCounts(MEO_OFFICER)).resolves.toEqual({
       allActive: 159,
       highUrgency: 4,
       disputed: 1,
@@ -105,7 +110,7 @@ describe('TicketsService.getViewCounts office scoping', () => {
 
   it('returns zeros rather than undefined when the aggregate yields no row', async () => {
     const { service } = makeService(undefined);
-    await expect(service.getViewCounts(SYSTEM_ADMIN)).resolves.toEqual({
+    await expect(service.getViewCounts(MEO_OFFICER)).resolves.toEqual({
       allActive: 0,
       highUrgency: 0,
       disputed: 0,
@@ -143,7 +148,7 @@ describe('TicketsService.getViewCounts office scoping', () => {
   // returns zero, which is exactly the bug this guards against.
   it('counts disputed tickets independently of the active-status filter', async () => {
     const { service } = makeService({ ...ROW, disputed: 3 });
-    await expect(service.getViewCounts(SYSTEM_ADMIN)).resolves.toMatchObject({
+    await expect(service.getViewCounts(MEO_OFFICER)).resolves.toMatchObject({
       disputed: 3,
     });
 
@@ -350,5 +355,87 @@ describe('bulk route declaration order', () => {
     ]) {
       expect(bulkIndex).toBeLessThan(controllerSource.indexOf(route));
     }
+  });
+});
+
+// Batch 4 (five-role production alignment): the queue's default sort must
+// be Operational Priority (priority_index) descending — the administrative
+// queue recommendation — not Hazard Urgency (priority_score), which is an
+// environmental indicator, not a workflow-ordering signal (docs/features.md
+// §5.1). Legacy 'priority_desc'/'priority_asc' sort values are preserved
+// verbatim (never repurposed) so an existing saved view's stored query
+// string keeps sorting by Hazard Urgency exactly as it always has —
+// changing what those keys MEAN would silently alter saved-view behavior.
+describe('TicketsService.parseTicketQuery default sort', () => {
+  const service = buildService(jest.fn() as unknown as Sql);
+
+  it('defaults to Operational Priority descending when no sort is given', () => {
+    const filters = service.parseTicketQuery({}, MEO_OFFICER);
+    expect(filters.sort).toBe('op_priority_desc');
+  });
+
+  it('defaults to Operational Priority descending on an unrecognized sort value', () => {
+    const filters = service.parseTicketQuery(
+      { sort: 'not-a-real-sort' },
+      MEO_OFFICER,
+    );
+    expect(filters.sort).toBe('op_priority_desc');
+  });
+
+  it('preserves an explicit legacy priority_desc (Hazard Urgency) sort verbatim', () => {
+    const filters = service.parseTicketQuery(
+      { sort: 'priority_desc' },
+      MEO_OFFICER,
+    );
+    expect(filters.sort).toBe('priority_desc');
+  });
+
+  it('preserves an explicit legacy priority_asc (Hazard Urgency) sort verbatim', () => {
+    const filters = service.parseTicketQuery(
+      { sort: 'priority_asc' },
+      MEO_OFFICER,
+    );
+    expect(filters.sort).toBe('priority_asc');
+  });
+
+  it('accepts the new explicit op_priority_asc sort', () => {
+    const filters = service.parseTicketQuery(
+      { sort: 'op_priority_asc' },
+      MEO_OFFICER,
+    );
+    expect(filters.sort).toBe('op_priority_asc');
+  });
+
+  it('accepts newest unchanged', () => {
+    const filters = service.parseTicketQuery({ sort: 'newest' }, MEO_OFFICER);
+    expect(filters.sort).toBe('newest');
+  });
+});
+
+describe('TicketsService.getTicketsForAdmin ORDER BY — Operational Priority vs Hazard Urgency', () => {
+  it('sorts by priority_index (Operational Priority) by default, not priority_score', () => {
+    const defaultBranch = ticketsServiceSource.match(
+      /const orderBy =\s*\n([\s\S]*?)\n {4}const search/,
+    )?.[1];
+    expect(defaultBranch).toBeTruthy();
+    // The final (default/fallback) branch of the ternary must reference
+    // priority_index, not priority_score.
+    const lastLine = defaultBranch?.trim().split('\n').pop()?.trim();
+    expect(lastLine).toMatch(/priority_index DESC/);
+  });
+
+  it("still supports 'op_priority_asc' as Operational Priority ascending", () => {
+    expect(ticketsServiceSource).toMatch(
+      /op_priority_asc[\s\S]{0,80}priority_index ASC/,
+    );
+  });
+
+  it("legacy 'priority_desc'/'priority_asc' still sort by priority_score (Hazard Urgency), unchanged", () => {
+    expect(ticketsServiceSource).toMatch(
+      /priority_asc'[\s\S]{0,80}priority_score ASC/,
+    );
+    expect(ticketsServiceSource).toMatch(
+      /priority_desc'[\s\S]{0,80}priority_score DESC/,
+    );
   });
 });

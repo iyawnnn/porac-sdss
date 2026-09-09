@@ -11,10 +11,11 @@ export interface AdminSession {
   adminId: number;
   email: string;
   adminName: string;
-  // null only for role: "system_admin" — every officer/supervisor is
-  // pinned to exactly one office. See lib/utils/adminScope.ts.
+  // null only for role: "system_admin". "focal" is always "MDRRMO"
+  // (organizationally MDRRMO/QRT). Every officer/supervisor is pinned to
+  // exactly one office. See lib/utils/adminScope.ts.
   office: "MEO" | "MDRRMO" | null;
-  role: "officer" | "supervisor" | "system_admin";
+  role: "officer" | "supervisor" | "focal" | "system_admin";
 }
 
 export async function verifySession(token: string): Promise<AdminSession | null> {

@@ -59,17 +59,18 @@ test("MDRRMO admin sees a fixed office badge, not a picker, on the index page", 
   await expect(page.getByRole("combobox", { name: "Office" })).toHaveCount(0);
 });
 
-test("system admin sees an office picker defaulting to all offices", async ({ page }) => {
+// Batch 6 (five-role E2E reconciliation): Barangay Insights' office
+// picker/all-offices view only ever rendered for system_admin. Batch 1 of
+// the five-role architecture removed system_admin's operational access
+// entirely (resolveOfficeScope rejects it outright), so this page now
+// throws for that role and renders "Barangay Insights Unavailable"
+// (confirmed live) rather than any picker — not a regression, since MEO/
+// MDRRMO never had a picker either (their own office is implicit).
+test("system admin cannot reach Barangay Insights at all", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/barangay-insights");
-  const officeFilter = page.getByRole("combobox", { name: "Office", exact: true });
-  await expect(officeFilter).toBeVisible();
-
-  await officeFilter.click();
-  await page.getByRole("option", { name: "MEO" }).click();
-  // Still 29 barangays — office scoping narrows the tickets counted per row,
-  // never the set of barangays shown.
-  await expect(page.getByRole("table").locator("tbody a")).toHaveCount(29);
+  await expect(page.getByText("Barangay Insights Unavailable")).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Office", exact: true })).toHaveCount(0);
 });
 
 test("MEO office-scoped index API never includes MDRRMO-only ticket counts higher than MDRRMO's own view", async ({ page, request }) => {
@@ -192,13 +193,7 @@ test("a nonexistent barangay id shows a not-found page", async ({ page }) => {
   await expect(page.getByText(/this page could not be found/i)).toBeVisible();
 });
 
-test("system admin sees an office toggle on the profile page; MEO/MDRRMO admins do not", async ({ page }) => {
-  await loginAs(page, E2E_SYSTEM_ADMIN);
-  await page.goto("/admin/barangay-insights");
-  await page.getByRole("table").locator("tbody a").first().click();
-  await expect(page.getByRole("group", { name: "Office" })).toBeVisible();
-
-  await page.context().clearCookies();
+test("MEO/MDRRMO admins see no office toggle on the profile page", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/barangay-insights");
   await page.getByRole("table").locator("tbody a").first().click();

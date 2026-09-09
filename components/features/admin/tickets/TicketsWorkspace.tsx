@@ -97,7 +97,12 @@ function initialQueryState(
       ? query.urgency
       : "";
   const sort: TicketSort =
-    query.sort === "priority_asc" || query.sort === "newest" ? query.sort : "priority_desc";
+    query.sort === "priority_asc" ||
+    query.sort === "priority_desc" ||
+    query.sort === "op_priority_asc" ||
+    query.sort === "newest"
+      ? query.sort
+      : "op_priority_desc";
   const limit = (PAGE_LIMITS as readonly number[]).includes(Number(query.limit))
     ? Number(query.limit)
     : 15;
@@ -487,7 +492,15 @@ export function TicketsWorkspace({
   selectionExportParams.set("ids", selectedIds.join(","));
 
   const sortLabel =
-    query.sort === "newest" ? "newest first" : query.sort === "priority_asc" ? "lowest hazard urgency" : "hazard urgency";
+    query.sort === "newest"
+      ? "newest first"
+      : query.sort === "priority_asc"
+        ? "hazard urgency, lowest first"
+        : query.sort === "priority_desc"
+          ? "hazard urgency, highest first"
+          : query.sort === "op_priority_asc"
+            ? "operational priority, lowest first"
+            : "operational priority, highest first";
 
   return (
     <div className="flex min-w-0 flex-col gap-5">

@@ -11,12 +11,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
+import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { BULK_MAX_TICKETS } from './tickets.service';
 import { WorkOrdersService } from './work-orders.service';
 
-@UseGuards(AdminSessionGuard)
+@UseGuards(AdminSessionGuard, OperationalStaffGuard)
 @Controller('admin/work-orders')
 export class WorkOrdersController {
   constructor(private readonly workOrders: WorkOrdersService) {}

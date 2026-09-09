@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
+import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { resolveOfficeScope } from '../common/authz/admin-scope';
@@ -17,7 +18,7 @@ import { ModerationService, type ModerationAction } from './moderation.service';
 
 const ACTIONS: ModerationAction[] = ['dismiss', 'quarantine', 'duplicate'];
 
-@UseGuards(AdminSessionGuard)
+@UseGuards(AdminSessionGuard, OperationalStaffGuard)
 @Controller('admin')
 export class ModerationController {
   constructor(private readonly moderation: ModerationService) {}

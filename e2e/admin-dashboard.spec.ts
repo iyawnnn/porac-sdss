@@ -1,10 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 import { formatDistributionPercent, normalizeDistribution } from "@/components/features/admin/dashboard/DistributionChartUtils";
-import { E2E_MDRRMO_ADMIN, E2E_MEO_ADMIN, E2E_SYSTEM_ADMIN, type E2EAdminAccount } from "./test-credentials";
+import { E2E_MDRRMO_ADMIN, E2E_MEO_ADMIN, type E2EAdminAccount } from "./test-credentials";
 import { loginAdmin as sharedLoginAdmin } from "./helpers";
 
 test.setTimeout(60_000);
-async function loginAdmin(page: Page, account: E2EAdminAccount = E2E_SYSTEM_ADMIN) {
+// Batch 6: default changed from E2E_SYSTEM_ADMIN to E2E_MEO_ADMIN.
+// system_admin can no longer reach the operational Dashboard at all (Batch
+// 1 of the five-role architecture), so every test in this file that relied
+// on the implicit default was actually testing an unreachable page. The
+// tests below test generic Dashboard content that any office admin sees
+// identically — they were never really about system_admin specifically.
+async function loginAdmin(page: Page, account: E2EAdminAccount = E2E_MEO_ADMIN) {
   await sharedLoginAdmin(page, account);
 }
 
@@ -116,32 +122,40 @@ test("Highest Urgency Actions renders at most 5 rows and its View all link uses 
   await expect(viewAll).toHaveAttribute("href", /\/admin\/tickets\?sort=priority_desc&status=active/);
 });
 
+// Batch 6 (five-role E2E reconciliation): this used to log in as
+// system_admin by this file's own default (see loginAdmin above) to check
+// the "MEO vs. MDRRMO" comparison and "Department Workload" widgets —
+// content that only ever rendered for system_admin's city-wide dashboard
+// view. Batch 1 of the five-role architecture removed system_admin's
+// operational Dashboard access entirely (OperationalStaffGuard denies it;
+// app/admin/page.tsx redirects it to /admin/admins before this route's own
+// data-fetching component ever runs), so those two widgets are now
+// unreachable by ANY role — not a regression to fix, just dead UI this
+// spec can no longer exercise. The rest of this test (generic dashboard
+// sections, the Map presets region, the click-through interaction) is
+// still real, reachable behavior — verified here as an office admin
+// (MEO), whose own map-preset links omit the office query param entirely
+// (session-scoped already, confirmed live against the real API).
 test("restored dashboard sections render from the existing dashboard response", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
 
-  await loginAdmin(page);
+  await loginAdmin(page, E2E_MEO_ADMIN);
   await expect(page.getByRole("region", { name: "Quick actions" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Office performance summary" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Dashboard analytics" })).toBeVisible();
   await expect(page.getByText("Category Distribution", { exact: true })).toBeVisible();
   await expect(page.getByText("Ticket Status Distribution", { exact: true })).toBeVisible();
   await expect(page.getByText("Reports by Citizen Severity", { exact: true })).toBeVisible();
-  await expect(page.getByText("Department Workload", { exact: true })).toBeVisible();
-  await expect(page.getByText("MEO vs. MDRRMO", { exact: true })).toBeVisible();
 
   const mapPresets = page.getByRole("region", { name: "Map presets" });
   await expect(mapPresets).toBeVisible();
   await expect(mapPresets.getByRole("link", { name: "Drainage Issues" })).toHaveAttribute(
     "href",
-    "/admin/map?category=Drainage+%2F+Culvert+%2F+Manhole+Issue&office=MEO",
-  );
-  await expect(mapPresets.getByRole("link", { name: "Flooding Reports" })).toHaveAttribute(
-    "href",
-    "/admin/map?category=Localized+Flooding&office=MDRRMO",
+    "/admin/map?category=Drainage+%2F+Culvert+%2F+Manhole+Issue",
   );
   await mapPresets.getByRole("link", { name: "Drainage Issues" }).click();
-  await expect(page).toHaveURL(/\/admin\/map\?category=Drainage\+%2F\+Culvert\+%2F\+Manhole\+Issue&office=MEO$/);
+  await expect(page).toHaveURL(/\/admin\/map\?category=Drainage\+%2F\+Culvert\+%2F\+Manhole\+Issue$/);
   await page.getByRole("button", { name: "Filters 1", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Category" })).toContainText("Drainage / Culvert / Manhole Issue");
 

@@ -150,17 +150,19 @@ describe('WorkOrdersService.parseQuery office scoping', () => {
     ).toBe('MDRRMO');
   });
 
-  it('defaults a system admin to city-wide (no office filter)', () => {
-    expect(service.parseQuery({}, SYSTEM_ADMIN).office).toBeUndefined();
-    expect(
-      service.parseQuery({ office: 'all' }, SYSTEM_ADMIN).office,
-    ).toBeUndefined();
+  // Batch 1 (five-role RBAC): system_admin no longer has routine
+  // operational access — resolveOfficeScope now rejects it outright rather
+  // than widening to city-wide or honoring a requested office.
+  it('rejects a system admin outright rather than defaulting to city-wide', () => {
+    expect(() => service.parseQuery({}, SYSTEM_ADMIN)).toThrow(
+      ForbiddenException,
+    );
   });
 
-  it('lets a system admin request a specific office', () => {
-    expect(service.parseQuery({ office: 'MDRRMO' }, SYSTEM_ADMIN).office).toBe(
-      'MDRRMO',
-    );
+  it('rejects a system admin even when a specific office is requested', () => {
+    expect(() =>
+      service.parseQuery({ office: 'MDRRMO' }, SYSTEM_ADMIN),
+    ).toThrow(ForbiddenException);
   });
 });
 
@@ -180,11 +182,13 @@ describe('WorkOrdersService.parseQuery "My Assignments" (assignedAdminId=me)', (
     ).toBe(2);
   });
 
-  it('resolves "me" for a system admin to their own adminId too, not city-wide/unfiltered', () => {
-    expect(
-      service.parseQuery({ assignedAdminId: 'me' }, SYSTEM_ADMIN)
-        .assignedAdminId,
-    ).toBe(3);
+  // Batch 1 (five-role RBAC): system_admin no longer has routine
+  // operational access — parseQuery rejects it before assignedAdminId is
+  // even resolved, since resolveOfficeScope runs first.
+  it('rejects a system admin outright — no "My Assignments" for a non-operational role', () => {
+    expect(() =>
+      service.parseQuery({ assignedAdminId: 'me' }, SYSTEM_ADMIN),
+    ).toThrow(ForbiddenException);
   });
 
   it('still accepts a raw numeric assignedAdminId (unrelated existing behavior, unchanged)', () => {
@@ -288,7 +292,33 @@ describe('WorkOrdersService.create', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('allows a system admin to create a work order for any office and logs the audit event', async () => {
+  // Batch 1 (five-role RBAC): system_admin no longer has routine
+  // operational access — assertOfficeAccess now rejects it outright rather
+  // than bypassing the office check.
+  it('rejects a system admin from creating a work order — no more city-wide bypass', async () => {
+    const db = makeDb();
+    db.select.mockReturnValueOnce(chain({ assignedOffice: 'MDRRMO' }));
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+    await expect(
+      service.create(
+        {
+          ticketId: 5,
+          title: 'Fix it',
+          notes: 'progress note',
+          assignedAdminId: null,
+          dueDate: null,
+        },
+        SYSTEM_ADMIN,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  // Same coverage the old (now-removed) system_admin-actor test carried for
+  // the successful-creation path — audit log, origin history row, and the
+  // office-wide notification — just created by an in-office supervisor
+  // instead, since system_admin can no longer reach this method at all.
+  it('creates a work order, logs the audit event, seeds an origin history row, and notifies the office', async () => {
     const db = makeDb();
     db.select.mockReturnValueOnce(chain({ assignedOffice: 'MDRRMO' }));
     db.insert.mockReturnValueOnce(
@@ -304,7 +334,7 @@ describe('WorkOrdersService.create', () => {
         assignedAdminId: null,
         dueDate: null,
       },
-      SYSTEM_ADMIN,
+      MDRRMO_SUPERVISOR,
     );
     expect(result.assigned_office).toBe('MDRRMO');
     expect(logInTx).toHaveBeenCalledWith(

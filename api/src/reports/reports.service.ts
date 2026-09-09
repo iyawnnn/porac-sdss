@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Sql } from 'postgres';
+import type { Sql, TransactionSql } from 'postgres';
 import { PG } from '../db/db.module';
 import { BarangayService } from '../domain/barangay.service';
 import { ElevationService } from '../domain/elevation.service';
@@ -105,6 +105,11 @@ export interface MyReportDetail {
   // for. Admins see the reason on Ticket Detail instead.
   disputed_at: string | null;
   resolution_confirmed_at: string | null;
+  // Sourced directly from report_acknowledgments.acknowledged_at (never
+  // derived from the first intake action) — null means Focal has not yet
+  // acknowledged this specific report. See CitizenReportTimeline's
+  // 'acknowledged' event kind.
+  acknowledged_at: string | null;
   is_merged: boolean;
 }
 
@@ -379,6 +384,14 @@ export class ReportsService {
           });
         }
 
+        await this.notifyFocalIntake(tx, {
+          office,
+          category,
+          barangayName: barangay.name,
+          ticketId: existing.id,
+          reportId: report.id,
+        });
+
         return {
           ticketId: existing.id,
           reportId: report.id,
@@ -416,7 +429,8 @@ export class ReportsService {
         recipientId: citizen.citizenId,
         type: 'report_received',
         title: 'Report received',
-        message: 'We received your report and it is now under review.',
+        message:
+          'Your report has been received and routed for municipal review.',
         href: `/dashboard/reports/${report.id}`,
         entityType: 'ticket',
         entityId: ticket.id,
@@ -431,6 +445,14 @@ export class ReportsService {
         href: `/admin/tickets/${ticket.id}`,
         entityType: 'ticket',
         entityId: ticket.id,
+      });
+
+      await this.notifyFocalIntake(tx, {
+        office,
+        category,
+        barangayName: barangay.name,
+        ticketId: ticket.id,
+        reportId: report.id,
       });
 
       return {
@@ -455,6 +477,41 @@ export class ReportsService {
       assignedOffice: office,
       flags,
     };
+  }
+
+  // Central Monitoring / Focal Personnel has municipality-wide intake
+  // visibility across both offices — a direct per-recipient notification
+  // (recipientId), never recipientOffice='MDRRMO', since that would mix
+  // Focal-intake notifications with MDRRMO's own operational office
+  // traffic (see NotificationsService.scopeFilter's role-aware office
+  // matching). Called from both the new-ticket and merge branches of
+  // submit(), since each is its own new report needing its own Focal
+  // acknowledgment (see docs/database.md's report_acknowledgments note).
+  private async notifyFocalIntake(
+    tx: TransactionSql,
+    params: {
+      office: 'MEO' | 'MDRRMO';
+      category: string;
+      barangayName: string;
+      ticketId: number;
+      reportId: number;
+    },
+  ): Promise<void> {
+    const focalAdmins = await tx<{ id: number }[]>`
+      SELECT id FROM admins WHERE role = 'focal' AND is_active = true
+    `;
+    for (const admin of focalAdmins) {
+      await this.notifications.createInTx(tx, {
+        recipientType: 'admin',
+        recipientId: admin.id,
+        type: 'new_intake_report',
+        title: 'New incoming report',
+        message: `${params.category} report in ${params.barangayName}, routed to ${params.office} — Ticket #${params.ticketId}, Report #${params.reportId}.`,
+        href: `/admin/intake/${params.reportId}`,
+        entityType: 'report',
+        entityId: params.reportId,
+      });
+    }
   }
 
   async getMyReports(citizenId: number): Promise<MyReportRow[]> {
@@ -486,11 +543,13 @@ export class ReportsService {
         r.created_at, t.created_at AS ticket_created_at, t.updated_at AS ticket_updated_at,
         t.assigned_office, t.member_count, r.moderation_status, r.moderated_at, t.resolution_notes,
         t.resolution_image_url, t.disputed_at, t.resolution_confirmed_at,
+        ra.acknowledged_at,
         r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id) AS is_merged
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
       JOIN citizens c ON c.id = r.citizen_id
+      LEFT JOIN report_acknowledgments ra ON ra.report_id = r.id
       WHERE r.id = ${reportId} AND r.citizen_id = ${citizenId}
     `;
 

@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { Sql } from 'postgres';
 import type { AdminSession } from '../auth/session.service';
 import { BarangayInsightsController } from './barangay-insights.controller';
@@ -116,14 +116,19 @@ describe('BarangayInsightsController office scoping', () => {
     expect(spy).toHaveBeenCalledWith('MDRRMO');
   });
 
-  it('lets a system admin request a single office or city-wide (undefined)', async () => {
+  // Batch 1 (five-role RBAC): system_admin no longer has routine
+  // operational access — resolveOfficeScope now rejects it outright rather
+  // than allowing a single-office or city-wide request.
+  it('rejects a system admin outright, whether or not an office is requested', async () => {
     const spy = jest.fn().mockResolvedValue([]);
     const controller = controllerWith(spy);
-    await controller.list('MEO', SYSTEM_ADMIN);
-    expect(spy).toHaveBeenCalledWith('MEO');
-
-    await controller.list(undefined, SYSTEM_ADMIN);
-    expect(spy).toHaveBeenCalledWith(undefined);
+    await expect(controller.list('MEO', SYSTEM_ADMIN)).rejects.toThrow(
+      ForbiddenException,
+    );
+    await expect(controller.list(undefined, SYSTEM_ADMIN)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it("echoes the resolved office (not the raw request) in the response's office field", async () => {
