@@ -1,5 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
+import { UnauthorizedException } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { SESSION_COOKIE, CITIZEN_SESSION_COOKIE } from './session.service';
 import type { AuthService } from './auth.service';
@@ -87,5 +88,73 @@ describe('AuthController logout (server-side session invalidation)', () => {
     expect(invalidateCitizenSession).not.toHaveBeenCalled();
     expect(res.cookie).toHaveBeenCalledWith(CITIZEN_SESSION_COOKIE, '', { path: '/', maxAge: 0 });
     expect(result).toEqual({ ok: true });
+  });
+});
+
+describe('AuthController GET auth/me (both cookies resolved independently)', () => {
+  it('returns both sessions when the browser holds a valid admin AND citizen cookie', async () => {
+    const controller = makeController({
+      verifyAdminSession: jest.fn().mockResolvedValue(adminSession),
+      verifyCitizenSession: jest.fn().mockResolvedValue(citizenSession),
+    });
+    const req = {
+      cookies: {
+        [SESSION_COOKIE]: 'admin-token',
+        [CITIZEN_SESSION_COOKIE]: 'citizen-token',
+      },
+    } as unknown as Request;
+
+    // Regression: the admin cookie used to short-circuit the citizen one, so
+    // getCitizenSessionFromApi() came back null on /dashboard, /map and
+    // /reports for any browser signed into both shells.
+    await expect(controller.me(req)).resolves.toEqual({
+      admin: adminSession,
+      citizen: citizenSession,
+    });
+  });
+
+  it('returns only the citizen session when the admin cookie is absent', async () => {
+    const controller = makeController({
+      verifyAdminSession: jest.fn(),
+      verifyCitizenSession: jest.fn().mockResolvedValue(citizenSession),
+    });
+    const req = {
+      cookies: { [CITIZEN_SESSION_COOKIE]: 'citizen-token' },
+    } as unknown as Request;
+
+    await expect(controller.me(req)).resolves.toEqual({
+      admin: null,
+      citizen: citizenSession,
+    });
+  });
+
+  it('returns only the admin session when the citizen cookie is stale', async () => {
+    const controller = makeController({
+      verifyAdminSession: jest.fn().mockResolvedValue(adminSession),
+      verifyCitizenSession: jest.fn().mockResolvedValue(null),
+    });
+    const req = {
+      cookies: {
+        [SESSION_COOKIE]: 'admin-token',
+        [CITIZEN_SESSION_COOKIE]: 'stale-token',
+      },
+    } as unknown as Request;
+
+    await expect(controller.me(req)).resolves.toEqual({
+      admin: adminSession,
+      citizen: null,
+    });
+  });
+
+  it('401s when neither cookie resolves', async () => {
+    const controller = makeController({
+      verifyAdminSession: jest.fn().mockResolvedValue(null),
+      verifyCitizenSession: jest.fn().mockResolvedValue(null),
+    });
+    const req = {
+      cookies: { [SESSION_COOKIE]: 'x', [CITIZEN_SESSION_COOKIE]: 'y' },
+    } as unknown as Request;
+
+    await expect(controller.me(req)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

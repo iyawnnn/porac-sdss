@@ -76,9 +76,12 @@ export async function apiGetOptional<T>(path: string, treatAsNull: number[] = [4
   return res.json() as Promise<T>;
 }
 
+// Both fields are resolved independently server-side, so a browser holding
+// both cookies (staff testing the citizen portal while signed into /admin)
+// gets both back — never one shadowing the other. See AuthController.me().
 interface MeResponse {
-  type: "admin" | "citizen";
-  session: AdminSession | CitizenSession;
+  admin: AdminSession | null;
+  citizen: CitizenSession | null;
 }
 
 // Replacements for lib/auth/getSession.ts / getCitizenSession.ts, which
@@ -87,10 +90,10 @@ interface MeResponse {
 // GET /auth/me instead of duplicating jose/JWT_SECRET logic here.
 export async function getAdminSessionFromApi(): Promise<AdminSession | null> {
   const me = await apiGetOptional<MeResponse>("/auth/me");
-  return me?.type === "admin" ? (me.session as AdminSession) : null;
+  return me?.admin ?? null;
 }
 
 export async function getCitizenSessionFromApi(): Promise<CitizenSession | null> {
   const me = await apiGetOptional<MeResponse>("/auth/me");
-  return me?.type === "citizen" ? (me.session as CitizenSession) : null;
+  return me?.citizen ?? null;
 }

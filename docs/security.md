@@ -31,6 +31,8 @@ Admin and citizen sessions are separate JWTs (`jose`, HS256), signed with an **`
 
 `api/src/auth/session.service.ts`.
 
+Because the two systems are independent, **one browser can legitimately hold both cookies at once** — a staff member signed into `/admin` who then signs into the citizen portal in the same browser. `GET /auth/me` (`api/src/auth/auth.controller.ts`) therefore resolves each cookie separately and returns `{ admin, citizen }`, either side nullable, 401 only when neither resolves. It must never collapse to a single "admin first, else citizen" principal: `lib/api-client.ts`'s `getAdminSessionFromApi()`/`getCitizenSessionFromApi()` each read their own field, and an admin-first response made the citizen field unreachable — every citizen page (`/dashboard`, `/map`, `/reports`) rendered "Sign in to continue" for a dual-cookie browser even though `proxy.ts` (which checks only the citizen cookie) had already admitted the request. Note that `NotificationsController.resolvePrincipal` still does resolve admin-first, deliberately — it serves one notification feed and has no second field to return; a dual-cookie browser sees the admin feed in both shells.
+
 ### 2.2 Cookie shape
 
 Both cookies use the same hardened shape (`admin-cookie.util.ts`, `citizen-cookie.util.ts`):

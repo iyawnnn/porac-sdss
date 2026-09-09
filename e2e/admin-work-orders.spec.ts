@@ -664,7 +664,7 @@ async function currentAdminId(page: Page): Promise<number> {
   return page.evaluate(async () => {
     const res = await fetch("/api/auth/me");
     const body = await res.json();
-    return body.session.adminId as number;
+    return body.admin.adminId as number;
   });
 }
 

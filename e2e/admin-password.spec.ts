@@ -146,9 +146,9 @@ test("a system admin cannot reset their own password via the Admin Management ac
   await loginAs(page, E2E_SYSTEM_ADMIN);
   const cookies = await page.context().cookies();
   const me = await request.get("/api/auth/me", { headers: authHeaders(cookies) });
-  const meBody = (await me.json()) as { session: { adminId: number } };
+  const meBody = (await me.json()) as { admin: { adminId: number } };
 
-  const res = await request.post(`/api/admin/admins/${meBody.session.adminId}/reset-password`, {
+  const res = await request.post(`/api/admin/admins/${meBody.admin.adminId}/reset-password`, {
     headers: { ...authHeaders(cookies), "content-type": "application/json" },
     data: { newPassword: "does-not-matter-123" },
   });
