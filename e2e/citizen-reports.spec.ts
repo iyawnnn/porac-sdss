@@ -95,7 +95,10 @@ test.describe("Report detail timeline", () => {
   test("shows a citizen-safe banner, matching notification wording, after an admin quarantines the report", async ({ page, browser }: { page: Page; browser: Browser }) => {
     await loginCitizen(page);
     const reports = await fetchMyReports(page);
-    const pending = reports.find((r) => r.moderation_status === null);
+    // The moderating admin is E2E_MEO_ADMIN, and the moderate endpoint only
+    // allows the ticket's own office (assertOfficeAccess) — so pick an
+    // MEO-routed report, or an MDRRMO one fails with 403.
+    const pending = reports.find((r) => r.moderation_status === null && r.assigned_office === "MEO");
     // moderation is a one-way transition — after the first successful run
     // against a given database, no report is left pending until the next
     // `seed:diverse-reports` reseed. Skipping (not failing) keeps reruns
