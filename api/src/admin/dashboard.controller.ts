@@ -1,5 +1,6 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { RecomputeService } from '../domain/recompute.service';
+import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { WeatherService } from '../domain/weather.service';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
@@ -23,6 +24,7 @@ export class DashboardController {
     private readonly dashboard: DashboardService,
     private readonly tickets: TicketsService,
     private readonly recompute: RecomputeService,
+    private readonly operationalPriority: OperationalPriorityService,
     private readonly weather: WeatherService,
     private readonly barangaysGeo: BarangaysGeoService,
     private readonly moderation: ModerationService,
@@ -76,6 +78,7 @@ export class DashboardController {
   ) {
     const range = parseDashboardRange(rangeParam);
     await this.recompute.recomputeActiveTicketUrgency();
+    await this.operationalPriority.recalculateActiveTickets();
 
     const requestedOffice =
       officeParam === 'all' || officeParam === 'MEO' || officeParam === 'MDRRMO'

@@ -78,6 +78,14 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 1, step 1 — Operational Priority split from Hazard Urgency recompute — **completed (code + unit tests; not yet exercised against a real database)**
+
+- New `OperationalPriorityService` (`api/src/domain/operational-priority.service.ts`) recalculates only `tickets.priority_index` for active tickets (Reported / Under Review / In Progress). Formula, weights, 1–100 scaling and MAX-severity rule are unchanged (`common/utils/scoring.ts`).
+- `RecomputeService.recomputeActiveTicketUrgency` now handles Hazard Urgency only and no longer reads or writes Operational Priority.
+- All six callers run both, Hazard Urgency first: `GET /admin/tickets`, `/admin/tickets/geo`, `/admin/tickets/:id`, `GET /admin/dashboard`, post-commit in `ReportsService.submit`, and `POST /cron/recompute-urgency` (response adds `operationalPriorityUpdated`; existing `updated`/`rain1hMm` keys unchanged, so the Ticket Queue's rain banner is unaffected).
+- No schema change, no migration. Hazard Urgency, the `ticket_critical` notification, the escalation job and auto-grouping are untouched — they are later steps of the revision plan.
+- Tests: new `operational-priority.service.spec.ts` and `recompute.service.spec.ts`; `scoring.spec.ts` gains age-cap (0 / 3.5 / 7 / 20 days), weight, scaling and clamp cases; `cron.controller.spec.ts` and `dashboard.service.spec.ts` updated for the new constructor argument.
+
 ### Dual-session `GET /auth/me` (citizen pages blocked for admin-signed-in browsers) — **completed**
 
 **Bug.** Any browser holding a valid admin cookie *and* a valid citizen cookie was locked out of every citizen page. `GET /auth/me` returned a single `{ type, session }` principal resolved admin-first, so `getCitizenSessionFromApi()` came back `null` and `/dashboard`, `/map` and `/reports` rendered `CitizenUnauthorized` ("Sign in to continue"). `proxy.ts` checks only the citizen cookie, so it admitted the request instead of redirecting — which is why the failure surfaced as a dead-end page rather than a login redirect. Most visible via "Continue with Google" (staff testing the citizen portal in the browser they administer from), but not OAuth-specific: password login hit it identically.

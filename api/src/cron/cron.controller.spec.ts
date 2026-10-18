@@ -1,5 +1,6 @@
 import { CronController } from './cron.controller';
 import type { RecomputeService } from '../domain/recompute.service';
+import type { OperationalPriorityService } from '../domain/operational-priority.service';
 import type { WeatherService } from '../domain/weather.service';
 import type { PasswordResetService } from '../citizens/password-reset.service';
 import type { NotificationsService } from '../notifications/notifications.service';
@@ -7,6 +8,8 @@ import type { RateLimitService } from '../domain/ratelimit.service';
 import type { EscalationService } from '../domain/escalation.service';
 
 function makeController(overrides: {
+  recomputeActiveTicketUrgency?: jest.Mock;
+  recalculateActiveTickets?: jest.Mock;
   cleanupExpiredTokens?: jest.Mock;
   cleanupOldNotifications?: jest.Mock;
   cleanupOldEvents?: jest.Mock;
@@ -32,8 +35,17 @@ function makeController(overrides: {
       jest.fn().mockResolvedValue({ candidatesFound: 0, notificationsCreated: 0, duplicatesSkipped: 0 }),
   } as unknown as EscalationService;
 
+  const recompute = {
+    recomputeActiveTicketUrgency:
+      overrides.recomputeActiveTicketUrgency ?? jest.fn(),
+  } as unknown as RecomputeService;
+  const operationalPriority = {
+    recalculateActiveTickets: overrides.recalculateActiveTickets ?? jest.fn(),
+  } as unknown as OperationalPriorityService;
+
   return new CronController(
-    {} as RecomputeService,
+    recompute,
+    operationalPriority,
     {} as WeatherService,
     passwordReset,
     notifications,
@@ -109,5 +121,30 @@ describe('CronController guard placement', () => {
     const guards = Reflect.getMetadata('__guards__', CronController) as unknown[];
     expect(guards).toBeDefined();
     expect(guards.length).toBeGreaterThan(0);
+  });
+});
+
+describe('CronController.recomputeUrgency', () => {
+  it('runs Hazard Urgency then Operational Priority and merges both results', async () => {
+    const order: string[] = [];
+    const recomputeActiveTicketUrgency = jest.fn().mockImplementation(() => {
+      order.push('urgency');
+      return Promise.resolve({ updated: 3, rain1hMm: 4.5 });
+    });
+    const recalculateActiveTickets = jest.fn().mockImplementation(() => {
+      order.push('priority');
+      return Promise.resolve({ updated: 3 });
+    });
+    const controller = makeController({
+      recomputeActiveTicketUrgency,
+      recalculateActiveTickets,
+    });
+
+    await expect(controller.recomputeUrgency()).resolves.toEqual({
+      updated: 3,
+      rain1hMm: 4.5,
+      operationalPriorityUpdated: 3,
+    });
+    expect(order).toEqual(['urgency', 'priority']);
   });
 });

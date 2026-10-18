@@ -608,7 +608,7 @@ export class TicketsService {
     return { ticket, reports, history, reassignments, referrals };
   }
 
-  // Live re-derivation of the same inputs RecomputeService uses for this one
+  // Live re-derivation of the same inputs OperationalPriorityService uses for this one
   // ticket, scoped by WHERE ticket_id — only meaningful while the ticket is
   // still active, since barangay density is computed over active tickets
   // only and freezes once resolved/rejected.

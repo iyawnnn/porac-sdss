@@ -17,6 +17,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RecomputeService } from '../domain/recompute.service';
+import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -58,6 +59,7 @@ export class TicketsController {
   constructor(
     private readonly tickets: TicketsService,
     private readonly recompute: RecomputeService,
+    private readonly operationalPriority: OperationalPriorityService,
     private readonly assessments: OperationalAssessmentService,
   ) {}
 
@@ -67,6 +69,7 @@ export class TicketsController {
     @CurrentAdmin() admin: AdminSession,
   ) {
     const recomputeResult = await this.recompute.recomputeActiveTicketUrgency();
+    await this.operationalPriority.recalculateActiveTickets();
     const filters = this.tickets.parseTicketQuery(query, admin);
     // viewCounts rides along rather than living on its own route: it labels
     // this exact list, and a separate endpoint would trigger a second
@@ -85,6 +88,7 @@ export class TicketsController {
     @CurrentAdmin() admin: AdminSession,
   ) {
     await this.recompute.recomputeActiveTicketUrgency();
+    await this.operationalPriority.recalculateActiveTickets();
     const requestedOffice =
       officeParam === 'all' || officeParam === 'MEO' || officeParam === 'MDRRMO'
         ? officeParam
@@ -102,6 +106,7 @@ export class TicketsController {
     // priority/urgency shown could lag behind the queue by up to the
     // caller's own recompute cadence.
     await this.recompute.recomputeActiveTicketUrgency();
+    await this.operationalPriority.recalculateActiveTickets();
     const detail = await this.tickets.getTicketDetail(id, admin);
     if (!detail) throw new NotFoundException();
     // Folded into the existing detail response rather than a second

@@ -1,5 +1,6 @@
 import { Controller, Post, UseGuards } from '@nestjs/common';
 import { RecomputeService } from '../domain/recompute.service';
+import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { WeatherService } from '../domain/weather.service';
 import { RateLimitService } from '../domain/ratelimit.service';
 import { EscalationService } from '../domain/escalation.service';
@@ -18,6 +19,7 @@ import { CronSecretGuard } from '../common/guards/cron-secret.guard';
 export class CronController {
   constructor(
     private readonly recompute: RecomputeService,
+    private readonly operationalPriority: OperationalPriorityService,
     private readonly weather: WeatherService,
     private readonly passwordReset: PasswordResetService,
     private readonly notifications: NotificationsService,
@@ -25,9 +27,15 @@ export class CronController {
     private readonly escalation: EscalationService,
   ) {}
 
+  // Still one route for both scores so .github/workflows/cron.yml keeps
+  // working unchanged. Response keeps { updated, rain1hMm } (Hazard
+  // Urgency) and adds operationalPriorityUpdated. Run one after the other,
+  // not in parallel, so the two UPDATEs never race on the same rows.
   @Post('recompute-urgency')
-  recomputeUrgency() {
-    return this.recompute.recomputeActiveTicketUrgency();
+  async recomputeUrgency() {
+    const urgency = await this.recompute.recomputeActiveTicketUrgency();
+    const priority = await this.operationalPriority.recalculateActiveTickets();
+    return { ...urgency, operationalPriorityUpdated: priority.updated };
   }
 
   // getCurrentRain1hMm() already does the "poll + cache" work itself (10min
