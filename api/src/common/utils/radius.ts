@@ -21,6 +21,11 @@ const RADIUS_BY_CATEGORY: Record<string, number> = {
   Flooding: 100,
 };
 
+// Since manuscript revision Phase 1, step 3 no API code calls this (automatic
+// grouping was removed from ReportsService.submit); only the seed scripts do.
+// Kept for Phase 3's suggested-related-ticket candidate search, which moves
+// these tiers to the manuscript's 20 / 50 / 100 m (pp. 31, 78) — point
+// concerns are still 25 m here until then.
 export function radiusForCategory(category: string): number {
   return RADIUS_BY_CATEGORY[category] ?? 50;
 }

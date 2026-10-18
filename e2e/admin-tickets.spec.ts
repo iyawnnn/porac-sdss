@@ -39,12 +39,10 @@ function sessionCookieHeader(cookies: { name: string; value: string }[]): Record
 // Surface Damage" always routes to MEO (api/src/common/utils/office.ts), so
 // E2E_MEO_ADMIN can act on it without any additional reassignment.
 async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Promise<{ reportId: number; ticketId: number }> {
-  // Pothole's dedup merge radius is 25m (api/src/common/utils/radius.ts) —
-  // a fixed lat/lng would silently merge into whatever other fixture (e.g.
-  // citizen-dispute.spec.ts's own Pothole reports) already sits at that
-  // exact point instead of creating a genuinely new ticket. The jitter here
-  // (~±550m) mirrors citizen-dispute.spec.ts's own jitter() for the same
-  // reason: comfortably clear of the merge radius.
+  // The jitter here (~±550m) mirrors citizen-dispute.spec.ts's own jitter().
+  // It used to keep this report clear of the automatic dedup merge radius;
+  // since manuscript revision Phase 1, step 3 every report creates its own
+  // ticket, so it is now only defensive.
   const jitter = () => (Math.random() - 0.5) * 0.01;
   const title = `E2E ticket-workflow ${titleSuffix}`;
   const res = await citizenPage.request.post("/api/reports", {
