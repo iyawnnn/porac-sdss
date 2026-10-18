@@ -78,6 +78,24 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 1, step 2 — 7-day escalation job removed — **completed (code + unit tests; not yet exercised against a real database)**
+
+- Deleted `EscalationService` (`api/src/domain/escalation.service.ts`) and its spec, its `DomainModule` registration, the `POST /cron/check-ticket-escalations` route, and that route's step in `.github/workflows/cron.yml`. The manuscript keeps 7 days only as Operational Priority's age cap `min(days / 7, 1)` (p. 74; handoff Decision 4).
+- Existing `ticket_escalation` notification rows are untouched and still render as history (label "Ticket Needs Review" in `lib/types/admin-notifications.ts`, which still lists the type for the Notification Center filter). Nothing creates new ones.
+- Not touched: Focal Intake's manual Escalate action (`POST /admin/intake/:reportId/escalate`) — a separate feature removed with Forward in Phase 5 (routing becomes REASSIGN / REFER only).
+- No schema change, no migration.
+- Tests: `cron.controller.spec.ts` drops the escalation case and asserts, from Nest's route metadata, that `check-ticket-escalations` is gone and the other five routes remain.
+
+**Phase 4 notes recorded now (group decisions, not built yet):**
+
+- `HAZARD_INFORMATION` (Appendix H names, use exactly): `id`, `ticket_id` (FK, not null), `hazard_context_type` enum (`FLOOD`, `RAIN_INDUCED_LANDSLIDE`), `lookup_status` enum (`CLASSIFIED`, `NO_CLASSIFICATION`, `TEMPORARILY_UNAVAILABLE`), `susceptibility_code` VARCHAR(20) null, `susceptibility_label` VARCHAR(100) null, `query_geom` point not null, `failure_reason` text null, `looked_up_at` timestamp not null, `superseded_at` timestamp null.
+- `RAINFALL_CONTEXT`: `id`, `ticket_id` (FK, not null), `status` enum (`CURRENT`, `STALE`, `UNAVAILABLE`), `rainfall_mm` real null (zero is valid), `source_provider` VARCHAR(100) not null, `observation_at` timestamp null, `fetched_at` timestamp not null, `query_geom` point not null, `failure_reason` text null, `superseded_at` timestamp null.
+- Rainfall is per ticket, at the ticket's current representative location, re-evaluated when that location or the category changes (p. 72). The 10-minute reuse means same ticket + same `query_geom` + fetched within 10 minutes — no cross-ticket or distance-based reuse.
+- At submission both lookups run in parallel with a 5 s timeout each, so they can add up to about 5 s to the response in the worst case; a failed lookup never fails the report.
+- Cron retry of `TEMPORARILY_UNAVAILABLE` Hazard Information lookups (max 20 tickets per run) is approved as a recorded implementation extension.
+- The landslide layer URL and field name are to be verified during the Porac coverage test before Phase 4 starts.
+- Open Phase 4 decision: Appendix H also defines an `OPERATIONAL_PRIORITY` table (`ticket_id` unique, `severity_factor`, `age_factor`, `service_demand_factor`, `priority_index`, `computed_at`), while the code stores only `tickets.priority_index`.
+
 ### Manuscript revision Phase 1, step 1 — Operational Priority split from Hazard Urgency recompute — **completed (code + unit tests; not yet exercised against a real database)**
 
 - New `OperationalPriorityService` (`api/src/domain/operational-priority.service.ts`) recalculates only `tickets.priority_index` for active tickets (Reported / Under Review / In Progress). Formula, weights, 1–100 scaling and MAX-severity rule are unchanged (`common/utils/scoring.ts`).
@@ -334,7 +352,7 @@ A personal quick filter on the existing `/admin/work-orders` list — no new pag
 - Office scoping is unchanged — `resolveOfficeScope` still runs first in `parseQuery`, so an MEO/MDRRMO admin's "My Assignments" is still clamped to their own office.
 - No schema change, no migration, no new endpoint.
 
-### Ticket Escalation Notifications — **completed**
+### Ticket Escalation Notifications — **completed; removed in manuscript revision Phase 1, step 2** (see §3)
 
 A backend-only safety net: flags active tickets that have stalled with no real field-work progress, so they don't silently age out of view. No new page, no new sidebar item — it's a notification, delivered through the existing bell/Notification Center.
 
@@ -576,7 +594,7 @@ Full checklist in [`deployment-readiness.md`](deployment-readiness.md). Nothing 
 
 **Already done in this area:**
 
-- **Cron scheduling — done.** `.github/workflows/cron.yml` calls all six `api/src/cron/*` routes (`recompute-urgency`, `recompute-weather`, `cleanup-password-reset-tokens`, `cleanup-notifications`, `cleanup-rate-limit-events`, `check-ticket-escalations`) daily via `curl`, authenticated the same way `CronSecretGuard` already accepts (`Authorization: Bearer $CRON_SECRET`). Requires two repo-level GitHub Actions configs to actually run: `vars.PORAC_API_BASE_URL` and `secrets.CRON_SECRET` — see that workflow file's header comment.
+- **Cron scheduling — done.** `.github/workflows/cron.yml` calls all five `api/src/cron/*` routes (`recompute-urgency`, `recompute-weather`, `cleanup-password-reset-tokens`, `cleanup-notifications`, `cleanup-rate-limit-events`) daily via `curl`, authenticated the same way `CronSecretGuard` already accepts (`Authorization: Bearer $CRON_SECRET`). Requires two repo-level GitHub Actions configs to actually run: `vars.PORAC_API_BASE_URL` and `secrets.CRON_SECRET` — see that workflow file's header comment.
 - **Rate-limit event cleanup — done.** `RateLimitService.cleanupOldEvents()` + `POST /cron/cleanup-rate-limit-events` prunes `rate_limit_events` and `password_reset_rate_limit_events` past a 30-day retention window — see `docs/database.md` for why 30 days is safe (both tables' checks only ever look back 24 hours at most).
 - **Setup/deployment documentation — done.** `README.md`'s env var setup section previously named variables that don't exist in this codebase (`OPENWEATHER_API_KEY`, `NEXTAUTH_SECRET`, `NEXT_PUBLIC_APP_URL`) and never mentioned `api/.env` as a separate file at all — a fresh clone following it literally could not start the API. Rewritten to explain the two-env-file split accurately (with tables of what's actually required vs. optional on each side, matching `api/src/config/env.ts`'s Zod schema) and to add a "Scheduled Jobs & Deployment" section documenting the `CRON_SECRET`/`PORAC_API_BASE_URL` GitHub Actions requirements and stating plainly that no hosting platform is decided yet.
 - **Admin ticket workflow E2E coverage — done.** `e2e/admin-tickets.spec.ts` now covers the Ticket Queue and Ticket Detail end to end: queue baseline/empty state, status/search/disputed/category/barangay filters plus filter reset, office scoping (including a doctored `?office=` clamp assertion), queue → detail navigation and back, the Ticket Detail read-only surface, status advancement, office reassignment with a `finally`-block restore, pagination, sorting, the mobile card list, and a full admin-UI resolution through the resolve dialog (completion notes + resolution photo) whose outcome is then asserted from the citizen side against the Case Closure Summary card. `e2e/citizen-dispute.spec.ts` gained the matching citizen-side coverage (confirm/dispute persistence across reload, and a hydration/wait fix on the dispute flow).

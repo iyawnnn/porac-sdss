@@ -5,7 +5,6 @@ import type { WeatherService } from '../domain/weather.service';
 import type { PasswordResetService } from '../citizens/password-reset.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { RateLimitService } from '../domain/ratelimit.service';
-import type { EscalationService } from '../domain/escalation.service';
 
 function makeController(overrides: {
   recomputeActiveTicketUrgency?: jest.Mock;
@@ -13,7 +12,6 @@ function makeController(overrides: {
   cleanupExpiredTokens?: jest.Mock;
   cleanupOldNotifications?: jest.Mock;
   cleanupOldEvents?: jest.Mock;
-  checkTicketEscalations?: jest.Mock;
 }) {
   const passwordReset = {
     cleanupExpiredTokens: overrides.cleanupExpiredTokens ?? jest.fn(),
@@ -29,11 +27,6 @@ function makeController(overrides: {
         passwordResetRateLimitEventsDeleted: 0,
       }),
   } as unknown as RateLimitService;
-  const escalation = {
-    checkTicketEscalations:
-      overrides.checkTicketEscalations ??
-      jest.fn().mockResolvedValue({ candidatesFound: 0, notificationsCreated: 0, duplicatesSkipped: 0 }),
-  } as unknown as EscalationService;
 
   const recompute = {
     recomputeActiveTicketUrgency:
@@ -50,7 +43,6 @@ function makeController(overrides: {
     passwordReset,
     notifications,
     rateLimit,
-    escalation,
   );
 }
 
@@ -94,21 +86,36 @@ describe('CronController.cleanupRateLimitEvents', () => {
   });
 });
 
-describe('CronController.checkTicketEscalations', () => {
-  it('exposes POST /cron/check-ticket-escalations and returns the counts from EscalationService', async () => {
-    const checkTicketEscalations = jest.fn().mockResolvedValue({
-      candidatesFound: 4,
-      notificationsCreated: 3,
-      duplicatesSkipped: 1,
-    });
-    const controller = makeController({ checkTicketEscalations });
+// Phase 1, step 2: the 7-day escalation job is gone. Route paths are read
+// from Nest's own @Post() metadata, so this fails if the route (or a
+// handler under another name serving the same path) ever comes back.
+describe('CronController — escalation job removed', () => {
+  const routePaths = Object.getOwnPropertyNames(CronController.prototype)
+    .filter((name) => name !== 'constructor')
+    .map(
+      (name) =>
+        Reflect.getMetadata(
+          'path',
+          (CronController.prototype as unknown as Record<string, object>)[name],
+        ) as string | undefined,
+    )
+    .filter((path): path is string => typeof path === 'string');
 
-    await expect(controller.checkTicketEscalations()).resolves.toEqual({
-      candidatesFound: 4,
-      notificationsCreated: 3,
-      duplicatesSkipped: 1,
-    });
-    expect(checkTicketEscalations).toHaveBeenCalledTimes(1);
+  it('no longer exposes POST /cron/check-ticket-escalations', () => {
+    expect(routePaths).not.toContain('check-ticket-escalations');
+    expect('checkTicketEscalations' in CronController.prototype).toBe(false);
+  });
+
+  it('still exposes the other five cron routes', () => {
+    expect(routePaths.sort()).toEqual(
+      [
+        'cleanup-notifications',
+        'cleanup-password-reset-tokens',
+        'cleanup-rate-limit-events',
+        'recompute-urgency',
+        'recompute-weather',
+      ].sort(),
+    );
   });
 });
 
