@@ -139,8 +139,6 @@ describe('FocalIntakeService.acknowledge', () => {
           lat: 15.0,
           lng: 120.5,
           elevation_m: 50,
-          hazard_urgency_index: 40,
-          hazard_urgency_level: 'MEDIUM',
           operational_priority: 50,
           acknowledged_at: '2026-01-02T00:00:00Z',
           acknowledged_by_name: 'Diana Torres',
@@ -242,8 +240,6 @@ describe('FocalIntakeService.screen', () => {
           lat: 15.0,
           lng: 120.5,
           elevation_m: 50,
-          hazard_urgency_index: 40,
-          hazard_urgency_level: 'MEDIUM',
           operational_priority: 50,
           acknowledged_at: '2026-01-02T00:00:00Z',
           acknowledged_by_name: 'Diana Torres',
@@ -288,8 +284,6 @@ describe('FocalIntakeService.forward', () => {
           lat: 15.0,
           lng: 120.5,
           elevation_m: 50,
-          hazard_urgency_index: 40,
-          hazard_urgency_level: 'MEDIUM',
           operational_priority: 50,
           acknowledged_at: null,
           acknowledged_by_name: null,
@@ -352,8 +346,6 @@ describe('FocalIntakeService.escalate', () => {
           lat: 15.0,
           lng: 120.5,
           elevation_m: 50,
-          hazard_urgency_index: 40,
-          hazard_urgency_level: 'MEDIUM',
           operational_priority: 90,
           acknowledged_at: null,
           acknowledged_by_name: null,
@@ -373,10 +365,12 @@ describe('FocalIntakeService.escalate', () => {
     });
     expect(result?.ticketStatus).toBe('Reported');
     expect(result?.routedOffice).toBe('MEO');
-    // No score field is ever written by escalate — hazard/priority values on
-    // the returned detail are read straight off the ticket, unchanged.
-    expect(result?.hazardUrgency.index).toBe(40);
+    // No score field is ever written by escalate — the Operational Priority
+    // on the returned detail is read straight off the ticket, unchanged.
+    // (Hazard Urgency left the Focal responses in manuscript revision
+    // Phase 1, step 6b.)
     expect(result?.operationalPriority).toBe(90);
+    expect(result).not.toHaveProperty('hazardUrgency');
   });
 });
 
@@ -395,8 +389,7 @@ describe('FocalIntakeService.listIntakeGeo', () => {
           category: 'Pothole',
           barangay_name: 'Mitla Proper',
           assigned_office: 'MEO',
-          hazard_urgency_index: 62,
-          hazard_urgency_level: 'MEDIUM',
+          operational_priority: 62,
           acknowledged_at: null,
           latest_action_type: null,
           lat: 15.05,
@@ -416,7 +409,10 @@ describe('FocalIntakeService.listIntakeGeo', () => {
       lng: 120.54,
       intakeState: 'New',
     });
-    expect(rows[0].hazardUrgency).toEqual({ index: 62, level: 'MEDIUM' });
+    // Operational Priority comes through on the map rows (manuscript
+    // revision Phase 1, step 6b); Hazard Urgency no longer does.
+    expect(rows[0].operationalPriority).toBe(62);
+    expect(rows[0]).not.toHaveProperty('hazardUrgency');
   });
 
   it('never exposes Operational Assessment, Work Order, or staff-assignment fields', () => {
@@ -431,5 +427,18 @@ describe('FocalIntakeService.listIntakeGeo', () => {
     expect(methodBody).not.toContain('operational_assessments');
     expect(methodBody).not.toContain('work_orders');
     expect(methodBody).not.toContain('assigned_admin');
+  });
+});
+
+// Manuscript revision Phase 1, step 6b: Focal Intake shows Operational
+// Priority only, so no Focal query or response shape reads Hazard Urgency.
+describe('focal-intake.service.ts reads no Hazard Urgency column', () => {
+  it('contains no priority_score, urgency_level or hazardUrgency', () => {
+    const source = readFileSync(
+      join(__dirname, 'focal-intake.service.ts'),
+      'utf8',
+    );
+    expect(source).not.toMatch(/priority_score|urgency_level|hazardUrgency/);
+    expect(source).toContain('t.priority_index AS operational_priority');
   });
 });

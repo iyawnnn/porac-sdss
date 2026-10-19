@@ -29,12 +29,10 @@ function MapResizeHandler() {
 export default function TicketLocationMap({
   lat,
   lng,
-  urgencyBand,
   barangayGeoJson,
 }: {
   lat: number;
   lng: number;
-  urgencyBand?: string | null;
   barangayGeoJson: Geometry | null;
 }) {
   // `isolate` makes the map its own stacking context. Leaflet gives its
@@ -51,7 +49,9 @@ export default function TicketLocationMap({
         className="map-tile-muted"
       />
       {barangayGeoJson && <GeoJSON data={barangayGeoJson} style={styleBarangayFeature} />}
-      <Marker position={[lat, lng]} icon={bandMarkerIcon(urgencyBand ?? null, { pulse: true })} />
+      {/* Neutral pin: no caller passes a Hazard Urgency band since manuscript
+          revision Phase 1, step 6b, and the pulse only ever fired for High. */}
+      <Marker position={[lat, lng]} icon={bandMarkerIcon(null)} />
     </MapContainer>
   );
 }

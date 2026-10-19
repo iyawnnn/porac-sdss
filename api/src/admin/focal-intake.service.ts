@@ -71,8 +71,6 @@ interface RawIntakeRow {
   citizen_severity: string;
   submitted_at: string;
   flags: string[] | null;
-  hazard_urgency_index: number | null;
-  hazard_urgency_level: string | null;
   operational_priority: number | null;
   acknowledged_at: string | null;
   acknowledged_by_name: string | null;
@@ -92,10 +90,10 @@ export interface FocalIntakeRow {
   citizenSeverity: string;
   submittedAt: string;
   flags: string[];
-  // Canonical Focal-facing decision-support labels (Step 29 of the Batch 2
-  // design) — never "priority_score"/"priority_index" verbatim, and never
-  // merged into one value.
-  hazardUrgency: { index: number | null; level: string | null };
+  // Canonical Focal-facing decision-support label (Step 29 of the Batch 2
+  // design) — Operational Priority, never the raw column name verbatim.
+  // The Hazard Urgency field that sat beside it was removed in manuscript
+  // revision Phase 1, step 6b.
   operationalPriority: number | null;
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
@@ -107,8 +105,7 @@ interface RawIntakeGeoRow {
   category: string;
   barangay_name: string;
   assigned_office: 'MEO' | 'MDRRMO';
-  hazard_urgency_index: number | null;
-  hazard_urgency_level: string | null;
+  operational_priority: number | null;
   acknowledged_at: string | null;
   latest_action_type: string | null;
   lat: number;
@@ -121,7 +118,7 @@ export interface FocalIntakeGeoRow {
   category: string;
   barangayName: string;
   routedOffice: 'MEO' | 'MDRRMO';
-  hazardUrgency: { index: number | null; level: string | null };
+  operationalPriority: number | null;
   lat: number;
   lng: number;
   intakeState: IntakeState;
@@ -157,10 +154,6 @@ function mapRow(row: RawIntakeRow): FocalIntakeRow {
     citizenSeverity: row.citizen_severity,
     submittedAt: row.submitted_at,
     flags: row.flags ?? [],
-    hazardUrgency: {
-      index: row.hazard_urgency_index,
-      level: row.hazard_urgency_level,
-    },
     operationalPriority: row.operational_priority,
     acknowledgedAt: row.acknowledged_at,
     acknowledgedByName: row.acknowledged_by_name,
@@ -192,7 +185,6 @@ export class FocalIntakeService {
         r.id AS report_id, t.id AS ticket_id, t.category, t.status AS ticket_status,
         t.assigned_office, t.member_count, b.name AS barangay_name,
         r.citizen_severity, r.created_at AS submitted_at, r.flags,
-        t.priority_score AS hazard_urgency_index, t.urgency_level AS hazard_urgency_level,
         t.priority_index AS operational_priority,
         ra.acknowledged_at, ra.acknowledged_by_name,
         latest.action_type AS latest_action_type
@@ -213,7 +205,8 @@ export class FocalIntakeService {
   // narrow query, not a reuse of the operational GET /admin/tickets/geo
   // endpoint (which stays behind OperationalStaffGuard and is never
   // relaxed for Focal). Only intake-relevant fields: report reference,
-  // category, barangay, coordinates, routed office, Hazard Urgency, and
+  // category, barangay, coordinates, routed office, Operational Priority
+  // (Hazard Urgency until manuscript revision Phase 1, step 6b), and
   // derived intake state — no Operational Assessment content, no Work
   // Order internals, no staff assignment, no mutation controls.
   async listIntakeGeo(): Promise<FocalIntakeGeoRow[]> {
@@ -221,8 +214,7 @@ export class FocalIntakeService {
     const rows = await sql<RawIntakeGeoRow[]>`
       SELECT
         r.id AS report_id, t.category, b.name AS barangay_name,
-        t.assigned_office, t.priority_score AS hazard_urgency_index,
-        t.urgency_level AS hazard_urgency_level,
+        t.assigned_office, t.priority_index AS operational_priority,
         ra.acknowledged_at, latest.action_type AS latest_action_type,
         ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng
       FROM reports r
@@ -241,10 +233,7 @@ export class FocalIntakeService {
       category: row.category,
       barangayName: row.barangay_name,
       routedOffice: row.assigned_office,
-      hazardUrgency: {
-        index: row.hazard_urgency_index,
-        level: row.hazard_urgency_level,
-      },
+      operationalPriority: row.operational_priority,
       lat: row.lat,
       lng: row.lng,
       intakeState: deriveIntakeState({
@@ -269,7 +258,6 @@ export class FocalIntakeService {
         t.assigned_office, t.member_count, b.name AS barangay_name,
         r.citizen_severity, r.created_at AS submitted_at, r.flags,
         r.description, ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng, r.elevation_m,
-        t.priority_score AS hazard_urgency_index, t.urgency_level AS hazard_urgency_level,
         t.priority_index AS operational_priority,
         ra.acknowledged_at, ra.acknowledged_by_name,
         latest.action_type AS latest_action_type

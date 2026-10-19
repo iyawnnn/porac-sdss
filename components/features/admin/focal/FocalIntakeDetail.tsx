@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import type { FocalIntakeDetail as FocalIntakeDetailData, ScreeningRecommendation } from "@/lib/types/admin-focal-intake";
 import { AcknowledgeDialog } from "@/components/features/admin/focal/dialogs/AcknowledgeDialog";
@@ -36,7 +35,6 @@ type DialogKey = "acknowledge" | "screening" | "forward" | "escalate" | null;
 export function FocalIntakeDetail({ report }: { report: FocalIntakeDetailData }) {
   const router = useRouter();
   const [openDialog, setOpenDialog] = useState<DialogKey>(null);
-  const hazardBadge = getUrgencyBadgeConfig(report.hazardUrgency.index);
 
   function handleScreened(outcome: ScreeningRecommendation) {
     if (outcome === "forward") {
@@ -60,8 +58,9 @@ export function FocalIntakeDetail({ report }: { report: FocalIntakeDetailData })
         <div className="mt-2 flex flex-wrap items-center gap-2.5">
           <h1 className="text-xl font-semibold">{report.reportReference} &middot; {report.category}</h1>
           <Badge variant="outline">{report.intakeState}</Badge>
-          <span className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] ${hazardBadge.className}`}>
-            {hazardBadge.label.toUpperCase()} <span className="mx-1 opacity-60">&middot;</span> <span className="font-mono tabular-nums">{report.hazardUrgency.index ?? "—"}</span>
+          {/* Operational Priority since manuscript revision Phase 1, step 6b (Hazard Urgency before). */}
+          <span className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] ${priorityBandClass(report.operationalPriority)}`} title="Operational Priority">
+            {priorityBandLabel(report.operationalPriority).toUpperCase()} <span className="mx-1 opacity-60">&middot;</span> <span className="font-mono tabular-nums">{report.operationalPriority ?? "—"}</span>
           </span>
           <Badge title="Related operational ticket" variant="secondary">
             Related: {report.linkedTicketReference}
@@ -102,7 +101,7 @@ export function FocalIntakeDetail({ report }: { report: FocalIntakeDetailData })
             <CardContent className="p-4">
               <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Location</p>
               <div className="h-64 overflow-hidden rounded-lg border border-border">
-                <TicketLocationMapLoader barangayGeoJson={null} lat={report.lat} lng={report.lng} urgencyBand={hazardBadge.label} />
+                <TicketLocationMapLoader barangayGeoJson={null} lat={report.lat} lng={report.lng} />
               </div>
               <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1"><MapPinIcon aria-hidden="true" className="size-3.5" />{report.barangayName}</span>
@@ -133,17 +132,7 @@ export function FocalIntakeDetail({ report }: { report: FocalIntakeDetailData })
             <CardContent className="space-y-4 p-4">
               <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Decision Support</p>
 
-              <div>
-                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Hazard Urgency</p>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <span className={`inline-flex h-6 items-center rounded-md px-2 text-xs font-semibold tracking-[0.02em] ${hazardBadge.className}`}>
-                    {hazardBadge.label.toUpperCase()}
-                  </span>
-                  <span className="font-mono text-lg font-semibold tabular-nums">{report.hazardUrgency.index ?? "—"} / 100</span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">System-generated environmental/spatial indicator — elevation, rainfall and cluster density.</p>
-              </div>
-
+              {/* The Hazard Urgency block was removed in manuscript revision Phase 1, step 6b. */}
               <div>
                 <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Operational Priority</p>
                 <div className="mt-1 flex items-baseline gap-2">

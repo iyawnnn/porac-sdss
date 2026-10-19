@@ -11,13 +11,15 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { TABLE_HEAD_CLASS } from "@/components/features/admin/shared/tableHead";
 import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
+import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import type { FocalIntakeRow, IntakeState } from "@/lib/types/admin-focal-intake";
 
 const INTAKE_STATES: IntakeState[] = ["New", "Acknowledged", "Screened", "Forwarded", "Escalated"];
 type StateFilter = "All" | IntakeState;
 type OfficeFilter = "All" | "MEO" | "MDRRMO";
-type UrgencyFilter = "All" | "LOW" | "MEDIUM" | "HIGH";
+// The Hazard Urgency filter was removed in manuscript revision Phase 1, step
+// 6b, with no replacement: Operational Priority has no manuscript-defined
+// levels to filter by.
 
 function matchesSearch(report: FocalIntakeRow, query: string): boolean {
   if (!query) return true;
@@ -58,7 +60,6 @@ export function FocalIntakeQueue({
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<StateFilter>("All");
   const [officeFilter, setOfficeFilter] = useState<OfficeFilter>("All");
-  const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>("All");
   const [flaggedOnly, setFlaggedOnly] = useState(initialFlaggedOnly);
 
   const reports = useMemo(() => {
@@ -69,10 +70,9 @@ export function FocalIntakeQueue({
         if (flaggedOnly && report.flags.length === 0) return false;
         if (stateFilter !== "All" && report.intakeState !== stateFilter) return false;
         if (officeFilter !== "All" && report.routedOffice !== officeFilter) return false;
-        if (urgencyFilter !== "All" && report.hazardUrgency.level !== urgencyFilter) return false;
         return matchesSearch(report, query);
       });
-  }, [initialRows, search, stateFilter, officeFilter, urgencyFilter, flaggedOnly]);
+  }, [initialRows, search, stateFilter, officeFilter, flaggedOnly]);
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -129,29 +129,17 @@ export function FocalIntakeQueue({
               <SelectItem value="MDRRMO">MDRRMO</SelectItem>
             </SelectContent>
           </Select>
-
-          <Select onValueChange={(v) => setUrgencyFilter(v as UrgencyFilter)} value={urgencyFilter}>
-            <SelectTrigger aria-label="Filter by Hazard Urgency" className="h-8 w-36 bg-card text-[13px]" size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Hazard Urgency</SelectItem>
-              <SelectItem value="LOW">Low</SelectItem>
-              <SelectItem value="MEDIUM">Medium</SelectItem>
-              <SelectItem value="HIGH">High</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
 
         <Table className="text-[13px]" style={{ minWidth: 920 }}>
-          <TableCaption className="sr-only">Incoming reports, filtered by intake state, routed office and Hazard Urgency.</TableCaption>
+          <TableCaption className="sr-only">Incoming reports, filtered by intake state and routed office.</TableCaption>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className={TABLE_HEAD_CLASS + " pl-4"} scope="col">Report</TableHead>
               <TableHead className={TABLE_HEAD_CLASS} scope="col">Location</TableHead>
               <TableHead className={TABLE_HEAD_CLASS} scope="col">Category</TableHead>
               <TableHead className={TABLE_HEAD_CLASS} scope="col">Routed To</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS} scope="col">Hazard Urgency</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS} scope="col">Op. Priority</TableHead>
               <TableHead className={TABLE_HEAD_CLASS} scope="col">Intake State</TableHead>
               <TableHead className={TABLE_HEAD_CLASS} scope="col">Submitted</TableHead>
               <TableHead className={TABLE_HEAD_CLASS + " pr-4 text-end"} scope="col">Action</TableHead>
@@ -166,7 +154,6 @@ export function FocalIntakeQueue({
               </TableRow>
             ) : (
               reports.map((report) => {
-                const urgencyBadge = getUrgencyBadgeConfig(report.hazardUrgency.index);
                 return (
                   <TableRow className="hover:bg-[var(--brand-subtle)]" key={report.reportId}>
                     <TableCell className="max-w-48 py-2.5 pl-4">
@@ -188,8 +175,8 @@ export function FocalIntakeQueue({
                       <Badge variant="secondary">{report.routedOffice}</Badge>
                     </TableCell>
                     <TableCell className="py-2.5">
-                      <span className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${urgencyBadge.className}`}>
-                        {urgencyBadge.label.toUpperCase()} <span className="mx-1 opacity-60">&middot;</span> <span className="font-mono tabular-nums">{report.hazardUrgency.index ?? "—"}</span>
+                      <span className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${priorityBandClass(report.operationalPriority)}`}>
+                        {priorityBandLabel(report.operationalPriority).toUpperCase()} <span className="mx-1 opacity-60">&middot;</span> <span className="font-mono tabular-nums">{report.operationalPriority ?? "—"}</span>
                       </span>
                     </TableCell>
                     <TableCell className="py-2.5">

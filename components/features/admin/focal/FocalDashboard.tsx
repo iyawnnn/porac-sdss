@@ -10,7 +10,7 @@ import { CardHeaderRow } from "@/components/features/admin/shared/CardHeaderRow"
 import { TABLE_HEAD_CLASS } from "@/components/features/admin/shared/tableHead";
 import { KpiCard } from "@/components/features/admin/shared/KpiCard";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
+import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import type { FocalIntakeRow } from "@/lib/types/admin-focal-intake";
 
 function formatSubmittedAgo(at: string): string {
@@ -56,13 +56,13 @@ export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
         </CardHeader>
         <CardBodyPanel>
           <Table className="text-[13px]">
-            <TableCaption className="sr-only">Most recently submitted reports, with routing and hazard urgency.</TableCaption>
+            <TableCaption className="sr-only">Most recently submitted reports, with routing and Operational Priority.</TableCaption>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className={TABLE_HEAD_CLASS + " pl-4"} scope="col">Report</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS} scope="col">Barangay</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS} scope="col">Routed To</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS} scope="col">Hazard Urgency</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS} scope="col">Op. Priority</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS} scope="col">Intake State</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS} scope="col">Submitted</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS + " pr-4 text-end"} scope="col">Review</TableHead>
@@ -73,7 +73,6 @@ export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
                 <TableRow className="hover:bg-transparent"><TableCell className="p-0" colSpan={7}><EmptyState className="p-6" title="No incoming reports right now." /></TableCell></TableRow>
               ) : (
                 reports.slice(0, 6).map((report) => {
-                  const urgencyBadge = getUrgencyBadgeConfig(report.hazardUrgency.index);
                   return (
                     <TableRow className="hover:bg-[var(--brand-subtle)]" key={report.reportId}>
                       <TableCell className="max-w-56 py-2.5 pl-4">
@@ -87,8 +86,8 @@ export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
                         <Badge variant="secondary">{report.routedOffice}</Badge>
                       </TableCell>
                       <TableCell className="py-2.5">
-                        <span className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${urgencyBadge.className}`}>
-                          {urgencyBadge.label.toUpperCase()} <span className="mx-1 opacity-60">&middot;</span> <span className="font-mono tabular-nums">{report.hazardUrgency.index ?? "—"}</span>
+                        <span className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${priorityBandClass(report.operationalPriority)}`}>
+                          {priorityBandLabel(report.operationalPriority).toUpperCase()} <span className="mx-1 opacity-60">&middot;</span> <span className="font-mono tabular-nums">{report.operationalPriority ?? "—"}</span>
                         </span>
                       </TableCell>
                       <TableCell className="py-2.5">

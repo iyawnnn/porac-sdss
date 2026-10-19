@@ -78,6 +78,16 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 1, step 6b — Hazard Urgency removed from Focal Intake — **completed (code + unit tests; not yet exercised against a real database)**
+
+- **Swapped to Operational Priority:** the Focal dashboard's and Intake Queue's "Hazard Urgency" columns are now "Op. Priority" (`priority_index` with its display band from `lib/utils/ui/priority.ts`); the intake detail's header badge shows Operational Priority; the Focal map's pins are filled with Operational Priority's band colour (new `priorityMarkerIcon` in `lib/gis/markerIcon.ts` — same pin sizes as before, no pulse) and the popup reads "Operational Priority: <label> (<value>)". No new threshold.
+- **Removed:** the Intake Queue's Hazard Urgency filter (no replacement — Operational Priority has no manuscript-defined levels to filter by), the intake detail's Hazard Urgency block in the Decision Support card (the Operational Priority block stays), and the `hazardUrgency` field from all three Focal responses (`GET /admin/intake`, `/admin/intake/:id`, `/admin/intake/geo`). `FocalIntakeService` no longer selects `priority_score` or `urgency_level`.
+- **Added:** `operationalPriority` on `GET /admin/intake/geo` (`t.priority_index`), so the map has a value to colour by. Focal's access rules are unchanged — still its own narrow queries, no Work Order or assessment data, never `/admin/tickets/geo`.
+- **`TicketLocationMap`:** the optional `urgencyBand` prop (left over from step 5 for Focal) is gone from `TicketLocationMap.tsx` and `TicketLocationMapLoader.tsx`; the pin is the neutral one for every caller. The intake detail's "Elevation …m" line stays (Phase 4 replaces it).
+- **Still Hazard Urgency until 6c / 7:** the citizen pages and citizen map (6c), and the Hazard Urgency recompute pass (7).
+- No schema change, no migration.
+- Tests: API 53 suites / 730 tests (`focal-intake.service.spec.ts`: fixtures drop the Hazard Urgency columns; escalate leaves `operationalPriority` unchanged and returns no `hazardUrgency`; the geo rows carry `operationalPriority`; a source-scan guard that `focal-intake.service.ts` contains no `priority_score`, `urgency_level` or `hazardUrgency`). Frontend `tsc --noEmit` and ESLint clean. Playwright (`admin-focal.spec.ts`): Focal dashboard and Intake Queue show no Hazard Urgency text, the queue has an "Op. Priority" column and no Hazard Urgency filter; an intake detail page shows the Operational Priority card and no Hazard Urgency.
+
 ### Manuscript revision Phase 1, step 6a — Hazard Urgency removed from the admin overview screens — **completed (code + unit tests; not yet exercised against a real database)**
 
 - **Removed, not replaced:** the "High Hazard Urgency" counts — Office Performance Summary's "High-Urgency Open Tickets" metric (dashboard and its MEO vs. MDRRMO table), the Reports page's "High Urgency Tickets" summary tile, and Barangay Insights' "High Urgency" index column and profile KPI tile. Operational Priority is a ranking with no manuscript-defined Low/Medium/High levels, so no Operational Priority count stands in for them. The API carries no new threshold.

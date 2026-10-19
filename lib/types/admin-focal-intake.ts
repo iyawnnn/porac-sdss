@@ -17,7 +17,8 @@ export interface FocalIntakeRow {
   citizenSeverity: string;
   submittedAt: string;
   flags: string[];
-  hazardUrgency: { index: number | null; level: string | null };
+  // Operational Priority (priority_index). The Hazard Urgency field was
+  // removed in manuscript revision Phase 1, step 6b.
   operationalPriority: number | null;
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
@@ -44,14 +45,16 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
 // deliberately narrow, separate shape from FocalIntakeRow/FocalIntakeDetail:
 // only what a map pin needs (never Operational Assessment content, Work
 // Order internals, or staff assignment). Mirrors
-// api/src/admin/focal-intake.service.ts's FocalIntakeGeoRow.
+// api/src/admin/focal-intake.service.ts's FocalIntakeGeoRow. Pins carry
+// Operational Priority since manuscript revision Phase 1, step 6b (Hazard
+// Urgency before).
 export interface FocalIntakeGeoRow {
   reportId: number;
   reportReference: string;
   category: string;
   barangayName: string;
   routedOffice: "MEO" | "MDRRMO";
-  hazardUrgency: { index: number | null; level: string | null };
+  operationalPriority: number | null;
   lat: number;
   lng: number;
   intakeState: IntakeState;
