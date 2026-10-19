@@ -9,14 +9,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
-import { WeatherService } from '../domain/weather.service';
 import { MediaService } from '../domain/media.service';
 import {
   computePriorityBreakdown,
   severityFromRank,
   type PriorityBreakdown,
 } from '../common/utils/scoring';
-import type { UrgencyLevel } from '../domain/urgency';
 import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
@@ -133,10 +131,10 @@ export interface AdminTicketGeoRow {
   status: string;
   assigned_office: string;
   barangay_name: string;
-  urgency_score: number | null;
-  urgency_band: string | null;
+  // Manuscript revision Phase 1, step 5: the admin map reads Operational
+  // Priority only. The Hazard Urgency columns (urgency_score/urgency_band/
+  // priority_score) are no longer selected here.
   priority_index: number | null;
-  priority_score: number | null;
   lat: number;
   lng: number;
   title: string | null;
@@ -155,14 +153,11 @@ export interface TicketDetail {
   lat: number;
   lng: number;
   elevation_m: number | null;
-  elevation_factor: number | null;
-  precipitation_factor: number | null;
-  cluster_factor: number | null;
-  urgency_score: number | null;
-  urgency_band: string | null;
+  // Manuscript revision Phase 1, step 5: Ticket Detail shows Operational
+  // Priority only. The Hazard Urgency columns (the three *_factor inputs,
+  // urgency_score, urgency_band, priority_score, urgency_level) are no
+  // longer selected here.
   priority_index: number | null;
-  priority_score: number | null;
-  urgency_level: UrgencyLevel | null;
   resolution_image_url: string | null;
   resolution_notes: string | null;
   disputed_at: string | null;
@@ -216,9 +211,11 @@ export interface TicketReferralRow {
   referred_at: string;
 }
 
+// The live rain reading (rain1hMm) that used to ride along here fed only
+// Ticket Detail's Hazard Urgency card, retired in manuscript revision
+// Phase 1, step 5. Operational Priority has no rainfall input.
 export interface TicketPriorityContext {
   breakdown: PriorityBreakdown;
-  rain1hMm: number;
 }
 
 // Same 3-status "active" set used throughout the codebase (dashboard,
@@ -258,7 +255,6 @@ const STATUS_NOTIFICATION: Partial<
 export class TicketsService {
   constructor(
     @Inject(PG) private readonly pg: Sql,
-    private readonly weather: WeatherService,
     private readonly media: MediaService,
     private readonly notifications: NotificationsService,
     @Inject(EMAIL_SERVICE) private readonly email: EmailService,
@@ -512,7 +508,7 @@ export class TicketsService {
     const sql = this.pg;
     return sql<AdminTicketGeoRow[]>`
       SELECT t.id, t.category, t.status, t.assigned_office, b.name AS barangay_name,
-        t.urgency_score, t.urgency_band, t.priority_index, t.priority_score, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
+        t.priority_index, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
         r.title, r.image_url
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
@@ -535,9 +531,7 @@ export class TicketsService {
     const [ticket] = await sql<TicketDetail[]>`
       SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, ST_AsGeoJSON(b.geom) AS barangay_geojson,
         t.status, t.assigned_office, t.member_count, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
-        t.elevation_m, t.elevation_factor, t.precipitation_factor,
-        t.cluster_factor, t.urgency_score, t.urgency_band, t.priority_index,
-        t.priority_score, t.urgency_level,
+        t.elevation_m, t.priority_index,
         t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at,
         t.disputed_at, t.dispute_reason
       FROM tickets t
@@ -627,7 +621,6 @@ export class TicketsService {
     if (!row) return null;
     assertOfficeAccess(admin, row.assigned_office);
 
-    const rain1hMm = await this.weather.getCurrentRain1hMm();
     const breakdown = computePriorityBreakdown({
       severity: severityFromRank(row.severity_rank),
       createdAt: row.created_at,
@@ -635,7 +628,7 @@ export class TicketsService {
       maxActiveBarangayCount: row.max_active_barangay_count,
     });
 
-    return { breakdown, rain1hMm };
+    return { breakdown };
   }
 
   // Resolving is the only transition that can carry a proof photo + notes;

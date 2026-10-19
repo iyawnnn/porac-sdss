@@ -3,14 +3,20 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, LayersIcon } from "lucide-react";
 import { TICKET_CATEGORIES } from "@/lib/types/admin-ticket-constants";
-import { getUrgencyBandStyle } from "@/lib/utils/ui/urgency";
+import { priorityBandHex } from "@/lib/utils/ui/priority";
 import { CATEGORY_MARKER_SPEC } from "@/lib/gis/categoryMarker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import styles from "./MapLegend.module.css";
 
-const URGENCY_BANDS = ["Low", "Medium", "High"] as const;
+// One representative priority_index per band, only to pick the ring colour
+// (priorityBandHex). Ranges match lib/utils/ui/priority.ts.
+const PRIORITY_BANDS = [
+  { label: "Low", range: "1–33", sample: 1 },
+  { label: "Medium", range: "34–66", sample: 34 },
+  { label: "High", range: "67–100", sample: 67 },
+] as const;
 
 function LegendBody() {
   return (
@@ -33,20 +39,19 @@ function LegendBody() {
         </div>
       </section>
       <section>
-        <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Hazard Urgency (outer ring)</p>
+        <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Operational Priority (outer ring)</p>
         <div className="space-y-1.5">
-          {URGENCY_BANDS.map((band) => (
-            <div className="flex items-center gap-2" key={band}>
-              <span className="flex size-7 shrink-0 items-center justify-center"><span className="size-4 rounded-full border-2 border-white" style={{ boxShadow: `0 0 0 2px ${getUrgencyBandStyle(band).hex}` }} /></span>
+          {PRIORITY_BANDS.map((band) => (
+            <div className="flex items-center gap-2" key={band.label}>
+              <span className="flex size-7 shrink-0 items-center justify-center"><span className="size-4 rounded-full border-2 border-white" style={{ boxShadow: `0 0 0 2px ${priorityBandHex(band.sample)}` }} /></span>
               <span className="text-xs text-foreground">
-                {band}
-                {band === "High" ? " - pulses" : ""}
+                {band.label} <span className="text-muted-foreground">({band.range})</span>
               </span>
             </div>
           ))}
         </div>
       </section>
-      <p className="text-xs text-muted-foreground">Numbered circles are clusters; their ring shows the highest Hazard Urgency inside.</p>
+      <p className="text-xs text-muted-foreground">Numbered circles are clusters; their ring shows the highest Operational Priority inside.</p>
     </div>
   );
 }

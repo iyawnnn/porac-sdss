@@ -7,7 +7,6 @@ import { TicketsService } from './tickets.service';
 import type { Sql } from 'postgres';
 import type { ConfigService } from '@nestjs/config';
 import type { AdminSession } from '../auth/session.service';
-import type { WeatherService } from '../domain/weather.service';
 import type { MediaService } from '../domain/media.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { EmailService } from '../citizens/email.service';
@@ -33,7 +32,6 @@ describe('parseTicketQuery category filter', () => {
   const sql = jest.fn() as unknown as Sql;
   const service = new TicketsService(
     sql,
-    {} as WeatherService,
     {} as MediaService,
     {} as NotificationsService,
     {} as EmailService,
@@ -75,7 +73,6 @@ describe('parseTicketQuery office scoping', () => {
   const sql = jest.fn() as unknown as Sql;
   const service = new TicketsService(
     sql,
-    {} as WeatherService,
     {} as MediaService,
     {} as NotificationsService,
     {} as EmailService,
@@ -119,7 +116,6 @@ describe('parseTicketQuery disputed filter', () => {
   const sql = jest.fn() as unknown as Sql;
   const service = new TicketsService(
     sql,
-    {} as WeatherService,
     {} as MediaService,
     {} as NotificationsService,
     {} as EmailService,
@@ -156,7 +152,6 @@ describe('cross-office access to single-resource ticket endpoints', () => {
     }) as unknown as Sql;
     return new TicketsService(
       sql,
-      {} as WeatherService,
       {} as MediaService,
       {} as NotificationsService,
       {} as EmailService,
@@ -298,7 +293,6 @@ describe('admin audit logging for ticket mutations', () => {
     const sendReportRejected = jest.fn().mockResolvedValue(undefined);
     const service = new TicketsService(
       sql,
-      {} as WeatherService,
       {} as MediaService,
       { createInTx } as unknown as NotificationsService,
       { sendReportRejected } as unknown as EmailService,
@@ -570,7 +564,6 @@ describe('TicketsService.getTicketsForExport', () => {
     }) as unknown as Sql;
     return new TicketsService(
       sql,
-      {} as WeatherService,
       {} as MediaService,
       {} as NotificationsService,
       {} as EmailService,

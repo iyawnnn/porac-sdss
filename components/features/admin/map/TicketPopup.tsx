@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ImageOffIcon, MapPinIcon, XIcon } from "lucide-react";
 import type { AdminTicketGeoRow } from "@/lib/types/admin-tickets";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
+import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { getCategoryMarkerSpec } from "@/lib/gis/categoryMarker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ export function TicketPopup({ ticket, onClose }: { ticket: AdminTicketGeoRow; on
   const title = ticket.title ?? ticket.category;
   const spec = getCategoryMarkerSpec(ticket.category);
   const CategoryIcon = spec.icon;
-  const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
 
   return (
     <Card className="w-80 gap-3 py-3 shadow-lg" size="sm">
@@ -50,8 +49,8 @@ export function TicketPopup({ ticket, onClose }: { ticket: AdminTicketGeoRow; on
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge className={urgencyBadge.className} variant="outline">
-            Hazard Urgency: {urgencyBadge.label} <span className="font-mono tabular-nums">{ticket.priority_score ?? "—"}</span>
+          <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
+            Operational Priority: {priorityBandLabel(ticket.priority_index)} <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span>
           </Badge>
           <StatusPill status={ticket.status} />
         </div>

@@ -5,7 +5,6 @@
 // erased at compile time, so keeping them here costs nothing and avoids
 // updating every import site to a new path).
 import type { PriorityBreakdown } from "@/lib/utils/scoring";
-import type { UrgencyLevel } from "@/lib/utils/urgency";
 
 export interface AdminTicketRow {
   id: number;
@@ -72,14 +71,9 @@ export interface TicketDetail {
   lat: number;
   lng: number;
   elevation_m: number | null;
-  elevation_factor: number | null;
-  precipitation_factor: number | null;
-  cluster_factor: number | null;
-  urgency_score: number | null;
-  urgency_band: string | null;
+  // Operational Priority only since manuscript revision Phase 1, step 5 —
+  // the Hazard Urgency fields are no longer in the API response.
   priority_index: number | null;
-  priority_score: number | null;
-  urgency_level: UrgencyLevel | null;
   resolution_image_url: string | null;
   resolution_notes: string | null;
   created_at: string;
@@ -156,7 +150,6 @@ export interface TicketReferralRow {
 
 export interface TicketPriorityContext {
   breakdown: PriorityBreakdown;
-  rain1hMm: number;
 }
 
 // Formerly defined in app/api/admin/tickets/geo/route.ts (deleted Phase 9)
@@ -168,10 +161,8 @@ export interface AdminTicketGeoRow {
   status: string;
   assigned_office: string;
   barangay_name: string;
-  urgency_score: number | null;
-  urgency_band: string | null;
+  // Operational Priority only since manuscript revision Phase 1, step 5.
   priority_index: number | null;
-  priority_score: number | null;
   lat: number;
   lng: number;
   title: string | null;
