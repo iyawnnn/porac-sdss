@@ -416,24 +416,30 @@ test("MEO admin can reassign a ticket's office through the UI, and office scopin
     const mdrrmoPage = await mdrrmoContext.newPage();
     await loginAs(mdrrmoPage, E2E_MDRRMO_ADMIN);
     const mdrrmoHeaders = { ...sessionCookieHeader(await mdrrmoContext.cookies()), "content-type": "application/json" };
-    await request.post(`/api/admin/tickets/${ticketId}/reassign`, {
+    const restoreRes = await request.post(`/api/admin/tickets/${ticketId}/reassign`, {
       headers: mdrrmoHeaders,
       data: { toOffice: "MEO" },
     });
+    expect(restoreRes.ok()).toBe(true);
     await mdrrmoContext.close();
   }
 
   // Confirm the restore actually took: MEO's own list has it back, MDRRMO's
-  // own list no longer does.
+  // own list no longer does. Both lists are searched by this ticket's id
+  // (the queue's search matches t.id exactly for a numeric term) rather than
+  // read as "the first 50 rows": a fresh Low-severity throwaway ticket ranks
+  // near the bottom of the Operational Priority order, and once the dev
+  // database holds more than 50 tickets for an office it falls off page one
+  // even when the restore worked.
   const meoCookies = await page.context().cookies();
-  const meoRes = await request.get("/api/admin/tickets?status=all&limit=50", { headers: sessionCookieHeader(meoCookies) });
+  const meoRes = await request.get(`/api/admin/tickets?status=all&search=${ticketId}`, { headers: sessionCookieHeader(meoCookies) });
   const meoBody = await meoRes.json();
   expect(meoBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(true);
 
   const mdrrmoContext = await browser.newContext();
   const mdrrmoPage = await mdrrmoContext.newPage();
   await loginAs(mdrrmoPage, E2E_MDRRMO_ADMIN);
-  const mdrrmoRes = await request.get("/api/admin/tickets?status=all&limit=50", { headers: sessionCookieHeader(await mdrrmoContext.cookies()) });
+  const mdrrmoRes = await request.get(`/api/admin/tickets?status=all&search=${ticketId}`, { headers: sessionCookieHeader(await mdrrmoContext.cookies()) });
   const mdrrmoBody = await mdrrmoRes.json();
   expect(mdrrmoBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(false);
   await mdrrmoContext.close();
