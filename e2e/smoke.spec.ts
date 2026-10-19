@@ -75,7 +75,7 @@ test("citizen header navigates public map, my reports, report form, and logs out
   await page.locator("header").getByRole("link", { name: "Map" }).click();
   await expect(page).toHaveURL(/\/map/);
   await expect(page.locator(".leaflet-container")).toBeVisible();
-  await expect(page.getByText("Public Hazard Map")).toBeVisible();
+  await expect(page.getByText("Public Report Map")).toBeVisible();
 
   await page.getByRole("link", { name: "My Reports" }).click();
   await expect(page).toHaveURL(/\/reports/);

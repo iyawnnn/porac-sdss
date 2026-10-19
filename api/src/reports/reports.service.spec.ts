@@ -566,3 +566,46 @@ describe('citizen responses carry no system score (Phase 1, step 6c)', () => {
     expect(resultType).not.toMatch(/elevationM\s*:/);
   });
 });
+
+// Manuscript revision Phase 1, step 6d (Appendix L, Citizen Web-GIS Map;
+// Table 12): the public map is a privacy-limited view. Other citizens'
+// reports send no title, photo or exact pin — coordinates are rounded on the
+// server — and only the fields the wireframe's "Selected report" panel shows.
+describe('public map privacy-limited view (Phase 1, step 6d)', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+  const start = reportsServiceSource.indexOf('async getPublicHazardMapData(');
+  // Comment lines dropped so the method's own explanatory comments (which
+  // name the excluded fields) can't satisfy or trip the assertions.
+  const method = reportsServiceSource
+    .slice(start, reportsServiceSource.indexOf('\n}', start))
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+  const ticketSelect = method.slice(
+    method.indexOf('t.id, t.category'),
+    method.indexOf('FROM tickets t'),
+  );
+
+  it('rounds the coordinates to 3 decimal places on the server', () => {
+    expect(method).toContain('ROUND(ST_Y(t.geom)::numeric, 3)');
+    expect(method).toContain('ROUND(ST_X(t.geom)::numeric, 3)');
+    expect(method).not.toMatch(/(?<!ROUND\()ST_[XY]\(t\.geom\)/);
+  });
+
+  it('never selects the title, photo, description, reporter, EXIF, flags, scores or notes', () => {
+    expect(method).not.toMatch(/\btitle\b|image_url|description/);
+    expect(ticketSelect).not.toMatch(
+      /citizen_id|exif|flags|urgency_|priority_|notes/,
+    );
+  });
+
+  it('still selects own_report_id, assigned_office, created_at and updated_at', () => {
+    expect(ticketSelect).toContain('own.id AS own_report_id');
+    expect(ticketSelect).toContain('t.assigned_office');
+    expect(ticketSelect).toContain('t.created_at AS reported_at');
+    expect(ticketSelect).toContain('t.updated_at AS last_updated_at');
+  });
+});

@@ -138,7 +138,7 @@ test.describe("No system score on citizen pages", () => {
     await expect(page.getByText(/urgency/i)).toHaveCount(0);
 
     await page.goto("/map");
-    await expect(page.getByText("Public Hazard Map", { exact: true })).toBeVisible();
+    await expect(page.getByText("Public Report Map", { exact: true })).toBeVisible();
     await expect(page.getByText("Urgency", { exact: true })).toHaveCount(0);
 
     const reports = await fetchMyReports(page);

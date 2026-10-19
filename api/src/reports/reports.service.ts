@@ -131,17 +131,25 @@ export interface StatusHistoryStep {
   changed_at: string;
 }
 
+// The public map's privacy-limited row (manuscript Appendix L, Citizen
+// Web-GIS Map; Table 12; manuscript revision Phase 1, step 6d). It carries
+// only what the wireframe's "Selected report" panel shows. Deliberately
+// excluded, because Appendix L says "reporter identity, photos, exact pins
+// and internal records are not shown" (Decision 8): the citizen's title,
+// description and photo, the reporter, EXIF, integrity flags, any system
+// score (Hazard Urgency left in step 6c; Operational Priority is never
+// shown to citizens), staff notes and assessments. lat/lng are rounded
+// server-side, so exact coordinates never reach the browser.
 export interface PublicTicketGeoRow {
   id: number;
   category: string;
   status: string;
   barangay_name: string;
-  // urgency_band/urgency_score left the public map in manuscript revision
-  // Phase 1, step 6c; pins and clusters are neutral.
   lat: number;
   lng: number;
-  title: string | null;
-  image_url: string | null;
+  reported_at: string;
+  last_updated_at: string;
+  assigned_office: 'MEO' | 'MDRRMO';
   own_report_id: number | null;
 }
 
@@ -607,19 +615,19 @@ export class ReportsService {
       sql<{ id: number; name: string; geojson: string }[]>`
         SELECT id, name, ST_AsGeoJSON(geom) AS geojson FROM barangays ORDER BY name
       `,
+      // Appendix L: "exact pins … are not shown". Coordinates are rounded
+      // to 3 decimal places (about 100 m) here, on the server — that
+      // precision is our implementation choice for the wireframe's
+      // "Approximate" location, not a manuscript-defined value.
       sql<PublicTicketGeoRow[]>`
         SELECT
           t.id, t.category, t.status, b.name AS barangay_name,
-          ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
-          r.title, r.image_url, own.id AS own_report_id
+          ROUND(ST_Y(t.geom)::numeric, 3)::float8 AS lat,
+          ROUND(ST_X(t.geom)::numeric, 3)::float8 AS lng,
+          t.created_at AS reported_at, t.updated_at AS last_updated_at,
+          t.assigned_office, own.id AS own_report_id
         FROM tickets t
         JOIN barangays b ON b.id = t.barangay_id
-        LEFT JOIN LATERAL (
-          SELECT title, image_url FROM reports
-          WHERE reports.ticket_id = t.id
-          ORDER BY reports.id ASC
-          LIMIT 1
-        ) r ON true
         LEFT JOIN LATERAL (
           SELECT id FROM reports
           WHERE reports.ticket_id = t.id AND reports.citizen_id = ${citizenId}

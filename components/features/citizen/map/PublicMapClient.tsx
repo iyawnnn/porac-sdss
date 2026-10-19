@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, GeoJSON, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, Marker, Popup, ZoomControl } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import type { FeatureCollection } from "geojson";
 import "leaflet/dist/leaflet.css";
@@ -25,6 +25,9 @@ const GLASS_PANEL = "rounded-xl border border-slate-200/60 bg-white/90 shadow-xl
 
 // Manuscript revision Phase 1, step 6c: citizens are shown no system score,
 // so every pin and cluster is neutral and the Urgency legend is gone.
+// Step 6d: the title follows the Appendix L wireframe ("Public Report Map",
+// privacy-limited details), and the zoom control sits bottom-right — top-left
+// it covered the title panel (same pattern as the admin MapClient).
 
 export default function PublicMapClient({
   barangays,
@@ -46,10 +49,12 @@ export default function PublicMapClient({
   return (
     <div className={`${heightClassName} w-full relative`}>
       <div className={`absolute left-3 top-3 z-[1000] px-3 py-2 text-sm text-ink-700 ${GLASS_PANEL}`}>
-        <p className="font-medium text-ink-900">Public Hazard Map</p>
-        <p>{tickets.length} active public reports</p>
+        <p className="font-medium text-ink-900">Public Report Map</p>
+        <p>{tickets.length} active public reports · privacy-limited details</p>
+        <p className="text-xs text-ink-500">This is not a hazard or risk map.</p>
       </div>
-      <MapContainer center={CITY_CENTER} zoom={MUNICIPALITY.defaultZoom} className="h-full w-full">
+      <MapContainer center={CITY_CENTER} zoom={MUNICIPALITY.defaultZoom} className="h-full w-full" zoomControl={false}>
+        <ZoomControl position="bottomright" />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="&copy; OpenStreetMap contributors"

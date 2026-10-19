@@ -4,17 +4,21 @@
 // components still `import type`.
 import type { Geometry } from "geojson";
 
+// The privacy-limited public map row (manuscript Appendix L, Citizen Web-GIS
+// Map; manuscript revision Phase 1, step 6d) — matches
+// api/src/reports/reports.service.ts's PublicTicketGeoRow exactly. No title,
+// photo, reporter or system score; lat/lng arrive already rounded to 3
+// decimals (about 100 m) by the server, so the pin is approximate.
 export interface PublicTicketGeoRow {
   id: number;
   category: string;
   status: string;
   barangay_name: string;
-  // urgency_band/urgency_score were removed in manuscript revision Phase 1,
-  // step 6c — pins are neutral and citizens see no system score.
   lat: number;
   lng: number;
-  title: string | null;
-  image_url: string | null;
+  reported_at: string;
+  last_updated_at: string;
+  assigned_office: "MEO" | "MDRRMO";
   // The signed-in citizen's own report id for this ticket, if any — lets the
   // popup link to their private /dashboard/reports/[id] status page without
   // exposing that route for reports they don't own.

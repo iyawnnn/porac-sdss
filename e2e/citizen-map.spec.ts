@@ -1,8 +1,8 @@
 
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { E2E_MEO_ADMIN } from "./test-credentials";
-import { loginAdmin as loginAs } from "./helpers";
+import { E2E_CITIZEN_ACCOUNT, E2E_MEO_ADMIN } from "./test-credentials";
+import { loginAdmin as loginAs, loginCitizen } from "./helpers";
 
 test.setTimeout(60_000);
 
@@ -90,4 +90,55 @@ test("public hazard map includes a ticket through Reported/Under Review/In Progr
   await expect.poll(() => publicMapStatuses(citizenPage, ticketId)).toBeUndefined();
 
   await citizenContext.close();
+});
+
+// Manuscript revision Phase 1, step 6d (Appendix L, Citizen Web-GIS Map;
+// Table 12): the public map is a privacy-limited view of other citizens'
+// reports. Uses the seeded citizen account, so it creates no report and
+// costs nothing against the hourly submission limit.
+test("public map sends and shows only privacy-limited details", async ({ page }) => {
+  await loginCitizen(page, E2E_CITIZEN_ACCOUNT);
+
+  const res = await page.request.get("/api/public-map");
+  expect(res.ok()).toBe(true);
+  const body = (await res.json()) as { tickets: Record<string, unknown>[] };
+  for (const ticket of body.tickets) {
+    expect(ticket).not.toHaveProperty("title");
+    expect(ticket).not.toHaveProperty("image_url");
+    expect(ticket).not.toHaveProperty("description");
+    const lat = ticket.lat as number;
+    const lng = ticket.lng as number;
+    expect(Math.round(lat * 1000) / 1000).toBe(lat);
+    expect(Math.round(lng * 1000) / 1000).toBe(lng);
+    expect(ticket).toHaveProperty("reported_at");
+    expect(ticket).toHaveProperty("last_updated_at");
+    expect(ticket).toHaveProperty("assigned_office");
+  }
+  test.skip(body.tickets.length === 0, "No active public tickets to open a popup for.");
+
+  await page.goto("/map");
+  await expect(page.getByText("Public Report Map", { exact: true })).toBeVisible();
+  const markers = page.locator(".leaflet-marker-pane .leaflet-marker-icon");
+  await expect(markers.first()).toBeVisible();
+
+  // Pins carry no text; clusters show their count. Click a bare pin if one
+  // is on screen, otherwise a cluster (which zooms in, or spiderfies at the
+  // last zoom level), until a popup opens.
+  const popup = page.locator(".leaflet-popup-content");
+  for (let attempt = 0; attempt < 8 && (await popup.count()) === 0; attempt++) {
+    const pin = markers.filter({ hasNotText: /\d/ }).first();
+    if (await pin.isVisible()) {
+      await pin.click();
+    } else {
+      await markers.filter({ hasText: /^\d+$/ }).first().click();
+    }
+    await page.waitForTimeout(600);
+  }
+
+  await expect(popup).toBeVisible();
+  await expect(popup.getByText("Approximate", { exact: true })).toBeVisible();
+  await expect(popup.getByText("Handled by", { exact: true })).toBeVisible();
+  await expect(popup.getByText("Public update", { exact: true })).toBeVisible();
+  await expect(popup.getByText(/exact pins and internal records are not shown/)).toBeVisible();
+  await expect(popup.locator("img")).toHaveCount(0);
 });
