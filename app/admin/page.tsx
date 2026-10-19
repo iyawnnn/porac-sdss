@@ -35,10 +35,11 @@ interface DashboardResponse {
 
 async function DashboardData() {
   // The dashboard endpoint's own response has no general ticket-level list
-  // suitable for the "Highest Urgency Actions" table (its needsAttention
-  // lists are narrowly scoped to work-order status, not general urgency) —
-  // so this reuses the exact endpoint/params the Ticket Queue already
-  // calls. Settled independently from the dashboard fetch: a failure here
+  // suitable for the "Highest Priority Actions" table (its needsAttention
+  // lists are narrowly scoped to work-order status) — so this reuses the
+  // exact endpoint/params the Ticket Queue already calls: Operational
+  // Priority, highest first (was Hazard Urgency until manuscript revision
+  // Phase 1, step 4). Settled independently from the dashboard fetch: a failure here
   // degrades just that one table, it must not take down the whole dashboard.
   //
   // limit=10, not 5: TicketsService.parseTicketQuery only accepts
@@ -49,7 +50,7 @@ async function DashboardData() {
   // the dashboard table itself slices to the 5 it wants to display.
   const [dashboardResult, ticketsResult, session] = await Promise.allSettled([
     apiGet<DashboardResponse>("/admin/dashboard"),
-    apiGet<PaginatedTickets>("/admin/tickets?sort=priority_desc&status=active&limit=10"),
+    apiGet<PaginatedTickets>("/admin/tickets?sort=op_priority_desc&status=active&limit=10"),
     getAdminSessionFromApi(),
   ]);
 

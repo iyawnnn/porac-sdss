@@ -65,7 +65,6 @@ describe('TicketsService.getViewCounts office scoping', () => {
 
   const ROW = {
     all_active: 159,
-    high_urgency: 4,
     disputed: 1,
     meo: 159,
     mdrrmo: 0,
@@ -101,7 +100,6 @@ describe('TicketsService.getViewCounts office scoping', () => {
     const { service } = makeService(ROW);
     await expect(service.getViewCounts(MEO_OFFICER)).resolves.toEqual({
       allActive: 159,
-      highUrgency: 4,
       disputed: 1,
       meo: 159,
       mdrrmo: 0,
@@ -112,23 +110,21 @@ describe('TicketsService.getViewCounts office scoping', () => {
     const { service } = makeService(undefined);
     await expect(service.getViewCounts(MEO_OFFICER)).resolves.toEqual({
       allActive: 0,
-      highUrgency: 0,
       disputed: 0,
       meo: 0,
       mdrrmo: 0,
     });
   });
 
-  // If this ever becomes a priority_score comparison, the High urgency tab will
-  // advertise a number the list it opens disagrees with — the urgency filter
-  // matches urgency_band, so the count has to as well.
-  it('counts High urgency off urgency_band, the column the urgency filter matches', () => {
+  // Manuscript revision Phase 1, step 4: the High urgency tab and its count
+  // are gone, so the counts query must not read any Hazard Urgency column.
+  it('no longer counts anything off a Hazard Urgency column', () => {
     const body = ticketsServiceSource.slice(
       ticketsServiceSource.indexOf('async getViewCounts('),
       ticketsServiceSource.indexOf('async getTicketsForExport('),
     );
-    expect(body).toMatch(/urgency_band = 'High'/);
-    expect(body).not.toMatch(/priority_score\s*>=/);
+    expect(body).not.toMatch(/urgency_band|urgency_level|priority_score/);
+    expect(body).not.toMatch(/high_urgency/);
   });
 
   it('counts only the active statuses, matching what the All active tab opens', () => {
@@ -358,14 +354,12 @@ describe('bulk route declaration order', () => {
   });
 });
 
-// Batch 4 (five-role production alignment): the queue's default sort must
-// be Operational Priority (priority_index) descending — the administrative
-// queue recommendation — not Hazard Urgency (priority_score), which is an
-// environmental indicator, not a workflow-ordering signal (docs/features.md
-// §5.1). Legacy 'priority_desc'/'priority_asc' sort values are preserved
-// verbatim (never repurposed) so an existing saved view's stored query
-// string keeps sorting by Hazard Urgency exactly as it always has —
-// changing what those keys MEAN would silently alter saved-view behavior.
+// The queue's default sort is Operational Priority (priority_index)
+// descending (Batch 4). Manuscript revision Phase 1, step 4 retired the
+// Hazard Urgency sorts ('priority_desc'/'priority_asc') and the urgency
+// filter: an old URL that still carries them falls back to the default order
+// with no urgency filter, and stored saved views were rewritten by
+// drizzle/0034_saved_views_retire_hazard_urgency.sql.
 describe('TicketsService.parseTicketQuery default sort', () => {
   const service = buildService(jest.fn() as unknown as Sql);
 
@@ -382,20 +376,29 @@ describe('TicketsService.parseTicketQuery default sort', () => {
     expect(filters.sort).toBe('op_priority_desc');
   });
 
-  it('preserves an explicit legacy priority_desc (Hazard Urgency) sort verbatim', () => {
+  it('falls back to Operational Priority descending for the retired priority_desc sort', () => {
     const filters = service.parseTicketQuery(
       { sort: 'priority_desc' },
       MEO_OFFICER,
     );
-    expect(filters.sort).toBe('priority_desc');
+    expect(filters.sort).toBe('op_priority_desc');
   });
 
-  it('preserves an explicit legacy priority_asc (Hazard Urgency) sort verbatim', () => {
+  it('falls back to Operational Priority descending for the retired priority_asc sort', () => {
     const filters = service.parseTicketQuery(
       { sort: 'priority_asc' },
       MEO_OFFICER,
     );
-    expect(filters.sort).toBe('priority_asc');
+    expect(filters.sort).toBe('op_priority_desc');
+  });
+
+  it('ignores a retired urgency= filter instead of passing it through', () => {
+    const filters = service.parseTicketQuery(
+      { urgency: 'High', category: 'Streetlight Out' },
+      MEO_OFFICER,
+    );
+    expect(filters).not.toHaveProperty('urgency');
+    expect(filters.category).toBe('Streetlight Out');
   });
 
   it('accepts the new explicit op_priority_asc sort', () => {
@@ -430,12 +433,24 @@ describe('TicketsService.getTicketsForAdmin ORDER BY — Operational Priority vs
     );
   });
 
-  it("legacy 'priority_desc'/'priority_asc' still sort by priority_score (Hazard Urgency), unchanged", () => {
-    expect(ticketsServiceSource).toMatch(
-      /priority_asc'[\s\S]{0,80}priority_score ASC/,
+  it('has no Hazard Urgency (priority_score) order or urgency filter any more', () => {
+    const listBody = ticketsServiceSource.slice(
+      ticketsServiceSource.indexOf('async getTicketsForAdmin('),
+      ticketsServiceSource.indexOf('async getViewCounts('),
     );
-    expect(ticketsServiceSource).toMatch(
-      /priority_desc'[\s\S]{0,80}priority_score DESC/,
+    expect(listBody).not.toMatch(/priority_score/);
+    expect(listBody).not.toMatch(/urgency_band|urgency_score|urgency_level/);
+    expect(listBody).not.toMatch(/filters\.urgency/);
+  });
+
+  it('the CSV export query selects Operational Priority and no Hazard Urgency column', () => {
+    const exportBody = ticketsServiceSource.slice(
+      ticketsServiceSource.indexOf('async getTicketsForExport('),
+      ticketsServiceSource.indexOf('async getTicketsGeo('),
+    );
+    expect(exportBody).toMatch(/t\.priority_index/);
+    expect(exportBody).not.toMatch(
+      /priority_score|urgency_band|filters\.urgency/,
     );
   });
 });

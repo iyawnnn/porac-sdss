@@ -28,18 +28,13 @@ export interface FilterChip {
   label: string;
 }
 
-// Sort options are exactly what TicketsService.parseTicketQuery accepts
-// (Batch 4). Operational Priority (priority_index — the administrative
-// queue recommendation) is listed first since it's now the queue's
-// default; Hazard Urgency (priority_score, the environmental score) stays
-// available under its legacy 'priority_desc'/'priority_asc' key names —
-// see api/src/admin/ticket-constants.ts for why those keys are never
-// renamed. See CLAUDE.md's Severity/Urgency/Priority terminology note.
+// Sort options are exactly what TicketsService.parseTicketQuery accepts.
+// Operational Priority (priority_index — the administrative queue
+// recommendation) is the default. The two Hazard Urgency sorts were retired in
+// manuscript revision Phase 1, step 4.
 const SORT_LABELS: Record<TicketSort, string> = {
   op_priority_desc: "Operational Priority: High to Low",
   op_priority_asc: "Operational Priority: Low to High",
-  priority_desc: "Hazard Urgency: High to Low",
-  priority_asc: "Hazard Urgency: Low to High",
   newest: "Newest first",
 };
 

@@ -46,12 +46,11 @@ import {
 
 // Counts behind the queue's built-in view tabs. Each field MUST be counted
 // with the same predicate the tab's filter applies, or the tab will promise a
-// number the list then contradicts: highUrgency uses urgency_band (what the
-// urgency filter matches), not a priority_score >= 70 comparison, even though
-// the two agree today by construction (urgencyLevelFromScore).
+// number the list then contradicts. (The former "High urgency" tab and its
+// highUrgency count went with the Hazard Urgency filter in manuscript
+// revision Phase 1, step 4.)
 export interface TicketViewCounts {
   allActive: number;
-  highUrgency: number;
   disputed: number;
   meo: number;
   mdrrmo: number;
@@ -74,7 +73,6 @@ export const BULK_MAX_TICKETS = 50;
 export interface AdminTicketFilters {
   office?: 'MEO' | 'MDRRMO';
   status?: 'active' | 'all' | TicketStatus;
-  urgency?: string;
   category?: string;
   barangayId?: number;
   // Citizen resolution-feedback loop: true narrows to tickets a citizen
@@ -95,11 +93,10 @@ export interface AdminTicketRow {
   barangay_id: number;
   barangay_name: string;
   member_count: number;
-  urgency_score: number | null;
-  urgency_band: string | null;
+  // Operational Priority (1-100). The Hazard Urgency fields this row used to
+  // carry (urgency_score/urgency_band/priority_score/urgency_level) were
+  // removed from the queue response in manuscript revision Phase 1, step 4.
   priority_index: number | null;
-  priority_score: number | null;
-  urgency_level: UrgencyLevel | null;
   assigned_office: string;
   status: string;
   created_at: string;
@@ -124,8 +121,7 @@ export interface AdminTicketExportRow {
   assigned_office: string;
   category: string;
   barangay_name: string;
-  urgency_band: string | null;
-  priority_score: number | null;
+  priority_index: number | null;
   member_count: number;
   created_at: string;
   updated_at: string;
@@ -278,7 +274,7 @@ export class TicketsService {
   ): Required<Pick<AdminTicketFilters, 'status' | 'sort' | 'page' | 'limit'>> &
     Pick<
       AdminTicketFilters,
-      'office' | 'urgency' | 'category' | 'barangayId' | 'search' | 'disputed'
+      'office' | 'category' | 'barangayId' | 'search' | 'disputed'
     > {
     const requestedOffice =
       query.office === 'all' ||
@@ -293,9 +289,6 @@ export class TicketsService {
       TICKET_STATUSES.includes(query.status as TicketStatus)
         ? (query.status as AdminTicketFilters['status'])
         : 'active';
-    const urgency = ['Low', 'Medium', 'High'].includes(query.urgency ?? '')
-      ? query.urgency
-      : undefined;
     const category = (ALL_CATEGORIES as readonly string[]).includes(
       query.category ?? '',
     )
@@ -304,15 +297,12 @@ export class TicketsService {
     const barangayId = query.barangayId ? Number(query.barangayId) : undefined;
     const disputed = query.disputed === 'true' ? true : undefined;
     // Default is Operational Priority (priority_index) descending — the
-    // administrative queue recommendation, not the Hazard Urgency
-    // environmental score (Batch 4). Legacy 'priority_desc'/'priority_asc'
-    // are recognized verbatim (see ticket-constants.ts) so an existing
-    // saved view's stored sort keeps its exact prior meaning.
+    // administrative queue recommendation. A retired Hazard Urgency sort
+    // ('priority_desc'/'priority_asc') or an `urgency=` filter left in an old
+    // bookmark is ignored, not rejected: it falls back to the default order
+    // and no urgency filter (manuscript revision Phase 1, step 4).
     const sort: TicketSort =
-      query.sort === 'priority_asc' ||
-      query.sort === 'priority_desc' ||
-      query.sort === 'op_priority_asc' ||
-      query.sort === 'newest'
+      query.sort === 'op_priority_asc' || query.sort === 'newest'
         ? query.sort
         : 'op_priority_desc';
     const search = query.search?.trim() || undefined;
@@ -327,7 +317,6 @@ export class TicketsService {
       office,
       status: status ?? 'active',
       disputed,
-      urgency,
       category,
       barangayId,
       sort,
@@ -349,19 +338,14 @@ export class TicketsService {
           ? sql``
           : sql`AND t.status = ${status}::ticket_status`;
     // Operational Priority (priority_index) descending is the default and
-    // canonical queue order (Batch 4) — Hazard Urgency (priority_score)
-    // sorting is kept available only under its legacy 'priority_desc'/
-    // 'priority_asc' names for saved-view backward compatibility.
+    // canonical queue order. The Hazard Urgency orders were retired in
+    // manuscript revision Phase 1, step 4.
     const orderBy =
-      filters.sort === 'priority_asc'
-        ? sql`t.priority_score ASC NULLS LAST, t.created_at DESC`
-        : filters.sort === 'priority_desc'
-          ? sql`t.priority_score DESC NULLS LAST, t.created_at DESC`
-          : filters.sort === 'op_priority_asc'
-            ? sql`t.priority_index ASC NULLS LAST, t.created_at DESC`
-            : filters.sort === 'newest'
-              ? sql`t.created_at DESC`
-              : sql`t.priority_index DESC NULLS LAST, t.created_at DESC`;
+      filters.sort === 'op_priority_asc'
+        ? sql`t.priority_index ASC NULLS LAST, t.created_at DESC`
+        : filters.sort === 'newest'
+          ? sql`t.created_at DESC`
+          : sql`t.priority_index DESC NULLS LAST, t.created_at DESC`;
 
     const search = filters.search?.trim() || null;
     const searchId = search && /^\d+$/.test(search) ? Number(search) : null;
@@ -379,14 +363,13 @@ export class TicketsService {
       SELECT t.id, t.category,
         (SELECT r.title FROM reports r WHERE r.ticket_id = t.id ORDER BY r.created_at ASC, r.id ASC LIMIT 1) AS title,
         t.barangay_id, b.name AS barangay_name, t.member_count,
-        t.urgency_score, t.urgency_band, t.priority_index, t.priority_score, t.urgency_level,
+        t.priority_index,
         t.assigned_office, t.status, t.created_at, t.disputed_at,
         COUNT(*) OVER ()::int AS total_count
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
       WHERE (${filters.office ?? null}::text IS NULL OR t.assigned_office = ${filters.office ?? null}::office)
         ${statusClause}
-        AND (${filters.urgency ?? null}::text IS NULL OR t.urgency_band = ${filters.urgency ?? null})
         AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
         AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
         AND (${filters.disputed ? true : null}::boolean IS NULL OR t.disputed_at IS NOT NULL)
@@ -416,7 +399,7 @@ export class TicketsService {
 
   // Powers the queue's view-tab strip. Deliberately NOT a separate endpoint:
   // it rides along on GET /admin/tickets so it can't be fetched without the
-  // list it labels, needs no second recomputeActiveTicketUrgency() pass, and
+  // list it labels, needs no second recalculation pass, and
   // sidesteps the @Get(':id') ParseIntPipe route-ordering trap.
   //
   // Office scope is the caller's, not the current filter's — the tabs are a
@@ -432,7 +415,6 @@ export class TicketsService {
     const [row] = await sql<
       {
         all_active: number;
-        high_urgency: number;
         disputed: number;
         meo: number;
         mdrrmo: number;
@@ -440,13 +422,12 @@ export class TicketsService {
     >`
       SELECT
         COUNT(*)::int AS all_active,
-        COUNT(*) FILTER (WHERE t.urgency_band = 'High')::int AS high_urgency,
         COUNT(*) FILTER (WHERE t.assigned_office = 'MEO')::int AS meo,
         COUNT(*) FILTER (WHERE t.assigned_office = 'MDRRMO')::int AS mdrrmo,
         -- Deliberately its own subquery, not a FILTER on the outer active-
         -- status WHERE below: a dispute can only ever exist on a Resolved
         -- ticket (disputeReport requires it), so filtering this count by
-        -- the same active-only WHERE as the other four columns would make
+        -- the same active-only WHERE as the other three columns would make
         -- it permanently zero. Still office-scoped for RBAC.
         (
           SELECT COUNT(*)::int FROM tickets t2
@@ -459,7 +440,6 @@ export class TicketsService {
     `;
     return {
       allActive: row?.all_active ?? 0,
-      highUrgency: row?.high_urgency ?? 0,
       disputed: row?.disputed ?? 0,
       meo: row?.meo ?? 0,
       mdrrmo: row?.mdrrmo ?? 0,
@@ -501,12 +481,11 @@ export class TicketsService {
 
     return sql<AdminTicketExportRow[]>`
       SELECT t.id, t.status, t.assigned_office, t.category, b.name AS barangay_name,
-        t.urgency_band, t.priority_score, t.member_count, t.created_at, t.updated_at
+        t.priority_index, t.member_count, t.created_at, t.updated_at
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
       WHERE (${filters.office ?? null}::text IS NULL OR t.assigned_office = ${filters.office ?? null}::office)
         ${statusClause}
-        AND (${filters.urgency ?? null}::text IS NULL OR t.urgency_band = ${filters.urgency ?? null})
         AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
         AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
         AND (${dateFrom}::timestamptz IS NULL OR t.created_at >= ${dateFrom}::timestamptz)

@@ -12,7 +12,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
+import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { relativeAge } from "@/lib/utils/ui/time";
 import { CardBodyPanel } from "../shared/CardBodyPanel";
 import { CardHeaderRow } from "../shared/CardHeaderRow";
@@ -100,7 +100,7 @@ function IncidentTooltip({ active, payload }: { active?: boolean; payload?: Arra
 // Brand orange appears on this page in exactly two chrome roles, both of
 // them permitted by docs/design-system.md §2.2 ("brand orange is chrome,
 // never data"): the card-header icons (decorative, aria-hidden) and the
-// Highest Urgency Actions row hover (selection affordance). It is
+// Highest Priority Actions row hover (selection affordance). It is
 // deliberately absent from every data surface — the sparklines, the incident
 // bars, the urgency badges and the status pills stay neutral/semantic. That
 // is not fussiness: the Hazard Urgency ramp is warm (amber → orange → red),
@@ -162,14 +162,13 @@ function RangeControl({ range, isUpdating, onChange }: { range: DashboardRange; 
 // optional so a card can still render honestly if a series is ever absent.
 
 // The dashboard-landing action queue — capped and compact, deliberately not
-// a second Ticket Queue. Ranked by priority_score (Hazard Urgency Score);
-// there is no existing backend sort by priority_index (Operational
-// Priority — api/src/admin/tickets.service.ts's parseTicketQuery only ever
-// orders by priority_score), so this must never be described as
-// Operational-Priority-ranked.
-function HighestUrgencyActionsTable({ tickets }: { tickets: AdminTicketRow[] | null }) {
+// a second Ticket Queue. Ranked by Operational Priority (priority_index,
+// GET /admin/tickets?sort=op_priority_desc). It was "Highest Urgency
+// Actions", ranked by Hazard Urgency, until manuscript revision Phase 1,
+// step 4.
+function HighestPriorityActionsTable({ tickets }: { tickets: AdminTicketRow[] | null }) {
   return (
-    <Card className="gap-0 overflow-hidden rounded-xl bg-muted pt-2 pb-5" data-testid="highest-urgency-actions">
+    <Card className="gap-0 overflow-hidden rounded-xl bg-muted pt-2 pb-5" data-testid="highest-priority-actions">
       {/* pt-2/pb-2 pairing, px-4 gutters and a bare title+icon header row are
           what make this sit in the same family as the KPI and Needs Attention
           cards — see CardBodyPanel's docblock on why pt-2 is not a free
@@ -187,16 +186,16 @@ function HighestUrgencyActionsTable({ tickets }: { tickets: AdminTicketRow[] | n
           carries a visible subtitle. */}
       <CardHeader className="px-4 pb-2">
         <CardHeaderRow>
-          <CardTitle className="text-xs font-medium text-muted-foreground">Highest Urgency Actions</CardTitle>
+          <CardTitle className="text-xs font-medium text-muted-foreground">Highest Priority Actions</CardTitle>
           <div className="flex shrink-0 items-center gap-3">
-            <Link className="text-sm font-medium text-primary hover:underline" href="/admin/tickets?sort=priority_desc&status=active">View all</Link>
+            <Link className="text-sm font-medium text-primary hover:underline" href="/admin/tickets?sort=op_priority_desc&status=active">View all</Link>
             <ClipboardList aria-hidden="true" className="size-5 shrink-0 text-[var(--brand)]" />
           </div>
         </CardHeaderRow>
       </CardHeader>
       <CardBodyPanel>
         <Table className="text-[13px]">
-          <TableCaption className="sr-only">Highest-urgency active tickets, ranked by Hazard Urgency Score.</TableCaption>
+          <TableCaption className="sr-only">Active tickets with the highest Operational Priority.</TableCaption>
           {/* No bg tint on the header row — the panel is a flat white surface
               on every other card, and the uppercase micro-caps already
               separate the header from the body without one. */}
@@ -204,7 +203,7 @@ function HighestUrgencyActionsTable({ tickets }: { tickets: AdminTicketRow[] | n
             <TableRow className="hover:bg-transparent">
               <TableHead className={TABLE_HEAD_CLASS + " pl-4"} scope="col">Ticket</TableHead>
               <TableHead className={TABLE_HEAD_CLASS} scope="col">Barangay / Office</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS} scope="col">Hazard Urgency</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS} scope="col">Op. Priority</TableHead>
               <TableHead className={TABLE_HEAD_CLASS} scope="col">Status</TableHead>
               <TableHead className={TABLE_HEAD_CLASS + " pr-4 text-end"} scope="col">Age</TableHead>
             </TableRow>
@@ -216,7 +215,6 @@ function HighestUrgencyActionsTable({ tickets }: { tickets: AdminTicketRow[] | n
               <TableRow className="hover:bg-transparent"><TableCell className="p-0" colSpan={5}><EmptyState className="p-6" title="No active tickets right now." /></TableCell></TableRow>
             ) : (
               tickets.map((ticket) => {
-                const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
                 const detailHref = `/admin/tickets/${ticket.id}`;
                 return (
                   <TableRow className="hover:bg-[var(--brand-subtle)]" key={ticket.id}>
@@ -234,13 +232,13 @@ function HighestUrgencyActionsTable({ tickets }: { tickets: AdminTicketRow[] | n
                       <span className="block text-xs text-muted-foreground">{ticket.assigned_office}</span>
                     </TableCell>
                     <TableCell className="py-2.5">
-                      <Badge className={urgencyBadge.className} variant="outline">
-                        <span className="font-mono tabular-nums">{ticket.priority_score ?? "—"}</span> {urgencyBadge.label}
+                      <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
+                        <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> {priorityBandLabel(ticket.priority_index)}
                       </Badge>
                     </TableCell>
                     <TableCell className="py-2.5"><StatusPill status={ticket.status} /></TableCell>
                     {/* Age is the only right-aligned column: it is the one
-                        genuinely scannable quantity here. The urgency score
+                        genuinely scannable quantity here. The priority score
                         stays left with its badge — right-aligning a pill
                         column would bunch it against the status pills rather
                         than form a numeric edge. */}
@@ -323,7 +321,7 @@ export function DashboardClient({ initialData, topPriorityTickets, adminName }: 
       <NeedsAttention data={data.needsAttention} flaggedReportsPending={numeric(data.officePerformanceSummary.flaggedReportsPending)} />
     </div>
 
-    <HighestUrgencyActionsTable tickets={topPriorityTickets} />
+    <HighestPriorityActionsTable tickets={topPriorityTickets} />
 
     <div className="flex min-w-0 flex-col gap-3">
       <OfficePerformanceSummary summary={data.officePerformanceSummary} />

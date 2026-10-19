@@ -11,7 +11,6 @@ export interface QueueFilterValues {
   status: string;
   category: string;
   barangayId: string;
-  urgency: string;
   disputed: boolean;
 }
 
@@ -134,20 +133,6 @@ export function QueueFiltersPopover({
                   {barangay.name}
                 </SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        </FilterField>
-
-        <FilterField label="Hazard urgency">
-          <Select onValueChange={(v) => onChange({ urgency: v === "all" ? "" : v })} value={values.urgency || "all"}>
-            <SelectTrigger aria-label="Hazard Urgency" className="w-full bg-card" size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All levels</SelectItem>
-              <SelectItem value="Low">Low</SelectItem>
-              <SelectItem value="Medium">Medium</SelectItem>
-              <SelectItem value="High">High</SelectItem>
             </SelectContent>
           </Select>
         </FilterField>

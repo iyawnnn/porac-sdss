@@ -5,7 +5,6 @@ import { Plus } from "lucide-react";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
 import type { AdminDirectoryRow } from "@/lib/types/admin-directory";
 import type { AdminTicketRow } from "@/lib/types/admin-tickets";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TicketComboboxSelect } from "./TicketComboboxSelect";
+import { PriorityBadge, TicketComboboxSelect } from "./TicketComboboxSelect";
 
 const UNASSIGNED = "unassigned";
 
@@ -144,11 +143,7 @@ export function CreateWorkOrderDialog({
               {selectedTicket && (
                 <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <span className="truncate">{selectedTicket.barangay_name}</span>
-                  <span
-                    className={`inline-flex h-5 items-center rounded-md px-2 font-semibold tracking-[0.02em] whitespace-nowrap ${getUrgencyBadgeConfig(selectedTicket.priority_score).className}`}
-                  >
-                    {getUrgencyBadgeConfig(selectedTicket.priority_score).label}
-                  </span>
+                  <PriorityBadge priorityIndex={selectedTicket.priority_index} />
                   <span>{selectedTicket.assigned_office}</span>
                 </p>
               )}

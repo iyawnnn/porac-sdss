@@ -96,7 +96,7 @@ export class DashboardController {
       statusDistribution,
       departmentWorkload,
       citizenSeverityDistribution,
-      topUrgencyQueueData,
+      topPriorityQueueData,
       rain1hMm,
       officePerformanceSummary,
       needsAttention,
@@ -119,7 +119,7 @@ export class DashboardController {
       this.tickets.getTicketsForAdmin({
         office,
         status: 'active',
-        sort: 'priority_desc',
+        sort: 'op_priority_desc',
         limit: 5,
         page: 1,
       }),
@@ -141,8 +141,10 @@ export class DashboardController {
       statusDistribution,
       departmentWorkload,
       citizenSeverityDistribution,
-      // Top active tickets by the existing urgency-derived priority_score.
-      topUrgencyQueue: topUrgencyQueueData.tickets,
+      // Top active tickets by Operational Priority (priority_index). Was
+      // topUrgencyQueue, ranked by Hazard Urgency, until manuscript revision
+      // Phase 1, step 4.
+      topPriorityQueue: topPriorityQueueData.tickets,
       range,
       rain1hMm,
       deltas,

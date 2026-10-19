@@ -68,18 +68,23 @@ export class TicketsController {
     @Query() query: Record<string, string | undefined>,
     @CurrentAdmin() admin: AdminSession,
   ) {
-    const recomputeResult = await this.recompute.recomputeActiveTicketUrgency();
+    await this.recompute.recomputeActiveTicketUrgency();
     await this.operationalPriority.recalculateActiveTickets();
     const filters = this.tickets.parseTicketQuery(query, admin);
     // viewCounts rides along rather than living on its own route: it labels
     // this exact list, and a separate endpoint would trigger a second
-    // recomputeActiveTicketUrgency() pass for numbers that must agree with
-    // the rows already being returned here.
+    // recalculation pass for numbers that must agree with the rows already
+    // being returned here.
+    //
+    // The former `recompute` field ({ updated, rain1hMm } — the Hazard
+    // Urgency pass and the city-wide rainfall behind the queue's rain
+    // banner) was dropped from this response in manuscript revision
+    // Phase 1, step 4. The pass itself still runs until Phase 1, step 7.
     const [result, viewCounts] = await Promise.all([
       this.tickets.getTicketsForAdmin(filters),
       this.tickets.getViewCounts(admin),
     ]);
-    return { ...result, recompute: recomputeResult, viewCounts };
+    return { ...result, viewCounts };
   }
 
   @Get('geo')

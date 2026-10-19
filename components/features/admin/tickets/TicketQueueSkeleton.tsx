@@ -12,7 +12,7 @@ import { gridTemplate, queueMinWidth, QUEUE_COLUMNS } from "./queue/columns";
 // adding or removing a column updates the header strip, the rows and this
 // skeleton together and the invariant cannot rot.
 const KPI_TILE_COUNT = 5;
-const VIEW_TAB_COUNT = 5;
+const VIEW_TAB_COUNT = 4;
 const BODY_ROW_COUNT = 8;
 
 // The queue's cards are white, so a default Skeleton (bg-muted, #f3f4f6) reads
@@ -34,8 +34,7 @@ export function TicketQueueSkeleton() {
           <Skeleton className="h-4 w-72 max-w-full" />
         </div>
         <div className="flex items-center gap-2">
-          {/* The recompute pill and the Export CSV button. */}
-          <Skeleton className="h-[26px] w-56 rounded-full" />
+          {/* The Export CSV button. */}
           <Skeleton className="h-8 w-28" />
         </div>
       </div>

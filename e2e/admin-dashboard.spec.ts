@@ -111,15 +111,18 @@ test("each KPI sparkline series ends at the card's own headline count", async ({
   expect(lastPending).toBe(data.officePerformanceSummary.pendingWorkOrders);
 });
 
-test("Highest Urgency Actions renders at most 5 rows and its View all link uses the verified Ticket Queue ordering", async ({ page }) => {
+test("Highest Priority Actions renders at most 5 rows and its View all link uses the Operational Priority queue order", async ({ page }) => {
   await loginAdmin(page);
-  const card = page.getByTestId("highest-urgency-actions");
+  const card = page.getByTestId("highest-priority-actions");
   const rowCount = await card.locator("table tbody tr").count();
   expect(rowCount).toBeGreaterThan(0);
   expect(rowCount).toBeLessThanOrEqual(5);
 
   const viewAll = page.getByRole("link", { name: "View all" });
-  await expect(viewAll).toHaveAttribute("href", /\/admin\/tickets\?sort=priority_desc&status=active/);
+  await expect(viewAll).toHaveAttribute("href", /\/admin\/tickets\?sort=op_priority_desc&status=active/);
+  // Manuscript revision Phase 1, step 4: no Hazard Urgency on this card.
+  await expect(card.getByText("Hazard Urgency")).toHaveCount(0);
+  await expect(card.getByRole("columnheader", { name: "Op. Priority" })).toBeVisible();
 });
 
 // Batch 6 (five-role E2E reconciliation): this used to log in as

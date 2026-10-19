@@ -14,11 +14,9 @@ export interface AdminTicketRow {
   barangay_id: number;
   barangay_name: string;
   member_count: number;
-  urgency_score: number | null;
-  urgency_band: string | null;
+  // Operational Priority (1-100). The Hazard Urgency fields were removed from
+  // the queue response in manuscript revision Phase 1, step 4.
   priority_index: number | null;
-  priority_score: number | null;
-  urgency_level: UrgencyLevel | null;
   assigned_office: string;
   status: string;
   created_at: string;
@@ -39,7 +37,6 @@ export interface PaginatedTickets {
 // permanent zero. Mirrors TicketViewCounts in api/src/admin/tickets.service.ts.
 export interface TicketViewCounts {
   allActive: number;
-  highUrgency: number;
   disputed: number;
   meo: number;
   mdrrmo: number;

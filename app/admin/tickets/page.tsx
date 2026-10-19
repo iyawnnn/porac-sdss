@@ -15,12 +15,7 @@ interface BarangaysGeoFeature {
   properties: { id: number; name: string };
 }
 
-interface RecomputeResult {
-  updated: number;
-  rain1hMm: number;
-}
-
-type TicketsResponse = PaginatedTickets & { recompute: RecomputeResult; viewCounts: TicketViewCounts };
+type TicketsResponse = PaginatedTickets & { viewCounts: TicketViewCounts };
 
 async function TicketsData({ query }: { query: Record<string, string | undefined> }) {
   const session = await getAdminSessionFromApi();
@@ -34,7 +29,7 @@ async function TicketsData({ query }: { query: Record<string, string | undefined
   // Saved views are a convenience layer, not part of the queue. They are
   // fetched outside the try/catch below and degrade to an empty list on
   // failure, so an outage in that one endpoint cannot take down the ticket
-  // queue itself — the five built-in view tabs, the filters and the table all
+  // queue itself — the built-in view tabs, the filters and the table all
   // work with no saved views at all, which is also the normal state for most
   // admins. Putting it in the Promise.all would have made a cosmetic feature
   // load-bearing for the primary triage surface.
@@ -57,13 +52,12 @@ async function TicketsData({ query }: { query: Record<string, string | undefined
   }
 
   const barangays: Barangay[] = barangaysGeo.features.map((f) => f.properties);
-  const { recompute: initialRecompute, viewCounts, ...paginated } = initialData;
+  const { viewCounts, ...paginated } = initialData;
 
   return (
     <TicketsWorkspace
       initialData={paginated}
       initialQuery={query}
-      initialRecompute={initialRecompute}
       initialViewCounts={viewCounts}
       initialSavedViews={savedViews}
       barangays={barangays}

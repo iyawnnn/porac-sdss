@@ -128,12 +128,12 @@ test("ticket export URL on the reports page includes the selected filters", asyn
   await page.goto("/admin/reports");
   await page.getByLabel("Ticket category", { exact: true }).click();
   await page.getByRole("option", { name: "Pothole / Road Surface Damage" }).click();
-  await page.getByLabel("Ticket urgency", { exact: true }).click();
-  await page.getByRole("option", { name: "High", exact: true }).click();
 
   const exportLink = page.getByRole("link", { name: "Export Tickets CSV" });
   await expect(exportLink).toHaveAttribute("href", /category=Pothole/);
-  await expect(exportLink).toHaveAttribute("href", /urgency=High/);
+  // The Hazard Urgency filter was removed (manuscript revision Phase 1, step 4).
+  await expect(page.getByLabel("Ticket urgency", { exact: true })).toHaveCount(0);
+  await expect(exportLink).not.toHaveAttribute("href", /urgency=/);
 });
 
 test("work order export URL on the reports page includes the selected filters", async ({ page }) => {
