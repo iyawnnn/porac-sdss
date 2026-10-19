@@ -310,7 +310,11 @@ test("Ticket Detail shows the dispute section only when the ticket is disputed",
   await signupCitizen(citizenPage, "dispute-section");
   const { reportId, ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
 
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  // The ticket's own office advances it. This used to log in as the system
+  // admin, but Batch 1 of the five-role architecture denies system_admin on
+  // every ticket route (OperationalStaffGuard), so the status POSTs below
+  // were 403s. "Pothole / Road Surface Damage" routes to MEO.
+  await loginAs(page, E2E_MEO_ADMIN);
   // Reported -> Under Review -> In Progress -> Resolved, then the citizen
   // disputes it — deterministically produces a disputed ticket instead of
   // depending on one already existing (and not yet consumed) in seed data.
@@ -381,8 +385,23 @@ test("MEO admin can reassign a ticket's office through the UI, and office scopin
 
     await page.getByLabel("Assigned office", { exact: true }).click();
     await page.getByRole("option", { name: "MDRRMO", exact: true }).click();
+    const reassigned = page.waitForResponse(
+      (r) => r.url().includes(`/api/admin/tickets/${ticketId}/reassign`) && r.request().method() === "POST",
+    );
     await page.getByRole("button", { name: "Reassign" }).click();
-    await expect(page.getByText(/· MDRRMO ·/)).toBeVisible();
+    expect((await reassigned).ok()).toBe(true);
+
+    // Once the ticket is MDRRMO's, the MEO session can no longer open it
+    // (assertOfficeAccess — the lock-out itself is covered by the
+    // "original MEO session is locked out" test below), so the new owner
+    // confirms the move from its own session instead of waiting for MEO's
+    // refreshed page to show text it is no longer allowed to read.
+    const mdrrmoCheckContext = await browser.newContext();
+    const mdrrmoCheckPage = await mdrrmoCheckContext.newPage();
+    await loginAs(mdrrmoCheckPage, E2E_MDRRMO_ADMIN);
+    await mdrrmoCheckPage.goto(`/admin/tickets/${ticketId}`);
+    await expect(mdrrmoCheckPage.getByText(/· MDRRMO ·/)).toBeVisible();
+    await mdrrmoCheckContext.close();
   } finally {
     // Restore regardless of assertion outcome — this is a shared seeded
     // ticket, and reassignment (unlike status advancement) has a real
