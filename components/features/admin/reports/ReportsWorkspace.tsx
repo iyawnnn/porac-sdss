@@ -310,7 +310,6 @@ export function ReportsWorkspace({
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <SummaryTile icon={TicketIcon} label="Total Tickets" tint="bg-slate-100 text-slate-600" value={totalTickets} />
               <SummaryTile icon={Gauge} label="Active Tickets" tint="bg-blue-50 text-blue-600" value={summary.kpis.active_count} />
-              <SummaryTile icon={AlertTriangle} label="High Urgency Tickets" tint="bg-red-50 text-red-600" value={perf.highUrgencyOpenTickets} />
               <SummaryTile icon={Hourglass} label="Pending Work Orders" tint="bg-amber-50 text-amber-600" value={perf.pendingWorkOrders} />
               <SummaryTile icon={Wrench} label="In-Progress Work Orders" tint="bg-indigo-50 text-indigo-600" value={perf.inProgressWorkOrders} />
               <SummaryTile icon={AlertTriangle} label="Overdue Work Orders" tint="bg-red-50 text-red-600" value={perf.overdueWorkOrders} />

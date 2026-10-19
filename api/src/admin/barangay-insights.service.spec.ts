@@ -87,7 +87,6 @@ describe('BarangayInsightsService.getProfile', () => {
       total_tickets: 0,
       active_tickets: 0,
       resolved_tickets: 0,
-      high_urgency_tickets: 0,
     });
     expect(profile.elevation).toEqual({ elevation_min: null, elevation_avg: null, elevation_max: null });
   });

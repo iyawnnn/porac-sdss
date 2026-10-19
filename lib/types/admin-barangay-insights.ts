@@ -4,7 +4,6 @@ export interface BarangayInsightRow {
   total_tickets: number;
   active_tickets: number;
   resolved_tickets: number;
-  high_urgency_tickets: number;
   top_category: string | null;
   last_activity_at: string | null;
 }
@@ -18,7 +17,6 @@ export interface BarangayInsightKpis {
   total_tickets: number;
   active_tickets: number;
   resolved_tickets: number;
-  high_urgency_tickets: number;
 }
 
 export interface BarangayCategoryRow {
@@ -42,8 +40,7 @@ export interface BarangayRecentTicketRow {
   category: string;
   title: string | null;
   status: string;
-  urgency_level: string | null;
-  priority_score: number | null;
+  priority_index: number | null;
   member_count: number;
   created_at: string;
 }

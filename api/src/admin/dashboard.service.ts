@@ -3,7 +3,6 @@ import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
 import type { WorkOrderPerformanceCounts } from './work-orders.service';
 
-const HIGH_URGENCY_LEVEL = 'HIGH';
 export const DASHBOARD_RANGE_DAYS = [7, 30, 90] as const;
 export type DashboardRangeDays = (typeof DASHBOARD_RANGE_DAYS)[number];
 
@@ -18,7 +17,6 @@ export function parseDashboardRange(value?: string): DashboardRangeDays {
 
 export interface DashboardKpis {
   active_count: number;
-  high_urgency_count: number;
   reports_this_month_count: number;
   avg_resolution_hours_30d: number | null;
 }
@@ -72,12 +70,13 @@ export interface CategoryDistributionRow {
   active_total: number;
 }
 
-// Assembled by DashboardController.officeCounts from three existing
-// office-scoped service methods (WorkOrdersService, DashboardService,
-// ModerationService) — never a new query path, and never work_orders.notes
-// or any other note body.
+// Assembled by DashboardController.officeCounts from two existing
+// office-scoped service methods (WorkOrdersService, ModerationService) —
+// never a new query path, and never work_orders.notes or any other note
+// body. The High-Urgency Open Tickets count was removed in manuscript
+// revision Phase 1, step 6a; Operational Priority has no defined levels, so
+// nothing replaces it.
 export interface OfficePerformanceCounts extends WorkOrderPerformanceCounts {
-  highUrgencyOpenTickets: number;
   flaggedReportsPending: number;
 }
 
@@ -96,9 +95,10 @@ export class DashboardService {
     return this.pg`('Reported', 'Under Review', 'In Progress')`;
   }
 
-  // "High urgency" follows the persisted urgency_level created by the
-  // existing scoring pipeline; it intentionally does not repurpose the
-  // separate workflow priority_index.
+  // Reads no Hazard Urgency column. The high-urgency count was removed in
+  // manuscript revision Phase 1, step 6a and is deliberately not replaced
+  // by an Operational Priority count: priority_index is a ranking with no
+  // manuscript-defined Low/Medium/High levels.
   async getDashboardKpis(office?: 'MEO' | 'MDRRMO'): Promise<DashboardKpis> {
     const sql = this.pg;
     const activeStatuses = this.activeStatuses();
@@ -112,9 +112,6 @@ export class DashboardService {
       SELECT
         (SELECT COUNT(*) FROM tickets WHERE status IN ${activeStatuses}
           AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office))::int AS active_count,
-        (SELECT COUNT(*) FROM tickets WHERE status IN ${activeStatuses}
-          AND urgency_level = ${HIGH_URGENCY_LEVEL}
-          AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office))::int AS high_urgency_count,
         (SELECT COUNT(*) FROM reports r
           WHERE r.created_at >= date_trunc('month', now())
           AND (${office ?? null}::text IS NULL OR EXISTS (

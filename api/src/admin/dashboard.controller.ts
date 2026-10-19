@@ -31,21 +31,21 @@ export class DashboardController {
     private readonly workOrders: WorkOrdersService,
   ) {}
 
-  // Combines the office-scoped ticket/work-order/moderation counts that
-  // already exist as separate service methods — no new query engine, just
-  // one more assembly point over data these services already compute.
-  // Never touches work_orders.notes or any other note body.
+  // Combines the office-scoped work-order/moderation counts that already
+  // exist as separate service methods — no new query engine, just one more
+  // assembly point over data these services already compute. Never touches
+  // work_orders.notes or any other note body. The Hazard Urgency count (and
+  // the getDashboardKpis call that supplied it) was removed in manuscript
+  // revision Phase 1, step 6a.
   private async officeCounts(
     scopedOffice: 'MEO' | 'MDRRMO' | undefined,
   ): Promise<OfficePerformanceCounts> {
-    const [workOrderCounts, kpis, moderationStats] = await Promise.all([
+    const [workOrderCounts, moderationStats] = await Promise.all([
       this.workOrders.getOfficePerformanceCounts(scopedOffice),
-      this.dashboard.getDashboardKpis(scopedOffice),
       this.moderation.getModerationStats(scopedOffice),
     ]);
     return {
       ...workOrderCounts,
-      highUrgencyOpenTickets: kpis.high_urgency_count,
       flaggedReportsPending: moderationStats.pending,
     };
   }

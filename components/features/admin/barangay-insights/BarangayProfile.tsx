@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { AlertTriangle, Ticket as TicketIcon, TrendingUp, CheckCircle2, ArrowLeftIcon, MountainIcon, type LucideIcon } from "lucide-react";
+import { Ticket as TicketIcon, TrendingUp, CheckCircle2, ArrowLeftIcon, MountainIcon, type LucideIcon } from "lucide-react";
 import type { BarangayProfile as BarangayProfileData } from "@/lib/types/admin-barangay-insights";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "../shared/EmptyState";
 import { StatusPill } from "../shared/StatusPill";
+import { PriorityBadge } from "../work-orders/TicketComboboxSelect";
 import { BarangayTrendChart } from "./BarangayTrendChart";
 import { CategoryBreakdownList } from "./CategoryBreakdownList";
 
@@ -86,11 +85,11 @@ export function BarangayProfile({
         {isSystemAdmin && <OfficeToggle barangayId={profile.barangay_id} office={office} />}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* The High Urgency Tickets tile was removed in manuscript revision Phase 1, step 6a. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <KpiTile icon={TicketIcon} label="Total Tickets" tint="bg-slate-100 text-slate-600" value={profile.kpis.total_tickets} />
         <KpiTile icon={TrendingUp} label="Active Tickets" tint="bg-blue-50 text-blue-600" value={profile.kpis.active_tickets} />
         <KpiTile icon={CheckCircle2} label="Resolved Tickets" tint="bg-emerald-50 text-emerald-600" value={profile.kpis.resolved_tickets} />
-        <KpiTile icon={AlertTriangle} label="High Urgency Tickets" tint="bg-red-50 text-red-600" value={profile.kpis.high_urgency_tickets} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -144,14 +143,13 @@ export function BarangayProfile({
                 <TableRow>
                   <TableHead className="pl-6">Ticket</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-center">Urgency</TableHead>
+                  <TableHead className="text-center">Op. Priority</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="pr-6 text-center">Created</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {profile.recentTickets.map((t) => {
-                  const urgencyBadge = getUrgencyBadgeConfig(t.priority_score);
                   return (
                     <TableRow key={t.id}>
                       <TableCell className="pl-6">
@@ -162,9 +160,7 @@ export function BarangayProfile({
                       </TableCell>
                       <TableCell>{t.category}</TableCell>
                       <TableCell className="text-center">
-                        <Badge className={urgencyBadge.className} variant="outline">
-                          {urgencyBadge.label}
-                        </Badge>
+                        <PriorityBadge priorityIndex={t.priority_index} />
                       </TableCell>
                       <TableCell className="text-center"><StatusPill status={t.status} /></TableCell>
                       <TableCell className="pr-6 text-center text-xs text-muted-foreground">{formatDate(t.created_at)}</TableCell>

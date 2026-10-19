@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ClipboardListIcon, DownloadIcon, Inbox, Wrench } from "lucide-react";
 import type { PaginatedWorkOrders, WorkOrderListRow, WorkOrderRow, WorkOrderStatus } from "@/lib/types/admin-work-orders";
 import { WORK_ORDER_STATUSES } from "@/lib/types/admin-work-orders";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,20 +17,14 @@ import { AdminErrorCard } from "../shared/AdminErrorCard";
 import { EmptyState } from "../shared/EmptyState";
 import { KpiCard } from "../shared/KpiCard";
 import { CreateWorkOrderDialog } from "./CreateWorkOrderDialog";
+import { PriorityBadge } from "./TicketComboboxSelect";
 import { WorkOrderStatusSelect } from "./WorkOrderStatusSelect";
 import { WorkOrderAssigneeSelect } from "./WorkOrderAssigneeSelect";
 import { WorkOrderDueDateEditor } from "./WorkOrderDueDateEditor";
 
-// Shared with QueueRow's own "level" badge (Ticket Queue) so a row can never
-// disagree with how urgency reads there — one className map, not two.
-function UrgencyBadge({ priorityScore }: { priorityScore: number | null }) {
-  const badge = getUrgencyBadgeConfig(priorityScore);
-  return (
-    <span className={`inline-flex h-5 shrink-0 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${badge.className}`}>
-      {badge.label}
-    </span>
-  );
-}
+// Rows show the linked ticket's Operational Priority with the same
+// PriorityBadge the ticket picker uses. The Hazard Urgency badge was removed
+// in manuscript revision Phase 1, step 6a.
 
 const STATUS_LABELS: Record<WorkOrderStatus, string> = {
   pending: "Pending",
@@ -136,15 +129,15 @@ export function WorkOrdersWorkspace({
   }
 
   // CreateWorkOrderDialog and the inline status/assignee/due-date widgets all
-  // return a plain WorkOrderRow (no linked-ticket urgency — that's a list-only
-  // join, see WorkOrdersService.list). Merging onto the existing row instead
-  // of replacing it keeps a row's urgency badge visible through an edit; a
-  // freshly created row simply has no urgency yet, until the list next
-  // refetches (e.g. a filter change).
+  // return a plain WorkOrderRow (no linked-ticket Operational Priority —
+  // that's a list-only join, see WorkOrdersService.list). Merging onto the
+  // existing row instead of replacing it keeps a row's priority badge visible
+  // through an edit; a freshly created row simply shows "—" until the list
+  // next refetches (e.g. a filter change).
   function handleCreated(created: WorkOrderRow) {
     setData((d) => ({
       ...d,
-      workOrders: [{ ...created, priority_score: null, urgency_level: null }, ...d.workOrders],
+      workOrders: [{ ...created, priority_index: null }, ...d.workOrders],
       total: d.total + 1,
     }));
   }
@@ -230,13 +223,13 @@ export function WorkOrdersWorkspace({
         <CardContent className="hidden min-w-0 p-0 md:block">
           <Table className="[&_td]:py-1.5 [&_th]:h-8">
             <TableHeader className="bg-muted/40">
-              {/* Urgency and Office each open a tier (State, Assignment) — a
+              {/* Op. Priority and Office each open a tier (State, Assignment) — a
                   left rule on those two cells (mirrored on the body cells
                   below) is the tier boundary; Created stays outside any tier,
                   it's metadata, not identity/state/assignment. */}
               <TableRow>
                 <TableHead className="pl-6">Work Order</TableHead>
-                <TableHead className="border-l text-center">Urgency</TableHead>
+                <TableHead className="border-l text-center">Op. Priority</TableHead>
                 <TableHead className="text-center">Status</TableHead>
                 <TableHead className="text-center">Due</TableHead>
                 <TableHead className="border-l text-center">Office</TableHead>
@@ -331,7 +324,7 @@ function WorkOrderDesktopRow({ workOrder, onUpdated }: { workOrder: WorkOrderLis
         </p>
       </TableCell>
       {/* State */}
-      <TableCell className="border-l text-center"><UrgencyBadge priorityScore={workOrder.priority_score} /></TableCell>
+      <TableCell className="border-l text-center"><PriorityBadge priorityIndex={workOrder.priority_index} /></TableCell>
       <TableCell className="text-center"><WorkOrderStatusSelect onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
       <TableCell className="text-center"><WorkOrderDueDateEditor onUpdated={onUpdated} workOrder={workOrder} /></TableCell>
       {/* Assignment */}
@@ -357,7 +350,7 @@ function WorkOrderCard({ workOrder, onUpdated }: { workOrder: WorkOrderListRow; 
         </div>
         {/* State */}
         <div className="flex flex-wrap items-center gap-2">
-          <UrgencyBadge priorityScore={workOrder.priority_score} />
+          <PriorityBadge priorityIndex={workOrder.priority_index} />
           <WorkOrderStatusSelect onUpdated={onUpdated} workOrder={workOrder} />
           <WorkOrderDueDateEditor onUpdated={onUpdated} workOrder={workOrder} />
         </div>

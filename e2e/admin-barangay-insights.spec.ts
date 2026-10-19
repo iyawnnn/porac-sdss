@@ -43,6 +43,8 @@ test("index page lists all 29 barangays", async ({ page }) => {
   // barangay name link, since the header row has no link.
   const nameLinks = page.getByRole("table").locator("tbody a");
   await expect(nameLinks).toHaveCount(29);
+  // The High Urgency column was removed in manuscript revision Phase 1, step 6a.
+  await expect(page.getByRole("columnheader", { name: /High Urgency/i })).toHaveCount(0);
 });
 
 test("MEO admin sees a fixed office badge, not a picker, on the index page", async ({ page }) => {
@@ -162,7 +164,8 @@ test("clicking a barangay opens its profile page with KPIs, category breakdown, 
   await expect(page.getByText("Total Tickets", { exact: true })).toBeVisible();
   await expect(page.getByText("Active Tickets", { exact: true })).toBeVisible();
   await expect(page.getByText("Resolved Tickets", { exact: true })).toBeVisible();
-  await expect(page.getByText("High Urgency Tickets", { exact: true })).toBeVisible();
+  // The High Urgency Tickets tile was removed in manuscript revision Phase 1, step 6a.
+  await expect(page.getByText("High Urgency Tickets", { exact: true })).toHaveCount(0);
   // CardTitle renders a styled <div>, not a semantic heading element (same
   // as every other admin card in this app) — getByText is the established
   // convention for asserting on it (see admin-dashboard-performance-summary.spec.ts).

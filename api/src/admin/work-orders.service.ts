@@ -56,12 +56,13 @@ export interface WorkOrderRow {
 }
 
 // The list query's own row shape — adds the linked ticket's already-computed
-// urgency (never recomputed here) so the workspace can show it per row
-// without opening the ticket. get/create/update/setStatus return plain
-// WorkOrderRow; only list() joins tickets for this.
+// Operational Priority (priority_index, never recomputed here) so the
+// workspace can show it per row without opening the ticket. It carried the
+// Hazard Urgency score until manuscript revision Phase 1, step 6a.
+// get/create/update/setStatus return plain WorkOrderRow; only list() joins
+// tickets for this.
 export interface WorkOrderListRow extends WorkOrderRow {
-  priority_score: number | null;
-  urgency_level: string | null;
+  priority_index: number | null;
 }
 
 export interface WorkOrderFilters {
@@ -92,22 +93,14 @@ export interface WorkOrderPerformanceCounts {
   completedWorkOrdersThisWeek: number;
 }
 
-export interface HighUrgencyTicketWithOpenWork {
-  id: number;
-  category: string;
-  assigned_office: 'MEO' | 'MDRRMO';
-  urgency_level: string | null;
-  priority_score: number | null;
-}
-
 // Feeds the dashboard's "Needs Attention" section — small, office-scoped
 // lists (never counts-only like WorkOrderPerformanceCounts) surfacing what
-// an office should look at next: overdue work, due-today work, and
-// high-urgency tickets whose field work hasn't started/finished yet.
+// an office should look at next: overdue work and due-today work. The
+// Hazard Urgency list (tickets with open work) was removed in manuscript
+// revision Phase 1, step 6a.
 export interface WorkOrderNeedsAttention {
   overdueWorkOrders: WorkOrderRow[];
   dueTodayWorkOrders: WorkOrderRow[];
-  highUrgencyTicketsWithOpenWork: HighUrgencyTicketWithOpenWork[];
 }
 
 // Feeds ReportsService's CSV export — deliberately excludes `notes` (the
@@ -127,11 +120,6 @@ export interface WorkOrderExportRow {
   updated_at: Date;
 }
 
-const ACTIVE_TICKET_STATUSES = [
-  'Reported',
-  'Under Review',
-  'In Progress',
-] as const;
 const OPEN_WORK_ORDER_STATUSES = ['pending', 'in_progress'] as const;
 
 const SAFE_COLUMNS = {
@@ -149,13 +137,12 @@ const SAFE_COLUMNS = {
   completed_at: workOrders.completedAt,
 };
 
-// list()-only column set: SAFE_COLUMNS plus the linked ticket's urgency,
-// joined in rather than recomputed. Not used by get/create/update/setStatus,
-// which don't need it.
+// list()-only column set: SAFE_COLUMNS plus the linked ticket's Operational
+// Priority, joined in rather than recomputed. Not used by
+// get/create/update/setStatus, which don't need it.
 const LIST_COLUMNS = {
   ...SAFE_COLUMNS,
-  priority_score: tickets.priorityScore,
-  urgency_level: tickets.urgencyLevel,
+  priority_index: tickets.priorityIndex,
 };
 
 const PAGE_LIMITS = [10, 15, 25, 50] as const;
@@ -676,72 +663,39 @@ export class WorkOrdersService {
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const openStatus = inArray(workOrders.status, OPEN_WORK_ORDER_STATUSES);
 
-    const [overdueWorkOrders, dueTodayWorkOrders, highUrgencyRows] =
-      await Promise.all([
-        this.db
-          .select(SAFE_COLUMNS)
-          .from(workOrders)
-          .where(
-            and(
-              officeFilter,
-              isNotNull(workOrders.dueDate),
-              lt(workOrders.dueDate, now),
-              openStatus,
-            ),
-          )
-          .orderBy(workOrders.dueDate)
-          .limit(limit),
-        this.db
-          .select(SAFE_COLUMNS)
-          .from(workOrders)
-          .where(
-            and(
-              officeFilter,
-              isNotNull(workOrders.dueDate),
-              gte(workOrders.dueDate, todayStart),
-              lt(workOrders.dueDate, tomorrowStart),
-              openStatus,
-            ),
-          )
-          .orderBy(workOrders.dueDate)
-          .limit(limit),
-        this.db
-          .select({
-            id: tickets.id,
-            category: tickets.category,
-            assigned_office: tickets.assignedOffice,
-            urgency_level: tickets.urgencyLevel,
-            priority_score: tickets.priorityScore,
-          })
-          .from(workOrders)
-          .innerJoin(tickets, eq(workOrders.ticketId, tickets.id))
-          .where(
-            and(
-              officeFilter,
-              openStatus,
-              eq(tickets.urgencyLevel, 'HIGH'),
-              inArray(tickets.status, ACTIVE_TICKET_STATUSES),
-            ),
-          )
-          .orderBy(desc(tickets.priorityScore)),
-      ]);
-
-    // A ticket can have more than one open work order, so the join above can
-    // repeat a ticket id — dedupe in application code rather than reaching
-    // for DISTINCT ON, since the result set here is small (dashboard-sized).
-    const seen = new Set<number>();
-    const highUrgencyTicketsWithOpenWork: HighUrgencyTicketWithOpenWork[] = [];
-    for (const row of highUrgencyRows as HighUrgencyTicketWithOpenWork[]) {
-      if (seen.has(row.id)) continue;
-      seen.add(row.id);
-      highUrgencyTicketsWithOpenWork.push(row);
-      if (highUrgencyTicketsWithOpenWork.length >= limit) break;
-    }
+    const [overdueWorkOrders, dueTodayWorkOrders] = await Promise.all([
+      this.db
+        .select(SAFE_COLUMNS)
+        .from(workOrders)
+        .where(
+          and(
+            officeFilter,
+            isNotNull(workOrders.dueDate),
+            lt(workOrders.dueDate, now),
+            openStatus,
+          ),
+        )
+        .orderBy(workOrders.dueDate)
+        .limit(limit),
+      this.db
+        .select(SAFE_COLUMNS)
+        .from(workOrders)
+        .where(
+          and(
+            officeFilter,
+            isNotNull(workOrders.dueDate),
+            gte(workOrders.dueDate, todayStart),
+            lt(workOrders.dueDate, tomorrowStart),
+            openStatus,
+          ),
+        )
+        .orderBy(workOrders.dueDate)
+        .limit(limit),
+    ]);
 
     return {
       overdueWorkOrders: overdueWorkOrders,
       dueTodayWorkOrders: dueTodayWorkOrders,
-      highUrgencyTicketsWithOpenWork,
     };
   }
 

@@ -9,7 +9,6 @@ const METRICS: { key: keyof OfficePerformanceCounts; label: string }[] = [
   { key: "inProgressWorkOrders", label: "In Progress Work Orders" },
   { key: "overdueWorkOrders", label: "Overdue Work Orders" },
   { key: "completedWorkOrdersThisWeek", label: "Completed This Week" },
-  { key: "highUrgencyOpenTickets", label: "High-Urgency Open Tickets" },
   { key: "flaggedReportsPending", label: "Flagged Reports Pending" },
 ];
 
@@ -60,7 +59,7 @@ export function OfficePerformanceSummary({ summary }: { summary: OfficePerforman
         <Badge variant="secondary">{scopeLabel}</Badge>
       </CardHeader>
       <CardBodyPanel className="flex flex-col gap-4 p-4">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {METRICS.map((metric) => <MetricTile counts={summary} key={metric.key} metric={metric} />)}
         </div>
         {summary.byOffice && (

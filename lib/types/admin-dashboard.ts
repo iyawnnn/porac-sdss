@@ -3,7 +3,6 @@ export type DashboardRange = (typeof DASHBOARD_RANGES)[number];
 
 export interface DashboardKpis {
   active_count: number;
-  high_urgency_count: number;
   reports_this_month_count: number;
   avg_resolution_hours_30d: number | null;
 }
@@ -71,7 +70,6 @@ export interface OfficePerformanceCounts {
   inProgressWorkOrders: number;
   overdueWorkOrders: number;
   completedWorkOrdersThisWeek: number;
-  highUrgencyOpenTickets: number;
   flaggedReportsPending: number;
 }
 
@@ -89,16 +87,7 @@ export interface NeedsAttentionWorkOrder {
   due_date: string | null;
 }
 
-export interface HighUrgencyTicketWithOpenWork {
-  id: number;
-  category: string;
-  assigned_office: "MEO" | "MDRRMO";
-  urgency_level: string | null;
-  priority_score: number | null;
-}
-
 export interface NeedsAttention {
   overdueWorkOrders: NeedsAttentionWorkOrder[];
   dueTodayWorkOrders: NeedsAttentionWorkOrder[];
-  highUrgencyTicketsWithOpenWork: HighUrgencyTicketWithOpenWork[];
 }
