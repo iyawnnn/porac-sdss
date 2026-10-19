@@ -21,7 +21,6 @@ export default async function DashboardPage() {
   const { barangays, tickets } = publicMap;
 
   const activeCount = reports.filter((r) => r.status !== "Resolved" && r.status !== "Rejected").length;
-  const citywideCriticalCount = tickets.filter((t) => t.urgency_band === "High").length;
   const recentReports = reports.slice(0, 3);
   const firstName = session.citizenName.split(" ")[0];
 
@@ -50,7 +49,8 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* The "Citywide High Urgency" tile was removed in manuscript revision Phase 1, step 6c — citizens are shown no system score. */}
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StatTile
           label="My Reports"
           value={reports.length}
@@ -74,14 +74,6 @@ export default async function DashboardPage() {
           note="Active, unflagged hazards across Porac."
           tint="var(--color-status-resolved-tint)"
           ink="var(--color-status-resolved-ink)"
-        />
-        <StatTile
-          label="Citywide High Urgency"
-          value={citywideCriticalCount}
-          caption="High-urgency hazards"
-          note="High-band tickets across all barangays."
-          tint="var(--color-urgency-critical-tint)"
-          ink="var(--color-urgency-critical-ink)"
         />
       </div>
 

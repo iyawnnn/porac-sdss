@@ -9,8 +9,8 @@ export interface PublicTicketGeoRow {
   category: string;
   status: string;
   barangay_name: string;
-  urgency_band: string | null;
-  urgency_score: number | null;
+  // urgency_band/urgency_score were removed in manuscript revision Phase 1,
+  // step 6c — pins are neutral and citizens see no system score.
   lat: number;
   lng: number;
   title: string | null;

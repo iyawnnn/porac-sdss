@@ -45,7 +45,8 @@ export interface SubmitReportResult {
   merged: boolean;
   memberCount: number;
   barangay: string;
-  elevationM: number;
+  // elevationM left the response in manuscript revision Phase 1, step 6c;
+  // the elevation is still looked up and stored until step 7.
   assignedOffice: 'MEO' | 'MDRRMO';
   flags: string[];
 }
@@ -58,7 +59,8 @@ export interface MyReportRow {
   citizen_severity: string;
   image_url: string;
   status: string;
-  urgency_band: string | null;
+  // No Hazard Urgency (urgency_band) since manuscript revision Phase 1, step
+  // 6c — citizens are shown no system score.
   barangay_name: string;
   created_at: string;
   assigned_office: 'MEO' | 'MDRRMO';
@@ -84,7 +86,6 @@ export interface MyReportDetail {
   image_url: string;
   category: string;
   status: string;
-  urgency_band: string | null;
   barangay_name: string;
   lat: number;
   lng: number;
@@ -135,8 +136,8 @@ export interface PublicTicketGeoRow {
   category: string;
   status: string;
   barangay_name: string;
-  urgency_band: string | null;
-  urgency_score: number | null;
+  // urgency_band/urgency_score left the public map in manuscript revision
+  // Phase 1, step 6c; pins and clusters are neutral.
   lat: number;
   lng: number;
   title: string | null;
@@ -370,7 +371,6 @@ export class ReportsService {
       merged: result.merged,
       memberCount: result.memberCount,
       barangay: barangay.name,
-      elevationM,
       assignedOffice: office,
       flags,
     };
@@ -415,7 +415,7 @@ export class ReportsService {
     return this.pg<MyReportRow[]>`
       SELECT
         r.id, r.ticket_id, r.title, t.category, r.citizen_severity, r.image_url,
-        t.status, t.urgency_band, b.name AS barangay_name, r.created_at,
+        t.status, b.name AS barangay_name, r.created_at,
         t.assigned_office, t.member_count, r.moderation_status,
         r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id) AS is_merged
       FROM reports r
@@ -434,7 +434,7 @@ export class ReportsService {
     const [report] = await sql<MyReportDetail[]>`
       SELECT
         r.id, r.ticket_id, r.title, r.description, r.citizen_severity, r.image_url,
-        t.category, t.status, t.urgency_band, b.name AS barangay_name,
+        t.category, t.status, b.name AS barangay_name,
         ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng,
         c.first_name AS citizen_first_name, c.last_name AS citizen_last_name,
         r.created_at, t.created_at AS ticket_created_at, t.updated_at AS ticket_updated_at,
@@ -610,7 +610,7 @@ export class ReportsService {
       sql<PublicTicketGeoRow[]>`
         SELECT
           t.id, t.category, t.status, b.name AS barangay_name,
-          t.urgency_band, t.urgency_score, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
+          ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
           r.title, r.image_url, own.id AS own_report_id
         FROM tickets t
         JOIN barangays b ON b.id = t.barangay_id

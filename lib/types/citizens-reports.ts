@@ -1,7 +1,8 @@
 // Query functions (getMyReports, getMyReportDetail) were ported to
 // api/src/reports/reports.service.ts (NestJS) — see PLAN blueprint Phase
 // 6/8. This file now only carries the row shapes that client components
-// still `import type`.
+// still `import type`. Neither shape carries a system score: urgency_band
+// was removed in manuscript revision Phase 1, step 6c.
 export interface MyReportRow {
   id: number;
   ticket_id: number;
@@ -10,7 +11,6 @@ export interface MyReportRow {
   citizen_severity: string;
   image_url: string;
   status: string;
-  urgency_band: string | null;
   barangay_name: string;
   created_at: string;
   assigned_office: "MEO" | "MDRRMO";
@@ -28,7 +28,6 @@ export interface MyReportDetail {
   image_url: string;
   category: string;
   status: string;
-  urgency_band: string | null;
   barangay_name: string;
   lat: number;
   lng: number;
