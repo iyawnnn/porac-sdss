@@ -258,7 +258,7 @@ Previously, `urgency_band` and `urgency_level` were computed independently with 
 
 ### 10.6 Precision is presented more confidently than it is warranted
 
-`priority_score` and `priority_index` render as precise integers (e.g. "73"). Given §10.1, §10.2, and §10.5, that number carries **far less precision than two significant figures implies** — the difference between 71 and 73 is not meaningful. Ticket Detail's factor breakdown mitigates this for admins by showing the inputs. Citizens see only `urgency_band`, a coarser and more honest three-way label, which is the right choice.
+`priority_score` and `priority_index` render as precise integers (e.g. "73"). Given §10.1, §10.2, and §10.5, that number carries **far less precision than two significant figures implies** — the difference between 71 and 73 is not meaningful. Ticket Detail's factor breakdown mitigates this for admins by showing the inputs. Citizens are shown no system score at all — no Hazard Urgency since manuscript revision Phase 1, step 6c, and never Operational Priority.
 
 Be careful not to describe the score as a calibrated risk probability. It is a **transparent, reproducible ranking heuristic** — which is genuinely useful for triage, and a more defensible claim.
 
