@@ -16,7 +16,6 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { RecomputeService } from '../domain/recompute.service';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
@@ -58,7 +57,6 @@ function parseTicketIds(value: unknown): number[] {
 export class TicketsController {
   constructor(
     private readonly tickets: TicketsService,
-    private readonly recompute: RecomputeService,
     private readonly operationalPriority: OperationalPriorityService,
     private readonly assessments: OperationalAssessmentService,
   ) {}
@@ -68,7 +66,6 @@ export class TicketsController {
     @Query() query: Record<string, string | undefined>,
     @CurrentAdmin() admin: AdminSession,
   ) {
-    await this.recompute.recomputeActiveTicketUrgency();
     await this.operationalPriority.recalculateActiveTickets();
     const filters = this.tickets.parseTicketQuery(query, admin);
     // viewCounts rides along rather than living on its own route: it labels
@@ -79,7 +76,7 @@ export class TicketsController {
     // The former `recompute` field ({ updated, rain1hMm } — the Hazard
     // Urgency pass and the city-wide rainfall behind the queue's rain
     // banner) was dropped from this response in manuscript revision
-    // Phase 1, step 4. The pass itself still runs until Phase 1, step 7.
+    // Phase 1, step 4, and the pass itself stopped running in step 7a.
     const [result, viewCounts] = await Promise.all([
       this.tickets.getTicketsForAdmin(filters),
       this.tickets.getViewCounts(admin),
@@ -92,7 +89,6 @@ export class TicketsController {
     @Query('office') officeParam: string | undefined,
     @CurrentAdmin() admin: AdminSession,
   ) {
-    await this.recompute.recomputeActiveTicketUrgency();
     await this.operationalPriority.recalculateActiveTickets();
     const requestedOffice =
       officeParam === 'all' || officeParam === 'MEO' || officeParam === 'MDRRMO'
@@ -107,10 +103,10 @@ export class TicketsController {
     @CurrentAdmin() admin: AdminSession,
   ) {
     // Matches the original SSR page (app/admin/tickets/[id]/page.tsx),
-    // which always recomputed right before reading — otherwise the
-    // priority/urgency shown could lag behind the queue by up to the
-    // caller's own recompute cadence.
-    await this.recompute.recomputeActiveTicketUrgency();
+    // which always recalculated right before reading — otherwise the
+    // Operational Priority shown could lag behind the queue by up to the
+    // caller's own recalculation cadence. (The Hazard Urgency recompute
+    // that also ran here was removed in manuscript revision Phase 1, step 7a.)
     await this.operationalPriority.recalculateActiveTickets();
     const detail = await this.tickets.getTicketDetail(id, admin);
     if (!detail) throw new NotFoundException();

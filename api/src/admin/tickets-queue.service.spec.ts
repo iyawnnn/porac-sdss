@@ -479,6 +479,30 @@ describe('Ticket Detail and admin map read no Hazard Urgency', () => {
     expect(detailSelect).not.toMatch(HAZARD_URGENCY_COLUMNS);
   });
 
+  // Manuscript revision Phase 1, step 7a: the per-ticket and per-report
+  // elevation display was removed, so neither detail query reads it.
+  it('the Ticket Detail ticket and reports queries select no elevation_m', () => {
+    const detailStart = ticketsServiceSource.indexOf('async getTicketDetail(');
+    const detailSelect = ticketsServiceSource.slice(
+      detailStart,
+      ticketsServiceSource.indexOf('FROM tickets t', detailStart),
+    );
+    const reportsStart = ticketsServiceSource.indexOf(
+      'const reports = await sql<TicketReport[]>',
+      detailStart,
+    );
+    const reportsSelect = ticketsServiceSource.slice(
+      reportsStart,
+      ticketsServiceSource.indexOf(
+        'FROM reports WHERE ticket_id',
+        reportsStart,
+      ),
+    );
+    expect(reportsSelect).toMatch(/exif_captured_at/);
+    expect(detailSelect).not.toMatch(/elevation_m/);
+    expect(reportsSelect).not.toMatch(/elevation_m/);
+  });
+
   it('the priority-context response carries the breakdown only, no rain reading', () => {
     const contextBody = ticketsServiceSource.slice(
       ticketsServiceSource.indexOf('async getTicketPriorityContext('),

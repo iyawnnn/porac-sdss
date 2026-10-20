@@ -70,7 +70,6 @@ export interface TicketDetail {
   member_count: number;
   lat: number;
   lng: number;
-  elevation_m: number | null;
   // Operational Priority only since manuscript revision Phase 1, step 5 —
   // the Hazard Urgency fields are no longer in the API response.
   priority_index: number | null;
@@ -114,7 +113,6 @@ export interface TicketReport {
   description: string | null;
   citizen_severity: string;
   image_url: string;
-  elevation_m: number | null;
   exif_captured_at: string | null;
   exif_data: Record<string, unknown> | null;
   location_mismatch_m: number | null;

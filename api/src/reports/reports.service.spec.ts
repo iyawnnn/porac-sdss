@@ -609,3 +609,52 @@ describe('public map privacy-limited view (Phase 1, step 6d)', () => {
     expect(ticketSelect).toContain('t.updated_at AS last_updated_at');
   });
 });
+// Manuscript revision Phase 1, step 7a: report submission no longer looks up
+// elevation or live rain and writes no Hazard Urgency column; new rows leave
+// them NULL until Phase 8 drops them. Operational Priority recalculation is
+// unchanged. Source-text assertions, same rationale as the blocks above.
+describe('submit() no longer calculates Hazard Urgency (Phase 1, step 7a)', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+  const submitBody = reportsServiceSource.slice(
+    reportsServiceSource.indexOf('  async submit('),
+    reportsServiceSource.indexOf('  private async notifyFocalIntake('),
+  );
+  const ticketInsert = submitBody.slice(
+    submitBody.indexOf('INSERT INTO tickets'),
+    submitBody.indexOf(
+      'RETURNING id',
+      submitBody.indexOf('INSERT INTO tickets'),
+    ),
+  );
+  const reportInsert = submitBody.slice(
+    submitBody.indexOf('INSERT INTO reports'),
+    submitBody.indexOf(
+      'RETURNING id',
+      submitBody.indexOf('INSERT INTO reports'),
+    ),
+  );
+
+  it('makes no elevation, rain, urgency-formula or recompute call', () => {
+    expect(submitBody).not.toMatch(
+      /findNearestElevation|getCurrentRain1hMm|computeUrgency|recomputeActiveTicketUrgency/,
+    );
+    expect(submitBody).toContain(
+      'await this.operationalPriority.recalculateActiveTickets();',
+    );
+  });
+
+  it('names none of the eight Hazard Urgency columns in the ticket INSERT', () => {
+    expect(ticketInsert.length).toBeGreaterThan(0);
+    expect(ticketInsert).not.toMatch(
+      /elevation_m|elevation_factor|precipitation_factor|cluster_factor|urgency_score|urgency_band|priority_score|urgency_level/,
+    );
+  });
+
+  it('no longer writes the report elevation', () => {
+    expect(reportInsert.length).toBeGreaterThan(0);
+    expect(reportInsert).not.toMatch(/elevation_m/);
+  });
+});

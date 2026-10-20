@@ -1,34 +1,25 @@
 import { Module } from '@nestjs/common';
 import { BarangayService } from './barangay.service';
-import { ElevationService } from './elevation.service';
-import { AppConfigService } from './app-config.service';
-import { WeatherService } from './weather.service';
-import { RecomputeService } from './recompute.service';
 import { OperationalPriorityService } from './operational-priority.service';
 import { MediaService } from './media.service';
 import { RateLimitService } from './ratelimit.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 // No controllers — feature modules (auth, reports, admin, cron) import
-// this and build their own routes around these services.
+// this and build their own routes around these services. The Hazard Urgency
+// services (RecomputeService, WeatherService, ElevationService,
+// AppConfigService and the urgency formula) were deleted in manuscript
+// revision Phase 1, step 7a.
 @Module({
   imports: [NotificationsModule],
   providers: [
     BarangayService,
-    ElevationService,
-    AppConfigService,
-    WeatherService,
-    RecomputeService,
     OperationalPriorityService,
     MediaService,
     RateLimitService,
   ],
   exports: [
     BarangayService,
-    ElevationService,
-    AppConfigService,
-    WeatherService,
-    RecomputeService,
     OperationalPriorityService,
     MediaService,
     RateLimitService,

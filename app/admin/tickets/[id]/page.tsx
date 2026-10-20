@@ -132,7 +132,6 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
               </div>
               <p className="mt-2 text-xs text-ink-500">
                 {ticket.barangay_name} · {ticket.lat.toFixed(5)}, {ticket.lng.toFixed(5)}
-                {ticket.elevation_m !== null && <> · Elevation {ticket.elevation_m.toFixed(0)}m</>}
               </p>
             </CardContent>
           </Card>
@@ -277,7 +276,6 @@ function ReportCard({ report }: { report: TicketReport }) {
   if (gpsLat !== null && gpsLng !== null) metaParts.push(`GPS ${gpsLat.toFixed(5)}, ${gpsLng.toFixed(5)}`);
   if (capturedAt) metaParts.push(`Captured ${new Date(capturedAt).toLocaleString()}`);
   if (make || model) metaParts.push([make, model].filter(Boolean).join(" "));
-  if (report.elevation_m !== null) metaParts.push(`Elevation ${report.elevation_m.toFixed(0)}m`);
   if (report.location_mismatch_m !== null) metaParts.push(`${report.location_mismatch_m.toFixed(0)}m from EXIF GPS`);
 
   const flags = report.flags ?? [];

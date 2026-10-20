@@ -36,7 +36,6 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
   description: string | null;
   lat: number;
   lng: number;
-  elevationM: number | null;
   linkedTicketReference: string;
   activity: IntakeActivityRow[];
 }

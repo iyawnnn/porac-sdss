@@ -1,7 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { RecomputeService } from '../domain/recompute.service';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
-import { WeatherService } from '../domain/weather.service';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -23,9 +21,7 @@ export class DashboardController {
   constructor(
     private readonly dashboard: DashboardService,
     private readonly tickets: TicketsService,
-    private readonly recompute: RecomputeService,
     private readonly operationalPriority: OperationalPriorityService,
-    private readonly weather: WeatherService,
     private readonly barangaysGeo: BarangaysGeoService,
     private readonly moderation: ModerationService,
     private readonly workOrders: WorkOrdersService,
@@ -77,7 +73,8 @@ export class DashboardController {
     @CurrentAdmin() admin: AdminSession,
   ) {
     const range = parseDashboardRange(rangeParam);
-    await this.recompute.recomputeActiveTicketUrgency();
+    // The Hazard Urgency recompute (and the live rain reading it returned as
+    // rain1hMm) stopped running here in manuscript revision Phase 1, step 7a.
     await this.operationalPriority.recalculateActiveTickets();
 
     const requestedOffice =
@@ -97,7 +94,6 @@ export class DashboardController {
       departmentWorkload,
       citizenSeverityDistribution,
       topPriorityQueueData,
-      rain1hMm,
       officePerformanceSummary,
       needsAttention,
       deltas,
@@ -123,7 +119,6 @@ export class DashboardController {
         limit: 5,
         page: 1,
       }),
-      this.weather.getCurrentRain1hMm(),
       this.getOfficePerformanceSummary(office),
       this.workOrders.getNeedsAttention(office),
       // Week-over-week KPI comparison. Fixed 7-day baseline, deliberately
@@ -146,7 +141,6 @@ export class DashboardController {
       // Phase 1, step 4.
       topPriorityQueue: topPriorityQueueData.tickets,
       range,
-      rain1hMm,
       deltas,
       officePerformanceSummary,
       needsAttention,

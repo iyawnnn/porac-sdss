@@ -138,7 +138,6 @@ describe('FocalIntakeService.acknowledge', () => {
           description: 'A pothole',
           lat: 15.0,
           lng: 120.5,
-          elevation_m: 50,
           operational_priority: 50,
           acknowledged_at: '2026-01-02T00:00:00Z',
           acknowledged_by_name: 'Diana Torres',
@@ -239,7 +238,6 @@ describe('FocalIntakeService.screen', () => {
           description: 'A pothole',
           lat: 15.0,
           lng: 120.5,
-          elevation_m: 50,
           operational_priority: 50,
           acknowledged_at: '2026-01-02T00:00:00Z',
           acknowledged_by_name: 'Diana Torres',
@@ -283,7 +281,6 @@ describe('FocalIntakeService.forward', () => {
           description: 'A pothole',
           lat: 15.0,
           lng: 120.5,
-          elevation_m: 50,
           operational_priority: 50,
           acknowledged_at: null,
           acknowledged_by_name: null,
@@ -345,7 +342,6 @@ describe('FocalIntakeService.escalate', () => {
           description: 'A pothole',
           lat: 15.0,
           lng: 120.5,
-          elevation_m: 50,
           operational_priority: 90,
           acknowledged_at: null,
           acknowledged_by_name: null,
@@ -440,5 +436,15 @@ describe('focal-intake.service.ts reads no Hazard Urgency column', () => {
     );
     expect(source).not.toMatch(/priority_score|urgency_level|hazardUrgency/);
     expect(source).toContain('t.priority_index AS operational_priority');
+  });
+
+  // Manuscript revision Phase 1, step 7a: the intake detail's elevation line
+  // was removed, so no Focal query or response carries the elevation.
+  it('contains no elevation_m or elevationM', () => {
+    const source = readFileSync(
+      join(__dirname, 'focal-intake.service.ts'),
+      'utf8',
+    );
+    expect(source).not.toMatch(/elevation_m|elevationM/);
   });
 });

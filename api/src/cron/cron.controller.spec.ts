@@ -1,13 +1,10 @@
 import { CronController } from './cron.controller';
-import type { RecomputeService } from '../domain/recompute.service';
 import type { OperationalPriorityService } from '../domain/operational-priority.service';
-import type { WeatherService } from '../domain/weather.service';
 import type { PasswordResetService } from '../citizens/password-reset.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { RateLimitService } from '../domain/ratelimit.service';
 
 function makeController(overrides: {
-  recomputeActiveTicketUrgency?: jest.Mock;
   recalculateActiveTickets?: jest.Mock;
   cleanupExpiredTokens?: jest.Mock;
   cleanupOldNotifications?: jest.Mock;
@@ -28,18 +25,12 @@ function makeController(overrides: {
       }),
   } as unknown as RateLimitService;
 
-  const recompute = {
-    recomputeActiveTicketUrgency:
-      overrides.recomputeActiveTicketUrgency ?? jest.fn(),
-  } as unknown as RecomputeService;
   const operationalPriority = {
     recalculateActiveTickets: overrides.recalculateActiveTickets ?? jest.fn(),
   } as unknown as OperationalPriorityService;
 
   return new CronController(
-    recompute,
     operationalPriority,
-    {} as WeatherService,
     passwordReset,
     notifications,
     rateLimit,
@@ -106,16 +97,19 @@ describe('CronController — escalation job removed', () => {
     expect('checkTicketEscalations' in CronController.prototype).toBe(false);
   });
 
-  it('still exposes the other five cron routes', () => {
+  // Phase 1, step 7a: recompute-urgency and recompute-weather (Hazard
+  // Urgency and its live rain reading) were replaced by recompute-priority.
+  it('exposes exactly recompute-priority and the three cleanup routes', () => {
     expect(routePaths.sort()).toEqual(
       [
         'cleanup-notifications',
         'cleanup-password-reset-tokens',
         'cleanup-rate-limit-events',
-        'recompute-urgency',
-        'recompute-weather',
+        'recompute-priority',
       ].sort(),
     );
+    expect(routePaths).not.toContain('recompute-urgency');
+    expect(routePaths).not.toContain('recompute-weather');
   });
 });
 
@@ -131,27 +125,29 @@ describe('CronController guard placement', () => {
   });
 });
 
-describe('CronController.recomputeUrgency', () => {
-  it('runs Hazard Urgency then Operational Priority and merges both results', async () => {
-    const order: string[] = [];
-    const recomputeActiveTicketUrgency = jest.fn().mockImplementation(() => {
-      order.push('urgency');
-      return Promise.resolve({ updated: 3, rain1hMm: 4.5 });
-    });
-    const recalculateActiveTickets = jest.fn().mockImplementation(() => {
-      order.push('priority');
-      return Promise.resolve({ updated: 3 });
-    });
+// Phase 1, step 7a: the only recompute route left runs Operational Priority
+// alone — no Hazard Urgency pass, no weather fetch.
+describe('CronController.recomputePriority', () => {
+  it('calls only OperationalPriorityService and returns its updated count', async () => {
+    const recalculateActiveTickets = jest
+      .fn()
+      .mockResolvedValue({ updated: 7 });
+    const cleanupExpiredTokens = jest.fn();
+    const cleanupOldNotifications = jest.fn();
+    const cleanupOldEvents = jest.fn();
     const controller = makeController({
-      recomputeActiveTicketUrgency,
       recalculateActiveTickets,
+      cleanupExpiredTokens,
+      cleanupOldNotifications,
+      cleanupOldEvents,
     });
 
-    await expect(controller.recomputeUrgency()).resolves.toEqual({
-      updated: 3,
-      rain1hMm: 4.5,
-      operationalPriorityUpdated: 3,
+    await expect(controller.recomputePriority()).resolves.toEqual({
+      operationalPriorityUpdated: 7,
     });
-    expect(order).toEqual(['urgency', 'priority']);
+    expect(recalculateActiveTickets).toHaveBeenCalledTimes(1);
+    expect(cleanupExpiredTokens).not.toHaveBeenCalled();
+    expect(cleanupOldNotifications).not.toHaveBeenCalled();
+    expect(cleanupOldEvents).not.toHaveBeenCalled();
   });
 });

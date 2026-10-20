@@ -152,7 +152,8 @@ export interface TicketDetail {
   member_count: number;
   lat: number;
   lng: number;
-  elevation_m: number | null;
+  // elevation_m left the detail response in manuscript revision Phase 1,
+  // step 7a (no longer stored for new tickets).
   // Manuscript revision Phase 1, step 5: Ticket Detail shows Operational
   // Priority only. The Hazard Urgency columns (the three *_factor inputs,
   // urgency_score, urgency_band, priority_score, urgency_level) are no
@@ -177,7 +178,6 @@ export interface TicketReport {
   description: string | null;
   citizen_severity: string;
   image_url: string;
-  elevation_m: number | null;
   exif_captured_at: string | null;
   exif_data: Record<string, unknown> | null;
   location_mismatch_m: number | null;
@@ -531,7 +531,7 @@ export class TicketsService {
     const [ticket] = await sql<TicketDetail[]>`
       SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, ST_AsGeoJSON(b.geom) AS barangay_geojson,
         t.status, t.assigned_office, t.member_count, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
-        t.elevation_m, t.priority_index,
+        t.priority_index,
         t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at,
         t.disputed_at, t.dispute_reason
       FROM tickets t
@@ -544,7 +544,7 @@ export class TicketsService {
 
     const reports = await sql<TicketReport[]>`
       SELECT id, title, description, citizen_severity, image_url,
-        elevation_m, exif_captured_at, exif_data, location_mismatch_m, created_at,
+        exif_captured_at, exif_data, location_mismatch_m, created_at,
         flags, moderation_status
       FROM reports WHERE ticket_id = ${id} ORDER BY created_at
     `;

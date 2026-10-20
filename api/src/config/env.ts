@@ -9,6 +9,7 @@ const envSchema = z
     DATABASE_URL: z.string().url(),
     JWT_SECRET: z.string().min(32),
     CLOUDINARY_URL: z.string().startsWith('cloudinary://'),
+    // Unread since manuscript revision Phase 1, step 7a; kept for Phase 4 rainfall context.
     OPENWEATHERMAP_API_KEY: z.string().min(1),
     CRON_SECRET: z.string().min(16),
     PORT: z.coerce.number().default(3001),
