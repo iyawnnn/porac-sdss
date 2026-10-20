@@ -34,11 +34,16 @@ export default function TicketLocationMap({
 }: {
   lat: number;
   lng: number;
-  urgencyBand: string | null;
+  urgencyBand?: string | null;
   barangayGeoJson: Geometry | null;
 }) {
+  // `isolate` makes the map its own stacking context. Leaflet gives its
+  // panes z-index 400+ and its controls 1000, and without this those
+  // values compete with the page's dialogs (z-50, portalled to <body>) —
+  // the barangay outline was drawing over the "Mark resolved" dialog and
+  // catching its clicks.
   return (
-    <MapContainer center={[lat, lng]} zoom={15} className="h-full w-full">
+    <MapContainer center={[lat, lng]} zoom={15} className="isolate h-full w-full">
       <MapResizeHandler />
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -46,7 +51,7 @@ export default function TicketLocationMap({
         className="map-tile-muted"
       />
       {barangayGeoJson && <GeoJSON data={barangayGeoJson} style={styleBarangayFeature} />}
-      <Marker position={[lat, lng]} icon={bandMarkerIcon(urgencyBand, { pulse: true })} />
+      <Marker position={[lat, lng]} icon={bandMarkerIcon(urgencyBand ?? null, { pulse: true })} />
     </MapContainer>
   );
 }

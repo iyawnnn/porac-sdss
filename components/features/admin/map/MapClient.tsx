@@ -14,7 +14,7 @@ import type { AdminTicketGeoRow } from "@/lib/types/admin-tickets";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { configureLeafletMarkerIcons } from "@/lib/gis/leaflet-icons";
 import { bindBarangayInteractions, getBarangayFeatureName, styleBarangayFeature, styleMunicipalBoundary } from "@/lib/gis/map-styles";
-import { categoryClusterIcon, categoryMarkerIcon, registerMarkerUrgency } from "@/lib/gis/categoryMarker";
+import { categoryClusterIcon, categoryMarkerIcon, registerMarkerPriority } from "@/lib/gis/categoryMarker";
 import { MapControls } from "./MapControls";
 import { MapLegend } from "./MapLegend";
 import { MapFilterBar, EMPTY_MAP_FILTERS, type MapFilterState } from "./MapFilterBar";
@@ -42,9 +42,9 @@ function HeatmapLayer({ tickets }: { tickets: AdminTicketGeoRow[] }) {
   const map = useMap();
   useEffect(() => {
     const points: L.HeatLatLngTuple[] = tickets.map((ticket) => [ticket.lat, ticket.lng, Math.max((ticket.priority_index ?? 1) / 100, 0.15)]);
-    // Deliberately distinct from the urgency-band hex values (getUrgencyBandStyle) — the
-    // heatmap encodes priority_index, a different metric than urgency, so it must never
-    // share colors with the urgency pin/legend palette (see CLAUDE.md's Urgency vs Priority note).
+    // A continuous density gradient, deliberately not the three priority band hexes the
+    // pin rings use (priorityBandHex) — a heat colour is not a Low/Medium/High band, so
+    // reusing those hues would invite reading it as one.
     const layer = L.heatLayer(points, { radius: 28, blur: 20, maxZoom: MUNICIPALITY.defaultZoom + 2, gradient: { 0.2: "#4338ca", 0.5: "#7c3aed", 0.75: "#c026d3", 1: "#db2777" } }).addTo(map);
     return () => { layer.remove(); };
   }, [map, tickets]);
@@ -91,7 +91,6 @@ function BarangayBoundaries({ data, selectedName, onSelect }: { data: FeatureCol
 function matchesFilters(ticket: AdminTicketGeoRow, filters: MapFilterState): boolean {
   if (filters.category && ticket.category !== filters.category) return false;
   if (filters.barangayName && ticket.barangay_name !== filters.barangayName) return false;
-  if (filters.urgency && ticket.urgency_band !== filters.urgency) return false;
   if (filters.status && ticket.status !== filters.status) return false;
   if (filters.search) { const needle = filters.search.trim().toLowerCase(); if (needle && !`${ticket.title ?? ""} ${ticket.category} ${ticket.barangay_name}`.toLowerCase().includes(needle)) return false; }
   return true;
@@ -143,7 +142,6 @@ export default function MapClient({
     if (isSystemAdmin) params.set("office", office ?? "all");
     if (mode !== "pins") params.set("layer", mode);
     if (filters.category) params.set("category", filters.category);
-    if (filters.urgency) params.set("urgency", filters.urgency);
     if (filters.status) params.set("status", filters.status);
     if (filters.barangayName) params.set("barangayName", filters.barangayName);
     if (filters.search) params.set("search", filters.search);
@@ -168,6 +166,6 @@ export default function MapClient({
     {!loading && loadError && <div className="absolute top-4 left-1/2 z-30 w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2"><AdminErrorCard message="Ticket pins couldn't load from the API. The map itself is unaffected — try again." onRetry={() => setRetryNonce((n) => n + 1)} title="Tickets Unavailable" /></div>}
     <div className="pointer-events-none absolute inset-0 z-20"><div className="pointer-events-auto"><MapControls isSystemAdmin={isSystemAdmin} mode={mode} office={office} onModeChange={setMode} onOfficeChange={setOffice} onToggleBoundaries={() => setShowBoundaries((previous) => !previous)} showBoundaries={showBoundaries} /></div><div className="pointer-events-auto"><MapFilterBar barangayOptions={barangayOptions} filters={filters} onChange={updateFilters} onReset={() => { setFilters(EMPTY_MAP_FILTERS); setSelectedBarangay(null); setSelectedBarangayBounds(null); setViewportResetKey((current) => current + 1); }} /></div><div className="pointer-events-auto"><MapLegend /></div></div>
     {isMobile && <Sheet onOpenChange={(open) => { if (!open) setSelectedId(null); }} open={Boolean(selectedTicket)}><SheetContent className="max-h-[82vh] overflow-y-auto p-0" showCloseButton={false} side="bottom"><SheetHeader className="sr-only"><SheetTitle>Ticket details</SheetTitle></SheetHeader>{selectedTicket && <TicketPopup onClose={() => setSelectedId(null)} ticket={selectedTicket} />}</SheetContent></Sheet>}
-    <MapContainer center={CITY_CENTER} className="relative z-0 h-full w-full" zoom={MUNICIPALITY.defaultZoom} zoomControl={false}><MapSizeInvalidator /><MapBackgroundReset onClear={() => { setSelectedId(null); clearBarangaySelection(); }} /><SelectedBarangayViewport bounds={selectedBarangayBounds} /><CityViewport resetKey={viewportResetKey} /><ZoomControl position="bottomright" /><TileLayer attribution="&copy; OpenStreetMap contributors" className="map-tile-muted" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />{showBoundaries && municipalBoundary && <GeoJSON data={municipalBoundary} style={styleMunicipalBoundary} />}{showBoundaries && barangays && <BarangayBoundaries data={barangays} onSelect={selectBarangay} selectedName={selectedBarangay} />}{mode === "heatmap" ? <HeatmapLayer tickets={filteredTickets} /> : <MarkerClusterGroup chunkedLoading iconCreateFunction={categoryClusterIcon}>{filteredTickets.map((ticket) => <Marker eventHandlers={{ click: () => setSelectedId(ticket.id), popupclose: () => setSelectedId((current) => current === ticket.id ? null : current) }} icon={categoryMarkerIcon(ticket.category, ticket.urgency_band, { selected: ticket.id === selectedId })} key={ticket.id} position={[ticket.lat, ticket.lng]} ref={(marker) => { if (marker) registerMarkerUrgency(marker, ticket.urgency_band); }} >{!isMobile && <Popup autoPan={false} className="admin-ticket-popup" closeButton={false} offset={[0, -20]}><TicketPopup onClose={() => setSelectedId(null)} ticket={ticket} /></Popup>}</Marker>)}</MarkerClusterGroup>}</MapContainer>
+    <MapContainer center={CITY_CENTER} className="relative z-0 h-full w-full" zoom={MUNICIPALITY.defaultZoom} zoomControl={false}><MapSizeInvalidator /><MapBackgroundReset onClear={() => { setSelectedId(null); clearBarangaySelection(); }} /><SelectedBarangayViewport bounds={selectedBarangayBounds} /><CityViewport resetKey={viewportResetKey} /><ZoomControl position="bottomright" /><TileLayer attribution="&copy; OpenStreetMap contributors" className="map-tile-muted" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />{showBoundaries && municipalBoundary && <GeoJSON data={municipalBoundary} style={styleMunicipalBoundary} />}{showBoundaries && barangays && <BarangayBoundaries data={barangays} onSelect={selectBarangay} selectedName={selectedBarangay} />}{mode === "heatmap" ? <HeatmapLayer tickets={filteredTickets} /> : <MarkerClusterGroup chunkedLoading iconCreateFunction={categoryClusterIcon}>{filteredTickets.map((ticket) => <Marker eventHandlers={{ click: () => setSelectedId(ticket.id), popupclose: () => setSelectedId((current) => current === ticket.id ? null : current) }} icon={categoryMarkerIcon(ticket.category, ticket.priority_index, { selected: ticket.id === selectedId })} key={ticket.id} position={[ticket.lat, ticket.lng]} ref={(marker) => { if (marker) registerMarkerPriority(marker, ticket.priority_index); }} >{!isMobile && <Popup autoPan={false} className="admin-ticket-popup" closeButton={false} offset={[0, -20]}><TicketPopup onClose={() => setSelectedId(null)} ticket={ticket} /></Popup>}</Marker>)}</MarkerClusterGroup>}</MapContainer>
   </div></section>;
 }

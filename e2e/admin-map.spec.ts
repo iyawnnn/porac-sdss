@@ -9,6 +9,9 @@ async function waitForMapReady(page: import("@playwright/test").Page) {
   await expect(page.getByText("Loading tickets...")).toHaveCount(0);
 }
 
+// Manuscript revision Phase 1, step 5 retired the map's Hazard Urgency
+// filter. An old link that still carries ?urgency= keeps its other filters
+// and simply drops that one — no Urgency control, no urgency in the URL.
 test("map loads with query params applied and reflects them in the filter bar", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/map?category=Pothole%20%2F%20Road%20Surface%20Damage&urgency=High");
@@ -16,7 +19,23 @@ test("map loads with query params applied and reflects them in the filter bar", 
 
   await page.getByRole("button", { name: /^Filters/ }).click();
   await expect(page.getByLabel("Category", { exact: true })).toHaveText("Pothole / Road Surface Damage");
-  await expect(page.getByLabel("Urgency", { exact: true })).toHaveText("High");
+  await expect(page.getByLabel("Urgency", { exact: true })).toHaveCount(0);
+
+  // Any filter change rebuilds the URL from parsed state, so the retired key drops.
+  await page.getByLabel("Status", { exact: true }).click();
+  await page.getByRole("option", { name: "Reported", exact: true }).click();
+  await expect(page).toHaveURL(/[?&]status=Reported(&|$)/);
+  await expect(page).not.toHaveURL(/[?&]urgency=/);
+});
+
+test("the map legend explains the marker ring as Operational Priority, not Hazard Urgency", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto("/admin/map");
+  await waitForMapReady(page);
+
+  await page.getByRole("button", { name: "Legend", exact: true }).click();
+  await expect(page.getByText("Operational Priority (outer ring)", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Hazard Urgency/)).toHaveCount(0);
 });
 
 test("changing a map filter updates the URL", async ({ page }) => {
@@ -63,7 +82,7 @@ test("invalid query params fail safely instead of crashing or matching nothing s
 
   await page.getByRole("button", { name: /^Filters/ }).click();
   await expect(page.getByLabel("Category", { exact: true })).toHaveText("All categories");
-  await expect(page.getByLabel("Urgency", { exact: true })).toHaveText("All urgency");
+  await expect(page.getByLabel("Urgency", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Status", { exact: true })).toHaveText("All statuses");
 });
 

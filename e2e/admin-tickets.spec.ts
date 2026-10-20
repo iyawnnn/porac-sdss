@@ -283,7 +283,7 @@ test("clicking a ticket from the queue opens its detail page and back link retur
 
 // --- 5. Ticket Detail read-only surface --------------------------------------
 
-test("Ticket Detail shows status, office, urgency, evidence, and location sections", async ({ page }) => {
+test("Ticket Detail shows status, office, Operational Priority, evidence, and location sections", async ({ page }) => {
   const ticketId = sharedReadOnlyTicketId;
 
   await loginAs(page, E2E_MEO_ADMIN);
@@ -293,9 +293,13 @@ test("Ticket Detail shows status, office, urgency, evidence, and location sectio
   await expect(page.getByText(/^#\d+ ·/)).toBeVisible();
   await expect(page.getByLabel("Assigned office", { exact: true })).toBeVisible();
 
-  // Urgency info (badge in the header + scoring tab).
-  await expect(page.getByText(/^Hazard Urgency \d/)).toBeVisible();
-  await expect(page.getByText("Hazard Urgency", { exact: true })).toBeVisible();
+  // Operational Priority (header badge + scoring tab). Hazard Urgency was
+  // retired from this page in manuscript revision Phase 1, step 5 — no
+  // urgency card, no factor bars, no live rain line.
+  await expect(page.getByText(/^Operational Priority (\d+|—) · (Low|Medium|High|—)$/)).toBeVisible();
+  await expect(page.getByText("Operational Priority (how soon to act)", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Hazard Urgency/)).toHaveCount(0);
+  await expect(page.getByText(/rain rate/i)).toHaveCount(0);
 
   // Evidence / reports section.
   await expect(page.getByText(/^Evidence & reports \(\d+\)$/)).toBeVisible();
@@ -310,7 +314,11 @@ test("Ticket Detail shows the dispute section only when the ticket is disputed",
   await signupCitizen(citizenPage, "dispute-section");
   const { reportId, ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
 
-  await loginAs(page, E2E_SYSTEM_ADMIN);
+  // The ticket's own office advances it. This used to log in as the system
+  // admin, but Batch 1 of the five-role architecture denies system_admin on
+  // every ticket route (OperationalStaffGuard), so the status POSTs below
+  // were 403s. "Pothole / Road Surface Damage" routes to MEO.
+  await loginAs(page, E2E_MEO_ADMIN);
   // Reported -> Under Review -> In Progress -> Resolved, then the citizen
   // disputes it — deterministically produces a disputed ticket instead of
   // depending on one already existing (and not yet consumed) in seed data.
@@ -381,8 +389,23 @@ test("MEO admin can reassign a ticket's office through the UI, and office scopin
 
     await page.getByLabel("Assigned office", { exact: true }).click();
     await page.getByRole("option", { name: "MDRRMO", exact: true }).click();
+    const reassigned = page.waitForResponse(
+      (r) => r.url().includes(`/api/admin/tickets/${ticketId}/reassign`) && r.request().method() === "POST",
+    );
     await page.getByRole("button", { name: "Reassign" }).click();
-    await expect(page.getByText(/· MDRRMO ·/)).toBeVisible();
+    expect((await reassigned).ok()).toBe(true);
+
+    // Once the ticket is MDRRMO's, the MEO session can no longer open it
+    // (assertOfficeAccess — the lock-out itself is covered by the
+    // "original MEO session is locked out" test below), so the new owner
+    // confirms the move from its own session instead of waiting for MEO's
+    // refreshed page to show text it is no longer allowed to read.
+    const mdrrmoCheckContext = await browser.newContext();
+    const mdrrmoCheckPage = await mdrrmoCheckContext.newPage();
+    await loginAs(mdrrmoCheckPage, E2E_MDRRMO_ADMIN);
+    await mdrrmoCheckPage.goto(`/admin/tickets/${ticketId}`);
+    await expect(mdrrmoCheckPage.getByText(/· MDRRMO ·/)).toBeVisible();
+    await mdrrmoCheckContext.close();
   } finally {
     // Restore regardless of assertion outcome — this is a shared seeded
     // ticket, and reassignment (unlike status advancement) has a real
@@ -393,24 +416,30 @@ test("MEO admin can reassign a ticket's office through the UI, and office scopin
     const mdrrmoPage = await mdrrmoContext.newPage();
     await loginAs(mdrrmoPage, E2E_MDRRMO_ADMIN);
     const mdrrmoHeaders = { ...sessionCookieHeader(await mdrrmoContext.cookies()), "content-type": "application/json" };
-    await request.post(`/api/admin/tickets/${ticketId}/reassign`, {
+    const restoreRes = await request.post(`/api/admin/tickets/${ticketId}/reassign`, {
       headers: mdrrmoHeaders,
       data: { toOffice: "MEO" },
     });
+    expect(restoreRes.ok()).toBe(true);
     await mdrrmoContext.close();
   }
 
   // Confirm the restore actually took: MEO's own list has it back, MDRRMO's
-  // own list no longer does.
+  // own list no longer does. Both lists are searched by this ticket's id
+  // (the queue's search matches t.id exactly for a numeric term) rather than
+  // read as "the first 50 rows": a fresh Low-severity throwaway ticket ranks
+  // near the bottom of the Operational Priority order, and once the dev
+  // database holds more than 50 tickets for an office it falls off page one
+  // even when the restore worked.
   const meoCookies = await page.context().cookies();
-  const meoRes = await request.get("/api/admin/tickets?status=all&limit=50", { headers: sessionCookieHeader(meoCookies) });
+  const meoRes = await request.get(`/api/admin/tickets?status=all&search=${ticketId}`, { headers: sessionCookieHeader(meoCookies) });
   const meoBody = await meoRes.json();
   expect(meoBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(true);
 
   const mdrrmoContext = await browser.newContext();
   const mdrrmoPage = await mdrrmoContext.newPage();
   await loginAs(mdrrmoPage, E2E_MDRRMO_ADMIN);
-  const mdrrmoRes = await request.get("/api/admin/tickets?status=all&limit=50", { headers: sessionCookieHeader(await mdrrmoContext.cookies()) });
+  const mdrrmoRes = await request.get(`/api/admin/tickets?status=all&search=${ticketId}`, { headers: sessionCookieHeader(await mdrrmoContext.cookies()) });
   const mdrrmoBody = await mdrrmoRes.json();
   expect(mdrrmoBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(false);
   await mdrrmoContext.close();

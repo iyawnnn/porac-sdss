@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Droplets, Flame, MapPin, TreeDeciduous, Trash2, type LucideIcon } from "lucide-react";
+import { Droplets, MapPin, TreeDeciduous, Trash2, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -10,21 +10,21 @@ interface MapPreset {
 }
 
 // Every preset maps to a real, already-URL-synced /admin/map filter (see
-// app/admin/map/page.tsx and MapClient.tsx's Phase 1 work) — category and
-// urgency are the only filters presets use, since those are the only ones
-// with a fixed, known-good value per office. Do not add a preset here for a
-// filter that doesn't already exist and apply on the map.
+// app/admin/map/page.tsx and MapClient.tsx's Phase 1 work) — category is the
+// only filter presets use, since it is the only one with a fixed, known-good
+// value per office. Do not add a preset here for a filter that doesn't
+// already exist and apply on the map. The two "High-Urgency" presets were
+// removed in manuscript revision Phase 1, step 5, along with the map's
+// Hazard Urgency filter they depended on.
 const MEO_PRESETS: MapPreset[] = [
   { label: "Drainage Issues", icon: Droplets, params: { category: "Drainage / Culvert / Manhole Issue" } },
   { label: "Potholes & Road Damage", icon: MapPin, params: { category: "Pothole / Road Surface Damage" } },
   { label: "Illegal Dumping", icon: Trash2, params: { category: "Illegal Dumping Affecting Drainage or Road" } },
-  { label: "High-Urgency Open Work", icon: AlertTriangle, params: { urgency: "High" } },
 ];
 
 const MDRRMO_PRESETS: MapPreset[] = [
   { label: "Flooding Reports", icon: Droplets, params: { category: "Localized Flooding" } },
   { label: "Fallen Trees", icon: TreeDeciduous, params: { category: "Fallen Tree / Storm-Related Obstruction" } },
-  { label: "High-Urgency Reports", icon: Flame, params: { urgency: "High" } },
 ];
 
 function presetHref(preset: MapPreset, office?: "MEO" | "MDRRMO"): string {

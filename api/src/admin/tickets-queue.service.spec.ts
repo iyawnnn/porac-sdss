@@ -4,7 +4,6 @@ import { join } from 'path';
 import type { Sql } from 'postgres';
 import type { ConfigService } from '@nestjs/config';
 import type { AdminSession } from '../auth/session.service';
-import type { WeatherService } from '../domain/weather.service';
 import type { MediaService } from '../domain/media.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { EmailService } from '../citizens/email.service';
@@ -38,7 +37,6 @@ const SYSTEM_ADMIN = { role: 'system_admin', office: null } as Pick<
 function buildService(sql: Sql): TicketsService {
   return new TicketsService(
     sql,
-    {} as WeatherService,
     {} as MediaService,
     {} as NotificationsService,
     {} as EmailService,
@@ -452,5 +450,41 @@ describe('TicketsService.getTicketsForAdmin ORDER BY — Operational Priority vs
     expect(exportBody).not.toMatch(
       /priority_score|urgency_band|filters\.urgency/,
     );
+  });
+});
+
+// Manuscript revision Phase 1, step 5: Ticket Detail and the admin map show
+// Operational Priority only. Their queries must not read Hazard Urgency back
+// in, and the priority-context response no longer carries a rain reading.
+describe('Ticket Detail and admin map read no Hazard Urgency', () => {
+  const HAZARD_URGENCY_COLUMNS =
+    /priority_score|urgency_band|urgency_score|urgency_level|elevation_factor|precipitation_factor|cluster_factor/;
+
+  it('the map (geo) query selects priority_index and no Hazard Urgency column', () => {
+    const geoBody = ticketsServiceSource.slice(
+      ticketsServiceSource.indexOf('async getTicketsGeo('),
+      ticketsServiceSource.indexOf('async getTicketDetail('),
+    );
+    expect(geoBody).toMatch(/t\.priority_index/);
+    expect(geoBody).not.toMatch(HAZARD_URGENCY_COLUMNS);
+  });
+
+  it('the Ticket Detail query selects priority_index and no Hazard Urgency column', () => {
+    const detailStart = ticketsServiceSource.indexOf('async getTicketDetail(');
+    const detailSelect = ticketsServiceSource.slice(
+      detailStart,
+      ticketsServiceSource.indexOf('FROM tickets t', detailStart),
+    );
+    expect(detailSelect).toMatch(/t\.priority_index/);
+    expect(detailSelect).not.toMatch(HAZARD_URGENCY_COLUMNS);
+  });
+
+  it('the priority-context response carries the breakdown only, no rain reading', () => {
+    const contextBody = ticketsServiceSource.slice(
+      ticketsServiceSource.indexOf('async getTicketPriorityContext('),
+      ticketsServiceSource.indexOf('async advanceStatus('),
+    );
+    expect(contextBody).toMatch(/return \{ breakdown \};/);
+    expect(contextBody).not.toMatch(/rain1hMm|weather/);
   });
 });

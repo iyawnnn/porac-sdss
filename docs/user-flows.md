@@ -107,7 +107,7 @@ Illegal Dumping Affecting Drainage or Road, Overgrown Vegetation Obstructing Roa
 
 - **Needs Attention** — overdue work orders, work due today, and high-urgency tickets that still have no real progress. This is the "what did I miss" panel.
 - **Office Performance Summary** — pending / in progress / overdue / completed-this-week work orders, high-urgency open tickets, flagged reports waiting.
-- **Map Presets** — one-click into a pre-filtered map: Drainage Issues, Potholes & Road Damage, Illegal Dumping, High-Urgency Open Work.
+- **Map Presets** — one-click into a pre-filtered map: Drainage Issues, Potholes & Road Damage, Illegal Dumping.
 
 **The Ticket Queue (`/admin/tickets`)** is the main triage surface, sorted by urgency by default. Filter by status, urgency, category, barangay, free text, or "Disputed only". Every filter is reflected in the URL, so a filtered view is a link that can be sent to a colleague. Works on a phone — the table becomes cards below tablet width.
 
@@ -177,7 +177,7 @@ Two honest caveats staff should understand, both detailed in [`triage-model.md`]
 
 Treat the score as a **ranking aid that shows its work**, not as a calibrated risk probability. The factor breakdown on Ticket Detail exists so a decision can be sanity-checked rather than taken on faith.
 
-**Map Presets** for MDRRMO go to Flooding Reports, Fallen Trees, and High-Urgency Reports.
+**Map Presets** for MDRRMO go to Flooding Reports and Fallen Trees.
 
 **Barangay Insights** is more useful here than for MEO: repeated flooding in one barangay shows as a pattern across the 30-day trend and category breakdown, with elevation range shown as context. Note elevation is **display only** — it is not a filter, and no elevation-based map filter exists (deferred; see [`project-status.md`](project-status.md) §5).
 

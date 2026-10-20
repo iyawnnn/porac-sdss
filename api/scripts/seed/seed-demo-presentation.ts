@@ -1659,7 +1659,6 @@ function buildTicketsService(): TicketsService {
   } as unknown as ConfigService<Env, true>;
   return new TicketsService(
     sql,
-    {} as WeatherService,
     {} as MediaService,
     notifications,
     email,

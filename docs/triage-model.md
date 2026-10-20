@@ -21,7 +21,7 @@ This is the single most important thing to understand, and the most common sourc
 | **Weights** | ⅓ / ⅓ / ⅓ | 0.5 / 0.25 / 0.25 |
 | **Source** | `api/src/domain/urgency.ts` | `api/src/common/utils/scoring.ts` |
 | **Scale** | 0–1, plus 0–100 restatements | 1–100 |
-| **Where shown** | Ticket Queue sort/badge, Ticket Detail "Urgency", map | Ticket Detail "Priority breakdown", map heatmap intensity |
+| **Where shown** | Being retired (manuscript revision Phase 1): gone from the Ticket Queue, CSV, Ticket Detail and admin map; still on dashboard counts, Barangay Insights, Focal intake and citizen views until step 6 | Ticket Queue score/sort, Ticket Detail header and breakdown, admin map rings/popup/heatmap, dashboard "Highest Priority Actions", CSV |
 
 They share no term. **Citizen-reported severity does not appear in `urgency_score` at all** — it feeds only `priority_index`. See §8.
 
@@ -133,8 +133,8 @@ Prior to Phase 2 of the manuscript-alignment work, `urgency_band` was computed i
 | Surface | Shows |
 |---|---|
 | **Ticket Queue** (`TicketsWorkspace.tsx`) | **No Hazard Urgency since manuscript revision Phase 1, step 4.** Shows `priority_index` (Operational Priority) with its own Low/Medium/High display band; default and only score sort is Operational Priority |
-| **Ticket Detail** (`app/admin/tickets/[id]`) | Urgency decomposition with the three factors, their explicit ⅓ weights, and per-factor contributions; separately, a **Priority breakdown** card for `priority_index` |
-| **Admin Map** (`MapClient.tsx`, `TicketPopup.tsx`) | Urgency-driven pin styling; heatmap intensity driven by `priority_index` |
+| **Ticket Detail** (`app/admin/tickets/[id]`) | **No Hazard Urgency since Phase 1, step 5.** Header badge shows `priority_index` with its display band; the Scoring tab shows the Operational Priority factor table (severity / age / barangay density). The Hazard Urgency card, its factor bars and the live rain line are gone |
+| **Admin Map** (`MapClient.tsx`, `TicketPopup.tsx`) | **No Hazard Urgency since Phase 1, step 5.** Marker and cluster rings, legend and popup use `priority_index`'s display band; heatmap intensity is `priority_index`. The urgency filter and the two "High-Urgency" dashboard map presets were removed |
 | **Dashboard** | High-urgency counts; "Needs Attention" surfaces active HIGH-urgency tickets with unfinished work (both removed in Phase 1, step 6). The "Highest Priority Actions" table ranks by Operational Priority since Phase 1, step 4 |
 | **Barangay Insights** (`BarangayProfile.tsx`) | High-urgency ticket counts per barangay. Elevation min/avg/max is shown as **display-only context, never a filter or scoring input** |
 | **CSV export** | No Hazard Urgency since Phase 1, step 4 — an Operational Priority (`priority_index`) column instead |

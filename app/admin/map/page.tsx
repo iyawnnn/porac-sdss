@@ -5,13 +5,11 @@ import MapClientLoader from "@/components/features/admin/map/MapClientLoader";
 import type { MapFilterState } from "@/components/features/admin/map/MapFilterBar";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
 
-const URGENCY_BANDS = ["Low", "Medium", "High"];
 type MapLayer = "pins" | "heatmap";
 
 interface MapSearchParams {
   office?: string;
   category?: string;
-  urgency?: string;
   status?: string;
   barangayName?: string;
   search?: string;
@@ -20,15 +18,17 @@ interface MapSearchParams {
 
 // Mirrors TicketsService.parseTicketQuery's validate-or-fall-back-to-default
 // shape (api/src/admin/tickets.service.ts) so an unknown/invalid query param
-// never reaches the client as a filter that silently matches nothing.
+// never reaches the client as a filter that silently matches nothing. The
+// retired Hazard Urgency filter (?urgency=) is simply not read any more
+// (manuscript revision Phase 1, step 5), so an old link opens the map with
+// its other filters applied.
 function parseMapFilters(params: MapSearchParams): { filters: MapFilterState; layer: MapLayer } {
   const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(params.category ?? "") ? (params.category as string) : "";
-  const urgency = URGENCY_BANDS.includes(params.urgency ?? "") ? (params.urgency as string) : "";
   const status = (TICKET_STATUSES as readonly string[]).includes(params.status ?? "") ? (params.status as string) : "";
   const barangayName = params.barangayName?.trim() || "";
   const search = params.search?.trim() || "";
   const layer = params.layer === "heatmap" ? "heatmap" : "pins";
-  return { filters: { category, urgency, status, barangayName, search }, layer };
+  return { filters: { category, status, barangayName, search }, layer };
 }
 
 export default async function AdminMapPage({

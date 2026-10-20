@@ -13,7 +13,6 @@ import type {
   OperationalAssessment,
 } from "@/lib/types/admin-tickets";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { StatusPill } from "@/components/features/admin/shared/StatusPill";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
@@ -38,20 +37,6 @@ const NEXT_STATUS: Record<string, string> = {
   "In Progress": "Resolved",
 };
 const ACTIVE_STATUSES = ["Reported", "Under Review", "In Progress"];
-
-// Decomposition bar segments (DESIGN.md §5.5). Each segment occupies an
-// equal third of the track; the fill *within* that third is the factor's
-// own 0-1 value, so filled area = (1/3) * factor = the factor's actual
-// contribution to urgency_score.
-const DECOMPOSITION_SEGMENTS = [
-  { key: "E", sub: "elevation", field: "elevation_factor" as const, barClass: "bg-brand-300" },
-  { key: "P", sub: "rainfall", field: "precipitation_factor" as const, barClass: "bg-brand-500" },
-  { key: "C", sub: "cluster", field: "cluster_factor" as const, barClass: "bg-brand-700" },
-];
-
-function clamp01(n: number) {
-  return Math.min(1, Math.max(0, n));
-}
 
 interface TicketDetailResponse {
   ticket: TicketDetail;
@@ -97,7 +82,6 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
   // never redirect off /admin/tickets based on an arbitrary query param.
   const backHref = from && from.startsWith("/admin/tickets") ? from : "/admin/tickets";
   const nextStatus = NEXT_STATUS[ticket.status];
-  const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
   const primaryReport = reports[0] as TicketReport | undefined;
   let barangayGeometry = null;
   try {
@@ -119,8 +103,10 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             {primaryReport ? ` — ${primaryReport.title}` : ""}
           </h1>
           <StatusPill size="lg" status={ticket.status} />
-          <Badge className={urgencyBadge.className} variant="outline">
-            Hazard Urgency {ticket.priority_score ?? "—"} · {urgencyBadge.label}
+          {/* Manuscript revision Phase 1, step 5: the header shows Operational
+              Priority (lib/utils/ui/priority.ts bands), not Hazard Urgency. */}
+          <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
+            Operational Priority <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> · {priorityBandLabel(ticket.priority_index)}
           </Badge>
           {ticket.disputed_at && (
             <Badge className="bg-red-50 text-red-700" variant="outline">
@@ -142,7 +128,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             <CardContent className="p-4">
               <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Location</p>
               <div className="h-72 overflow-hidden rounded-lg border border-line-100">
-                <TicketLocationMapLoader barangayGeoJson={barangayGeometry} lat={ticket.lat} lng={ticket.lng} urgencyBand={ticket.urgency_band} />
+                <TicketLocationMapLoader barangayGeoJson={barangayGeometry} lat={ticket.lat} lng={ticket.lng} />
               </div>
               <p className="mt-2 text-xs text-ink-500">
                 {ticket.barangay_name} · {ticket.lat.toFixed(5)}, {ticket.lng.toFixed(5)}
@@ -221,7 +207,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
                   <TabsTrigger value="timeline">Timeline</TabsTrigger>
                 </TabsList>
                 <TabsContent className="pt-4" value="scoring">
-                  <ScoringTab priorityContext={priorityContext} ticket={ticket} urgencyBadge={urgencyBadge} />
+                  <ScoringTab priorityContext={priorityContext} ticket={ticket} />
                 </TabsContent>
                 <TabsContent className="pt-4" value="timeline">
                   <TimelineTab createdAt={ticket.created_at} history={history} reassignments={reassignments} referrals={referrals} />
@@ -346,86 +332,54 @@ function BeforeAfterCard({
   );
 }
 
+// Manuscript revision Phase 1, step 5: the Hazard Urgency card (score,
+// elevation/rainfall/cluster bars, live rain rate) is retired. Operational
+// Priority is the only system score shown. Its factor table needs the live
+// priority context, which is only fetched while the ticket is active; a
+// Resolved or Rejected ticket shows its last stored value without it.
 function ScoringTab({
   ticket,
-  urgencyBadge,
   priorityContext,
 }: {
   ticket: TicketDetail;
-  urgencyBadge: ReturnType<typeof getUrgencyBadgeConfig>;
   priorityContext: TicketPriorityContext | null;
 }) {
   return (
-    <div className="space-y-5">
-      <div>
-        <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Hazard Urgency</p>
-        <p className="text-[11px] text-ink-400">System generated</p>
-        <p className="mt-0.5 text-xs text-ink-400">Elevation + live rainfall + report-cluster density — computed, not citizen-reported.</p>
-        <div className="mt-3 flex items-baseline gap-2">
-          <span className="font-mono text-2xl font-semibold tabular-nums text-ink-900">{ticket.priority_score ?? "—"}</span>
-          <Badge className={urgencyBadge.className} variant="outline">{urgencyBadge.label}</Badge>
-        </div>
-        <div className="mt-3 flex h-2 w-full gap-0.5">
-          {DECOMPOSITION_SEGMENTS.map((seg) => {
-            const value = ticket[seg.field];
-            const fillPct = value != null ? clamp01(value) * 100 : 0;
-            return (
-              <div className="h-full flex-1 overflow-hidden rounded-full bg-line-100" key={seg.key}>
-                <div className={`h-full rounded-full ${seg.barClass}`} style={{ width: `${fillPct}%` }} />
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-1.5 flex gap-0.5 text-center">
-          {DECOMPOSITION_SEGMENTS.map((seg) => {
-            const value = ticket[seg.field];
-            return (
-              <div className="flex-1" key={seg.key}>
-                <p className="font-mono text-xs tabular-nums text-ink-700">{seg.key} {value?.toFixed(3) ?? "—"}</p>
-                <p className="text-[11px] text-ink-400">{seg.sub}</p>
-              </div>
-            );
-          })}
-        </div>
-        {priorityContext && <p className="mt-2 text-xs text-ink-500">Local rain rate right now: {priorityContext.rain1hMm}mm/h</p>}
+    <div>
+      <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Operational Priority (how soon to act)</p>
+      <p className="text-[11px] text-ink-400">System generated</p>
+      <p className="mt-0.5 text-xs text-ink-400">Citizen-reported severity + ticket age + barangay density.</p>
+      <div className="mt-3 flex items-baseline gap-2">
+        <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
+          <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> · {priorityBandLabel(ticket.priority_index)}
+        </Badge>
       </div>
-
       {priorityContext && (
-        <div className="border-t border-line-100 pt-4">
-          <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Operational Priority (how soon to act)</p>
-          <p className="text-[11px] text-ink-400">System generated</p>
-          <p className="mt-0.5 text-xs text-ink-400">Citizen-reported severity + ticket age + barangay density — a separate signal from Hazard Urgency above.</p>
-          <div className="mt-3 flex items-baseline gap-2">
-            <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
-              <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> · {priorityBandLabel(ticket.priority_index)}
-            </Badge>
-          </div>
-          <table className="mt-3 w-full border-collapse text-xs text-ink-700">
-            <thead>
-              <tr className="text-left text-ink-500">
-                <th className="pb-1 font-normal">Factor</th>
-                <th className="pb-1 text-right font-normal">Value</th>
-                <th className="pb-1 text-right font-normal">Contribution</th>
+        <table className="mt-3 w-full border-collapse text-xs text-ink-700">
+          <thead>
+            <tr className="text-left text-ink-500">
+              <th className="pb-1 font-normal">Factor</th>
+              <th className="pb-1 text-right font-normal">Value</th>
+              <th className="pb-1 text-right font-normal">Contribution</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono">
+            {[
+              { label: "Citizen-reported severity weight", factor: priorityContext.breakdown.severityFactor, contribution: priorityContext.breakdown.severityContribution, note: priorityContext.breakdown.severity },
+              { label: "Ticket age factor", factor: priorityContext.breakdown.ageFactor, contribution: priorityContext.breakdown.ageContribution, note: null },
+              { label: "Barangay active density", factor: priorityContext.breakdown.spatialFactor, contribution: priorityContext.breakdown.spatialContribution, note: null },
+            ].map((row) => (
+              <tr key={row.label}>
+                <td className="py-0.5 font-sans">
+                  {row.label}
+                  {row.note && <span className="ml-1 text-ink-400">({row.note})</span>}
+                </td>
+                <td className="text-right">{row.factor.toFixed(3)}</td>
+                <td className="text-right">{row.contribution.toFixed(3)}</td>
               </tr>
-            </thead>
-            <tbody className="font-mono">
-              {[
-                { label: "Citizen-reported severity weight", factor: priorityContext.breakdown.severityFactor, contribution: priorityContext.breakdown.severityContribution, note: priorityContext.breakdown.severity },
-                { label: "Ticket age factor", factor: priorityContext.breakdown.ageFactor, contribution: priorityContext.breakdown.ageContribution, note: null },
-                { label: "Barangay active density", factor: priorityContext.breakdown.spatialFactor, contribution: priorityContext.breakdown.spatialContribution, note: null },
-              ].map((row) => (
-                <tr key={row.label}>
-                  <td className="py-0.5 font-sans">
-                    {row.label}
-                    {row.note && <span className="ml-1 text-ink-400">({row.note})</span>}
-                  </td>
-                  <td className="text-right">{row.factor.toFixed(3)}</td>
-                  <td className="text-right">{row.contribution.toFixed(3)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
