@@ -4,8 +4,8 @@ import Link from "next/link";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { configureLeafletMarkerIcons } from "@/lib/gis/leaflet-icons";
-import { bandMarkerIcon } from "@/lib/gis/markerIcon";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
+import { priorityMarkerIcon } from "@/lib/gis/markerIcon";
+import { priorityBandLabel } from "@/lib/utils/ui/priority";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import type { FocalIntakeGeoRow } from "@/lib/types/admin-focal-intake";
 
@@ -18,7 +18,9 @@ configureLeafletMarkerIcons();
 // mutation controls anywhere in the popup. Sourced from GET
 // /admin/intake/geo (FocalGuard-protected), never the operational
 // GET /admin/tickets/geo endpoint. See FocalIntakeService.listIntakeGeo's
-// own docblock for exactly which fields this is allowed to carry.
+// own docblock for exactly which fields this is allowed to carry. Pins and
+// popups show Operational Priority since manuscript revision Phase 1, step
+// 6b (Hazard Urgency before).
 export function FocalMap({ reports }: { reports: FocalIntakeGeoRow[] }) {
   return (
     <MapContainer
@@ -32,10 +34,9 @@ export function FocalMap({ reports }: { reports: FocalIntakeGeoRow[] }) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {reports.map((report) => {
-        const badge = getUrgencyBadgeConfig(report.hazardUrgency.index);
         return (
           <Marker
-            icon={bandMarkerIcon(badge.label === "—" ? null : badge.label)}
+            icon={priorityMarkerIcon(report.operationalPriority)}
             key={report.reportId}
             position={[report.lat, report.lng]}
           >
@@ -44,8 +45,8 @@ export function FocalMap({ reports }: { reports: FocalIntakeGeoRow[] }) {
                 <p className="font-medium">{report.reportReference} &middot; {report.category}</p>
                 <p className="text-muted-foreground">{report.barangayName} &middot; routed to {report.routedOffice}</p>
                 <p>
-                  Hazard Urgency: <span className="font-medium">{badge.label}</span>
-                  {report.hazardUrgency.index !== null && ` (${report.hazardUrgency.index})`}
+                  Operational Priority: <span className="font-medium">{priorityBandLabel(report.operationalPriority)}</span>
+                  {report.operationalPriority !== null && ` (${report.operationalPriority})`}
                 </p>
                 <p>Intake State: <span className="font-medium">{report.intakeState}</span></p>
                 <Link className="mt-1 inline-block font-medium text-primary hover:underline" href={`/admin/focal/intake/${report.reportId}`}>

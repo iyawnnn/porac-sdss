@@ -1,5 +1,6 @@
 import L from "leaflet";
 import { getUrgencyBandStyle } from "@/lib/utils/ui/urgency";
+import { priorityBandHex, priorityBandLabel } from "@/lib/utils/ui/priority";
 
 // Shared by the admin and citizen maps so pin sizing/colors never drift
 // between the two (see lib/ui/urgency.ts header for the drift this avoids).
@@ -22,6 +23,22 @@ export function bandMarkerIcon(band: string | null, options: { pulse?: boolean }
   return L.divIcon({
     className: "",
     html: `<div class="${pulseClass}" style="background:${color};width:${spec.diameter}px;height:${spec.diameter}px;border-radius:50%;border:${spec.ringWidth}px solid white;${outerRing}"></div>`,
+    iconSize: [spec.diameter, spec.diameter],
+    iconAnchor: [spec.diameter / 2, spec.diameter / 2],
+  });
+}
+
+// Same round pin as bandMarkerIcon (size from getPinSpec, so High stays
+// larger), filled with Operational Priority's display-band colour and never
+// pulsing — a pulse signals a hazard, which Operational Priority does not
+// measure. Used by the Focal map since manuscript revision Phase 1, step 6b.
+export function priorityMarkerIcon(priorityIndex: number | null) {
+  const color = priorityBandHex(priorityIndex);
+  const spec = getPinSpec(priorityBandLabel(priorityIndex));
+  const outerRing = spec.outerRing ? `box-shadow:0 0 0 1px ${spec.outerRing};` : "";
+  return L.divIcon({
+    className: "",
+    html: `<div style="background:${color};width:${spec.diameter}px;height:${spec.diameter}px;border-radius:50%;border:${spec.ringWidth}px solid white;${outerRing}"></div>`,
     iconSize: [spec.diameter, spec.diameter],
     iconAnchor: [spec.diameter / 2, spec.diameter / 2],
   });

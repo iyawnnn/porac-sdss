@@ -33,6 +33,34 @@ test("Focal Dashboard and Intake Queue load, and Intake spans both offices", asy
   await expect(page.getByText("MDRRMO", { exact: true }).first()).toBeVisible();
 });
 
+// Manuscript revision Phase 1, step 6b: Focal screens show Operational
+// Priority, not Hazard Urgency, and the Hazard Urgency filter is gone.
+test("Focal Dashboard and Intake Queue show Operational Priority and no Hazard Urgency", async ({ page }) => {
+  await loginAs(page, E2E_FOCAL_ADMIN);
+  await expect(page.getByText("Focal Dashboard")).toBeVisible();
+  await expect(page.getByText(/Hazard Urgency/)).toHaveCount(0);
+
+  await page.goto("/admin/focal/intake");
+  await expect(page.getByRole("heading", { name: "Intake Queue" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Op. Priority" })).toBeVisible();
+  await expect(page.getByText(/Hazard Urgency/)).toHaveCount(0);
+  await expect(page.getByLabel("Filter by Hazard Urgency")).toHaveCount(0);
+});
+
+test("Focal intake detail shows the Operational Priority card and no Hazard Urgency", async ({ page }) => {
+  await loginAs(page, E2E_FOCAL_ADMIN);
+  await page.goto("/admin/focal/intake");
+  await expect(page.getByRole("heading", { name: "Intake Queue" })).toBeVisible();
+  const firstReview = page.getByRole("link", { name: "Review", exact: true }).first();
+  test.skip((await firstReview.count()) === 0, "No intake rows in this environment's data.");
+  await firstReview.click();
+
+  await expect(page).toHaveURL(/\/admin\/focal\/intake\/\d+$/);
+  await expect(page.getByText("Decision Support", { exact: true })).toBeVisible();
+  await expect(page.getByText("Operational Priority", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Hazard Urgency/)).toHaveCount(0);
+});
+
 test("Focal cannot reach the operational Ticket Queue, Work Orders, or Admin Management", async ({ page }) => {
   await loginAs(page, E2E_FOCAL_ADMIN);
 
