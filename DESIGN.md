@@ -224,6 +224,8 @@ Brand blue is unchanged from citizen's value in both shells — the admin canvas
 
 ### 4.4 Urgency ramp (`urgency_band`) — unchanged in v3, no shell variant needed
 
+> **Retired.** Hazard Urgency was removed in manuscript revision Phase 1 (finished in step 7b); no screen shows an urgency band any more. The same hues survive only as the stylesheet's warning/danger/info colour tokens (renamed from `urgency-*` in a follow-up commit), used for error and warning styling. Kept below as the design record.
+
 Applies to `urgency_band` only: `< 0.50` Low · `0.50–0.80` Medium · `> 0.80` Critical. **Same asymmetry rule as always: Low and Medium stay tinted, Critical stays solid** — in a 40-row queue, three equal pastels give every row the same visual weight; Critical needs to win the scan.
 
 | Band | Solid | Tint | Ink | Edge |

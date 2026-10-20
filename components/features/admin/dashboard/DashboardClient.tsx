@@ -102,9 +102,9 @@ function IncidentTooltip({ active, payload }: { active?: boolean; payload?: Arra
 // never data"): the card-header icons (decorative, aria-hidden) and the
 // Highest Priority Actions row hover (selection affordance). It is
 // deliberately absent from every data surface — the sparklines, the incident
-// bars, the urgency badges and the status pills stay neutral/semantic. That
-// is not fussiness: the Hazard Urgency ramp is warm (amber → orange → red),
-// so an orange KPI or series would sit on the same hue as urgency Medium and
+// bars, the priority badges and the status pills stay neutral/semantic. That
+// is not fussiness: the warning/danger colour ramp is warm (amber → orange →
+// red), so an orange KPI or series would sit on the same hue as a warning and
 // make the color channel ambiguous (§7, "warm-hue collision risk").
 //
 // This was three roles until the range control became a Select: the old

@@ -1,6 +1,6 @@
 import L from "leaflet";
 
-// Neutral grey, the same as bandMarkerIcon(null)'s pin. Clusters were
+// Neutral grey, the same as neutralMarkerIcon()'s pin. Clusters were
 // coloured by the average Hazard Urgency band of their markers (with a glow
 // for High) until manuscript revision Phase 1, step 6c; citizens are shown
 // no system score, so every cluster now looks the same and only the size

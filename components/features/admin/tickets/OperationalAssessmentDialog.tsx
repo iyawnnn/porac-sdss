@@ -84,7 +84,7 @@ export function OperationalAssessmentDialog({
           <DialogTitle>{existing ? "Edit Assessment" : "Add Assessment"}</DialogTitle>
           <DialogDescription>
             Document your office&apos;s operational evaluation of Ticket #{ticketId}. This is a human record — it does
-            not change Hazard Urgency, Operational Priority, or the ticket&apos;s status.
+            not change Operational Priority or the ticket&apos;s status.
           </DialogDescription>
         </DialogHeader>
 

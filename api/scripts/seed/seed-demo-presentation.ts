@@ -1,45 +1,41 @@
 // Dedicated presentation/demo dataset for PORAC-SDSS. Demo-only: every
-// derived value (barangay, elevation, office routing, dedup merge,
-// member_count, urgency factors, priority_score, urgency_level/band, flags)
-// is computed by the same pure functions and SQL patterns the real API
-// uses — nothing here hand-writes a score or label. The only things this
-// script does that the real system deliberately never lets a caller do are
-// listed under "DEMO-ONLY BEHAVIOR" below, and are isolated to this file.
+// derived value (barangay, office routing, dedup merge, member_count,
+// Operational Priority, flags) is computed by the same pure functions and
+// SQL patterns the real API uses — nothing here hand-writes a score or
+// label. The only things this script does that the real system deliberately
+// never lets a caller do are listed under "DEMO-ONLY BEHAVIOR" below, and
+// are isolated to this file.
+//
+// Manuscript revision Phase 1, step 7b: Hazard Urgency was removed from
+// this script — no seed rainfall, no elevation lookup, no urgency formula,
+// and no Hazard Urgency columns written (new rows leave them NULL, matching
+// ReportsService.submit since step 7a). The scenarios that existed only to
+// land tickets in a Hazard Urgency band keep their tickets and reports so
+// the demo still has data; their band targets and checks are gone. The
+// full demo rework (including the old automatic dedup-merge clusters
+// below) is Phase 8.
 //
 // DEMO-ONLY BEHAVIOR:
-//   1. Deterministic seed rainfall (rain1hMm passed directly to
-//      computeUrgency() per scenario, see RAIN_LOW/RAIN_HIGH below) instead
-//      of a live OpenWeatherMap fetch, for every ticket this script itself
-//      creates or updates. This alone is NOT enough to keep the live app's
-//      own recomputes deterministic afterward — that requires the separate
-//      DEMO_FIXED_RAIN_MM env var (api/src/domain/weather.service.ts).
-//      Without it, the very next admin Dashboard/Ticket Queue load
-//      recomputes every active ticket against live/cached weather again
-//      and can silently move seeded HIGH/MEDIUM tickets out of their
-//      bands — set DEMO_FIXED_RAIN_MM=30 in api/.env and restart the API
-//      before presenting (see that file's comment for the exact revert
-//      steps). This script warns at the end if it isn't set.
-//   2. Timestamp backdating: every real service call below stamps `now()`,
+//   1. Timestamp backdating: every real service call below stamps `now()`,
 //      by design (a citizen/admin cannot backdate an action for real) — a
 //      final pass shifts created_at/updated_at/status_history.changed_at/
 //      reassigned_at/work-order timestamps backward per scenario, after all
 //      real logic has already run, preserving the order it produced.
-//   3. Email suppression: TicketsService/WorkOrdersService are constructed
+//   2. Email suppression: TicketsService/WorkOrdersService are constructed
 //      by hand here with the real ConsoleEmailService (api/src/citizens/
 //      email.service.ts) wired directly as the email dependency — bypassing
 //      citizens.module.ts's provider factory entirely, so this never
 //      selects ResendEmailService even though RESEND_API_KEY is set in this
 //      environment. See "Manual service construction" below.
-//   4. A demo-only image generator variant (see lib/utils/generate-exif-
+//   3. A demo-only image generator variant (see lib/utils/generate-exif-
 //      image.ts's new optional `variant` param) so generated evidence
 //      photos get distinct perceptual hashes instead of all colliding —
 //      that param is additive/backward-compatible and lives in the shared
 //      util, not seed-only, but is otherwise unused by production code.
 //
-// Nothing here changes: the 50/80 thresholds, the 1/3 urgency weights,
-// rainfall normalization, cluster saturation, the priority formula,
-// category routing, dedup radii, or containment logic — every one of those
-// is imported and called exactly as production does.
+// Nothing here changes: the Operational Priority formula, category
+// routing, dedup radii, or containment logic — every one of those is
+// imported and called exactly as production does.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
@@ -50,7 +46,6 @@ import {
 } from '../../../lib/utils/generate-exif-image';
 import { extractExif } from '../lib/exif';
 import { computeDHash, hammingDistanceHex } from '../lib/phash';
-import { computeUrgency } from '../../../lib/utils/urgency';
 import { officeForCategory } from '../../src/common/utils/office';
 import { radiusForCategory } from '../../src/common/utils/radius';
 import { DUPLICATE_MERGE_WINDOW_DAYS } from '../../src/common/utils/duplicate-detection';
@@ -61,17 +56,14 @@ import { ReportsService } from '../../src/reports/reports.service';
 import { NotificationsService } from '../../src/notifications/notifications.service';
 import { AdminAuditService } from '../../src/admin/admin-audit.service';
 import { ConsoleEmailService } from '../../src/citizens/email.service';
-import { recomputeActiveTicketUrgency } from '../lib/recompute';
+import { recalculateActivePriority } from '../lib/recompute';
 import type { AdminSession } from '../../src/auth/session.service';
 import type { ConfigService } from '@nestjs/config';
 import type { Env } from '../../src/config/env';
-import type { WeatherService } from '../../src/domain/weather.service';
 import type { MediaService } from '../../src/domain/media.service';
 import type { BarangayService } from '../../src/domain/barangay.service';
-import type { ElevationService } from '../../src/domain/elevation.service';
-import type { AppConfigService } from '../../src/domain/app-config.service';
 import type { RateLimitService } from '../../src/domain/ratelimit.service';
-import type { RecomputeService } from '../../src/domain/recompute.service';
+import type { OperationalPriorityService } from '../../src/domain/operational-priority.service';
 
 // ---------------------------------------------------------------------
 // Safety guard — fail loudly on anything that doesn't look like a local
@@ -94,18 +86,6 @@ function assertSafeTarget() {
     );
   }
 }
-
-// ---------------------------------------------------------------------
-// Deterministic rainfall. RAIN_HIGH saturates precipitationFactor to 1.0
-// (>= 30mm/h per the real, unmodified formula) for MEDIUM/HIGH-target
-// scenarios; RAIN_LOW is dry (0mm/h) for LOW-target scenarios. Verified
-// against the real computeUrgency() and this environment's real elev_min/
-// elev_max/DEM data before committing to this design — see the report
-// accompanying this script for the exact numbers. Passed directly as
-// computeUrgency()'s rain1hMm argument; the rainfall NORMALIZATION formula
-// itself (min(rain/30, 1)) is untouched.
-const RAIN_HIGH = 30;
-const RAIN_LOW = 0;
 
 // Mirrors the private thresholds in api/src/reports/reports.service.ts's
 // submit() flag logic exactly (LOCATION_MISMATCH_THRESHOLD_M,
@@ -156,10 +136,9 @@ interface ClusterSpec {
   targetStatus: TicketStatusTarget;
   ageDays: number;
   reports: ReportSpec[];
-  // Overrides the barangay's default point-on-surface as the offset base.
-  // Needed when the barangay's own point-on-surface isn't low enough for a
-  // HIGH-achievable cluster but a real DEM point elsewhere inside its
-  // actual polygon is (verified via a live ST_Contains query, not guessed).
+  // Overrides the barangay's default point-on-surface as the offset base
+  // (a real point inside the barangay's polygon, verified via a live
+  // ST_Contains query, not guessed).
   anchor?: { lat: number; lng: number };
 }
 
@@ -169,7 +148,6 @@ interface StandaloneSpec {
   category: string;
   targetStatus: TicketStatusTarget;
   ageDays: number;
-  rain: number;
   report: ReportSpec;
   // Only meaningful when targetStatus is 'Resolved' — applied after status
   // advancement via the real ReportsService.disputeReport/confirmResolution.
@@ -209,8 +187,7 @@ function nextVariant() {
 
 // ---------------------------------------------------------------------
 // Dataset — 29 barangays, ~53 tickets / ~60 reports. See the accompanying
-// report for the full rationale (elevation-verified HIGH placement,
-// rain-batching for LOW/MEDIUM, flag distribution).
+// report for the full rationale (flag distribution, hotspot coverage).
 // ---------------------------------------------------------------------
 
 // Two independent intentional duplicate-image pairs, each pair sharing one
@@ -231,7 +208,6 @@ function standalone(
   category: string,
   targetStatus: TicketStatusTarget,
   ageDays: number,
-  rain: number,
   imageKind: ReportSpec['imageKind'] = 'clean',
   title?: string,
   feedback?: StandaloneSpec['feedback'],
@@ -242,7 +218,6 @@ function standalone(
     category,
     targetStatus,
     ageDays,
-    rain,
     report: {
       title: title ?? `${category} report`,
       category,
@@ -287,11 +262,7 @@ function cluster(
 
 const SPECS: Spec[] = [
   // ---- Dedup clusters (all real ST_DWithin merge logic, real centroid
-  // recompute, real member_count increment). Barangays chosen from a real
-  // DEM query as the three lowest-elevation candidates so RAIN_HIGH +
-  // member_count >= 3 mathematically clears the HIGH threshold — verified
-  // via computeUrgency() against this environment's real elev_min/elev_max
-  // before being hardcoded here (see script header + accompanying report).
+  // recompute, real member_count increment).
   cluster('San Jose Mitla', 'Pothole / Road Surface Damage', 'In Progress', 1, [
     { dLatM: 0, dLngM: 0 },
     { dLatM: 8, dLngM: 6, imageKind: 'location_mismatch' },
@@ -315,45 +286,40 @@ const SPECS: Spec[] = [
     { dLatM: 10, dLngM: -60, imageKind: 'no_exif' },
   ]),
 
-  // ---- Hotspot: Sapang Uwak (highest-elevation barangay in the dataset —
-  // no cluster; deliberately shows a barangay can be "busy" without dedup).
+  // ---- Hotspot: Sapang Uwak (no cluster; deliberately shows a barangay
+  // can be "busy" without dedup).
   standalone(
     'Sapang Uwak',
     'Landslide / Slope Failure',
     'In Progress',
     5,
-    RAIN_HIGH,
   ),
   standalone(
     'Sapang Uwak',
     'Fallen Tree / Storm-Related Obstruction',
     'Reported',
     1,
-    RAIN_HIGH,
   ),
   standalone(
     'Sapang Uwak',
     'Leaking Pipe / Water Supply Concern',
     'Resolved',
     12,
-    RAIN_LOW,
   ),
   standalone(
     'Sapang Uwak',
     'Other Minor Infrastructure Hazard',
     'Reported',
     0,
-    RAIN_HIGH,
   ),
 
   // ---- Mid-tier (10 barangays, 2-3 standalone tickets each)
-  standalone('Camias', 'Uneven Sidewalk', 'Reported', 2, RAIN_HIGH),
+  standalone('Camias', 'Uneven Sidewalk', 'Reported', 2),
   standalone(
     'Camias',
     'Leaking Pipe / Water Supply Concern',
     'Resolved',
     15,
-    RAIN_LOW,
   ),
 
   standalone(
@@ -361,47 +327,41 @@ const SPECS: Spec[] = [
     'Landslide / Slope Failure',
     'Under Review',
     6,
-    RAIN_HIGH,
   ),
   standalone(
     'Villa Maria',
     'Pothole / Road Surface Damage',
     'Reported',
     1,
-    RAIN_HIGH,
     'no_exif',
   ),
-  standalone('Villa Maria', 'Streetlight Out', 'Resolved', 20, RAIN_LOW),
+  standalone('Villa Maria', 'Streetlight Out', 'Resolved', 20),
 
   standalone(
     'Inararo',
     'Overgrown Vegetation Obstructing Road or Signage',
     'Reported',
     3,
-    RAIN_HIGH,
   ),
   standalone(
     'Inararo',
     'Drainage / Culvert / Manhole Issue',
     'In Progress',
     7,
-    RAIN_HIGH,
   ),
 
-  standalone('Pio', 'Localized Flooding', 'Reported', 2, RAIN_HIGH),
+  standalone('Pio', 'Localized Flooding', 'Reported', 2),
   standalone(
     'Pio',
     'Fallen Tree / Storm-Related Obstruction',
     'Reported',
     0,
-    RAIN_HIGH,
   ),
   standalone(
     'Pio',
     'Other Minor Infrastructure Hazard',
     'Rejected',
     5,
-    RAIN_LOW,
   ),
 
   standalone(
@@ -409,32 +369,28 @@ const SPECS: Spec[] = [
     'Pothole / Road Surface Damage',
     'Under Review',
     4,
-    RAIN_HIGH,
   ),
-  standalone('Planas', 'Streetlight Out', 'Reported', 1, RAIN_HIGH),
+  standalone('Planas', 'Streetlight Out', 'Reported', 1),
 
   standalone(
     'Palat',
     'Illegal Dumping Affecting Drainage or Road',
     'Reported',
     2,
-    RAIN_HIGH,
   ),
   standalone(
     'Palat',
     'Drainage / Culvert / Manhole Issue',
     'In Progress',
     8,
-    RAIN_HIGH,
   ),
-  standalone('Palat', 'Uneven Sidewalk', 'Resolved', 18, RAIN_LOW),
+  standalone('Palat', 'Uneven Sidewalk', 'Resolved', 18),
 
   standalone(
     'Dolores',
     'Lahar / Debris-Flow Threat',
     'Reported',
     3,
-    RAIN_HIGH,
     'location_mismatch',
   ),
   standalone(
@@ -442,7 +398,6 @@ const SPECS: Spec[] = [
     'Leaking Pipe / Water Supply Concern',
     'Reported',
     1,
-    RAIN_HIGH,
   ),
 
   standalone(
@@ -450,30 +405,26 @@ const SPECS: Spec[] = [
     'Landslide / Slope Failure',
     'In Progress',
     9,
-    RAIN_HIGH,
   ),
   standalone(
     'Jalung',
     'Fallen Tree / Storm-Related Obstruction',
     'Reported',
     2,
-    RAIN_HIGH,
   ),
   standalone(
     'Jalung',
     'Pothole / Road Surface Damage',
     'Resolved',
     22,
-    RAIN_LOW,
   ),
 
-  standalone('Mancatian', 'Streetlight Out', 'Reported', 0, RAIN_HIGH),
+  standalone('Mancatian', 'Streetlight Out', 'Reported', 0),
   standalone(
     'Mancatian',
     'Overgrown Vegetation Obstructing Road or Signage',
     'Under Review',
     5,
-    RAIN_HIGH,
   ),
 
   standalone(
@@ -481,40 +432,35 @@ const SPECS: Spec[] = [
     'Drainage / Culvert / Manhole Issue',
     'Reported',
     3,
-    RAIN_HIGH,
   ),
-  standalone('Sinura', 'Localized Flooding', 'Reported', 1, RAIN_HIGH),
+  standalone('Sinura', 'Localized Flooding', 'Reported', 1),
   standalone(
     'Sinura',
     'Other Minor Infrastructure Hazard',
     'Resolved',
     14,
-    RAIN_LOW,
   ),
 
   // ---- Low-tier (15 barangays, 1 standalone ticket each)
-  standalone('Babo Pangulo', 'Streetlight Out', 'Reported', 4, RAIN_HIGH),
-  standalone('Babo Sacan', 'Uneven Sidewalk', 'Under Review', 6, RAIN_HIGH),
+  standalone('Babo Pangulo', 'Streetlight Out', 'Reported', 4),
+  standalone('Babo Sacan', 'Uneven Sidewalk', 'Under Review', 6),
   standalone(
     'Balubad',
     'Pothole / Road Surface Damage',
     'Reported',
     2,
-    RAIN_HIGH,
   ),
   standalone(
     'Calzadang Bayu',
     'Drainage / Culvert / Manhole Issue',
     'Resolved',
     16,
-    RAIN_LOW,
   ),
   standalone(
     'Cangatba',
     'Illegal Dumping Affecting Drainage or Road',
     'Reported',
     0,
-    RAIN_HIGH,
     'duplicate_a',
   ),
   standalone(
@@ -522,7 +468,6 @@ const SPECS: Spec[] = [
     'Other Minor Infrastructure Hazard',
     'Reported',
     1,
-    RAIN_HIGH,
     'duplicate_b',
   ),
   standalone(
@@ -530,50 +475,44 @@ const SPECS: Spec[] = [
     'Streetlight Out',
     'In Progress',
     7,
-    RAIN_HIGH,
   ),
   standalone(
     'Manibaug Paralaya',
     'Overgrown Vegetation Obstructing Road or Signage',
     'Reported',
     3,
-    RAIN_HIGH,
   ),
   standalone(
     'Manibaug Pasig',
     'Leaking Pipe / Water Supply Concern',
     'Resolved',
     25,
-    RAIN_LOW,
   ),
-  standalone('Manuali', 'Landslide / Slope Failure', 'Reported', 2, RAIN_HIGH),
+  standalone('Manuali', 'Landslide / Slope Failure', 'Reported', 2),
   standalone(
     'Mitla Proper',
     'Fallen Tree / Storm-Related Obstruction',
     'Under Review',
     5,
-    RAIN_HIGH,
   ),
-  standalone('Pias', 'Pothole / Road Surface Damage', 'Resolved', 10, RAIN_LOW),
+  standalone('Pias', 'Pothole / Road Surface Damage', 'Resolved', 10),
   standalone(
     'Poblacion',
     'Drainage / Culvert / Manhole Issue',
     'In Progress',
     6,
-    RAIN_HIGH,
   ),
-  standalone('Sta. Cruz', 'Uneven Sidewalk', 'Reported', 1, RAIN_HIGH),
-  standalone('Sepung Bulaon', 'Localized Flooding', 'Reported', 3, RAIN_HIGH),
+  standalone('Sta. Cruz', 'Uneven Sidewalk', 'Reported', 1),
+  standalone('Sepung Bulaon', 'Localized Flooding', 'Reported', 3),
 
   // =======================================================================
   // Expansion pass — brings the dataset from ~47/54 to ~88/99 tickets/
   // reports. Reclassifies the 29 barangays into 4 true hotspots (7-10
   // tickets each), 8 medium-activity barangays (3-5 each), and 17
   // low-activity barangays (1-3 each), per the wider-demo requirements.
-  // Two more dedup clusters are added (both in already-verified
-  // low-elevation hotspot barangays) so HIGH has 5 tickets total instead of
-  // relying on a forced score. New Resolved tickets are the pool the
-  // dispute/resolution-confirmation scenarios below draw from.
+  // Two more dedup clusters are added in hotspot barangays. New Resolved
+  // tickets are the pool the dispute/resolution-confirmation scenarios
+  // below draw from.
   // =======================================================================
 
   // ---- Hotspot completion: San Jose Mitla (existing: 1 cluster) -> 7
@@ -588,13 +527,12 @@ const SPECS: Spec[] = [
       { dLatM: -12, dLngM: 14 },
     ],
   ),
-  standalone('San Jose Mitla', 'Uneven Sidewalk', 'Reported', 1, RAIN_HIGH),
+  standalone('San Jose Mitla', 'Uneven Sidewalk', 'Reported', 1),
   standalone(
     'San Jose Mitla',
     'Streetlight Out',
     'Under Review',
     4,
-    RAIN_HIGH,
     'location_mismatch',
   ),
   standalone(
@@ -602,14 +540,12 @@ const SPECS: Spec[] = [
     'Overgrown Vegetation Obstructing Road or Signage',
     'In Progress',
     6,
-    RAIN_HIGH,
   ),
   standalone(
     'San Jose Mitla',
     'Leaking Pipe / Water Supply Concern',
     'Resolved',
     9,
-    RAIN_LOW,
     'clean',
     undefined,
     { kind: 'dispute', reason: 'Pipe still leaking at the same spot.' },
@@ -619,7 +555,6 @@ const SPECS: Spec[] = [
     'Other Minor Infrastructure Hazard',
     'Resolved',
     11,
-    RAIN_HIGH,
     'clean',
     undefined,
     { kind: 'confirm' },
@@ -636,23 +571,20 @@ const SPECS: Spec[] = [
     'Pothole / Road Surface Damage',
     'Under Review',
     3,
-    RAIN_HIGH,
     'duplicate_a2',
   ),
-  standalone('Pulung Santol', 'Streetlight Out', 'In Progress', 5, RAIN_HIGH),
+  standalone('Pulung Santol', 'Streetlight Out', 'In Progress', 5),
   standalone(
     'Pulung Santol',
     'Illegal Dumping Affecting Drainage or Road',
     'Reported',
     0,
-    RAIN_HIGH,
   ),
   standalone(
     'Pulung Santol',
     'Leaking Pipe / Water Supply Concern',
     'Resolved',
     13,
-    RAIN_LOW,
     'clean',
     undefined,
     {
@@ -665,30 +597,27 @@ const SPECS: Spec[] = [
     'Fallen Tree / Storm-Related Obstruction',
     'Resolved',
     17,
-    RAIN_HIGH,
     'clean',
     undefined,
     { kind: 'confirm' },
   ),
 
   // ---- Hotspot completion: Salu (existing: 1 cluster) -> 7
-  standalone('Salu', 'Lahar / Debris-Flow Threat', 'Reported', 1, RAIN_HIGH),
-  standalone('Salu', 'Landslide / Slope Failure', 'In Progress', 4, RAIN_HIGH),
+  standalone('Salu', 'Lahar / Debris-Flow Threat', 'Reported', 1),
+  standalone('Salu', 'Landslide / Slope Failure', 'In Progress', 4),
   standalone(
     'Salu',
     'Pothole / Road Surface Damage',
     'Under Review',
     2,
-    RAIN_HIGH,
     'no_exif',
   ),
-  standalone('Salu', 'Streetlight Out', 'Reported', 0, RAIN_HIGH),
+  standalone('Salu', 'Streetlight Out', 'Reported', 0),
   standalone(
     'Salu',
     'Drainage / Culvert / Manhole Issue',
     'Resolved',
     19,
-    RAIN_LOW,
     'clean',
     undefined,
     { kind: 'dispute', reason: 'Flooding condition not actually addressed.' },
@@ -698,7 +627,6 @@ const SPECS: Spec[] = [
     'Other Minor Infrastructure Hazard',
     'Resolved',
     21,
-    RAIN_HIGH,
     'clean',
     undefined,
     { kind: 'confirm' },
@@ -710,20 +638,18 @@ const SPECS: Spec[] = [
     'Lahar / Debris-Flow Threat',
     'Under Review',
     3,
-    RAIN_HIGH,
   ),
-  standalone('Sapang Uwak', 'Streetlight Out', 'Reported', 1, RAIN_HIGH),
+  standalone('Sapang Uwak', 'Streetlight Out', 'Reported', 1),
   standalone(
     'Sapang Uwak',
     'Drainage / Culvert / Manhole Issue',
     'Resolved',
     15,
-    RAIN_LOW,
     'clean',
     undefined,
     { kind: 'confirm' },
   ),
-  standalone('Sapang Uwak', 'Uneven Sidewalk', 'In Progress', 6, RAIN_HIGH),
+  standalone('Sapang Uwak', 'Uneven Sidewalk', 'In Progress', 6),
 
   // ---- Medium-activity completion (8 barangays, target 3-5 each)
   standalone(
@@ -731,31 +657,28 @@ const SPECS: Spec[] = [
     'Fallen Tree / Storm-Related Obstruction',
     'In Progress',
     5,
-    RAIN_HIGH,
   ),
   standalone(
     'Villa Maria',
     'Leaking Pipe / Water Supply Concern',
     'Resolved',
     8,
-    RAIN_HIGH,
     'clean',
     undefined,
     { kind: 'confirm' },
   ),
 
-  standalone('Pio', 'Landslide / Slope Failure', 'Under Review', 4, RAIN_HIGH),
+  standalone('Pio', 'Landslide / Slope Failure', 'Under Review', 4),
 
-  standalone('Palat', 'Streetlight Out', 'Under Review', 3, RAIN_HIGH),
+  standalone('Palat', 'Streetlight Out', 'Under Review', 3),
 
-  standalone('Jalung', 'Localized Flooding', 'Reported', 1, RAIN_HIGH),
+  standalone('Jalung', 'Localized Flooding', 'Reported', 1),
 
   standalone(
     'Sinura',
     'Landslide / Slope Failure',
     'In Progress',
     6,
-    RAIN_HIGH,
   ),
 
   standalone(
@@ -763,17 +686,15 @@ const SPECS: Spec[] = [
     'Fallen Tree / Storm-Related Obstruction',
     'Under Review',
     2,
-    RAIN_HIGH,
   ),
-  standalone('Camias', 'Streetlight Out', 'In Progress', 5, RAIN_HIGH),
+  standalone('Camias', 'Streetlight Out', 'In Progress', 5),
 
-  standalone('Inararo', 'Localized Flooding', 'Reported', 1, RAIN_HIGH),
+  standalone('Inararo', 'Localized Flooding', 'Reported', 1),
   standalone(
     'Inararo',
     'Pothole / Road Surface Damage',
     'Resolved',
     10,
-    RAIN_HIGH,
   ),
 
   standalone(
@@ -781,14 +702,12 @@ const SPECS: Spec[] = [
     'Landslide / Slope Failure',
     'In Progress',
     4,
-    RAIN_HIGH,
   ),
   standalone(
     'Planas',
     'Leaking Pipe / Water Supply Concern',
     'Resolved',
     12,
-    RAIN_LOW,
     'clean',
     undefined,
     { kind: 'dispute', reason: 'Streetlight still not working at night.' },
@@ -801,18 +720,16 @@ const SPECS: Spec[] = [
     'Streetlight Out',
     'Resolved',
     7,
-    RAIN_HIGH,
     'clean',
     undefined,
     { kind: 'confirm' },
   ),
-  standalone('Mancatian', 'Localized Flooding', 'In Progress', 3, RAIN_HIGH),
+  standalone('Mancatian', 'Localized Flooding', 'In Progress', 3),
   standalone(
     'Babo Pangulo',
     'Fallen Tree / Storm-Related Obstruction',
     'Resolved',
     6,
-    RAIN_LOW,
     'clean',
     undefined,
     { kind: 'dispute', reason: 'Pothole still visible, not repaved.' },
@@ -822,15 +739,13 @@ const SPECS: Spec[] = [
     'Landslide / Slope Failure',
     'Reported',
     2,
-    RAIN_HIGH,
   ),
-  standalone('Balubad', 'Localized Flooding', 'In Progress', 5, RAIN_HIGH),
+  standalone('Balubad', 'Localized Flooding', 'In Progress', 5),
   standalone(
     'Balubad',
     'Fallen Tree / Storm-Related Obstruction',
     'Resolved',
     7,
-    RAIN_LOW,
     'clean',
     undefined,
     { kind: 'dispute', reason: 'Flooding condition not actually addressed.' },
@@ -840,7 +755,6 @@ const SPECS: Spec[] = [
     'Drainage / Culvert / Manhole Issue',
     'Resolved',
     9,
-    RAIN_HIGH,
     'clean',
     undefined,
     {
@@ -849,17 +763,10 @@ const SPECS: Spec[] = [
     },
   ),
 
-  // ---- Manuali expansion: from 2 tickets to 6, including one legitimate
-  // HIGH cluster. Manuali's own point-on-surface sits at 625m elevation —
-  // too high to ever reach HIGH even at member_count 4 (verified: caps
-  // around priority_score 75, MEDIUM). But a real DEM point *inside*
-  // Manuali's actual polygon, not just its point-on-surface, sits at 138m
-  // (confirmed via a live query against dem_points JOIN barangays ON
-  // ST_Contains) — a genuine low-lying pocket, thematically a flood-prone
-  // spot in an otherwise highland barangay. A 3-member cluster there is
-  // verified (by hand, against the real formula, before writing this) at
-  // elevationFactor=0.925, clusterFactor(3)=0.578, rain=30 ->
-  // priorityScore ~= 83 -> HIGH, comfortably clear of the 80 threshold.
+  // ---- Manuali expansion: from 2 tickets to 6, including one 3-member
+  // cluster anchored at a real point inside Manuali's polygon (a low-lying
+  // pocket, thematically a flood-prone spot in an otherwise highland
+  // barangay).
   cluster(
     'Manuali',
     'Localized Flooding',
@@ -870,32 +777,29 @@ const SPECS: Spec[] = [
       { dLatM: 40, dLngM: -25 },
       { dLatM: -30, dLngM: 35 },
     ],
-    // Real DEM point confirmed (via ST_Contains against Manuali's actual
-    // polygon, not assumed) to sit at 138m — a genuine low-lying pocket in
-    // an otherwise highland barangay. See the ClusterSpec comment above.
+    // Real point confirmed (via ST_Contains against Manuali's actual
+    // polygon, not assumed) to sit inside it. See the ClusterSpec comment
+    // above.
     { lat: 15.119999999994057, lng: 120.54666666670647 },
   ),
-  standalone('Manuali', 'Uneven Sidewalk', 'Reported', 1, RAIN_HIGH),
+  standalone('Manuali', 'Uneven Sidewalk', 'Reported', 1),
   standalone(
     'Manuali',
     'Pothole / Road Surface Damage',
     'Resolved',
     11,
-    RAIN_LOW,
   ),
   standalone(
     'Manuali',
     'Overgrown Vegetation Obstructing Road or Signage',
     'Under Review',
     4,
-    RAIN_HIGH,
   ),
   standalone(
     'Poblacion',
     'Streetlight Out',
     'Under Review',
     2,
-    RAIN_HIGH,
     'stale_photo',
   ),
 
@@ -908,55 +812,47 @@ const SPECS: Spec[] = [
     'Streetlight Out',
     'In Progress',
     7,
-    RAIN_HIGH,
     'duplicate_b2',
   ),
 
   // =======================================================================
-  // HIGH-urgency expansion — 5 more legitimate dedup clusters, bringing the
-  // total from 6 to 11 HIGH tickets. Each barangay/member-count pair below
-  // was verified against this environment's real elev_min/elev_max and a
-  // real DEM point-on-surface lookup *before* being written here (see the
-  // accompanying report for the exact computeUrgency() results); none of
-  // these five barangays had any prior HIGH representation. Radii,
-  // categories, and offsets follow radiusForCategory() exactly — no
-  // fabricated geometry. All clean evidence (no flags) and mostly active
-  // statuses, per the requirement that HIGH/Needs Attention stay
+  // Cluster expansion — 5 more legitimate dedup clusters in barangays that
+  // had none (originally added as Hazard Urgency HIGH examples; kept as
+  // clusters after step 7b). Radii, categories, and offsets follow
+  // radiusForCategory() exactly — no fabricated geometry. All clean
+  // evidence (no flags) and mostly active statuses, so the queue stays
   // actionable rather than mostly-resolved.
   // =======================================================================
 
-  // Pias (42m) — 25m point-defect tier, MEO. member=3 verified -> 86.
+  // Pias — 25m point-defect tier, MEO. member=3.
   cluster('Pias', 'Pothole / Road Surface Damage', 'Reported', 1, [
     { dLatM: 0, dLngM: 0 },
     { dLatM: 9, dLngM: -7 },
     { dLatM: -8, dLngM: 6 },
   ]),
 
-  // Balubad (50m) — 50m drainage tier, MEO. member=3 verified -> 85.
+  // Balubad — 50m drainage tier, MEO. member=3.
   cluster('Balubad', 'Drainage / Culvert / Manhole Issue', 'Under Review', 2, [
     { dLatM: 0, dLngM: 0 },
     { dLatM: 25, dLngM: -15 },
     { dLatM: -20, dLngM: 18 },
   ]),
 
-  // Sepung Bulaon (66m) — 100m surface-area tier, MDRRMO. member=3
-  // verified -> 85.
+  // Sepung Bulaon — 100m surface-area tier, MDRRMO. member=3.
   cluster('Sepung Bulaon', 'Localized Flooding', 'In Progress', 3, [
     { dLatM: 0, dLngM: 0 },
     { dLatM: 55, dLngM: -35 },
     { dLatM: -40, dLngM: 45 },
   ]),
 
-  // Pio (67m) — default 50m tier (not in RADIUS_BY_CATEGORY), MDRRMO.
-  // member=3 verified -> 85.
+  // Pio — default 50m tier (not in RADIUS_BY_CATEGORY), MDRRMO. member=3.
   cluster('Pio', 'Fallen Tree / Storm-Related Obstruction', 'Reported', 1, [
     { dLatM: 0, dLngM: 0 },
     { dLatM: 20, dLngM: 15 },
     { dLatM: -22, dLngM: -10 },
   ]),
 
-  // Mitla Proper (71m) — 100m tier, MDRRMO. member=4 for a touch more
-  // margin/variety in cluster size, verified -> 88.
+  // Mitla Proper — 100m tier, MDRRMO. member=4 for variety in cluster size.
   cluster('Mitla Proper', 'Landslide / Slope Failure', 'Under Review', 2, [
     { dLatM: 0, dLngM: 0 },
     { dLatM: 50, dLngM: -40 },
@@ -982,9 +878,8 @@ async function main() {
   console.log('--- Resetting operational/demo data ---');
   await resetOperationalData();
 
-  console.log('--- Loading barangays, DEM bounds, admins ---');
+  console.log('--- Loading barangays, admins ---');
   const barangaysByName = await loadBarangays();
-  const { elevMin, elevMax } = await loadElevationBounds();
   const citizens = await loadOrCreateCitizens();
   const adminsByOffice = await loadAdmins();
 
@@ -1020,9 +915,6 @@ async function main() {
       const { id, reportId, citizenId, flags } = await createStandaloneTicket({
         barangay,
         category: spec.category,
-        rain: spec.rain,
-        elevMin,
-        elevMax,
         report: spec.report,
         citizenEmail: nextCitizen(),
         duplicateImageFiles,
@@ -1045,9 +937,6 @@ async function main() {
           ? { id: barangay.id, lat: spec.anchor.lat, lng: spec.anchor.lng }
           : barangay,
         category: spec.category,
-        rain: RAIN_HIGH,
-        elevMin,
-        elevMax,
         reports: spec.reports,
         pickCitizen: nextCitizen,
         duplicateImageFiles,
@@ -1129,24 +1018,11 @@ async function main() {
   console.log('--- Backdating timestamps ---');
   await backdateTimestamps(createdTickets);
 
-  console.log(
-    "--- Final recompute pass (explicit RAIN_HIGH override, matching this script's own inserts) ---",
-  );
-  // Only settles this run's own recompute — it does NOT make future admin
-  // page loads deterministic. That's DEMO_FIXED_RAIN_MM's job (see header):
-  // set it in api/.env and restart the API before presenting, so every
-  // subsequent recompute (including this script's own re-runs) reads the
-  // same fixed value from WeatherService instead of live/cached weather.
-  const recomputeResult = await recomputeActiveTicketUrgency(RAIN_HIGH);
-  console.log('Recompute:', recomputeResult);
-  if (process.env.DEMO_FIXED_RAIN_MM === undefined) {
-    console.warn(
-      '\n⚠ DEMO_FIXED_RAIN_MM is not set in this shell. The scores just computed above are correct now, ' +
-        'but the next time anyone loads the admin Dashboard/Ticket Queue, the live API process will recompute ' +
-        'active tickets against live/cached weather again and can silently move them out of their seeded bands. ' +
-        'Set DEMO_FIXED_RAIN_MM=30 in api/.env and restart the API before presenting — see that file for details.\n',
-    );
-  }
+  console.log('--- Final Operational Priority recalculation ---');
+  // Same pass the API runs on every admin list/detail/dashboard load, so
+  // this only settles the seeded rows' priority_index before verification.
+  const recalcResult = await recalculateActivePriority();
+  console.log('Recalculated:', recalcResult);
 
   console.log('--- Verification ---');
   await verifyAndReport(
@@ -1186,19 +1062,6 @@ async function loadBarangays() {
     console.warn(`Warning: expected 29 barangays, found ${rows.length}.`);
   }
   return new Map(rows.map((r) => [r.name, r]));
-}
-
-async function loadElevationBounds() {
-  const rows = await sql<{ key: string; value: string }[]>`
-    SELECT key, value FROM config WHERE key IN ('elev_min', 'elev_max')
-  `;
-  const map = Object.fromEntries(rows.map((r) => [r.key, Number(r.value)]));
-  if (map.elev_min === undefined || map.elev_max === undefined) {
-    throw new Error(
-      "config table is missing elev_min/elev_max — run 'pnpm --prefix api seed:dem' first.",
-    );
-  }
-  return { elevMin: map.elev_min, elevMax: map.elev_max };
 }
 
 async function loadOrCreateCitizens(): Promise<string[]> {
@@ -1287,14 +1150,6 @@ async function resolveBarangayForPoint(
     ORDER BY geom <-> ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326) LIMIT 1
   `;
   return { ...nearest, viaFallback: true };
-}
-
-async function findNearestElevation(lat: number, lng: number): Promise<number> {
-  const [row] = await sql<{ elevation_m: number }[]>`
-    SELECT elevation_m FROM dem_points
-    ORDER BY geom <-> ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326) LIMIT 1
-  `;
-  return row.elevation_m;
 }
 
 // ---------------------------------------------------------------------
@@ -1398,18 +1253,12 @@ async function buildEvidence({
 async function createStandaloneTicket({
   barangay,
   category,
-  rain,
-  elevMin,
-  elevMax,
   report,
   citizenEmail,
   duplicateImageFiles,
 }: {
   barangay: { id: number; lat: number; lng: number };
   category: string;
-  rain: number;
-  elevMin: number;
-  elevMax: number;
   report: ReportSpec;
   citizenEmail: string;
   duplicateImageFiles: Record<number, string>;
@@ -1422,15 +1271,7 @@ async function createStandaloneTicket({
   const lat = barangay.lat + report.offsetLat;
   const lng = barangay.lng + report.offsetLng;
   const resolved = await resolveBarangayForPoint(lat, lng);
-  const elevationM = await findNearestElevation(lat, lng);
   const office = officeForCategory(category);
-  const urgency = computeUrgency({
-    elevationM,
-    elevMin,
-    elevMax,
-    memberCount: 1,
-    rain1hMm: rain,
-  });
 
   const [citizen] = await sql<
     { id: number }[]
@@ -1438,14 +1279,10 @@ async function createStandaloneTicket({
 
   const [ticket] = await sql<{ id: number }[]>`
     INSERT INTO tickets (
-      category, barangay_id, status, member_count, elevation_m, assigned_office, geom,
-      elevation_factor, precipitation_factor, cluster_factor, urgency_score, urgency_band,
-      priority_score, urgency_level
+      category, barangay_id, status, member_count, assigned_office, geom
     ) VALUES (
-      ${category}, ${resolved.id}, 'Reported', 1, ${elevationM}, ${office},
-      ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
-      ${urgency.elevationFactor}, ${urgency.precipitationFactor}, ${urgency.clusterFactor},
-      ${urgency.urgencyScore}, ${urgency.urgencyBand}, ${urgency.priorityScore}, ${urgency.urgencyLevel}
+      ${category}, ${resolved.id}, 'Reported', 1, ${office},
+      ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)
     ) RETURNING id
   `;
 
@@ -1463,10 +1300,10 @@ async function createStandaloneTicket({
 
   const [insertedReport] = await sql<{ id: number }[]>`
     INSERT INTO reports (
-      ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
+      ticket_id, citizen_id, title, description, citizen_severity, image_url,
       geom, pin_geom, exif_geom, exif_captured_at, exif_data, image_phash, location_mismatch_m, flags
     ) VALUES (
-      ${ticket.id}, ${citizen.id}, ${report.title}, 'Demo presentation report', 'Medium', ${elevationM}, ${evidence.imageUrl},
+      ${ticket.id}, ${citizen.id}, ${report.title}, 'Demo presentation report', 'Medium', ${evidence.imageUrl},
       ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326), ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
       ${evidence.exif.lat !== null ? sql`ST_SetSRID(ST_MakePoint(${evidence.exif.lng}, ${evidence.exif.lat}), 4326)` : sql`NULL`},
       ${evidence.exifCapturedAtIso}, ${JSON.stringify(evidence.exif.data)}::jsonb, ${evidence.phash}, ${evidence.locationMismatchM}, ${evidence.flags}
@@ -1494,18 +1331,12 @@ async function createStandaloneTicket({
 async function createClusterTicket({
   barangay,
   category,
-  rain,
-  elevMin,
-  elevMax,
   reports,
   pickCitizen,
   duplicateImageFiles,
 }: {
   barangay: { id: number; lat: number; lng: number };
   category: string;
-  rain: number;
-  elevMin: number;
-  elevMax: number;
   reports: ReportSpec[];
   pickCitizen: () => string;
   duplicateImageFiles: Record<number, string>;
@@ -1519,7 +1350,6 @@ async function createClusterTicket({
     const lat = barangay.lat + report.offsetLat;
     const lng = barangay.lng + report.offsetLng;
     const resolved = await resolveBarangayForPoint(lat, lng);
-    const elevationM = await findNearestElevation(lat, lng);
     const citizenEmail = pickCitizen();
     const [citizen] = await sql<
       { id: number }[]
@@ -1551,10 +1381,10 @@ async function createClusterTicket({
     if (existing) {
       await sql`
         INSERT INTO reports (
-          ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
+          ticket_id, citizen_id, title, description, citizen_severity, image_url,
           geom, pin_geom, exif_geom, exif_captured_at, exif_data, image_phash, location_mismatch_m, flags
         ) VALUES (
-          ${existing.id}, ${citizen.id}, ${report.title}, 'Demo presentation report (cluster member)', 'High', ${elevationM}, ${evidence.imageUrl},
+          ${existing.id}, ${citizen.id}, ${report.title}, 'Demo presentation report (cluster member)', 'High', ${evidence.imageUrl},
           ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326), ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
           ${evidence.exif.lat !== null ? sql`ST_SetSRID(ST_MakePoint(${evidence.exif.lng}, ${evidence.exif.lat}), 4326)` : sql`NULL`},
           ${evidence.exifCapturedAtIso}, ${JSON.stringify(evidence.exif.data)}::jsonb, ${evidence.phash}, ${evidence.locationMismatchM}, ${evidence.flags}
@@ -1566,59 +1396,29 @@ async function createClusterTicket({
           SELECT ST_Centroid(ST_Collect(geom)) AS c FROM reports WHERE ticket_id = ${existing.id}
         ) t
       `;
-      const ticketElevationM = await findNearestElevation(
-        centroid.lat,
-        centroid.lng,
-      );
-      const urgency = computeUrgency({
-        elevationM: ticketElevationM,
-        elevMin,
-        elevMax,
-        memberCount,
-        rain1hMm: rain,
-      });
       await sql`
         UPDATE tickets SET
           member_count = ${memberCount},
           geom = ST_SetSRID(ST_MakePoint(${centroid.lng}, ${centroid.lat}), 4326),
-          elevation_m = ${ticketElevationM},
-          elevation_factor = ${urgency.elevationFactor},
-          precipitation_factor = ${urgency.precipitationFactor},
-          cluster_factor = ${urgency.clusterFactor},
-          urgency_score = ${urgency.urgencyScore},
-          urgency_band = ${urgency.urgencyBand},
-          priority_score = ${urgency.priorityScore},
-          urgency_level = ${urgency.urgencyLevel},
           updated_at = now()
         WHERE id = ${existing.id}
       `;
     } else {
-      const urgency = computeUrgency({
-        elevationM,
-        elevMin,
-        elevMax,
-        memberCount: 1,
-        rain1hMm: rain,
-      });
       const [created] = await sql<{ id: number }[]>`
         INSERT INTO tickets (
-          category, barangay_id, status, member_count, elevation_m, assigned_office, geom,
-          elevation_factor, precipitation_factor, cluster_factor, urgency_score, urgency_band,
-          priority_score, urgency_level
+          category, barangay_id, status, member_count, assigned_office, geom
         ) VALUES (
-          ${category}, ${resolved.id}, 'Reported', 1, ${elevationM}, ${office},
-          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
-          ${urgency.elevationFactor}, ${urgency.precipitationFactor}, ${urgency.clusterFactor},
-          ${urgency.urgencyScore}, ${urgency.urgencyBand}, ${urgency.priorityScore}, ${urgency.urgencyLevel}
+          ${category}, ${resolved.id}, 'Reported', 1, ${office},
+          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)
         ) RETURNING id
       `;
       ticketId = created.id;
       await sql`
         INSERT INTO reports (
-          ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
+          ticket_id, citizen_id, title, description, citizen_severity, image_url,
           geom, pin_geom, exif_geom, exif_captured_at, exif_data, image_phash, location_mismatch_m, flags
         ) VALUES (
-          ${ticketId}, ${citizen.id}, ${report.title}, 'Demo presentation report (cluster anchor)', 'High', ${elevationM}, ${evidence.imageUrl},
+          ${ticketId}, ${citizen.id}, ${report.title}, 'Demo presentation report (cluster anchor)', 'High', ${evidence.imageUrl},
           ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326), ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
           ${evidence.exif.lat !== null ? sql`ST_SetSRID(ST_MakePoint(${evidence.exif.lng}, ${evidence.exif.lat}), 4326)` : sql`NULL`},
           ${evidence.exifCapturedAtIso}, ${JSON.stringify(evidence.exif.data)}::jsonb, ${evidence.phash}, ${evidence.locationMismatchM}, ${evidence.flags}
@@ -1644,7 +1444,7 @@ async function createClusterTicket({
 // Manual service construction — real NotificationsService/AdminAuditService
 // (both take only a Drizzle db handle), real ConsoleEmailService (bypasses
 // citizens.module.ts's Resend-selecting factory entirely — see header),
-// stub WeatherService/MediaService (structurally unreachable from
+// stub MediaService (structurally unreachable from
 // advanceStatus/rejectTicket/reassignOffice as long as no resolution photo
 // buffer is passed, which this script never does).
 // ---------------------------------------------------------------------
@@ -1669,9 +1469,8 @@ function buildTicketsService(): TicketsService {
 
 // disputeReport/confirmResolution only ever touch this.pg and (dispute
 // only) this.notifications — verified by reading both method bodies before
-// wiring this. The other six ReportsService dependencies (barangay,
-// elevation, appConfig, weather, media, rateLimit, recompute) all belong to
-// submit(), which this script never calls through the real service (see
+// wiring this. The other ReportsService dependencies (barangay, media,
+// rateLimit, operationalPriority) all belong to submit(), which this script never calls through the real service (see
 // header: submit() forces a Cloudinary upload and real rate-limit checks
 // with no override, which is why report/ticket creation above replicates
 // its SQL directly instead).
@@ -1680,12 +1479,9 @@ function buildReportsService(): ReportsService {
   return new ReportsService(
     sql,
     {} as BarangayService,
-    {} as ElevationService,
-    {} as AppConfigService,
-    {} as WeatherService,
     {} as MediaService,
     {} as RateLimitService,
-    {} as RecomputeService,
+    {} as OperationalPriorityService,
     notifications,
   );
 }
@@ -1799,10 +1595,8 @@ async function seedWorkOrders(
 // `now()` on a ticket (and its reports/status_history/office_reassignments/
 // work_orders/work_order_status_history) backward by the spec's ageDays,
 // preserving whatever relative order the real sequence of calls produced.
-// Never touches urgency_score/priority_score/urgency_level/urgency_band/
-// elevation_factor/precipitation_factor/cluster_factor/priority_index —
-// those stay exactly as real computeUrgency()/computePriorityIndex() set
-// them.
+// Never touches priority_index — that stays exactly as the real
+// computePriorityIndex() set it.
 // ---------------------------------------------------------------------
 async function backdateTimestamps(
   createdTickets: {
@@ -1866,23 +1660,21 @@ async function verifyAndReport(
       `Barangays with zero tickets: ${uncovered.map((b) => b.name).join(', ')}`,
     );
 
-  const byBand = await sql<{ urgency_level: string | null; count: number }[]>`
-    SELECT urgency_level, COUNT(*)::int AS count FROM tickets GROUP BY urgency_level
+  // Operational Priority's display band (lib/utils/ui/priority.ts thirds) —
+  // printed for information only, no per-band targets. The Hazard Urgency
+  // band targets this used to enforce were removed in step 7b.
+  const byPriorityBand = await sql<{ band: string; count: number }[]>`
+    SELECT CASE
+      WHEN priority_index IS NULL THEN 'NULL'
+      WHEN priority_index < 34 THEN 'Low'
+      WHEN priority_index < 67 THEN 'Medium'
+      ELSE 'High'
+    END AS band, COUNT(*)::int AS count
+    FROM tickets GROUP BY 1
   `;
-  const bandMap = Object.fromEntries(
-    byBand.map((r) => [r.urgency_level ?? 'NULL', r.count]),
+  const priorityBandMap = Object.fromEntries(
+    byPriorityBand.map((r) => [r.band, r.count]),
   );
-  const BAND_MINIMUMS = { LOW: 8, MEDIUM: 15 };
-  for (const [band, minimum] of Object.entries(BAND_MINIMUMS)) {
-    if (!bandMap[band] || bandMap[band] < minimum)
-      failures.push(
-        `Urgency band ${band} has fewer than ${minimum} tickets (${bandMap[band] ?? 0}).`,
-      );
-  }
-  // HIGH has an exact target range (not just a floor) this round: 10-12.
-  if (!bandMap.HIGH || bandMap.HIGH < 10 || bandMap.HIGH > 12) {
-    failures.push(`Expected 10-12 HIGH tickets, found ${bandMap.HIGH ?? 0}.`);
-  }
 
   const byStatus = await sql<{ status: string; count: number }[]>`
     SELECT status, COUNT(*)::int AS count FROM tickets GROUP BY status
@@ -1918,60 +1710,14 @@ async function verifyAndReport(
       `Expected at least 11 dedup clusters (member_count > 1), found ${clusters.length}.`,
     );
 
-  // ---- HIGH-ticket table + targeted assertions ----
-  const highTickets = await sql<
-    {
-      id: number;
-      barangay: string;
-      category: string;
-      assigned_office: string;
-      status: string;
-      elevation_m: number | null;
-      member_count: number;
-      elevation_factor: number | null;
-      precipitation_factor: number | null;
-      cluster_factor: number | null;
-      priority_score: number | null;
-    }[]
-  >`
-    SELECT t.id, b.name AS barangay, t.category, t.assigned_office, t.status,
-      t.elevation_m, t.member_count, t.elevation_factor, t.precipitation_factor,
-      t.cluster_factor, t.priority_score
-    FROM tickets t JOIN barangays b ON b.id = t.barangay_id
-    WHERE t.urgency_level = 'HIGH'
-    ORDER BY t.priority_score DESC
+  // Operational Priority is 1-100 by construction (scoring.ts); guard it.
+  const priorityRange = await sql<{ min: number | null; max: number | null }[]>`
+    SELECT MIN(priority_index) AS min, MAX(priority_index) AS max FROM tickets WHERE priority_index IS NOT NULL
   `;
-  for (const h of highTickets) {
-    if (h.priority_score === null || h.priority_score < 80) {
-      failures.push(
-        `HIGH ticket #${h.id} (${h.barangay}) has priority_score ${h.priority_score}, expected >= 80.`,
-      );
-    }
-    if (h.member_count <= 1) {
-      failures.push(
-        `HIGH ticket #${h.id} (${h.barangay}) has member_count ${h.member_count} — HIGH must come from a real cluster.`,
-      );
-    }
-  }
-  const highOffices = new Set(highTickets.map((h) => h.assigned_office));
-  if (!highOffices.has('MEO'))
-    failures.push('No HIGH ticket is assigned to MEO.');
-  if (!highOffices.has('MDRRMO'))
-    failures.push('No HIGH ticket is assigned to MDRRMO.');
-  const highBarangays = new Set(highTickets.map((h) => h.barangay));
-  if (highBarangays.size < 5) {
-    failures.push(
-      `HIGH tickets span only ${highBarangays.size} barangay(s), expected several.`,
-    );
-  }
-
-  const scoreRange = await sql<{ min: number | null; max: number | null }[]>`
-    SELECT MIN(priority_score) AS min, MAX(priority_score) AS max FROM tickets WHERE priority_score IS NOT NULL
-  `;
-  if (scoreRange[0].min !== null && scoreRange[0].min < 0)
-    failures.push(`A priority_score fell below 0 (${scoreRange[0].min}).`);
-  if (scoreRange[0].max !== null && scoreRange[0].max > 100)
-    failures.push(`A priority_score exceeded 100 (${scoreRange[0].max}).`);
+  if (priorityRange[0].min !== null && priorityRange[0].min < 1)
+    failures.push(`A priority_index fell below 1 (${priorityRange[0].min}).`);
+  if (priorityRange[0].max !== null && priorityRange[0].max > 100)
+    failures.push(`A priority_index exceeded 100 (${priorityRange[0].max}).`);
 
   const KNOWN_FLAG_PREFIXES = [
     'NO_EXIF',
@@ -2097,7 +1843,7 @@ async function verifyAndReport(
     '/',
     barangayCoverage.length,
   );
-  console.log('By urgency band:', bandMap);
+  console.log('By Operational Priority band:', priorityBandMap);
   console.log('By status:', statusMap);
   console.log('By office:', officeMap);
   console.log('Flag counts (from creation-time computation):', flagCounts);
@@ -2128,24 +1874,6 @@ async function verifyAndReport(
     Object.fromEntries(
       HOTSPOTS.map((name) => [name, barangayByName[name] ?? 0]),
     ),
-  );
-  console.log(
-    `\nHIGH tickets: ${highTickets.length} across ${highBarangays.size} barangay(s) — [${[...highBarangays].join(', ')}]`,
-  );
-  console.table(
-    highTickets.map((h) => ({
-      id: h.id,
-      barangay: h.barangay,
-      category: h.category,
-      office: h.assigned_office,
-      status: h.status,
-      elevation_m: h.elevation_m,
-      member_count: h.member_count,
-      elevationFactor: h.elevation_factor?.toFixed(3),
-      precipitationFactor: h.precipitation_factor?.toFixed(3),
-      clusterFactor: h.cluster_factor?.toFixed(3),
-      priority_score: h.priority_score,
-    })),
   );
   console.log('================================================\n');
 

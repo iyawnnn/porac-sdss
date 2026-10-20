@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { FocalIntakeDetail } from "@/lib/types/admin-focal-intake";
 
 // Real production Acknowledge action — a municipal monitoring event, never
-// a ticket status change (see CLAUDE.md's Severity/Urgency/Priority note
+// a ticket status change (see CLAUDE.md's terminology note
 // and the report_acknowledgments docblock in api/src/db/schema.ts). After a
 // successful submit this calls router.refresh() rather than updating any
 // local optimistic state, so the UI always reflects server truth.

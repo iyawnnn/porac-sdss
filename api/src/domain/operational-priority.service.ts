@@ -15,10 +15,10 @@ export interface OperationalPriorityRecalcResult {
 //   0.50 * severity + 0.25 * age (capped at 7 days) + 0.25 * barangay demand
 // The formula itself lives in common/utils/scoring.ts and is unchanged.
 //
-// Phase 1, step 1: this used to be computed and written inside
-// RecomputeService.recomputeActiveTicketUrgency(), coupled to the Hazard
-// Urgency update. It is now its own service so Hazard Urgency can be removed
-// later without touching the queue order. It reads and writes ONLY
+// Phase 1, step 1: this used to be computed and written inside the Hazard
+// Urgency recompute (RecomputeService, deleted in step 7a). It became its
+// own service so Hazard Urgency could be removed without touching the queue
+// order. It reads and writes ONLY
 // priority_index — never priority_score, urgency_score, urgency_band,
 // urgency_level or any *_factor column.
 //

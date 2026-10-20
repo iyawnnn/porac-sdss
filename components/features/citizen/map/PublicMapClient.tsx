@@ -10,7 +10,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { configureLeafletMarkerIcons } from "@/lib/gis/leaflet-icons";
 import { bindBarangayHoverTooltip, styleBarangayFeature, styleMunicipalBoundary } from "@/lib/gis/map-styles";
-import { bandMarkerIcon } from "@/lib/gis/markerIcon";
+import { neutralMarkerIcon } from "@/lib/gis/markerIcon";
 import { clusterIcon } from "@/lib/gis/clusterIcon";
 import type { PublicTicketGeoRow } from "@/lib/types/citizens-public-map";
 import { PublicTicketPopup } from "./PublicTicketPopup";
@@ -73,7 +73,7 @@ export default function PublicMapClient({
         <GeoJSON data={barangays} style={styleBarangayFeature} onEachFeature={bindBarangayHoverTooltip} />
         <MarkerClusterGroup chunkedLoading iconCreateFunction={clusterIcon}>
           {tickets.map((ticket) => (
-            <Marker key={ticket.id} position={[ticket.lat, ticket.lng]} icon={bandMarkerIcon(null)}>
+            <Marker key={ticket.id} position={[ticket.lat, ticket.lng]} icon={neutralMarkerIcon()}>
               <Popup>
                 <PublicTicketPopup ticket={ticket} />
               </Popup>

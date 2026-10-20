@@ -6,12 +6,11 @@
 
 ## Background
 
-`docs/deployment-readiness.md` §6. `.github/workflows/cron.yml` calls all six `/cron/*` routes daily at **18:00 UTC (02:00 Asia/Manila)** — deliberately low-traffic hours — and can also be triggered manually via `workflow_dispatch`.
+`docs/deployment-readiness.md` §6. `.github/workflows/cron.yml` calls all four `/cron/*` routes daily at **18:00 UTC (02:00 Asia/Manila)** — deliberately low-traffic hours — and can also be triggered manually via `workflow_dispatch`.
 
 | Endpoint | What it does | Other trigger? |
 |---|---|---|
-| `recompute-urgency` | Recomputes urgency for active tickets | Yes — inline on dashboard/ticket loads |
-| `recompute-weather` | Refreshes cached precipitation | Yes — inline |
+| `recompute-priority` | Recalculates Operational Priority for active tickets (replaced `recompute-urgency`/`recompute-weather` in manuscript revision Phase 1, step 7a) | Yes — inline on dashboard/ticket loads |
 | `cleanup-password-reset-tokens` | Deletes expired reset tokens | **No** |
 | `cleanup-notifications` | Prunes read notifications past retention | **No** |
 | `cleanup-rate-limit-events` | Prunes both rate-limit tables past 30 days | **No** |

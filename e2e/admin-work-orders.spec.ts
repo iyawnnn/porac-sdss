@@ -467,8 +467,8 @@ test("MDRRMO office admin's assignee picker only offers MDRRMO admins", async ({
   // ticket instead, so nothing shared is mutated.
   await loginAs(page, E2E_MDRRMO_ADMIN);
   await page.goto(`/admin/tickets/${sharedMdrrmoTicketId}`);
-  // Ticket Detail renders a Leaflet map (barangay boundary polygon + pulsing
-  // urgency marker, TicketLocationMap.tsx) whose leaflet-interactive <path>
+  // Ticket Detail renders a Leaflet map (barangay boundary polygon + location
+  // pin, TicketLocationMap.tsx) whose leaflet-interactive <path>
   // elements sit underneath the dialog. Waiting for network idle alone isn't
   // enough to stop them intermittently intercepting a pointer click on the
   // assignee trigger, so that click goes through openAssigneePicker (focus +

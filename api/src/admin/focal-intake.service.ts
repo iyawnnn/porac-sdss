@@ -421,8 +421,8 @@ export class FocalIntakeService {
     return this.getIntakeDetail(reportId);
   }
 
-  // Attention signal only — never touches Hazard Urgency, Operational
-  // Priority, ticket.status, or assigned_office (Step 15 of the Batch 2
+  // Attention signal only — never touches Operational Priority,
+  // ticket.status, or assigned_office (Step 15 of the Batch 2
   // design). Notifies the ticket's CURRENT office, not a fixed one, since
   // Forward may already have moved it before Escalate is called.
   async escalate(

@@ -25,8 +25,8 @@ pending.
 | `PRODUCT.md` (root) | Still authoritative for product, audience, and brand *personality*. Its brand *color* statement (institutional blue) and its "warm cream/sand" anti-reference are superseded by this file; that edit is deferred. |
 | `docs/project-status.md` | Remains the only roadmap and status authority. §7 below is a design sequencing note, **not** a product roadmap, and does not queue features. |
 
-Nothing in this document changes ticket statuses, Hazard Urgency logic, Operational
-Priority logic, routing, API contracts, auth, or any application behavior.
+Nothing in this document changes ticket statuses, Operational Priority logic,
+routing, API contracts, auth, or any application behavior.
 
 ---
 
@@ -54,7 +54,9 @@ in `reportStatusStyle.ts`, and that map duplicated verbatim again in the citizen
 detail page). The clearest symptom of the drift: `priorityScoreBandClass` and
 `getUrgencyBadgeConfig` derive from the *identical* `urgencyLevelFromScore` call — the
 source comment states they are "always in lockstep" — yet render from different palettes,
-so a `LOW` ticket shows a green score badge beside a yellow "Low" urgency badge.
+so a `LOW` ticket shows a green score badge beside a yellow "Low" urgency badge. (Both
+badges went with Hazard Urgency in manuscript revision Phase 1; kept as the record of
+why palette drift matters.)
 
 **The goal of this system is one token layer, one type scale, and one set of component
 rules.**
@@ -180,9 +182,9 @@ listed here so the open decisions are tracked, not to authorize an edit.
 
 | Palette | Current state | Status |
 |---|---|---|
-| **Hazard Urgency** (`urgency_band` — Low / Medium / Critical) | Warm-only: amber `#D99A00` → orange `#E2680E` → red `#C42B1C` | **TBD.** A direction has been discussed — cooling **Low** to a neutral slate so no band shares a hue with brand orange, while keeping Medium yellow-amber and Critical solid red, and preserving the tint / tint / solid escalation asymmetry so Critical still wins the scan in a long queue. **Exact values are not approved and not implemented.** Any change must preserve `DESIGN.md` §4.4's standing rejection of green-for-Low (green reads as "fine," wrong for a queue where every row is an active hazard) and must be re-verified for deuteranopia/protanopia. |
+| **Hazard Urgency** (`urgency_band` — Low / Medium / Critical) | Warm-only: amber `#D99A00` → orange `#E2680E` → red `#C42B1C` | **Retired** — Hazard Urgency was removed in manuscript revision Phase 1, so this palette no longer encodes any data; its hues remain only as the warning/danger/info tokens. Earlier note, kept for the record: **TBD.** A direction has been discussed — cooling **Low** to a neutral slate so no band shares a hue with brand orange, while keeping Medium yellow-amber and Critical solid red, and preserving the tint / tint / solid escalation asymmetry so Critical still wins the scan in a long queue. **Exact values are not approved and not implemented.** Any change must preserve `DESIGN.md` §4.4's standing rejection of green-for-Low (green reads as "fine," wrong for a queue where every row is an active hazard) and must be re-verified for deuteranopia/protanopia. |
 | **Ticket status** (Reported / Under Review / In Progress / Resolved / Rejected) | Blue-progression + green Resolved + red Rejected, defined in four places | **TBD.** Consolidation onto tokens is required; the hues themselves are unresolved. The five status *names* are fixed and must never change. |
-| **Operational Priority** (`priority_index`) | `emerald / amber / rose` | **TBD.** Must end up visually distinct from Hazard Urgency, since it is a genuinely different model — and the two must stop being the reverse of that today. |
+| **Operational Priority** (`priority_index`) | `emerald / amber / rose` | **TBD.** (The requirement to stay visually distinct from Hazard Urgency lapsed when Hazard Urgency was retired in manuscript revision Phase 1.) |
 | **Work-order status** | `slate / blue / emerald / red` | **TBD.** |
 | **Moderation status** | `blue / orange / emerald / sky` | **TBD.** The `orange` entry will need review once brand orange lands. |
 | **Integrity flags** | Violet `#7B2FA8` family | **Retained.** Correctly isolated from every other ramp; no change proposed. |

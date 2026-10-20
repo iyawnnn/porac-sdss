@@ -9,9 +9,9 @@ import { OPERATIONAL_CONSTRAINT_LABEL, type OperationalConstraint } from "@/lib/
 import type { OperationalAssessment } from "@/lib/types/admin-tickets";
 import { OperationalAssessmentDialog } from "@/components/features/admin/tickets/OperationalAssessmentDialog";
 
-// Third decision-support layer on real Ticket Detail (Batch 3) — Hazard
-// Urgency and Operational Priority (both system-generated) live in the
-// existing Scoring tab; this card is exclusively the human-entered one.
+// Human decision-support layer on real Ticket Detail (Batch 3) — the
+// system-generated Operational Priority lives in the existing Scoring tab;
+// this card is exclusively the human-entered one.
 // Anyone who can load this page already passed OperationalStaffGuard +
 // assertOfficeAccess for this exact ticket (see TicketsController.detail),
 // so Add/Edit is never gated further on the frontend — the backend
