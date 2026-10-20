@@ -7,7 +7,6 @@ import { RecomputeService } from './recompute.service';
 import { OperationalPriorityService } from './operational-priority.service';
 import { MediaService } from './media.service';
 import { RateLimitService } from './ratelimit.service';
-import { EscalationService } from './escalation.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 // No controllers — feature modules (auth, reports, admin, cron) import
@@ -23,7 +22,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     OperationalPriorityService,
     MediaService,
     RateLimitService,
-    EscalationService,
   ],
   exports: [
     BarangayService,
@@ -34,7 +32,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     OperationalPriorityService,
     MediaService,
     RateLimitService,
-    EscalationService,
   ],
 })
 export class DomainModule {}

@@ -229,7 +229,7 @@ For the full pre-production checklist — required services, production-only env
 
 ### Scheduled cron jobs (GitHub Actions)
 
-`api/src/cron/cron.controller.ts` exposes six routes behind `CronSecretGuard` (urgency recompute, weather recompute, three cleanup jobs — expired password-reset tokens, old read notifications, old rate-limit events — and a ticket escalation check, `POST /cron/check-ticket-escalations`). `.github/workflows/cron.yml` calls all six once a day via `curl`, authenticated the same way the guard already accepts (`Authorization: Bearer $CRON_SECRET`).
+`api/src/cron/cron.controller.ts` exposes five routes behind `CronSecretGuard` (urgency recompute, weather recompute, and three cleanup jobs — expired password-reset tokens, old read notifications, old rate-limit events). The former 7-day ticket escalation check (`POST /cron/check-ticket-escalations`) was removed in manuscript revision Phase 1, step 2. `.github/workflows/cron.yml` calls all five once a day via `curl`, authenticated the same way the guard already accepts (`Authorization: Bearer $CRON_SECRET`).
 
 That workflow only works once two values are set under the repository's **Settings → Secrets and variables → Actions**:
 

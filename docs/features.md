@@ -257,7 +257,7 @@ Flags **never block a submission**. They append to `reports.flags[]` and route t
 
 ### 4.6 Scheduled jobs
 
-Six cron routes (`api/src/cron/`), all behind a shared secret, run daily via GitHub Actions: urgency recompute, weather recompute, three cleanup jobs (expired reset tokens, old read notifications, old rate-limit events), and a **ticket escalation check** that flags active tickets older than 7 days with no work order that ever reached `in_progress` or `completed`. Escalation notifies the office once per ticket, using the existence of the prior notification row rather than a new schema column.
+Five cron routes (`api/src/cron/`), all behind a shared secret, run daily via GitHub Actions: urgency recompute, weather recompute, and three cleanup jobs (expired reset tokens, old read notifications, old rate-limit events). The former 7-day **ticket escalation check** was removed in manuscript revision Phase 1, step 2: the manuscript uses 7 days only as Operational Priority's age cap, never as an escalation rule (p. 74). Existing `ticket_escalation` notifications remain readable as history ("Ticket Needs Review"); nothing creates new ones.
 
 ---
 

@@ -288,7 +288,7 @@ Maria's report page shows *"Merged with an existing issue — grouped with 3 oth
 
 **8b — Or it did not.** If the water returns the next day, she taps **Report Still Not Fixed** and writes why. That notifies MDRRMO, marks the ticket **Disputed** in their queue with a badge and a filter, and shows Ronald her reason on Ticket Detail. The status does not roll back and no score changes — it is a flag for human attention.
 
-**Meanwhile,** if the ticket had sat at "In Progress" for a week with no work order ever reaching in-progress or completed, the nightly escalation job would have flagged it to MDRRMO once — a safety net against tickets quietly ageing out of view.
+**Meanwhile,** a ticket that sits unattended is not escalated by any timer — the nightly 7-day escalation job was removed in manuscript revision Phase 1, step 2. Ageing instead raises the ticket's Operational Priority (the age factor reaches its cap at 7 days), so it climbs the queue rather than paging anyone.
 
 ---
 

@@ -3,8 +3,9 @@ name: Scheduled Cron Jobs
 # Calls the existing api/src/cron/cron.controller.ts endpoints on a
 # schedule — none of them have any other trigger today (urgency/weather
 # recompute also happen inline on dashboard/ticket loads, so this is a
-# safety net for them; the three cleanup jobs and the ticket-escalation
-# check have no other trigger at all). One daily schedule for everything
+# safety net for them; the three cleanup jobs have no other trigger at
+# all). The 7-day ticket-escalation check was removed in manuscript
+# revision Phase 1, step 2. One daily schedule for everything
 # rather than several schedules with per-job conditionals — every job here
 # is cheap and idempotent, so there's nothing to gain from splitting them.
 #
@@ -52,8 +53,7 @@ jobs:
             recompute-weather \
             cleanup-password-reset-tokens \
             cleanup-notifications \
-            cleanup-rate-limit-events \
-            check-ticket-escalations
+            cleanup-rate-limit-events
           do
             echo "POST /cron/$path"
             curl -sf -X POST "$PORAC_API_BASE_URL/cron/$path" \

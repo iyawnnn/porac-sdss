@@ -3,7 +3,6 @@ import { RecomputeService } from '../domain/recompute.service';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { WeatherService } from '../domain/weather.service';
 import { RateLimitService } from '../domain/ratelimit.service';
-import { EscalationService } from '../domain/escalation.service';
 import { PasswordResetService } from '../citizens/password-reset.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CronSecretGuard } from '../common/guards/cron-secret.guard';
@@ -24,7 +23,6 @@ export class CronController {
     private readonly passwordReset: PasswordResetService,
     private readonly notifications: NotificationsService,
     private readonly rateLimit: RateLimitService,
-    private readonly escalation: EscalationService,
   ) {}
 
   // Still one route for both scores so .github/workflows/cron.yml keeps
@@ -73,13 +71,9 @@ export class CronController {
     return this.rateLimit.cleanupOldEvents();
   }
 
-  // Escalates active tickets (Reported/Under Review/In Progress) that have
-  // sat for 7+ days with no work order that ever reached in_progress/
-  // completed — a ticket_escalation notification to the assigned office,
-  // never a status/scoring change. See EscalationService for the full rule
-  // and its duplicate-prevention behavior.
-  @Post('check-ticket-escalations')
-  checkTicketEscalations() {
-    return this.escalation.checkTicketEscalations();
-  }
+  // POST /cron/check-ticket-escalations (the 7-day escalation job) was
+  // removed in manuscript revision Phase 1, step 2 — the manuscript keeps
+  // 7 days only as Operational Priority's age cap, never as an escalation
+  // rule (p. 74). Existing ticket_escalation notifications are kept and
+  // still render as history; nothing creates new ones.
 }
