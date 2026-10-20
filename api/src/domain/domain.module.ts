@@ -4,6 +4,7 @@ import { ElevationService } from './elevation.service';
 import { AppConfigService } from './app-config.service';
 import { WeatherService } from './weather.service';
 import { RecomputeService } from './recompute.service';
+import { OperationalPriorityService } from './operational-priority.service';
 import { MediaService } from './media.service';
 import { RateLimitService } from './ratelimit.service';
 import { EscalationService } from './escalation.service';
@@ -19,6 +20,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AppConfigService,
     WeatherService,
     RecomputeService,
+    OperationalPriorityService,
     MediaService,
     RateLimitService,
     EscalationService,
@@ -29,6 +31,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AppConfigService,
     WeatherService,
     RecomputeService,
+    OperationalPriorityService,
     MediaService,
     RateLimitService,
     EscalationService,

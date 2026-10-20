@@ -4,12 +4,13 @@ import { PG } from '../db/db.module';
 import { WeatherService } from './weather.service';
 import { AppConfigService } from './app-config.service';
 import { computeUrgency } from './urgency';
-import {
-  computePriorityIndex,
-  severityFromRank,
-} from '../common/utils/scoring';
 import { NotificationsService } from '../notifications/notifications.service';
 
+// Hazard Urgency only (priority_score / urgency_level / urgency_band and the
+// three *_factor columns). Operational Priority (priority_index) moved to
+// OperationalPriorityService in Phase 1 step 1 — callers run both. This
+// service is scheduled for removal once the DENR-MGB Hazard Information
+// replaces Hazard Urgency (Phase 1 later steps).
 @Injectable()
 export class RecomputeService {
   constructor(
@@ -32,37 +33,13 @@ export class RecomputeService {
         // silently lying that it can't happen.
         elevation_m: number | null;
         member_count: number;
-        created_at: string;
-        severity_rank: number;
-        active_barangay_count: number;
-        max_active_barangay_count: number;
         urgency_band: string | null;
         assigned_office: 'MEO' | 'MDRRMO';
       }[]
     >`
-      WITH barangay_density AS (
-        SELECT barangay_id, COUNT(*)::int AS active_barangay_count
-        FROM tickets
-        WHERE status IN ('Reported', 'Under Review', 'In Progress')
-        GROUP BY barangay_id
-      ), severity_by_ticket AS (
-        SELECT ticket_id, MAX(CASE citizen_severity
-          WHEN 'Critical' THEN 4
-          WHEN 'High' THEN 3
-          WHEN 'Medium' THEN 2
-          ELSE 1
-        END)::int AS severity_rank
-        FROM reports
-        GROUP BY ticket_id
-      )
-      SELECT t.id, t.elevation_m, t.member_count, t.created_at,
-        COALESCE(s.severity_rank, 1) AS severity_rank,
-        d.active_barangay_count,
-        MAX(d.active_barangay_count) OVER ()::int AS max_active_barangay_count,
+      SELECT t.id, t.elevation_m, t.member_count,
         t.urgency_band, t.assigned_office
       FROM tickets t
-      JOIN barangay_density d ON d.barangay_id = t.barangay_id
-      LEFT JOIN severity_by_ticket s ON s.ticket_id = t.id
       WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
     `;
 
@@ -74,7 +51,6 @@ export class RecomputeService {
     const clusterFactors: number[] = [];
     const urgencyScores: number[] = [];
     const urgencyBands: string[] = [];
-    const priorityIndices: number[] = [];
     const priorityScores: number[] = [];
     const urgencyLevels: string[] = [];
     const newlyHigh: { id: number; office: 'MEO' | 'MDRRMO' }[] = [];
@@ -95,14 +71,6 @@ export class RecomputeService {
       urgencyBands.push(urgency.urgencyBand);
       priorityScores.push(urgency.priorityScore);
       urgencyLevels.push(urgency.urgencyLevel);
-      priorityIndices.push(
-        computePriorityIndex({
-          severity: severityFromRank(ticket.severity_rank),
-          createdAt: ticket.created_at,
-          activeBarangayCount: ticket.active_barangay_count,
-          maxActiveBarangayCount: ticket.max_active_barangay_count,
-        }),
-      );
 
       // Genuine old-vs-new state comparison, not a "have we already
       // notified" flag — naturally idempotent, since a ticket already at
@@ -120,7 +88,6 @@ export class RecomputeService {
           cluster_factor = u.cluster_factor,
           urgency_score = u.urgency_score,
           urgency_band = u.urgency_band,
-          priority_index = u.priority_index,
           priority_score = u.priority_score,
           urgency_level = u.urgency_level,
           updated_at = now()
@@ -132,10 +99,9 @@ export class RecomputeService {
             ${clusterFactors}::real[],
             ${urgencyScores}::real[],
             ${urgencyBands}::text[],
-            ${priorityIndices}::int[],
             ${priorityScores}::int[],
             ${urgencyLevels}::text[]
-          ) AS u(id, elevation_factor, precipitation_factor, cluster_factor, urgency_score, urgency_band, priority_index, priority_score, urgency_level)
+          ) AS u(id, elevation_factor, precipitation_factor, cluster_factor, urgency_score, urgency_band, priority_score, urgency_level)
         ) AS u
         WHERE t.id = u.id
       `;

@@ -15,6 +15,7 @@ import { WeatherService } from '../domain/weather.service';
 import { MediaService } from '../domain/media.service';
 import { RateLimitService } from '../domain/ratelimit.service';
 import { RecomputeService } from '../domain/recompute.service';
+import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { officeForCategory } from '../common/utils/office';
 import { radiusForCategory } from '../common/utils/radius';
 import { haversineMeters } from '../common/utils/distance';
@@ -154,6 +155,7 @@ export class ReportsService {
     private readonly media: MediaService,
     private readonly rateLimit: RateLimitService,
     private readonly recompute: RecomputeService,
+    private readonly operationalPriority: OperationalPriorityService,
     private readonly notifications: NotificationsService,
   ) {}
 
@@ -466,6 +468,7 @@ export class ReportsService {
     // Step 8: post-commit, not part of the transaction — a slow recompute
     // here must never hold the advisory lock or the row locks open.
     await this.recompute.recomputeActiveTicketUrgency();
+    await this.operationalPriority.recalculateActiveTickets();
 
     return {
       reportId: result.reportId,

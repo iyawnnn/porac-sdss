@@ -6,7 +6,7 @@ For developer onboarding, QA, and capstone defense. If you are preparing to answ
 
 **Nothing here proposes a change.** The formulas and thresholds below are described exactly as implemented. See §11 before altering any of them.
 
-**Primary sources:** `api/src/domain/urgency.ts`, `api/src/common/utils/scoring.ts`, `api/src/domain/recompute.service.ts`, `api/src/domain/weather.service.ts`, `api/src/domain/app-config.service.ts`.
+**Primary sources:** `api/src/domain/urgency.ts`, `api/src/common/utils/scoring.ts`, `api/src/domain/recompute.service.ts`, `api/src/domain/operational-priority.service.ts`, `api/src/domain/weather.service.ts`, `api/src/domain/app-config.service.ts`.
 
 ---
 
@@ -148,7 +148,12 @@ Prior to Phase 2 of the manuscript-alignment work, `urgency_band` was computed i
 
 ### What recomputes
 
-`RecomputeService.recomputeActiveTicketUrgency` (`api/src/domain/recompute.service.ts`) recomputes **both** models in one pass and writes eight columns: `elevation_factor`, `precipitation_factor`, `cluster_factor`, `urgency_score`, `urgency_band`, `priority_index`, `priority_score`, `urgency_level`.
+The two models are recalculated by two separate services (split in manuscript-revision Phase 1, step 1 — behavior unchanged):
+
+- **Hazard Urgency** — `RecomputeService.recomputeActiveTicketUrgency` (`api/src/domain/recompute.service.ts`) writes seven columns: `elevation_factor`, `precipitation_factor`, `cluster_factor`, `urgency_score`, `urgency_band`, `priority_score`, `urgency_level`. It no longer reads severity, age, or barangay density, and never writes `priority_index`.
+- **Operational Priority** — `OperationalPriorityService.recalculateActiveTickets` (`api/src/domain/operational-priority.service.ts`) writes only `priority_index`, using the unchanged §4.2 formula (severity still `MAX` across linked reports).
+
+Every trigger below runs Hazard Urgency first, then Operational Priority, one after the other (never in parallel, so the two UPDATEs never compete for the same rows). The split exists so Hazard Urgency can later be replaced by DENR-MGB Hazard Information without touching the queue order.
 
 **Only tickets with status `Reported`, `Under Review`, or `In Progress` are updated.** `Resolved` and `Rejected` tickets keep whatever values they last held — their scores are effectively frozen at resolution time. Historical scores in exports of closed tickets reflect the moment they were closed, not current conditions.
 
@@ -157,7 +162,8 @@ Prior to Phase 2 of the manuscript-alignment work, `urgency_band` was computed i
 | Trigger | Mechanism |
 |---|---|
 | **On demand** | `GET /admin/dashboard`, `/admin/tickets`, `/admin/tickets/:id`, `/admin/tickets/geo` — an admin loading these pages triggers a recompute |
-| **Daily cron** | `POST /cron/recompute-urgency` and `POST /cron/recompute-weather`, at 18:00 UTC (02:00 Manila), behind `CronSecretGuard` |
+| **After citizen submission** | `ReportsService.submit`, post-commit (outside the submission transaction) |
+| **Daily cron** | `POST /cron/recompute-urgency` (runs both services; response is `{ updated, rain1hMm, operationalPriorityUpdated }`) and `POST /cron/recompute-weather`, at 18:00 UTC (02:00 Manila), behind `CronSecretGuard` |
 
 On-demand recompute is what makes the queue re-rank live during a storm. The cron jobs are a safety net for periods with no admin activity — see `docs/deployment-readiness.md` §6.
 
