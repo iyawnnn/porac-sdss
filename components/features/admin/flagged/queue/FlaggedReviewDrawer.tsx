@@ -26,22 +26,22 @@ const CATEGORY_WEIGHT_LABEL: Record<string, number> = {
 
 const RISK_TONE: Record<string, { surface: string; border: string; chip: string; ink: string }> = {
   high: {
-    surface: "bg-urgency-critical-tint",
-    border: "border-urgency-critical-edge",
-    chip: "bg-urgency-critical text-white",
-    ink: "text-urgency-critical-ink",
+    surface: "bg-danger-tint",
+    border: "border-danger-edge",
+    chip: "bg-danger text-white",
+    ink: "text-danger-ink",
   },
   medium: {
-    surface: "bg-urgency-medium-tint",
-    border: "border-urgency-medium-edge",
-    chip: "bg-urgency-medium-ink text-white",
-    ink: "text-urgency-medium-ink",
+    surface: "bg-warning-tint",
+    border: "border-warning-edge",
+    chip: "bg-warning-ink text-white",
+    ink: "text-warning-ink",
   },
   low: {
-    surface: "bg-urgency-low-tint",
-    border: "border-urgency-low-edge",
-    chip: "bg-urgency-low-ink text-white",
-    ink: "text-urgency-low-ink",
+    surface: "bg-info-tint",
+    border: "border-info-edge",
+    chip: "bg-info-ink text-white",
+    ink: "text-info-ink",
   },
 };
 
@@ -289,7 +289,7 @@ function DrawerBody({
               className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--color-meter-track)]"
             >
               <span
-                className="block h-1 rounded-full bg-urgency-low-ink"
+                className="block h-1 rounded-full bg-info-ink"
                 style={{ width: `${cleanRate}%` }}
               />
             </span>
@@ -369,7 +369,7 @@ function DrawerBody({
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-urgency-low-edge bg-urgency-low-tint text-[13px] font-medium text-urgency-low-ink transition-colors hover:border-urgency-low-ink"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-info-edge bg-info-tint text-[13px] font-medium text-info-ink transition-colors hover:border-info-ink"
                   onClick={() => startAction("dismiss")}
                   type="button"
                 >

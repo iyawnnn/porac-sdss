@@ -23,28 +23,26 @@
   --color-brand-700: #1a4570;
   --color-brand-900: #102943;
 
-  /* Urgency  urgency_band only, never chrome (DESIGN.md 4.4). Low/Medium
-     retuned for docs/design-system.md 3.2's Hazard Urgency TBD: cool slate
-     for Low and a true yellow-gold for Medium, both hue-separated from
-     brand orange (--primary #c2410c / --ring #f26b1d, hue ~15-22Ā°) so a
-     Medium badge and a brand-orange UI element never collide by hue. High
-     is unchanged (already well-separated); the token name stays
-     urgency-critical (internal identifier only  the rendered label is
-     "High" everywhere, see lib/utils/ui/urgency.ts). */
-  --color-urgency-low: #5b7290;
-  --color-urgency-low-tint: #dce6f0;
-  --color-urgency-low-ink: #3c4b5c;
-  --color-urgency-low-edge: #b8c9db;
+  /* Danger / warning / info: semantic feedback colours (error text, warning
+     rows, neutral info chips) - never chrome. Renamed from the former
+     urgency-* tokens in manuscript revision Phase 1, step 7b, when the badges
+     those names described were retired (names only; values unchanged). Hue-separated from brand orange (--primary #c2410c /
+     --ring #f26b1d) so a warning and a brand-orange element never collide by
+     hue (DESIGN.md 4.4, docs/design-system.md 3.2). */
+  --color-info: #5b7290;
+  --color-info-tint: #dce6f0;
+  --color-info-ink: #3c4b5c;
+  --color-info-edge: #b8c9db;
 
-  --color-urgency-medium: #a68300;
-  --color-urgency-medium-tint: #fbf2c7;
-  --color-urgency-medium-ink: #7a6500;
-  --color-urgency-medium-edge: #ead98f;
+  --color-warning: #a68300;
+  --color-warning-tint: #fbf2c7;
+  --color-warning-ink: #7a6500;
+  --color-warning-edge: #ead98f;
 
-  --color-urgency-critical: #c42b1c;
-  --color-urgency-critical-tint: #fadcd9;
-  --color-urgency-critical-ink: #8a1d12;
-  --color-urgency-critical-edge: #eda9a1;
+  --color-danger: #c42b1c;
+  --color-danger-tint: #fadcd9;
+  --color-danger-ink: #8a1d12;
+  --color-danger-edge: #eda9a1;
 
   /* Status  ticket_status. Now a complete five-status set: Under Review
      and In Progress previously had no tokens and were hand-copied as hex
@@ -118,11 +116,9 @@
      the queue table header strip and its footer strip only. */
   --color-surface-subtle: #fafafa;
 
-  /* Track behind the Urgency column inline meter. Deliberately not --border
-     (#e5e7eb): the meter sits beside a mono score at 13px and an e5 track
-     reads as a rule rather than an empty gauge. The FILL is never defined
-     here - it comes from getUrgencyBandStyle().hex so the meter, the score
-     and the level badge can never disagree. */
+  /* Track for inline score meters. Deliberately not --border (#e5e7eb): a
+     meter beside a mono score at 13px with an e5 track reads as a rule rather
+     than an empty gauge. */
   --color-meter-track: #eef0f2;
 }
 
@@ -201,7 +197,7 @@ body {
    light foundation and a two-step brand orange (--primary is the deeper,
    AA-safe fill; --ring/--sidebar-ring are the brighter accent, used only
    where a 3:1 UI-component threshold applies, e.g. focus rings). The PORAC
-   data-color tokens in the @theme block above (urgency, status, lifecycle,
+   data-color tokens in the @theme block above (danger/warning/info, status, lifecycle,
    severity, flag, map accents) are semantic palettes and are intentionally
    untouched by this phase  see docs/design-system.md 3.2. */
 /* PORAC-SDSS brand repoint (2026-08) — admin shell + dashboard scope only.

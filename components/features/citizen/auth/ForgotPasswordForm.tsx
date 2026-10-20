@@ -97,7 +97,7 @@ export default function ForgotPasswordForm() {
                 <p
                   role="alert"
                   aria-live="polite"
-                  className="flex items-center gap-2 text-xs text-urgency-critical-ink"
+                  className="flex items-center gap-2 text-xs text-danger-ink"
                 >
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   {error}

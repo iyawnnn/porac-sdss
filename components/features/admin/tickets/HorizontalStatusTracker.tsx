@@ -12,9 +12,9 @@ import { TICKET_STATUS_STYLE } from "../shared/StatusPill";
 
 const STEPS = ["Reported", "Under Review", "In Progress", "Resolved"] as const;
 const REJECTED_STYLE = TICKET_STATUS_STYLE.Rejected;
-// "Done" reuses the Resolved status's own ink color, not an urgency token —
-// urgency and status are separate meaning-channels (DESIGN.md §1) and must
-// never share a hue by coincidence.
+// "Done" reuses the Resolved status's own ink color, not a danger/warning
+// token — feedback colours and status are separate meaning-channels
+// (DESIGN.md §1) and must never share a hue by coincidence.
 const DONE_STYLE = TICKET_STATUS_STYLE.Resolved;
 
 type StepState = "done" | "active" | "upcoming" | "rejected";

@@ -336,7 +336,7 @@ export function DashboardClient({ initialData, topPriorityTickets, adminName }: 
           <DistributionDonutChart ariaLabel="Ticket status distribution" config={statusChartConfig} description="All tickets grouped by lifecycle status." items={statuses} />
         </AnalyticsCard>
         <AnalyticsCard icon={Gauge} title="Reports by Citizen Severity">
-          <SeverityRadialChart ariaLabel="Reports by citizen severity" config={severityChartConfig} description="Citizen-selected severity in the latest 30 days; not system urgency." items={severities} />
+          <SeverityRadialChart ariaLabel="Reports by citizen severity" config={severityChartConfig} description="Citizen-selected severity in the latest 30 days; not a system score." items={severities} />
         </AnalyticsCard>
         {departments && (
           <AnalyticsCard icon={Building2} title="Department Workload">
