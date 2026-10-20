@@ -38,7 +38,6 @@ interface FilterState {
   dateTo: string;
   ticketStatus: string;
   ticketCategory: string;
-  ticketUrgency: string;
   workOrderStatus: string;
   assignedAdminId: string;
 }
@@ -52,7 +51,6 @@ function initialFilterState(query: Record<string, string | undefined>, sessionOf
     ticketStatus:
       query.status === "all" || (TICKET_STATUSES as string[]).includes(query.status ?? "") ? (query.status as string) : "all",
     ticketCategory: (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "") ? (query.category as string) : "",
-    ticketUrgency: ["Low", "Medium", "High"].includes(query.urgency ?? "") ? (query.urgency as string) : "",
     workOrderStatus: (WORK_ORDER_STATUSES as string[]).includes(query.workOrderStatus ?? "") ? (query.workOrderStatus as string) : "all",
     assignedAdminId: query.assignedAdminId ?? "",
   };
@@ -63,7 +61,6 @@ function buildTicketExportParams(f: FilterState): URLSearchParams {
   if (f.office !== "all") params.set("office", f.office);
   if (f.ticketStatus !== "all") params.set("status", f.ticketStatus);
   if (f.ticketCategory) params.set("category", f.ticketCategory);
-  if (f.ticketUrgency) params.set("urgency", f.ticketUrgency);
   if (f.dateFrom) params.set("dateFrom", f.dateFrom);
   if (f.dateTo) params.set("dateTo", f.dateTo);
   return params;
@@ -240,7 +237,7 @@ export function ReportsWorkspace({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Ticket Export</CardTitle>
-            <CardDescription>Filter tickets by status, category, and urgency, then export as CSV.</CardDescription>
+            <CardDescription>Filter tickets by status and category, then export as CSV.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-3">
@@ -257,15 +254,6 @@ export function ReportsWorkspace({
                 <SelectContent>
                   <SelectItem value="all">All categories</SelectItem>
                   {TICKET_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select onValueChange={(v) => updateFilter({ ticketUrgency: v === "all" ? "" : v })} value={filters.ticketUrgency || "all"}>
-                <SelectTrigger aria-label="Ticket urgency"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All urgency bands</SelectItem>
-                  <SelectItem value="Low">Low</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="High">High</SelectItem>
                 </SelectContent>
               </Select>
             </div>

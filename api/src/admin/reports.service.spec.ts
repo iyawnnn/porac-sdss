@@ -88,8 +88,7 @@ describe('ReportsService.ticketsCsv', () => {
         assigned_office: 'MEO',
         category: 'Pothole',
         barangay_name: 'Poblacion',
-        urgency_band: 'High',
-        priority_score: 87,
+        priority_index: 64,
         member_count: 3,
         created_at: '2026-01-05T00:00:00.000Z',
         updated_at: '2026-01-06T00:00:00.000Z',
@@ -101,9 +100,17 @@ describe('ReportsService.ticketsCsv', () => {
 
     const [header, row] = csv.trim().split('\r\n');
     expect(header).toBe(
-      'Ticket ID,Status,Assigned Office,Urgency Band,Hazard Urgency Score,Category,Barangay,Report Count,Created At,Updated At',
+      'Ticket ID,Status,Assigned Office,Operational Priority,Category,Barangay,Report Count,Created At,Updated At',
     );
-    expect(row).toBe('42,Reported,MEO,High,87,Pothole,Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z');
+    expect(row).toBe('42,Reported,MEO,64,Pothole,Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z');
+  });
+
+  // Manuscript revision Phase 1, step 4: no Hazard Urgency column or value
+  // in the ticket export.
+  it('has no Hazard Urgency column', async () => {
+    const { service } = makeService({ getTicketsForExport: jest.fn().mockResolvedValue([]) });
+    const header = (await service.ticketsCsv({}, MEO_OFFICER)).trim();
+    expect(header).not.toMatch(/urgency/i);
   });
 
   it('produces just a header row when there are no matching tickets', async () => {

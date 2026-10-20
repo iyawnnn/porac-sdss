@@ -86,8 +86,10 @@ export class ReportsService {
       { header: 'Ticket ID', value: (r) => r.id },
       { header: 'Status', value: (r) => r.status },
       { header: 'Assigned Office', value: (r) => r.assigned_office },
-      { header: 'Urgency Band', value: (r) => r.urgency_band },
-      { header: 'Hazard Urgency Score', value: (r) => r.priority_score },
+      // Replaced the former 'Urgency Band' / 'Hazard Urgency Score' columns
+      // (manuscript revision Phase 1, step 4). The raw 1-100 value only; the
+      // Low/Medium/High word the queue shows next to it is a display band.
+      { header: 'Operational Priority', value: (r) => r.priority_index },
       { header: 'Category', value: (r) => r.category },
       { header: 'Barangay', value: (r) => r.barangay_name },
       { header: 'Report Count', value: (r) => r.member_count },

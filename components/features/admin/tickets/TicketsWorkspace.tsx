@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ActivityIcon,
-  CloudRainIcon,
   DownloadIcon,
   GaugeIcon,
   MapPinIcon,
@@ -24,7 +23,7 @@ import {
   TICKET_STATUSES,
   type TicketSort,
 } from "@/lib/types/admin-ticket-constants";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
+import { priorityBandLabel } from "@/lib/utils/ui/priority";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -50,11 +49,6 @@ import {
 import { useQueueKeyboard } from "./queue/useQueueKeyboard";
 import { useQueueSelection } from "./queue/useQueueSelection";
 
-interface RecomputeResult {
-  updated: number;
-  rain1hMm: number;
-}
-
 interface Barangay {
   id: number;
   name: string;
@@ -67,7 +61,6 @@ interface QueryState {
   status: string;
   category: string;
   barangayId: string;
-  urgency: string;
   sort: TicketSort;
   search: string;
   disputed: boolean;
@@ -92,17 +85,12 @@ function initialQueryState(
   const category = (ALL_TICKET_CATEGORIES as readonly string[]).includes(query.category ?? "")
     ? (query.category as string)
     : "";
-  const urgency =
-    query.urgency === "Low" || query.urgency === "Medium" || query.urgency === "High"
-      ? query.urgency
-      : "";
+  // A retired Hazard Urgency sort (priority_desc/priority_asc) or urgency=
+  // filter in an old bookmark falls back to the default order and no filter,
+  // exactly as the API's parseTicketQuery does (manuscript revision Phase 1,
+  // step 4).
   const sort: TicketSort =
-    query.sort === "priority_asc" ||
-    query.sort === "priority_desc" ||
-    query.sort === "op_priority_asc" ||
-    query.sort === "newest"
-      ? query.sort
-      : "op_priority_desc";
+    query.sort === "op_priority_asc" || query.sort === "newest" ? query.sort : "op_priority_desc";
   const limit = (PAGE_LIMITS as readonly number[]).includes(Number(query.limit))
     ? Number(query.limit)
     : 15;
@@ -112,7 +100,6 @@ function initialQueryState(
     status,
     category,
     barangayId: query.barangayId ?? "",
-    urgency,
     sort,
     search: query.search ?? "",
     disputed: query.disputed === "true",
@@ -130,7 +117,6 @@ function buildParams(state: QueryState): URLSearchParams {
   params.set("page", String(state.page));
   if (state.category) params.set("category", state.category);
   if (state.barangayId) params.set("barangayId", state.barangayId);
-  if (state.urgency) params.set("urgency", state.urgency);
   if (state.search) params.set("search", state.search);
   if (state.disputed) params.set("disputed", "true");
   return params;
@@ -146,11 +132,9 @@ function matchBuiltInView(state: QueryState, defaultOffice: string): BuiltInView
   // status=all (see selectBuiltInView), so it's matched against that
   // instead of the "active" requirement every other built-in tab needs.
   if (state.disputed) {
-    return state.status !== "all" || state.urgency || state.office !== defaultOffice ? null : "disputed";
+    return state.status !== "all" || state.office !== defaultOffice ? null : "disputed";
   }
   if (state.status !== "active") return null;
-  if (state.urgency === "High") return state.office !== defaultOffice ? null : "highUrgency";
-  if (state.urgency) return null;
   if (state.office === "MEO" && defaultOffice !== "MEO") return "meo";
   if (state.office === "MDRRMO" && defaultOffice !== "MDRRMO") return "mdrrmo";
   if (state.office === defaultOffice) return "allActive";
@@ -160,7 +144,6 @@ function matchBuiltInView(state: QueryState, defaultOffice: string): BuiltInView
 export function TicketsWorkspace({
   initialData,
   initialQuery,
-  initialRecompute,
   initialViewCounts,
   initialSavedViews,
   barangays,
@@ -169,7 +152,6 @@ export function TicketsWorkspace({
 }: {
   initialData: PaginatedTickets;
   initialQuery: Record<string, string | undefined>;
-  initialRecompute: RecomputeResult;
   initialViewCounts: TicketViewCounts;
   initialSavedViews: SavedView[];
   barangays: Barangay[];
@@ -185,7 +167,6 @@ export function TicketsWorkspace({
   );
   const [searchInput, setSearchInput] = useState(query.search);
   const [data, setData] = useState(initialData);
-  const [recompute, setRecompute] = useState(initialRecompute);
   const [viewCounts, setViewCounts] = useState(initialViewCounts);
   const [savedViews, setSavedViews] = useState(initialSavedViews);
   const [activeSavedViewId, setActiveSavedViewId] = useState<number | null>(null);
@@ -238,7 +219,6 @@ export function TicketsWorkspace({
       .then((json) => {
         if (cancelled) return;
         setData(json);
-        setRecompute(json.recompute);
         // The tab counts are recounted server-side on every list fetch, so a
         // bulk action that moves tickets out of a tab updates that tab's number
         // in the same round trip as the rows.
@@ -305,7 +285,6 @@ export function TicketsWorkspace({
       status: key === "disputed" ? "all" : "active",
       category: "",
       barangayId: "",
-      urgency: key === "highUrgency" ? "High" : "",
       search: "",
       disputed: key === "disputed",
       page: 1,
@@ -361,7 +340,7 @@ export function TicketsWorkspace({
 
   // --- Bulk actions --------------------------------------------------------
   // Every bulk call refetches the list afterwards rather than patching rows in
-  // place: the server may have skipped some tickets, recomputed urgency, and
+  // place: the server may have skipped some tickets, recalculated priority, and
   // moved rows out of the current filter entirely. Re-reading is the only way
   // the rows, the tab counts and the KPI row stay consistent with each other.
   const runBulk = useCallback(
@@ -421,7 +400,6 @@ export function TicketsWorkspace({
     status: query.status,
     category: query.category,
     barangayId: query.barangayId,
-    urgency: query.urgency,
     disputed: query.disputed,
   };
 
@@ -431,7 +409,6 @@ export function TicketsWorkspace({
     query.status !== "active" ? { key: "status", label: `Status: ${query.status === "all" ? "All" : query.status}` } : null,
     query.category ? { key: "category", label: `Category: ${query.category}` } : null,
     query.barangayId ? { key: "barangayId", label: `Barangay: ${barangayName ?? query.barangayId}` } : null,
-    query.urgency ? { key: "urgency", label: `Urgency: ${query.urgency}` } : null,
     query.disputed ? { key: "disputed", label: "Disputed only" } : null,
   ].filter((chip): chip is FilterChip => chip !== null);
 
@@ -445,8 +422,6 @@ export function TicketsWorkspace({
         return updateFilter({ category: "" });
       case "barangayId":
         return updateFilter({ barangayId: "" });
-      case "urgency":
-        return updateFilter({ urgency: "" });
       case "disputed":
         return updateFilter({ disputed: false });
     }
@@ -461,7 +436,6 @@ export function TicketsWorkspace({
       status: "active",
       category: "",
       barangayId: "",
-      urgency: "",
       search: "",
       disputed: false,
       page: 1,
@@ -478,12 +452,16 @@ export function TicketsWorkspace({
   const activeCount = data.tickets.filter(
     (t) => t.status === "Reported" || t.status === "Under Review" || t.status === "In Progress",
   ).length;
-  const highUrgencyCount = data.tickets.filter(
-    (t) => getUrgencyBadgeConfig(t.priority_score).level === "HIGH",
+  // Operational Priority (priority_index) replaced the two Hazard Urgency tiles
+  // in manuscript revision Phase 1, step 4. "High" is Operational Priority's
+  // own display band from lib/utils/ui/priority.ts (67-100), never
+  // urgency_level.
+  const highPriorityCount = data.tickets.filter(
+    (t) => priorityBandLabel(t.priority_index) === "High",
   ).length;
-  const scored = data.tickets.map((t) => t.priority_score).filter((s): s is number => s !== null);
-  const avgUrgency = scored.length
-    ? Math.round(scored.reduce((sum, s) => sum + s, 0) / scored.length)
+  const prioritized = data.tickets.map((t) => t.priority_index).filter((s): s is number => s !== null);
+  const avgPriority = prioritized.length
+    ? Math.round(prioritized.reduce((sum, s) => sum + s, 0) / prioritized.length)
     : null;
   const barangayCount = new Set(data.tickets.map((t) => t.barangay_id)).size;
 
@@ -494,13 +472,9 @@ export function TicketsWorkspace({
   const sortLabel =
     query.sort === "newest"
       ? "newest first"
-      : query.sort === "priority_asc"
-        ? "hazard urgency, lowest first"
-        : query.sort === "priority_desc"
-          ? "hazard urgency, highest first"
-          : query.sort === "op_priority_asc"
-            ? "operational priority, lowest first"
-            : "operational priority, highest first";
+      : query.sort === "op_priority_asc"
+        ? "operational priority, lowest first"
+        : "operational priority, highest first";
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -513,16 +487,9 @@ export function TicketsWorkspace({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* initialRecompute was fetched and discarded before this rebuild. It
-              is the freshest thing on the page — the rain figure every urgency
-              score was just recomputed against — and belongs beside the data it
-              explains rather than in the layout's app header, which has no
-              access to it. */}
-          <span className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-[var(--brand-border)] bg-[var(--brand-subtle)] px-2.5 text-xs font-medium text-primary">
-            <CloudRainIcon aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
-            Rain {recompute.rain1hMm.toFixed(1)} mm/h &middot; {recompute.updated} urgency score
-            {recompute.updated === 1 ? "" : "s"} recomputed
-          </span>
+          {/* The city-wide rain / "urgency scores recomputed" pill was removed
+              with Hazard Urgency (manuscript revision Phase 1, step 4). Per-ticket
+              rainfall context returns on Ticket Detail in Phase 4. */}
           <Button asChild size="sm" variant="outline">
             <a href={`/api/admin/reports/tickets.csv?${exportParams.toString()}`}>
               <DownloadIcon />
@@ -546,8 +513,8 @@ export function TicketsWorkspace({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard icon={TicketIcon} label="Total tickets" note="all filters" value={data.total.toLocaleString()} />
         <KpiCard icon={ActivityIcon} label="Active" note="on this page" value={activeCount.toLocaleString()} />
-        <KpiCard icon={TriangleAlertIcon} label="High urgency" note="&ge; 80" value={highUrgencyCount.toLocaleString()} />
-        <KpiCard icon={GaugeIcon} label="Avg. urgency" note="of 100" value={avgUrgency === null ? "—" : String(avgUrgency)} />
+        <KpiCard icon={TriangleAlertIcon} label="High priority" note="&ge; 67, this page" value={highPriorityCount.toLocaleString()} />
+        <KpiCard icon={GaugeIcon} label="Avg. priority" note="of 100" value={avgPriority === null ? "—" : String(avgPriority)} />
         <KpiCard icon={MapPinIcon} label="Barangays" note="affected" value={barangayCount.toLocaleString()} />
       </div>
 

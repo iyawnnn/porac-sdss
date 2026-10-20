@@ -4,17 +4,23 @@ import { useEffect, useState } from "react";
 import { ChevronsUpDown, Loader2 } from "lucide-react";
 import type { AdminTicketRow } from "@/lib/types/admin-tickets";
 import type { PaginatedTickets } from "@/lib/types/admin-tickets";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
+import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import styles from "./TicketComboboxSelect.module.css";
 
-function UrgencyBadge({ priorityScore }: { priorityScore: number | null }) {
-  const badge = getUrgencyBadgeConfig(priorityScore);
+// Operational Priority (priority_index) with its own display band
+// (lib/utils/ui/priority.ts). Replaced the Hazard Urgency badge in manuscript
+// revision Phase 1, step 4. Also used by CreateWorkOrderDialog.
+export function PriorityBadge({ priorityIndex }: { priorityIndex: number | null }) {
   return (
-    <span className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${badge.className}`}>
-      {badge.label}
+    <span
+      className={`inline-flex h-5 items-center gap-1 rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${priorityBandClass(priorityIndex)}`}
+      title="Operational Priority"
+    >
+      <span className="font-mono tabular-nums">{priorityIndex ?? "—"}</span>
+      {priorityBandLabel(priorityIndex)}
     </span>
   );
 }
@@ -126,7 +132,7 @@ export function TicketComboboxSelect({
                         </span>
                         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <span className="truncate">{ticket.barangay_name}</span>
-                          <UrgencyBadge priorityScore={ticket.priority_score} />
+                          <PriorityBadge priorityIndex={ticket.priority_index} />
                           <span>{ticket.assigned_office}</span>
                         </span>
                       </div>

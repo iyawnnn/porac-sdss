@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ChevronDownIcon, EllipsisIcon, PanelRightOpenIcon } from "lucide-react";
 import type { AdminTicketRow } from "@/lib/types/admin-tickets";
-import { getUrgencyBadgeConfig } from "@/lib/utils/ui/urgency";
+import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { relativeAge } from "@/lib/utils/ui/time";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -14,12 +14,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TICKET_STATUS_STYLE } from "../../shared/StatusPill";
 import { isColumnVisible, type QueueColumnKey, type QueueColumnVisibility } from "./columns";
-import { UrgencyMeter } from "./UrgencyMeter";
 
 // The linear status ladder, mirroring NEXT_STATUS in
-// api/src/admin/ticket-constants.ts. Duplicated here for the same reason
-// lib/utils/urgency.ts duplicates the scoring math: this copy only decides what
-// the row's menu OFFERS. The server re-derives the real transition and is the
+// api/src/admin/ticket-constants.ts. Duplicated here on purpose: this copy
+// only decides what the row's menu OFFERS. The server re-derives the real transition and is the
 // only thing that can perform it, so a drifted copy can mislabel a menu item
 // but can never cause an illegal transition.
 const NEXT_STATUS: Record<string, string> = {
@@ -56,7 +54,6 @@ export function QueueRow({
   onAdvanceStatus: () => void;
   onFocus: () => void;
 }) {
-  const urgencyBadge = getUrgencyBadgeConfig(ticket.priority_score);
   const statusStyle = TICKET_STATUS_STYLE[ticket.status] ?? TICKET_STATUS_STYLE.Reported;
   const nextStatus = NEXT_STATUS[ticket.status];
   const show = (key: QueueColumnKey) => isColumnVisible(columnVisibility, key);
@@ -67,7 +64,7 @@ export function QueueRow({
         selected ? "bg-[var(--brand-wash)] shadow-[inset_2px_0_0_var(--brand)]" : ""
       } ${focused ? "outline outline-2 -outline-offset-2 outline-ring" : ""}`}
       data-ticket-row={ticket.id}
-      data-urgency-score={ticket.priority_score ?? ""}
+      data-priority-index={ticket.priority_index ?? ""}
       onMouseDown={onFocus}
       role="row"
       style={{ gridTemplateColumns, paddingTop: padding, paddingBottom: padding }}
@@ -115,18 +112,21 @@ export function QueueRow({
         </span>
       )}
 
-      {show("urgency") && (
-        <span className="flex justify-center" role="cell">
-          <UrgencyMeter priorityScore={ticket.priority_score} />
+      {show("priority") && (
+        <span className="text-center font-mono text-[13px] font-semibold tabular-nums" role="cell">
+          {ticket.priority_index ?? "—"}
         </span>
       )}
 
+      {/* Operational Priority's own display band (lib/utils/ui/priority.ts:
+          1-33 Low, 34-66 Medium, 67-100 High) — never urgency_level. Text
+          label always rendered beside the color, so it is not color-only. */}
       {show("level") && (
         <span role="cell">
           <span
-            className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${urgencyBadge.className}`}
+            className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${priorityBandClass(ticket.priority_index)}`}
           >
-            {urgencyBadge.label}
+            {priorityBandLabel(ticket.priority_index)}
           </span>
         </span>
       )}

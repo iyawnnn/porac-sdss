@@ -89,6 +89,7 @@ pnpm --prefix api migrate:admin-focal-role          # admin_role enum gains 'foc
 pnpm --prefix api migrate:report-acknowledgments    # report_acknowledgments, UNIQUE(report_id) — Focal Intake (Batch 2)
 pnpm --prefix api migrate:report-intake-actions     # report_intake_actions, append-only screened/forwarded/escalated trail (Batch 2)
 pnpm --prefix api migrate:operational-assessments   # operational_assessments, UNIQUE(ticket_id) — one current assessment per ticket (Batch 3)
+pnpm --prefix api migrate:saved-views-retire-hazard-urgency  # rewrites Ticket Queue saved views off the retired Hazard Urgency sort/filter (manuscript revision Phase 1, step 4); prints before/after counts, safe to re-run
 pnpm --prefix api verify:config                     # print computed elev_min/elev_max etc.
 pnpm --prefix api verify:city-boundary              # confirm city_boundary_osm is populated with valid geometry
 pnpm --prefix api seed:admin -- <email> <password> <MEO|MDRRMO|-> <officer|supervisor|focal|system_admin>  # use '-' for office with system_admin; focal must be MDRRMO

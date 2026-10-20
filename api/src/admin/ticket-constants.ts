@@ -2,20 +2,14 @@
 // copy stays in place until Phase 9 (client components import it directly).
 export type TicketStatus =
   'Reported' | 'Under Review' | 'In Progress' | 'Resolved' | 'Rejected';
-// 'priority_desc'/'priority_asc' are legacy key names — they sort by
-// t.priority_score (Hazard Urgency) and are preserved verbatim (never
-// repurposed) since existing saved views (admin_saved_views.query) may
-// already carry them literally in a stored URL querystring; silently
-// changing what they mean would silently change those saved views' order.
-// 'op_priority_desc'/'op_priority_asc' (Operational Priority / priority_index
-// — Batch 4) are the new canonical names and 'op_priority_desc' is now the
-// default the queue falls back to when no sort is specified at all.
-export type TicketSort =
-  | 'priority_desc'
-  | 'priority_asc'
-  | 'op_priority_desc'
-  | 'op_priority_asc'
-  | 'newest';
+// Operational Priority (priority_index) is the queue's only score-based
+// order; 'op_priority_desc' is the default. The former Hazard Urgency sorts
+// ('priority_desc'/'priority_asc', ordering by t.priority_score) were retired
+// in manuscript revision Phase 1, step 4: an incoming request that still
+// carries one falls back to the default, and stored saved views were
+// rewritten to the op_priority_* equivalents by
+// drizzle/0034_saved_views_retire_hazard_urgency.sql.
+export type TicketSort = 'op_priority_desc' | 'op_priority_asc' | 'newest';
 
 export const TICKET_STATUSES: TicketStatus[] = [
   'Reported',

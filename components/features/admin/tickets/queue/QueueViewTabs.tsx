@@ -7,7 +7,7 @@ import type { SavedView, TicketViewCounts } from "@/lib/types/admin-tickets";
 // `null` means the filters are ad-hoc and no tab is underlined — deliberately
 // not "fall back to All active", which would claim a preset the admin is not
 // actually looking at.
-export type BuiltInViewKey = "allActive" | "highUrgency" | "disputed" | "meo" | "mdrrmo";
+export type BuiltInViewKey = "allActive" | "disputed" | "meo" | "mdrrmo";
 
 export interface BuiltInView {
   key: BuiltInViewKey;
@@ -26,7 +26,8 @@ export function buildBuiltInViews(
 ): BuiltInView[] {
   const views: BuiltInView[] = [
     { key: "allActive", label: "All active", count: counts.allActive },
-    { key: "highUrgency", label: "High urgency", count: counts.highUrgency },
+    // The "High urgency" tab was removed with Hazard Urgency (manuscript
+    // revision Phase 1, step 4).
     { key: "disputed", label: "Disputed", count: counts.disputed },
   ];
   // An office admin sees only their own office, so an MEO/MDRRMO split would

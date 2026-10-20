@@ -558,30 +558,33 @@ test("barangay filter narrows the queue to only that barangay", async ({ page, r
   }
 });
 
-test("Hazard Urgency deep-link filters the queue and survives an unrelated filter change (Phase 5)", async ({ page }) => {
+// Manuscript revision Phase 1, step 4: the Hazard Urgency filter and sorts are
+// retired. An old bookmark that still carries them must open the normal
+// Operational Priority queue — no urgency chip, no urgency control, and the
+// retired keys are not echoed back into the URL or the API request.
+test("a retired Hazard Urgency deep link falls back to the Operational Priority queue", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
 
-  // Same URL shape as the dashboard's "High Urgency Tickets" quick action.
-  await page.goto("/admin/tickets?status=all&urgency=High");
+  await page.goto("/admin/tickets?status=all&urgency=High&sort=priority_desc");
   await page.waitForLoadState("networkidle");
 
-  // The active filter is advertised twice now: as a toolbar chip, and inside
-  // the popover. Both must agree with the URL.
-  await expect(page.getByRole("button", { name: "Urgency: High" })).toBeVisible();
-  await expect(page).toHaveURL(/[?&]urgency=High(&|$)/);
+  await expect(page.getByRole("button", { name: "Urgency: High" })).toHaveCount(0);
+  await expect(page.getByText(/sorted by operational priority, highest first/)).toBeVisible();
+  await expect(page.getByText("High urgency", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/urgency score/i)).toHaveCount(0);
 
   await openQueueFilters(page);
-  await expect(page.getByLabel("Hazard Urgency", { exact: true })).toHaveText("High");
+  await expect(page.getByLabel("Hazard Urgency", { exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  // An unrelated filter change must not silently drop the urgency filter.
-  const filtered = page.waitForResponse((r) => r.url().includes("/api/admin/tickets?") && r.url().includes("urgency=High"));
+  // Any refetch rebuilds the URL from parsed state, so the retired keys drop.
   await page.getByRole("button", { name: "Sort tickets" }).click();
+  await expect(page.getByRole("menuitemradio", { name: /Hazard Urgency/ })).toHaveCount(0);
+  const refetch = page.waitForResponse((r) => r.url().includes("/api/admin/tickets?") && r.url().includes("sort=newest"));
   await page.getByRole("menuitemradio", { name: "Newest first" }).click();
-  await filtered;
-
-  await expect(page).toHaveURL(/[?&]urgency=High(&|$)/);
-  await expect(page.getByRole("button", { name: "Urgency: High" })).toBeVisible();
+  const res = await refetch;
+  expect(res.url()).not.toContain("urgency=");
+  await expect(page).not.toHaveURL(/[?&]urgency=/);
 });
 
 // --- 9. Pagination and sorting -------------------------------------------------
@@ -606,22 +609,22 @@ test("pagination advances to the next page of results when enough tickets exist"
   expect(secondPageFirstRow).not.toBe(firstPageFirstRow);
 });
 
-test("sort control reorders tickets by urgency", async ({ page }) => {
+test("sort control reorders tickets by Operational Priority", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/tickets?status=all&limit=50");
   await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "Sort tickets" }).click();
-  await page.getByRole("menuitemradio", { name: "Urgency: lowest" }).click();
-  await expect(page).toHaveURL(/[?&]sort=priority_asc(&|$)/);
+  await page.getByRole("menuitemradio", { name: "Operational Priority: Low to High" }).click();
+  await expect(page).toHaveURL(/[?&]sort=op_priority_asc(&|$)/);
   await page.waitForLoadState("networkidle");
 
   // Read the score off the row's own data attribute rather than a cell index:
   // the queue's columns are user-hideable, so nth-child is no longer a stable
-  // way to find the urgency column.
+  // way to find the priority column.
   const scores = await queueRows(page).evaluateAll((rows) =>
     rows
-      .map((row) => (row as HTMLElement).dataset.urgencyScore)
+      .map((row) => (row as HTMLElement).dataset.priorityIndex)
       .filter((v): v is string => !!v)
       .map(Number),
   );

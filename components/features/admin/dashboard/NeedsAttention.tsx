@@ -8,7 +8,7 @@ import { CardHeaderRow } from "../shared/CardHeaderRow";
 
 // Compact awareness feed, not a work queue — one aggregate row per
 // condition (icon, label, count, short description), never a per-item list.
-// The detailed actionable queue lives in DashboardClient's "Highest Urgency
+// The detailed actionable queue lives in DashboardClient's "Highest Priority
 // Actions" table; this rail must not duplicate the same tickets one-by-one.
 function AttentionRow({ icon: Icon, tone, label, count, description, href }: { icon: LucideIcon; tone: string; label: string; count: number; description: string; href?: string }) {
   const nonzero = count > 0;

@@ -132,12 +132,12 @@ Prior to Phase 2 of the manuscript-alignment work, `urgency_band` was computed i
 
 | Surface | Shows |
 |---|---|
-| **Ticket Queue** (`TicketsWorkspace.tsx`) | `priority_score` as the sortable number, `urgency_level` as the badge; default sort is urgency-descending |
+| **Ticket Queue** (`TicketsWorkspace.tsx`) | **No Hazard Urgency since manuscript revision Phase 1, step 4.** Shows `priority_index` (Operational Priority) with its own Low/Medium/High display band; default and only score sort is Operational Priority |
 | **Ticket Detail** (`app/admin/tickets/[id]`) | Urgency decomposition with the three factors, their explicit ⅓ weights, and per-factor contributions; separately, a **Priority breakdown** card for `priority_index` |
 | **Admin Map** (`MapClient.tsx`, `TicketPopup.tsx`) | Urgency-driven pin styling; heatmap intensity driven by `priority_index` |
-| **Dashboard** | High-urgency counts; "Needs Attention" surfaces active HIGH-urgency tickets with unfinished work |
+| **Dashboard** | High-urgency counts; "Needs Attention" surfaces active HIGH-urgency tickets with unfinished work (both removed in Phase 1, step 6). The "Highest Priority Actions" table ranks by Operational Priority since Phase 1, step 4 |
 | **Barangay Insights** (`BarangayProfile.tsx`) | High-urgency ticket counts per barangay. Elevation min/avg/max is shown as **display-only context, never a filter or scoring input** |
-| **CSV export** | Urgency band and priority score columns |
+| **CSV export** | No Hazard Urgency since Phase 1, step 4 — an Operational Priority (`priority_index`) column instead |
 | **Citizen views** (`app/(citizen)/**`) | `urgency_band` only. Citizens never see the factor breakdown, `priority_index`, or `priority_score` — see §10.6 |
 
 **Frontend/backend consistency was verified, not assumed.** `lib/utils/urgency.ts` and `lib/utils/scoring.ts` are duplicates of their `api/src` counterparts; a line-by-line diff shows they are **identical apart from quote style and line wrapping**. Same formulas, same weights, same thresholds, same saturation constants. The frontend copies exist for badge/label display only and are never authoritative.

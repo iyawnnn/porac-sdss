@@ -1,10 +1,11 @@
 // Operational Priority Index (1-100, severity/age/density model,
-// lib/scoring.ts) badge color — a separate axis from priority_score/
-// urgencyLevel (lib/triage/urgency.ts), so it gets its own scale rather
-// than reusing that one. Thirds, no stored thresholds elsewhere to derive
-// from. Not the Hazard Urgency Score/Level shown on the Ticket Queue table
-// (see lib/utils/ui/urgency.ts) — this renders only on the ticket detail
-// page's Priority breakdown.
+// lib/utils/scoring.ts) display band — Operational Priority's OWN scale,
+// never derived from Hazard Urgency's priority_score/urgency_level. Thirds
+// (1-33 Low, 34-66 Medium, 67-100 High): a UI display convention, not a
+// manuscript-defined threshold and not stored anywhere. Used by the ticket
+// detail page's Priority breakdown and, since manuscript revision Phase 1,
+// step 4, by the Ticket Queue's Level column / KPI tile and the dashboard's
+// Highest Priority Actions table.
 export function priorityBandClass(priority: number | null): string {
   if (priority === null) return "bg-line-100 text-ink-500";
   if (priority < 34) return "bg-emerald-100 text-emerald-700";
