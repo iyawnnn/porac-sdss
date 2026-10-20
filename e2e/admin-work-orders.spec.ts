@@ -29,9 +29,8 @@ async function signupCitizen(page: Page, label: string): Promise<{ email: string
 // different ticket — or one mid-mutation — by the time a later test reads
 // it). "Pothole / Road Surface Damage" always routes to MEO
 // (api/src/common/utils/office.ts); the ~±550m jitter mirrors
-// admin-tickets.spec.ts's createThrowawayReport, comfortably clear of the
-// 25m dedup merge radius so this never silently merges into another
-// fixture's ticket.
+// admin-tickets.spec.ts's createThrowawayReport (defensive only since
+// manuscript revision Phase 1, step 3 — every report creates its own ticket).
 async function createDisposableTicket(browser: Browser, label: string): Promise<number> {
   const context = await browser.newContext();
   const page = await context.newPage();

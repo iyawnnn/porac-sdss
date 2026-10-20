@@ -78,6 +78,16 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 1, step 3 — automatic grouping removed from report submission — **completed (code + unit tests; not yet exercised against a real database)**
+
+- `ReportsService.submit` now creates a new ticket (`member_count` 1) for every report. Removed: the same-category active-ticket lookup (`ST_DWithin` within `radiusForCategory` + 7-day `DUPLICATE_MERGE_WINDOW_DAYS`), the merge branch (report attached to the existing ticket, `member_count` increment, centroid and elevation recompute, Hazard Urgency rewrite of the merged ticket), the automatic `report_merged` citizen notifications, and the per-(category, barangay) `pg_advisory_xact_lock` that only serialized that lookup. Handoff Decision 1: only authorized Focal, MEO or MDRRMO personnel confirm a merge (Phase 3).
+- Unchanged: rate limiting, barangay containment, EXIF / location-mismatch / stale-photo / duplicate-image flags, office routing, the new-ticket notifications (citizen receipt, office, Focal fan-out), and the post-commit Hazard Urgency then Operational Priority recalculation. The submit response keeps its shape; `merged` is now always `false` and `memberCount` always `1`.
+- Kept for Phase 3: `api/src/common/utils/radius.ts` (`radiusForCategory`, the candidate-search radius; still 25 / 50 / 100 m — Phase 3 moves point concerns to the manuscript's 20 m) and `api/src/common/utils/distance.ts` (`haversineMeters`, still used for the location-mismatch flag). No API code calls `radiusForCategory` now; the seed scripts still do.
+- Kept but no longer used by the API: `api/src/common/utils/duplicate-detection.ts` (`DUPLICATE_MERGE_WINDOW_DAYS`). Phase 3 must not use it (no 7-day window in the manuscript); it stays only because `scripts/seed/seed-bulk-reports.ts` and `seed-demo-presentation.ts` import it. Those two seeds still build automatically merged demo tickets directly in SQL — reworked in Phase 8 together with the Hazard Urgency demo scenarios.
+- Existing multi-report tickets and old `report_merged` notifications are untouched history; the citizen report page still shows its merge banner for them.
+- No schema change, no migration.
+- Tests: `reports.service.spec.ts` replaces the merge-query wiring guards with guards that `submit()` has no merge lookup, no ticket UPDATE / centroid / `member_count` write, no `report_merged` notification, no advisory lock, exactly one ticket INSERT with `member_count` 1, and still records the rate-limit event in the transaction; notification call-site counts drop from 5 to 4 and Focal fan-out from 2 call sites to 1. Three Playwright specs only had stale merge-radius comments updated.
+
 ### Manuscript revision Phase 1, step 2 — 7-day escalation job removed — **completed (code + unit tests; not yet exercised against a real database)**
 
 - Deleted `EscalationService` (`api/src/domain/escalation.service.ts`) and its spec, its `DomainModule` registration, the `POST /cron/check-ticket-escalations` route, and that route's step in `.github/workflows/cron.yml`. The manuscript keeps 7 days only as Operational Priority's age cap `min(days / 7, 1)` (p. 74; handoff Decision 4).

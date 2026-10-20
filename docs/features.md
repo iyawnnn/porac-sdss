@@ -62,7 +62,7 @@ On submit, the server independently recomputes everything it will not trust from
 
 - **My Reports** (`/reports`) — list with category, barangay, status, and assigned office; a real empty state with a "Report Hazard" call to action for new accounts.
 - **Report detail** (`/dashboard/reports/[id]`) — a timeline of what has happened, starting from "Report submitted", plus the current status.
-- **Merge visibility** — when a report is deduplicated into an existing ticket (§5.3), the detail page shows *"Merged with an existing issue"* and *"Grouped with N other report(s)"*. The citizen is told their report joined a group, not that it was discarded.
+- **Merge visibility** — when a report belongs to a ticket with earlier reports (historical automatic merges; staff-confirmed merges from Phase 3), the detail page shows *"Merged with an existing issue"* and *"Grouped with N other report(s)"*. The citizen is told their report joined a group, not that it was discarded.
 - **Moderation visibility** — if an admin quarantines a report, the citizen sees a deliberately non-accusatory banner (*"Report under additional review"*) explaining it needs another look before appearing on the map, and that **this does not affect the ticket's progress**.
 
 Covered by `e2e/citizen-reports.spec.ts`.
@@ -81,7 +81,7 @@ A dispute never rolls the ticket status backwards and never feeds any score. Onl
 ### 2.5 Map and notifications
 
 - **Citizen map** (`/map`) — city-wide ticket pins with the municipal boundary overlay. Requires a citizen session (it is city-wide, not anonymous-public). Shows all active tickets (`Reported`, `Under Review`, `In Progress`) — `Resolved`/`Rejected` tickets are terminal and excluded; this matches the same 3-status "active" definition used by the admin map, dashboards, and every ticket-list query (Phase 5 fixed a prior omission where `Under Review` tickets were briefly invisible on this map).
-- **Notifications** — a bell with click-through to the relevant report. Citizen-facing types include `report_received`, `report_merged`, `report_quarantined`, `report_flagged_duplicate`, and the status-progression types (`ticket_under_review`, `ticket_in_progress`, `ticket_resolved`).
+- **Notifications** — a bell with click-through to the relevant report. Citizen-facing types include `report_received`, `report_merged` (historical only — no longer created since Phase 1, step 3), `report_quarantined`, `report_flagged_duplicate`, and the status-progression types (`ticket_under_review`, `ticket_in_progress`, `ticket_resolved`).
 
 ---
 
@@ -225,9 +225,9 @@ Coordinates are bounds-checked against the municipality before anything else. Th
 
 ### 4.3 Duplicate detection and merging
 
-A new report merges into an existing ticket when it falls within a **category-specific radius** (`api/src/common/utils/radius.ts`) of an active ticket **created within the last 7 days**. The window is anchored to the ticket's original creation and does not slide on merge.
+Since manuscript revision Phase 1, step 3, **every report creates its own ticket**. The former automatic merge (category-specific radius + 7-day window, `member_count` increment, centroid recompute, `report_merged` notification, `pg_advisory_xact_lock`) was removed: the manuscript requires a human to confirm any grouping (handoff Decision 1). Phase 3 adds suggested related tickets within 20 / 50 / 100 m (`api/src/common/utils/radius.ts`) and a staff Merge action with audit. Existing multi-report tickets from the old automatic merge are unchanged.
 
-Merging increments `member_count` and recomputes the ticket centroid — which is why urgency is scored on **tickets**, not reports. The merge transaction takes a `pg_advisory_xact_lock` keyed on `(category, barangay_id)`.
+Photo-level duplicate detection (`DUPLICATE_IMAGE`, perceptual hash) is a separate evidence check and still runs on every submission (§4.5).
 
 ### 4.4 Urgency scoring
 

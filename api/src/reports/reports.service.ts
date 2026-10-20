@@ -17,9 +17,7 @@ import { RateLimitService } from '../domain/ratelimit.service';
 import { RecomputeService } from '../domain/recompute.service';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { officeForCategory } from '../common/utils/office';
-import { radiusForCategory } from '../common/utils/radius';
 import { haversineMeters } from '../common/utils/distance';
-import { DUPLICATE_MERGE_WINDOW_DAYS } from '../common/utils/duplicate-detection';
 import { computeUrgency } from '../domain/urgency';
 import type { ReportInput } from '../contracts/schemas';
 import { TICKET_DISPUTE_REASON_MAX_LENGTH } from '../contracts/schemas';
@@ -42,6 +40,8 @@ export const OUTSIDE_MUNICIPALITY_MESSAGE =
 export interface SubmitReportResult {
   reportId: number;
   ticketId: number;
+  // Always false / 1 since Phase 1, step 3 (no automatic grouping). Kept so
+  // the submit response shape is unchanged for the citizen report form.
   merged: boolean;
   memberCount: number;
   barangay: string;
@@ -189,10 +189,9 @@ export class ReportsService {
       throw new BadRequestException(OUTSIDE_MUNICIPALITY_MESSAGE);
     }
 
-    // Step 3: elevation, office, radius, elevation bounds, rain.
+    // Step 3: elevation, office, elevation bounds, rain.
     const elevationM = await this.elevation.findNearestElevation(lat, lng);
     const office = officeForCategory(category);
-    const radius = radiusForCategory(category);
     const { elevMin, elevMax } = await this.appConfig.getElevationBounds();
     const rain1hMm = await this.weather.getCurrentRain1hMm();
 
@@ -266,21 +265,14 @@ export class ReportsService {
     // Step 7: tickets.geom / reports.geom / reports.pin_geom are NOT NULL,
     // so this goes through the raw PG client instead of Drizzle.
     const result = await sql.begin(async (tx) => {
-      // Serialize concurrent submissions for the same (category, barangay)
-      // so two reports racing within the same radius+window can't both
-      // miss each other and create duplicate tickets. Coarser than the
-      // actual dedup radius (locks the whole barangay, not just points
-      // within the radius), but that's fine at citizen-reporting volumes.
-      // Released automatically at transaction end.
-      // (Plain SELECT FOR UPDATE was tried first and dropped: combined
-      // with the <-> KNN ordering + LIMIT below it hits a Postgres planner
-      // limitation — "attempted to lock invisible tuple".)
-      await tx`SELECT pg_advisory_xact_lock(hashtext(${category}), ${barangay.id})`;
-
-      // Both branches below insert an identical report row and differ only
-      // in which ticket it attaches to, so the column list lives here once
-      // — adding a report column can't be applied to the merge path and
-      // missed on the new-ticket path (or vice versa).
+      // Manuscript revision Phase 1, step 3: every report creates its own
+      // report and ticket. Automatic grouping (the 7-day / tiered-radius
+      // merge into an existing active ticket, its centroid recompute and
+      // the report_merged notification) was removed — handoff Decision 1:
+      // only authorized staff confirm a merge, which returns as a
+      // human-confirmed action in Phase 3. The per-(category, barangay)
+      // advisory lock existed only to serialize that merge lookup, so it
+      // went with it.
       const insertReport = (ticketId: number) => tx<{ id: number }[]>`
         INSERT INTO reports (
           ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
@@ -296,25 +288,6 @@ export class ReportsService {
         RETURNING id
       `;
 
-      // PLAN.md §6: same category, active ticket, created within the last
-      // DUPLICATE_MERGE_WINDOW_DAYS days (anchored to the ticket's original
-      // created_at — merging additional reports never slides this window),
-      // within the category's tiered radius.
-      const [existing] = await tx<{ id: number; member_count: number }[]>`
-        SELECT id, member_count
-        FROM tickets
-        WHERE category = ${category}
-          AND status IN ('Reported', 'Under Review', 'In Progress')
-          AND created_at > now() - make_interval(days => ${DUPLICATE_MERGE_WINDOW_DAYS})
-          AND ST_DWithin(
-            geom::geography,
-            ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography,
-            ${radius}
-          )
-        ORDER BY geom <-> ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)
-        LIMIT 1
-      `;
-
       await this.rateLimit.recordRateLimitEvent(
         tx,
         citizen.citizenId,
@@ -322,85 +295,6 @@ export class ReportsService {
         lat,
         lng,
       );
-
-      if (existing) {
-        const [report] = await insertReport(existing.id);
-
-        const memberCount = existing.member_count + 1;
-
-        const [centroid] = await tx<{ lng: number; lat: number }[]>`
-          SELECT ST_X(c) AS lng, ST_Y(c) AS lat
-          FROM (
-            SELECT ST_Centroid(ST_Collect(geom)) AS c FROM reports WHERE ticket_id = ${existing.id}
-          ) t
-        `;
-
-        const ticketElevationM = await this.elevation.findNearestElevation(
-          centroid.lat,
-          centroid.lng,
-        );
-        const urgency = computeUrgency({
-          elevationM: ticketElevationM,
-          elevMin,
-          elevMax,
-          memberCount,
-          rain1hMm,
-        });
-
-        await tx`
-          UPDATE tickets SET
-            member_count = ${memberCount},
-            geom = ST_SetSRID(ST_MakePoint(${centroid.lng}, ${centroid.lat}), 4326),
-            elevation_m = ${ticketElevationM},
-            elevation_factor = ${urgency.elevationFactor},
-            precipitation_factor = ${urgency.precipitationFactor},
-            cluster_factor = ${urgency.clusterFactor},
-            urgency_score = ${urgency.urgencyScore},
-            urgency_band = ${urgency.urgencyBand},
-            updated_at = now()
-          WHERE id = ${existing.id}
-        `;
-
-        // Every distinct citizen on this ticket (the new reporter included,
-        // since their report was just inserted above) gets one notification
-        // — a merge is one event from each of their perspectives, atomic
-        // with the merge itself. Each links to that citizen's own report on
-        // this ticket, not the report that just triggered the merge.
-        const citizenRows = await tx<
-          { citizen_id: number; report_id: number }[]
-        >`
-          SELECT DISTINCT ON (citizen_id) citizen_id, id AS report_id
-          FROM reports WHERE ticket_id = ${existing.id}
-          ORDER BY citizen_id, id ASC
-        `;
-        for (const row of citizenRows) {
-          await this.notifications.createInTx(tx, {
-            recipientType: 'citizen',
-            recipientId: row.citizen_id,
-            type: 'report_merged',
-            title: 'Report update',
-            message: `Your report has been grouped with ${memberCount - 1} other report${memberCount - 1 === 1 ? '' : 's'} on this issue.`,
-            href: `/dashboard/reports/${row.report_id}`,
-            entityType: 'ticket',
-            entityId: existing.id,
-          });
-        }
-
-        await this.notifyFocalIntake(tx, {
-          office,
-          category,
-          barangayName: barangay.name,
-          ticketId: existing.id,
-          reportId: report.id,
-        });
-
-        return {
-          ticketId: existing.id,
-          reportId: report.id,
-          merged: true,
-          memberCount,
-        };
-      }
 
       const urgency = computeUrgency({
         elevationM,
@@ -466,7 +360,7 @@ export class ReportsService {
     });
 
     // Step 8: post-commit, not part of the transaction — a slow recompute
-    // here must never hold the advisory lock or the row locks open.
+    // here must never hold the submission transaction's row locks open.
     await this.recompute.recomputeActiveTicketUrgency();
     await this.operationalPriority.recalculateActiveTickets();
 

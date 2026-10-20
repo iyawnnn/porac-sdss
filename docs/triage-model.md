@@ -57,7 +57,7 @@ Five distinct concepts. The first four are frequently conflated; the last is unr
 
 ### 3.1 How cluster size is produced
 
-A new report merges into an existing ticket when it falls within a category-specific radius of an active ticket created in the last 7 days (`duplicate-detection.ts`, `radius.ts`). Merging increments `member_count` and recomputes the ticket centroid — which is why urgency is scored on **tickets**, not reports.
+**Since manuscript revision Phase 1, step 3 nothing increments `member_count` automatically**: every report creates its own ticket, so new tickets stay at `member_count` 1 and the Hazard Urgency cluster factor is constant for them until Hazard Urgency itself is removed later in Phase 1. Tickets from the former automatic merge (category radius + 7-day window) keep their counts. Human-confirmed merging returns in Phase 3 and will recalculate the surviving ticket's member count and Operational Priority.
 
 ### 3.2 Missing-data behavior
 

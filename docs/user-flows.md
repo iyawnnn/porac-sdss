@@ -63,7 +63,7 @@ Behind the scenes the server recomputes everything it will not take on trust: wh
 
 Two situations get their own explanation on that page:
 
-- **Merged into an existing ticket.** If the report matched a nearby recent one, the page says *"Merged with an existing issue"* and *"Grouped with N other report(s)."* The citizen is told their report joined a group — not that it was rejected or ignored.
+- **Merged into an existing ticket.** Shown only for reports that belong to a ticket with earlier reports (historical automatic merges; from Phase 3, merges confirmed by staff). The page says *"Merged with an existing issue"* and *"Grouped with N other report(s)."* The citizen is told their report joined a group — not that it was rejected or ignored.
 - **Held for review (quarantined).** If an admin quarantines the report, the citizen sees a deliberately neutral banner: the report *"needs another look before it appears on the public map"*, and explicitly that **this does not affect the ticket's progress**. The admin's internal reasoning for the quarantine is never shown.
 - **Acknowledged by municipal monitoring** (five-role Batch 2). Once Focal Personnel acknowledges the report (§5), the timeline gains its own **"Acknowledged by municipal monitoring"** event, sourced from `report_acknowledgments.acknowledged_at` — a municipal-monitoring signal, not a ticket-status value. **Acknowledged ≠ Under Review**: the report's status line above can still read `Reported` at the same time the timeline shows it acknowledged, and that is correct, not a bug.
 
@@ -80,7 +80,7 @@ Only one outstanding dispute per ticket. A dispute never moves the status backwa
 
 ### 1.5 Notifications and the map
 
-- **Notifications** arrive in a bell and link straight to the relevant report. Citizens receive: report received, report merged, report quarantined, flagged as duplicate, and each status change (under review, in progress, resolved).
+- **Notifications** arrive in a bell and link straight to the relevant report. Citizens receive: report received, report quarantined, flagged as duplicate, and each status change (under review, in progress, resolved).
 - **`/map`** shows city-wide ticket pins over the municipal boundary. It requires a citizen session — it is city-wide in *content*, not open to the public.
 
 **What a citizen never sees:** work orders, internal staff notes, moderation reasoning, the urgency factor breakdown, the priority index, or anyone else's report details.
@@ -270,11 +270,11 @@ A flooded road in Barangay Cangatba, during the rainy season.
 
 **1 — Maria reports it.** Standing at the edge of the water, she opens `/report`, photographs the flooded stretch, and the app reads the photo's GPS and confirms it is inside Porac. She picks **Localized Flooding**, marks severity **High**, and submits.
 
-**2 — The system processes it.** The server resolves the point to Cangatba, looks up the elevation from the DEM, checks the photo for integrity problems (none — fresh photo, GPS matches the pin), and searches for a nearby recent Localized Flooding ticket. There is one, filed 40 minutes earlier by a neighbour. Maria's report **merges into it**, and the ticket's member count rises to 4.
+**2 — The system processes it.** The server resolves the point to Cangatba, looks up the elevation from the DEM, checks the photo for integrity problems (none — fresh photo, GPS matches the pin), and creates a **new ticket** for her report — even though a neighbour filed a Localized Flooding report nearby 40 minutes earlier. Since manuscript revision Phase 1, step 3 the system never merges reports on its own; from Phase 3 MDRRMO staff will see a "Possibly related to Ticket #…" suggestion and decide whether to merge.
 
-Maria's report page shows *"Merged with an existing issue — grouped with 3 other reports."* She gets a notification. Because Localized Flooding routes to MDRRMO, the ticket sits in their queue.
+Maria gets a "Report received" notification. Because Localized Flooding routes to MDRRMO, the ticket sits in their queue.
 
-**3 — Urgency is computed.** Low-lying ground, live rainfall near the torrential threshold, four reports clustered together — the ticket scores into the **High** band. Crossing into High fires a `ticket_critical`-typed notification to MDRRMO.
+**3 — Urgency is computed.** Low-lying ground and live rainfall near the torrential threshold — the ticket scores into the **High** band. Crossing into High fires a `ticket_critical`-typed notification to MDRRMO.
 
 **4 — MDRRMO picks it up.** Ronald opens `/admin` at the start of his shift; the ticket is near the top of an urgency-sorted queue and appears under Needs Attention. On Ticket Detail he reads the four photos, checks the urgency breakdown (low elevation and heavy rain, not just a noisy cluster), and advances the status to **Under Review**, then **In Progress**. Maria gets a notification at each step.
 

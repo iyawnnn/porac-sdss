@@ -95,7 +95,10 @@ test.describe("Report detail timeline", () => {
   test("shows a citizen-safe banner, matching notification wording, after an admin quarantines the report", async ({ page, browser }: { page: Page; browser: Browser }) => {
     await loginCitizen(page);
     const reports = await fetchMyReports(page);
-    const pending = reports.find((r) => r.moderation_status === null);
+    // The moderating admin is E2E_MEO_ADMIN, and the moderate endpoint only
+    // allows the ticket's own office (assertOfficeAccess) — so pick an
+    // MEO-routed report, or an MDRRMO one fails with 403.
+    const pending = reports.find((r) => r.moderation_status === null && r.assigned_office === "MEO");
     // moderation is a one-way transition — after the first successful run
     // against a given database, no report is left pending until the next
     // `seed:diverse-reports` reseed. Skipping (not failing) keeps reruns
@@ -157,11 +160,9 @@ test.describe("Notification click-through", () => {
     // smoke.spec.ts; this test's concern is notification click-through, not
     // re-proving the submission form works. Municipality center (see
     // lib/municipality-config.ts's default centerLat/centerLng) — guaranteed
-    // inside the accepted boundary. Coordinates are jittered per run so
-    // repeated test runs within the 7-day duplicate-merge window each
-    // create a brand-new ticket rather than merging into a prior run's —
-    // a merge produces a "Report update" notification instead of "Report
-    // received", which this test doesn't care about distinguishing.
+    // inside the accepted boundary. Coordinates are jittered per run. Since
+    // manuscript revision Phase 1, step 3 every report creates its own
+    // ticket (no automatic merge), so the jitter is now only defensive.
     const { readFileSync } = await import("node:fs");
     const jitter = () => (Math.random() - 0.5) * 0.01;
     const submitRes = await page.request.post("/api/reports", {
@@ -189,8 +190,7 @@ test.describe("Notification click-through", () => {
     await page.getByRole("button", { name: /notifications/i }).click();
     // This is a brand-new signup with zero prior notifications, so whatever
     // shows up first is unambiguously the one this submission just created
-    // — no need to match its exact title (which differs between a
-    // brand-new ticket and a same-window merge, see comment above).
+    // — no need to match its exact title.
     const item = page.getByRole("menuitem").first();
     await expect(item).toBeVisible({ timeout: 10_000 });
     await item.click();

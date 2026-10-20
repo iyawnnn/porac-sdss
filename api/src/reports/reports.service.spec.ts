@@ -17,7 +17,9 @@ describe('OUTSIDE_MUNICIPALITY_MESSAGE', () => {
   });
 });
 
-// The duplicate-merge candidate query (Issue #4) sits behind ~7 injected
+// Manuscript revision Phase 1, step 3: automatic grouping is gone — every
+// report creates its own ticket (handoff Decision 1). Background on why this
+// file asserts on source text: the old duplicate-merge candidate query (Issue #4) sat behind ~7 injected
 // services (rate limiting, barangay resolution, elevation, weather, EXIF/
 // perceptual-hash comparison) that all hit the DB before the merge query
 // itself runs, and this repo has no DB test harness (no testcontainers,
@@ -33,36 +35,49 @@ describe('OUTSIDE_MUNICIPALITY_MESSAGE', () => {
 // to the shared constant, not that PostgreSQL's boundary math is correct
 // (that syntax was confirmed directly against the dev database during
 // implementation, not re-verified here).
-describe('duplicate-merge query wiring (Issue #4)', () => {
+describe('automatic grouping removed from submit() (Phase 1, step 3)', () => {
   const reportsServiceSource = readFileSync(
     join(__dirname, 'reports.service.ts'),
     'utf8',
   );
+  const submitBody = reportsServiceSource.slice(
+    reportsServiceSource.indexOf('  async submit('),
+    reportsServiceSource.indexOf('  private async notifyFocalIntake('),
+  );
 
-  it('imports the shared duplicate-merge window constant', () => {
-    expect(reportsServiceSource).toMatch(
-      /import\s*{\s*DUPLICATE_MERGE_WINDOW_DAYS\s*}\s*from\s*['"]\.\.\/common\/utils\/duplicate-detection['"]/,
+  it('no longer looks up an existing ticket to merge into', () => {
+    expect(submitBody).not.toMatch(/ST_DWithin/);
+    expect(submitBody).not.toMatch(/DUPLICATE_MERGE_WINDOW_DAYS/);
+    expect(submitBody).not.toMatch(/make_interval/);
+    expect(submitBody).not.toMatch(/radiusForCategory/);
+    expect(reportsServiceSource).not.toMatch(
+      /common\/utils\/duplicate-detection/,
     );
   });
 
-  it('uses make_interval with the named constant, not a hardcoded interval literal', () => {
-    expect(reportsServiceSource).toMatch(
-      /make_interval\(days => \$\{DUPLICATE_MERGE_WINDOW_DAYS\}\)/,
-    );
-    expect(reportsServiceSource).not.toMatch(/interval\s*'7 days'/);
-    expect(reportsServiceSource).not.toMatch(/interval\s*"7 days"/);
+  it('never updates an existing ticket (member_count, centroid) during submission', () => {
+    expect(submitBody).not.toMatch(/UPDATE tickets/);
+    expect(submitBody).not.toMatch(/ST_Centroid/);
+    expect(submitBody).not.toMatch(/member_count = /);
   });
 
-  it('retains the strict greater-than boundary against created_at', () => {
-    expect(reportsServiceSource).toMatch(
-      /created_at > now\(\) - make_interval/,
-    );
+  it('no longer sends the automatic report_merged notification', () => {
+    expect(reportsServiceSource).not.toMatch(/type: 'report_merged'/);
   });
 
-  it('retains the active-status filter alongside the temporal cutoff', () => {
-    expect(reportsServiceSource).toMatch(
-      /status IN \('Reported', 'Under Review', 'In Progress'\)/,
-    );
+  it('drops the merge-only advisory lock', () => {
+    expect(submitBody).not.toMatch(/pg_advisory_xact_lock/);
+  });
+
+  it('always inserts a new ticket with member_count 1 and reports merged: false', () => {
+    expect(submitBody.match(/INSERT INTO tickets/g)).toHaveLength(1);
+    expect(submitBody).toMatch(/\$\{category\}, \$\{barangay\.id\}, 1,/);
+    expect(submitBody).toMatch(/merged: false,\s*memberCount: 1,/);
+    expect(submitBody).not.toMatch(/merged: true/);
+  });
+
+  it('still records the rate-limit event inside the submission transaction', () => {
+    expect(submitBody).toMatch(/this\.rateLimit\.recordRateLimitEvent\(\s*tx,/);
   });
 });
 
@@ -99,16 +114,14 @@ describe('notification wiring stays inside the submit transaction', () => {
     'utf8',
   );
 
-  it('uses createInTx (not the standalone create()) for the new-ticket, merge, dispute, and Focal-fan-out paths', () => {
-    // 5, not 4: citizen ack (new-ticket) + admin office notification
-    // (new-ticket) + citizen ack (merge) + dispute + notifyFocalIntake's
-    // own single createInTx call site (shared by both the new-ticket and
-    // merge branches, which call the method rather than duplicating the
-    // notification inline — see the next describe block).
+  it('uses createInTx (not the standalone create()) for the new-ticket, dispute, and Focal-fan-out paths', () => {
+    // 4: citizen ack (new ticket) + admin office notification (new ticket)
+    // + dispute + notifyFocalIntake's own single createInTx call site. The
+    // automatic-merge citizen notification went away in Phase 1, step 3.
     const matches = reportsServiceSource.match(
       /this\.notifications\.createInTx\(tx,/g,
     );
-    expect(matches).toHaveLength(5);
+    expect(matches).toHaveLength(4);
   });
 
   it('does not call the standalone create() from submit()', () => {
@@ -125,7 +138,7 @@ describe('new-report admin notification wiring', () => {
   it('creates exactly one citizen acknowledgement and one office-targeted admin notification for a new ticket', () => {
     expect(
       reportsServiceSource.match(/this\.notifications\.createInTx\(tx,/g),
-    ).toHaveLength(5);
+    ).toHaveLength(4);
     expect(reportsServiceSource).toMatch(
       /recipientType: 'admin',[\s\S]*?recipientOffice: office,[\s\S]*?type: 'new_citizen_report',[\s\S]*?title: 'New citizen report'/,
     );
@@ -137,17 +150,11 @@ describe('new-report admin notification wiring', () => {
     );
   });
 
-  it('keeps the admin new-report notification out of the duplicate-merge branch', () => {
-    const mergeBranch = reportsServiceSource.slice(
-      reportsServiceSource.indexOf('if (existing) {'),
-      reportsServiceSource.indexOf(
-        '\n      const urgency = computeUrgency',
-        reportsServiceSource.indexOf('if (existing) {'),
-      ),
-    );
-    expect(mergeBranch).toContain("type: 'report_merged'");
-    expect(mergeBranch).not.toContain("type: 'new_citizen_report'");
-    expect(mergeBranch).not.toContain("title: 'New citizen report'");
+  it('sends exactly one office-targeted new-report notification per submission (no merge branch any more)', () => {
+    expect(
+      reportsServiceSource.match(/type: 'new_citizen_report'/g),
+    ).toHaveLength(1);
+    expect(reportsServiceSource).not.toMatch(/if \(existing\) \{/);
   });
 
   it('citizen receipt wording does not claim Under Review at submission time', () => {
@@ -159,8 +166,8 @@ describe('new-report admin notification wiring', () => {
 });
 
 // Batch 2 (Focal intake): Focal has municipality-wide intake visibility, so
-// every new report — whether it starts a new ticket or merges into an
-// existing one — must notify active Focal accounts directly. Source-text
+// every new report must notify active Focal accounts directly (since Phase 1,
+// step 3 every report starts its own ticket, so there is one call site). Source-text
 // assertions, same rationale as the blocks above (no DB test harness).
 describe('Focal intake fan-out wiring (new report notifications)', () => {
   const reportsServiceSource = readFileSync(
@@ -168,9 +175,9 @@ describe('Focal intake fan-out wiring (new report notifications)', () => {
     'utf8',
   );
 
-  it('calls notifyFocalIntake from both the new-ticket and merge branches', () => {
+  it('calls notifyFocalIntake once, for the new ticket every report creates', () => {
     const matches = reportsServiceSource.match(/this\.notifyFocalIntake\(tx,/g);
-    expect(matches).toHaveLength(2);
+    expect(matches).toHaveLength(1);
   });
 
   it('fans out to active focal admins by direct recipientId, never recipientOffice', () => {

@@ -26,7 +26,7 @@ Two ORMs are in play (see `CLAUDE.md`'s Architecture section for the full ration
 - **Ownership:** Application (Drizzle).
 
 ### `reports`
-- **Purpose:** One row per citizen submission (photo, EXIF data, location, citizen-selected severity, moderation flags). Merges into a `tickets` row via `ST_DWithin` deduplication — see CLAUDE.md's "Report → Ticket separation."
+- **Purpose:** One row per citizen submission (photo, EXIF data, location, citizen-selected severity, moderation flags). Each new report creates its own `tickets` row (automatic `ST_DWithin` merging was removed in manuscript revision Phase 1, step 3; older tickets may still carry several reports) — see CLAUDE.md's "Report → Ticket separation."
 - **Reads:** Ticket detail page (member reports), `/admin/flagged` moderation queue, dedup/merge logic.
 - **Writes:** Citizen report submission (`ReportsService`), moderation actions (`moderation_status`/`moderation_note`/`moderated_at`/`moderated_by`).
 - **Expected empty?** No once any report has ever been submitted; normal to be empty on a completely fresh DB before `seed:diverse-reports` or a real submission.
@@ -34,9 +34,9 @@ Two ORMs are in play (see `CLAUDE.md`'s Architecture section for the full ration
 - **Indexes:** `reports_geom_idx`/`reports_pin_geom_idx` (GIST, spatial). B-tree: `reports_ticket_id_idx` (join key into `tickets`, used by ticket detail/moderation/merge/dispute lookups), `reports_citizen_id_idx` ("My Reports" and per-citizen lookups), `reports_moderation_status_idx` (moderation queue's default `IS NULL`-pending view) — all added by `api/drizzle/0025_ticket_report_indexes.sql`, none modeled in `schema.ts` per this repo's raw-SQL-migration-owns-indexes convention.
 
 ### `tickets`
-- **Purpose:** The deduplicated unit admins act on — one ticket can represent multiple merged `reports`. Carries the full urgency/priority scoring output (`urgency_score`, `urgency_band`, `priority_score`, `urgency_level`, `priority_index` — see CLAUDE.md's Severity/Urgency/Priority terminology section for how these differ) plus lifecycle `status` and `assigned_office`.
+- **Purpose:** The unit admins act on. New tickets carry exactly one report (no automatic merge since manuscript revision Phase 1, step 3); tickets created before that can represent several merged `reports`. Carries the full urgency/priority scoring output (`urgency_score`, `urgency_band`, `priority_score`, `urgency_level`, `priority_index` — see CLAUDE.md's Severity/Urgency/Priority terminology section for how these differ) plus lifecycle `status` and `assigned_office`.
 - **Reads:** Ticket Queue, Map, Dashboard, urgency recompute (`RecomputeService`).
-- **Writes:** Ticket creation on first report in an area/category, merge (`member_count`/centroid recompute), status transitions (`StatusHistory` insert alongside), urgency recompute (on-demand, per CLAUDE.md's Urgency triage section), office reassignment.
+- **Writes:** Ticket creation for every new report, status transitions (`StatusHistory` insert alongside), urgency recompute (on-demand, per CLAUDE.md's Urgency triage section), office reassignment.
 - **Expected empty?** No once any report has ever been submitted.
 - **Ownership:** Application, but `geom` is raw-PG-only (not in `schema.ts`).
 - **Indexes:** `tickets_geom_idx` (GIST, spatial). B-tree: `tickets_office_status_idx` (composite, `assigned_office`+`status` — the combined filter shape used by the admin Ticket Queue and most Dashboard queries), `tickets_status_idx` (status-only filtering for queries with no office scope — public hazard map, urgency recompute), `tickets_barangay_id_idx` (barangay-scoped filters/joins) — all added by `api/drizzle/0025_ticket_report_indexes.sql`, none modeled in `schema.ts`.
