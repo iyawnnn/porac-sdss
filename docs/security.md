@@ -260,7 +260,7 @@ Elevation is always computed server-side from the DEM by nearest-neighbour looku
 Five-role Batch 2/3 additions follow the same structural rule as §7.1:
 
 - No `api/src/citizens/*` response type includes `report_intake_actions`, `operational_assessments`, or intake-state fields — the citizen-visible `acknowledged_at` is the one exception, sourced directly from `report_acknowledgments.acknowledged_at`, never derived from an intake action.
-- `FocalIntakeService`'s responses never include Operational Assessment content, Work Order internals, or staff assignment data — only report reference, category, barangay, coordinates, routed office, Hazard Urgency, and derived intake state.
+- `FocalIntakeService`'s responses never include Operational Assessment content, Work Order internals, or staff assignment data — only report reference, category, barangay, coordinates, routed office, Operational Priority, and derived intake state.
 - MIS (`system_admin`) gains no Focal Intake or Operational Assessment access merely by being an administrator — `FocalGuard`/`OperationalStaffGuard` reject it exactly as they reject each other's role. MIS's Activity Log can show that an acknowledgment/screening/forward/escalation/assessment action *occurred* (via the existing `admin_audit_events` action-type/summary fields every other audit entry already has), but never the underlying remarks or assessment text — no second, richer audit path exists for these action types.
 
 ---

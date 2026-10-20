@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, GeoJSON, Marker, Popup, ZoomControl } from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, Marker, Popup, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import type { FeatureCollection } from "geojson";
 import "leaflet/dist/leaflet.css";
@@ -27,7 +27,16 @@ const GLASS_PANEL = "rounded-xl border border-slate-200/60 bg-white/90 shadow-xl
 // so every pin and cluster is neutral and the Urgency legend is gone.
 // Step 6d: the title follows the Appendix L wireframe ("Public Report Map",
 // privacy-limited details), and the zoom control sits bottom-right — top-left
-// it covered the title panel (same pattern as the admin MapClient).
+// it covered the title panel.
+
+// Moving Leaflet's built-in control (rather than the react-leaflet ZoomControl component) avoids the StrictMode double-mount crash "Cannot read properties of undefined (reading 'bottomright')" on the dashboard mini-map, while keeping it off the title panel.
+function ZoomControlBottomRight() {
+  const map = useMap();
+  useEffect(() => {
+    map.zoomControl?.setPosition("bottomright");
+  }, [map]);
+  return null;
+}
 
 export default function PublicMapClient({
   barangays,
@@ -53,8 +62,8 @@ export default function PublicMapClient({
         <p>{tickets.length} active public reports · privacy-limited details</p>
         <p className="text-xs text-ink-500">This is not a hazard or risk map.</p>
       </div>
-      <MapContainer center={CITY_CENTER} zoom={MUNICIPALITY.defaultZoom} className="h-full w-full" zoomControl={false}>
-        <ZoomControl position="bottomright" />
+      <MapContainer center={CITY_CENTER} zoom={MUNICIPALITY.defaultZoom} className="h-full w-full">
+        <ZoomControlBottomRight />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="&copy; OpenStreetMap contributors"

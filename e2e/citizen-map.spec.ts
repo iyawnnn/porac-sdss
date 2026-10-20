@@ -121,20 +121,47 @@ test("public map sends and shows only privacy-limited details", async ({ page })
   const markers = page.locator(".leaflet-marker-pane .leaflet-marker-icon");
   await expect(markers.first()).toBeVisible();
 
-  // Pins carry no text; clusters show their count. Click a bare pin if one
-  // is on screen, otherwise a cluster (which zooms in, or spiderfies at the
-  // last zoom level), until a popup opens.
+  // Never click under the title panel (it sits over the top-left of the map
+  // and swallows the click) or under a Leaflet control. Pins carry no text;
+  // clusters show their count. A bare pin is preferred; otherwise a cluster,
+  // which zooms in — or, at the last zoom level, spiderfies into pins (pins
+  // can share a point because coordinates are rounded to 3 decimals).
+  type Box = { x: number; y: number; width: number; height: number };
+  const intersects = (a: Box, b: Box) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  const panelBox = await page.getByText("Public Report Map", { exact: true }).locator("..").boundingBox();
+  expect(panelBox).not.toBeNull();
+  const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
   const popup = page.locator(".leaflet-popup-content");
-  for (let attempt = 0; attempt < 8 && (await popup.count()) === 0; attempt++) {
-    const pin = markers.filter({ hasNotText: /\d/ }).first();
-    if (await pin.isVisible()) {
-      await pin.click();
-    } else {
-      await markers.filter({ hasText: /^\d+$/ }).first().click();
+
+  for (let attempt = 0; attempt < 10 && !(await popup.isVisible()); attempt++) {
+    const blockers: Box[] = [panelBox!];
+    for (const control of await page.locator(".leaflet-control-container .leaflet-control").all()) {
+      const box = await control.boundingBox();
+      if (box) blockers.push(box);
     }
+
+    let target: (typeof markers) | null = null;
+    for (const marker of await markers.all()) {
+      if (!(await marker.isVisible())) continue;
+      const box = await marker.boundingBox();
+      if (!box) continue;
+      const inViewport = box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height;
+      if (!inViewport || blockers.some((b) => intersects(box, b))) continue;
+      if ((await marker.innerText()).trim() === "") {
+        target = marker;
+        break;
+      }
+      target ??= marker;
+    }
+    if (!target) break;
+    await target.click();
     await page.waitForTimeout(600);
   }
 
+  if (!(await popup.isVisible())) {
+    throw new Error("No public-map popup opened after 10 marker/cluster clicks outside the title panel.");
+  }
   await expect(popup).toBeVisible();
   await expect(popup.getByText("Approximate", { exact: true })).toBeVisible();
   await expect(popup.getByText("Handled by", { exact: true })).toBeVisible();

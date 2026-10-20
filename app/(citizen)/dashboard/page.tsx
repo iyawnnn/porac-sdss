@@ -129,7 +129,7 @@ export default async function DashboardPage() {
 
         <div className="flex flex-col gap-4 rounded-xl border border-line-200 bg-surface p-6 lg:col-span-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-[18px] font-semibold leading-[26px] text-ink-900">Hazard Map</h2>
+            <h2 className="text-[18px] font-semibold leading-[26px] text-ink-900">Public Report Map</h2>
             <Link href="/map" className="text-sm font-medium text-brand-700 hover:text-brand-800">
               View full map
             </Link>

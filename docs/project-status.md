@@ -679,7 +679,7 @@ Full checklist in [`deployment-readiness.md`](deployment-readiness.md). Nothing 
 
 **Still not done:** provisioning a production PostGIS database and running the documented migration order; automated backups and a **tested** restore; a verified email sending domain with a matching `EMAIL_FROM`; the two GitHub Actions cron values; monitoring/alerting; load and performance validation; credential rotation (deliberately gated on an actual deploy decision — see `PLAN.md` §0); re-deriving `trust proxy` depth for the real topology; ensuring the API is not publicly reachable independently of the proxy; TLS/HSTS; and a written deployment runbook (no hosting platform is committed anywhere in this repo yet).
 
-### 4.5 Manuscript revision — queued
+### 4.5 Manuscript revision — nothing queued right now
 
 - **Public map privacy alignment — done in Phase 1, step 6d (see §3).** Original queue note kept below for the record. Source: manuscript Appendix L (Citizen Web-GIS Map wireframe), the functional requirement "privacy-limited view of active public reports", and Table 12. Other citizens' reports must not show reporter identity, photos, exact pins or internal records; today the public map (`ReportsService.getPublicHazardMapData`, `PublicTicketPopup.tsx`) still sends each ticket's first report title and photo and the exact ticket location. Appendix L's "Selected report" panel shows only: status, category as the heading, barangay, location "Approximate", reported date, last update, handled-by office, and a public update message. A citizen's own reports keep full detail on their own dashboard (`/dashboard/reports/[id]`). Step 6c deliberately left the map's title, photo, pin position and popup layout untouched for this step.
 
