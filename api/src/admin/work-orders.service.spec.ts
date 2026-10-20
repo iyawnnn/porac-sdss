@@ -836,12 +836,12 @@ describe('WorkOrdersService.getOfficePerformanceCounts', () => {
 });
 
 describe('WorkOrdersService.getNeedsAttention', () => {
-  // Verifies the three lists map to the right buckets and that a ticket
-  // with more than one open work order is deduped, not repeated — office
-  // scoping itself (the `office` filter is applied identically to every
-  // other list/summary query in this service) is covered end-to-end in
-  // e2e/admin-work-orders.spec.ts.
-  it('maps the three independent queries to overdue/dueToday/highUrgency and dedupes repeated tickets', async () => {
+  // Verifies the two lists map to the right buckets — office scoping itself
+  // (the `office` filter is applied identically to every other list/summary
+  // query in this service) is covered end-to-end in
+  // e2e/admin-work-orders.spec.ts. The Hazard Urgency list (tickets with open
+  // work) was removed in manuscript revision Phase 1, step 6a.
+  it('maps the two independent queries to overdue/dueToday and returns no Hazard Urgency list', async () => {
     const db = makeDb();
     db.select
       .mockReturnValueOnce(
@@ -849,31 +849,6 @@ describe('WorkOrdersService.getNeedsAttention', () => {
       )
       .mockReturnValueOnce(
         chain([workOrderRow({ id: 2, due_date: new Date() })]),
-      )
-      .mockReturnValueOnce(
-        chain([
-          {
-            id: 100,
-            category: 'Flooding',
-            assigned_office: 'MEO',
-            urgency_level: 'HIGH',
-            priority_score: 90,
-          },
-          {
-            id: 100,
-            category: 'Flooding',
-            assigned_office: 'MEO',
-            urgency_level: 'HIGH',
-            priority_score: 90,
-          },
-          {
-            id: 101,
-            category: 'Drainage',
-            assigned_office: 'MEO',
-            urgency_level: 'HIGH',
-            priority_score: 80,
-          },
-        ]),
       );
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
@@ -882,10 +857,8 @@ describe('WorkOrdersService.getNeedsAttention', () => {
 
     expect(result.overdueWorkOrders.map((w) => w.id)).toEqual([1]);
     expect(result.dueTodayWorkOrders.map((w) => w.id)).toEqual([2]);
-    expect(result.highUrgencyTicketsWithOpenWork.map((t) => t.id)).toEqual([
-      100, 101,
-    ]);
-    expect(db.select).toHaveBeenCalledTimes(3);
+    expect(result).not.toHaveProperty('highUrgencyTicketsWithOpenWork');
+    expect(db.select).toHaveBeenCalledTimes(2);
   });
 
   it('returns empty lists when nothing needs attention', async () => {
@@ -899,7 +872,6 @@ describe('WorkOrdersService.getNeedsAttention', () => {
     expect(result).toEqual({
       overdueWorkOrders: [],
       dueTodayWorkOrders: [],
-      highUrgencyTicketsWithOpenWork: [],
     });
   });
 });

@@ -146,6 +146,8 @@ test("restored dashboard sections render from the existing dashboard response", 
   await loginAdmin(page, E2E_MEO_ADMIN);
   await expect(page.getByRole("region", { name: "Quick actions" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Office performance summary" })).toBeVisible();
+  // The High-Urgency Open Tickets metric was removed in manuscript revision Phase 1, step 6a.
+  await expect(page.getByRole("region", { name: "Office performance summary" }).getByText("High-Urgency Open Tickets", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Dashboard analytics" })).toBeVisible();
   await expect(page.getByText("Category Distribution", { exact: true })).toBeVisible();
   await expect(page.getByText("Ticket Status Distribution", { exact: true })).toBeVisible();

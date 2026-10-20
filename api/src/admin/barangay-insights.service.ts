@@ -4,15 +4,16 @@ import { PG } from '../db/db.module';
 
 const TREND_DAYS = 30;
 const RECENT_TICKETS_LIMIT = 10;
-const HIGH_URGENCY_LEVEL = 'HIGH';
 
+// The High Urgency ticket counts (index column and profile KPI) were removed
+// in manuscript revision Phase 1, step 6a and are not replaced: Operational
+// Priority is a ranking with no manuscript-defined levels.
 export interface BarangayInsightRow {
   barangay_id: number;
   barangay_name: string;
   total_tickets: number;
   active_tickets: number;
   resolved_tickets: number;
-  high_urgency_tickets: number;
   top_category: string | null;
   last_activity_at: string | null;
 }
@@ -21,7 +22,6 @@ export interface BarangayInsightKpis {
   total_tickets: number;
   active_tickets: number;
   resolved_tickets: number;
-  high_urgency_tickets: number;
 }
 
 export interface BarangayCategoryRow {
@@ -45,8 +45,7 @@ export interface BarangayRecentTicketRow {
   category: string;
   title: string | null;
   status: string;
-  urgency_level: string | null;
-  priority_score: number | null;
+  priority_index: number | null;
   member_count: number;
   created_at: string;
 }
@@ -87,7 +86,6 @@ export class BarangayInsightsService {
         COUNT(t.id)::int AS total_tickets,
         COUNT(t.id) FILTER (WHERE t.status IN ${this.activeStatuses()})::int AS active_tickets,
         COUNT(t.id) FILTER (WHERE t.status = 'Resolved')::int AS resolved_tickets,
-        COUNT(t.id) FILTER (WHERE t.urgency_level = ${HIGH_URGENCY_LEVEL})::int AS high_urgency_tickets,
         MAX(t.updated_at) AS last_activity_at,
         (
           SELECT t2.category FROM tickets t2
@@ -117,8 +115,7 @@ export class BarangayInsightsService {
         SELECT
           COUNT(*)::int AS total_tickets,
           COUNT(*) FILTER (WHERE status IN ${this.activeStatuses()})::int AS active_tickets,
-          COUNT(*) FILTER (WHERE status = 'Resolved')::int AS resolved_tickets,
-          COUNT(*) FILTER (WHERE urgency_level = ${HIGH_URGENCY_LEVEL})::int AS high_urgency_tickets
+          COUNT(*) FILTER (WHERE status = 'Resolved')::int AS resolved_tickets
         FROM tickets
         WHERE barangay_id = ${barangayId}
           AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office)
@@ -168,7 +165,7 @@ export class BarangayInsightsService {
       sql<BarangayRecentTicketRow[]>`
         SELECT t.id, t.category,
           (SELECT r.title FROM reports r WHERE r.ticket_id = t.id ORDER BY r.created_at ASC, r.id ASC LIMIT 1) AS title,
-          t.status, t.urgency_level, t.priority_score, t.member_count, t.created_at
+          t.status, t.priority_index, t.member_count, t.created_at
         FROM tickets t
         WHERE t.barangay_id = ${barangayId}
           AND (${office ?? null}::text IS NULL OR t.assigned_office = ${office ?? null}::office)
@@ -180,7 +177,7 @@ export class BarangayInsightsService {
     return {
       barangay_id: barangay.id,
       barangay_name: barangay.name,
-      kpis: kpis ?? { total_tickets: 0, active_tickets: 0, resolved_tickets: 0, high_urgency_tickets: 0 },
+      kpis: kpis ?? { total_tickets: 0, active_tickets: 0, resolved_tickets: 0 },
       categoryBreakdown,
       incidentTrend,
       elevation: elevation ?? { elevation_min: null, elevation_avg: null, elevation_max: null },

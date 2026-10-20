@@ -289,10 +289,12 @@ export function DashboardClient({ initialData, topPriorityTickets, adminName }: 
           {/* No caption line any more. These carried a secondary figure each
               ("N high urgency", "N in progress", "Last N days"); the cards now
               show the headline number and its week-over-week delta only.
-              kpis.high_urgency_count and officePerformanceSummary
-              .inProgressWorkOrders are consequently fetched but unrendered —
-              the API response shape is deliberately unchanged, same as the
-              other payload fields this composition stopped displaying. */}
+              officePerformanceSummary.inProgressWorkOrders is consequently
+              fetched but unrendered — the API response shape is deliberately
+              unchanged, same as the other payload fields this composition
+              stopped displaying. The Hazard Urgency count behind the first
+              caption was removed from the API in manuscript revision Phase 1,
+              step 6a. */}
           <KpiCard delta={data.deltas?.activeTickets} icon={Ticket} label="Active Tickets" sparkline={activeTicketSeries} value={numeric(data.kpis.active_count).toLocaleString()} />
           <KpiCard delta={data.deltas?.pendingWorkOrders} icon={Inbox} label="Pending Work Orders" sparkline={pendingWorkOrderSeries} value={numeric(data.officePerformanceSummary.pendingWorkOrders).toLocaleString()} />
           <KpiCard delta={data.deltas?.reports} icon={FileText} label="Reports This Month" sparkline={reportSeries} value={numeric(data.kpis.reports_this_month_count).toLocaleString()} />

@@ -96,8 +96,8 @@ The sidebar has exactly eight entries (asserted in `e2e/citizen-dispute.spec.ts`
 Assembled from a single `GET /admin/dashboard` call:
 
 - KPIs and a date-range control, incident-over-time chart, status/category distributions, barangay and category rankings.
-- **Office Performance Summary** — Pending / In Progress / Overdue / Completed-this-week work orders, high-urgency open tickets, and flagged reports pending review. System Administrators additionally get a MEO vs. MDRRMO comparison.
-- **Needs Attention** — three short lists: overdue work orders, work orders due today, and active HIGH-urgency tickets that still have unfinished work.
+- **Office Performance Summary** — Pending / In Progress / Overdue / Completed-this-week work orders and flagged reports pending review. System Administrators additionally get a MEO vs. MDRRMO comparison. (The high-urgency open-tickets count was removed in manuscript revision Phase 1, step 6a, with no replacement.)
+- **Needs Attention** — three rows: overdue work orders, work orders due today, and flagged reports pending. (The "High-Urgency Open Work" row was removed in manuscript revision Phase 1, step 6a.)
 - **Map Presets** — office-appropriate links into a genuinely pre-filtered `/admin/map`.
 - Role-aware Quick Actions.
 
@@ -143,6 +143,7 @@ The record of actual field work. **A fourth, independent status track** — `pen
 - **Due dates** — editable inline, with derived `overdue` / `due today` states. "Overdue" is computed from `due_date` and status, never stored.
 - **"My Assignments"** — a personal filter resolved server-side from the caller's own session, so it can't be used to probe another admin's workload.
 - Filters for status, office, overdue, and assignee; CSV export excludes `notes` at the query level.
+- Each row shows the linked ticket's Operational Priority badge ("Op. Priority" column) — the Hazard Urgency badge until manuscript revision Phase 1, step 6a.
 
 **`notes` is staff-only and never appears in any citizen-facing response** — enforced and regression-tested (`e2e/admin-work-orders.spec.ts` submits a sentinel note and asserts it never renders on the citizen page). ~30 tests.
 
@@ -161,8 +162,8 @@ Covered by `e2e/admin-flagged.spec.ts`.
 
 Read-only per-barangay drill-down across all 29 Porac barangays.
 
-- **Index** — total / active / resolved / high-urgency ticket counts, most common category, last activity. All 29 barangays always render, including those with zero tickets for the scoped office.
-- **Profile** — KPI tiles, all-time category breakdown, a fixed 30-day incident trend, a DEM-derived elevation min/avg/max (**display only, never a filter**), and the 10 most recent tickets, each deep-linking into the filtered Ticket Queue.
+- **Index** — total / active / resolved ticket counts, most common category, last activity. All 29 barangays always render, including those with zero tickets for the scoped office. (The High Urgency column was removed in manuscript revision Phase 1, step 6a.)
+- **Profile** — KPI tiles (total / active / resolved; the High Urgency tile was removed in step 6a), all-time category breakdown, a fixed 30-day incident trend, a DEM-derived elevation min/avg/max (**display only, never a filter**), and the 10 most recent tickets with their Operational Priority badge, each deep-linking into the filtered Ticket Queue.
 
 No editing, creating, or exporting — deliberately. Covered by `e2e/admin-barangay-insights.spec.ts`.
 

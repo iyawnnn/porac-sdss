@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Bell, CalendarClock, Flame, ShieldAlert, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Bell, CalendarClock, ShieldAlert, type LucideIcon } from "lucide-react";
 import type { NeedsAttention as NeedsAttentionData } from "@/lib/types/admin-dashboard";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -59,17 +59,7 @@ export function NeedsAttention({ data, flaggedReportsPending }: { data: NeedsAtt
             label="Due Today"
             tone="text-urgency-medium"
           />
-          {/* /admin/tickets?urgency=High — the closest existing Ticket Queue
-              filter. A superset of "high urgency AND has open work"; there is
-              no narrower existing filter for the exact underlying set. */}
-          <AttentionRow
-            count={data.highUrgencyTicketsWithOpenWork.length}
-            description="High-urgency tickets with unresolved work"
-            href="/admin/tickets?urgency=High"
-            icon={Flame}
-            label="High-Urgency Open Work"
-            tone="text-urgency-critical"
-          />
+          {/* The Hazard Urgency row was removed in manuscript revision Phase 1, step 6a. */}
           <AttentionRow
             count={flaggedReportsPending}
             description="Reports awaiting moderation review"

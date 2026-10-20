@@ -90,6 +90,8 @@ test("MEO admin sees an office-scoped summary and no office picker on the report
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/reports");
   await expect(page.getByText("MEO office summary", { exact: true })).toBeVisible();
+  // The High Urgency Tickets tile was removed in manuscript revision Phase 1, step 6a.
+  await expect(page.getByText("High Urgency Tickets", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Office" })).toHaveCount(0);
   const exportLink = page.getByRole("link", { name: "Export Tickets CSV" });
   await expect(exportLink).toHaveAttribute("href", /office=MEO/);

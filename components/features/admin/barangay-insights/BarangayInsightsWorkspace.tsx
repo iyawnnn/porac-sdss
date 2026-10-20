@@ -23,8 +23,10 @@ const HEAD_CLASS = "text-xs font-semibold tracking-wide text-muted-foreground up
 
 // Numeric metric columns only — Resolved and Top Category stay unsortable
 // per the issue scope, and Barangay itself is the implicit default order
-// (the backend already returns rows ORDER BY b.name ASC).
-type SortableKey = "total_tickets" | "active_tickets" | "high_urgency_tickets" | "last_activity_at";
+// (the backend already returns rows ORDER BY b.name ASC). The High Urgency
+// column was removed in manuscript revision Phase 1, step 6a; sort state is
+// in-memory only and starts unset, so nothing stored can point at it.
+type SortableKey = "total_tickets" | "active_tickets" | "last_activity_at";
 type SortState = { key: SortableKey; direction: "asc" | "desc" };
 
 // No recorded activity sorts as older than any real date, in both
@@ -192,7 +194,6 @@ export function BarangayInsightsWorkspace({
                   <SortableHead className="text-center" label="Total" onSort={handleSort} sort={sort} sortKey="total_tickets" />
                   <SortableHead className="text-center" label="Active" onSort={handleSort} sort={sort} sortKey="active_tickets" />
                   <TableHead className={`${HEAD_CLASS} text-center`}>Resolved</TableHead>
-                  <SortableHead className="text-center" label="High Urgency" onSort={handleSort} sort={sort} sortKey="high_urgency_tickets" />
                   <TableHead className={HEAD_CLASS}>Top Category</TableHead>
                   <SortableHead className="pr-6" label="Last Activity" onSort={handleSort} sort={sort} sortKey="last_activity_at" />
                 </TableRow>
@@ -202,7 +203,7 @@ export function BarangayInsightsWorkspace({
                   <SkeletonRows />
                 ) : filtered.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell className="p-0" colSpan={7}>
+                    <TableCell className="p-0" colSpan={6}>
                       <EmptyState icon={SearchXIcon} title="No barangays match this search." />
                     </TableCell>
                   </TableRow>
@@ -217,7 +218,6 @@ export function BarangayInsightsWorkspace({
                       <TableCell className="text-center font-mono tabular-nums">{b.total_tickets}</TableCell>
                       <TableCell className="text-center font-mono tabular-nums">{b.active_tickets}</TableCell>
                       <TableCell className="text-center font-mono tabular-nums">{b.resolved_tickets}</TableCell>
-                      <TableCell className="text-center font-mono tabular-nums">{b.high_urgency_tickets}</TableCell>
                       <TableCell>{b.top_category ?? "—"}</TableCell>
                       <TableCell className="pr-6 text-xs text-muted-foreground">{formatDate(b.last_activity_at)}</TableCell>
                     </TableRow>
@@ -237,7 +237,7 @@ function SkeletonRows() {
     <>
       {Array.from({ length: 8 }).map((_, i) => (
         <TableRow className="hover:bg-transparent" key={i}>
-          {Array.from({ length: 7 }).map((__, j) => (
+          {Array.from({ length: 6 }).map((__, j) => (
             <TableCell key={j}>
               <Skeleton className="h-4 w-full max-w-24" />
             </TableCell>

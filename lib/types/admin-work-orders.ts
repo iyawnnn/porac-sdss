@@ -17,10 +17,10 @@ export interface WorkOrderRow {
 }
 
 // The list endpoint's own row shape — adds the linked ticket's
-// already-computed urgency, joined server-side, never recomputed here.
+// already-computed Operational Priority (priority_index), joined
+// server-side, never recomputed here.
 export interface WorkOrderListRow extends WorkOrderRow {
-  priority_score: number | null;
-  urgency_level: string | null;
+  priority_index: number | null;
 }
 
 export interface WorkOrderPerformanceCounts {

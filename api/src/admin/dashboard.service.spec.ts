@@ -1,4 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { DashboardController } from './dashboard.controller';
 import {
   DashboardService,
@@ -118,17 +120,19 @@ describe('dashboard ranges', () => {
   });
 });
 
-// The Office Performance Summary is assembled from three already-scoped
-// service methods (WorkOrdersService, DashboardService, ModerationService)
-// — these tests verify the assembly itself (which office each sub-call
-// receives, when the MEO/MDRRMO comparison is computed) rather than
-// re-testing those services' own SQL, which have their own spec files.
+// The Office Performance Summary is assembled from two already-scoped
+// service methods (WorkOrdersService, ModerationService) — these tests
+// verify the assembly itself (which office each sub-call receives, when the
+// MEO/MDRRMO comparison is computed) rather than re-testing those services'
+// own SQL, which have their own spec files. The High-Urgency Open Tickets
+// count (read from DashboardService.getDashboardKpis) was removed in
+// manuscript revision Phase 1, step 6a.
 describe('DashboardController office performance summary assembly', () => {
-  function officePerformanceController(counts: Record<string, { pending: number; highUrgency: number; flagged: number }>) {
+  function officePerformanceController(
+    counts: Record<string, { pending: number; flagged: number }>,
+  ) {
     const dashboard = {
-      getDashboardKpis: jest.fn((office?: 'MEO' | 'MDRRMO') =>
-        Promise.resolve({ high_urgency_count: counts[office ?? 'ALL'].highUrgency }),
-      ),
+      getDashboardKpis: jest.fn(),
     } as unknown as DashboardService;
     const moderation = {
       getModerationStats: jest.fn((office?: 'MEO' | 'MDRRMO') =>
@@ -162,7 +166,6 @@ describe('DashboardController office performance summary assembly', () => {
         ) => Promise<{
           scope: string;
           pendingWorkOrders: number;
-          highUrgencyOpenTickets: number;
           flaggedReportsPending: number;
           byOffice: { MEO: { pendingWorkOrders: number } } | null;
         }>;
@@ -174,17 +177,18 @@ describe('DashboardController office performance summary assembly', () => {
   }
 
   it('an office-scoped admin (MEO) gets scope MEO, MEO-only counts, and no byOffice comparison', async () => {
-    const { controller, workOrders } = officePerformanceController({
-      MEO: { pending: 2, highUrgency: 4, flagged: 1 },
-      MDRRMO: { pending: 99, highUrgency: 99, flagged: 99 },
+    const { controller, dashboard, workOrders } = officePerformanceController({
+      MEO: { pending: 2, flagged: 1 },
+      MDRRMO: { pending: 99, flagged: 99 },
     });
 
     const summary = await controller.getOfficePerformanceSummary('MEO');
 
     expect(summary.scope).toBe('MEO');
     expect(summary.pendingWorkOrders).toBe(2);
-    expect(summary.highUrgencyOpenTickets).toBe(4);
     expect(summary.flaggedReportsPending).toBe(1);
+    expect(summary).not.toHaveProperty('highUrgencyOpenTickets');
+    expect(dashboard.getDashboardKpis).not.toHaveBeenCalled();
     expect(summary.byOffice).toBeNull();
     // Never touches MDRRMO's data for an MEO-scoped request.
     expect(workOrders.getOfficePerformanceCounts).toHaveBeenCalledTimes(1);
@@ -193,8 +197,8 @@ describe('DashboardController office performance summary assembly', () => {
 
   it('an office-scoped admin (MDRRMO) never receives MEO data either', async () => {
     const { controller, workOrders } = officePerformanceController({
-      MEO: { pending: 99, highUrgency: 99, flagged: 99 },
-      MDRRMO: { pending: 6, highUrgency: 3, flagged: 2 },
+      MEO: { pending: 99, flagged: 99 },
+      MDRRMO: { pending: 6, flagged: 2 },
     });
 
     const summary = await controller.getOfficePerformanceSummary('MDRRMO');
@@ -208,9 +212,9 @@ describe('DashboardController office performance summary assembly', () => {
 
   it('a system admin (office undefined) gets scope ALL plus a MEO vs MDRRMO comparison', async () => {
     const { controller, workOrders } = officePerformanceController({
-      ALL: { pending: 8, highUrgency: 7, flagged: 3 },
-      MEO: { pending: 2, highUrgency: 4, flagged: 1 },
-      MDRRMO: { pending: 6, highUrgency: 3, flagged: 2 },
+      ALL: { pending: 8, flagged: 3 },
+      MEO: { pending: 2, flagged: 1 },
+      MDRRMO: { pending: 6, flagged: 2 },
     });
 
     const summary = await controller.getOfficePerformanceSummary(undefined);
@@ -225,6 +229,41 @@ describe('DashboardController office performance summary assembly', () => {
     );
     // City-wide + MEO + MDRRMO = 3 calls total for a system admin.
     expect(workOrders.getOfficePerformanceCounts).toHaveBeenCalledTimes(3);
+  });
+});
+
+// Manuscript revision Phase 1, step 6a: the admin overview queries
+// (dashboard KPIs, Needs Attention, the Work Orders list, Barangay Insights)
+// read no Hazard Urgency column. Source-text assertions, in the style of
+// tickets-queue.service.spec.ts, because the property is about how the
+// queries are written rather than what a mocked call returns.
+describe('admin overview queries read no Hazard Urgency column', () => {
+  const HAZARD_URGENCY =
+    /urgency_level|priority_score|urgencyLevel|priorityScore|high_urgency/;
+  const source = (file: string) => readFileSync(join(__dirname, file), 'utf8');
+
+  it('dashboard.service.ts', () => {
+    expect(source('dashboard.service.ts')).not.toMatch(HAZARD_URGENCY);
+  });
+
+  it("work-orders.service.ts's LIST_COLUMNS and getNeedsAttention", () => {
+    const text = source('work-orders.service.ts');
+    const listColumns = text.slice(
+      text.indexOf('const LIST_COLUMNS'),
+      text.indexOf('const PAGE_LIMITS'),
+    );
+    const needsAttention = text.slice(
+      text.indexOf('async getNeedsAttention('),
+      text.indexOf('async getWorkOrdersForExport('),
+    );
+    expect(listColumns).toContain('priority_index: tickets.priorityIndex');
+    expect(listColumns).not.toMatch(HAZARD_URGENCY);
+    expect(needsAttention.length).toBeGreaterThan(0);
+    expect(needsAttention).not.toMatch(HAZARD_URGENCY);
+  });
+
+  it('barangay-insights.service.ts', () => {
+    expect(source('barangay-insights.service.ts')).not.toMatch(HAZARD_URGENCY);
   });
 });
 

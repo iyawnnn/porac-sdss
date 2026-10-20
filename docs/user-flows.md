@@ -105,8 +105,8 @@ Illegal Dumping Affecting Drainage or Road, Overgrown Vegetation Obstructing Roa
 
 **The dashboard (`/admin`)** opens on MEO's numbers only. No toggle exists to see MDRRMO's, because there is nothing to toggle. Useful sections in practice:
 
-- **Needs Attention** — overdue work orders, work due today, and high-urgency tickets that still have no real progress. This is the "what did I miss" panel.
-- **Office Performance Summary** — pending / in progress / overdue / completed-this-week work orders, high-urgency open tickets, flagged reports waiting.
+- **Needs Attention** — overdue work orders, work due today, and flagged reports pending. This is the "what did I miss" panel.
+- **Office Performance Summary** — pending / in progress / overdue / completed-this-week work orders, flagged reports waiting.
 - **Map Presets** — one-click into a pre-filtered map: Drainage Issues, Potholes & Road Damage, Illegal Dumping.
 
 **The Ticket Queue (`/admin/tickets`)** is the main triage surface, sorted by urgency by default. Filter by status, urgency, category, barangay, free text, or "Disputed only". Every filter is reflected in the URL, so a filtered view is a link that can be sent to a colleague. Works on a phone — the table becomes cards below tablet width.
@@ -276,7 +276,7 @@ Maria gets a "Report received" notification. Because Localized Flooding routes t
 
 **3 — Urgency is computed.** Low-lying ground and live rainfall near the torrential threshold — the ticket scores into the **High** band. Crossing into High fires a `ticket_critical`-typed notification to MDRRMO.
 
-**4 — MDRRMO picks it up.** Ronald opens `/admin` at the start of his shift; the ticket is near the top of an urgency-sorted queue and appears under Needs Attention. On Ticket Detail he reads the four photos, checks the urgency breakdown (low elevation and heavy rain, not just a noisy cluster), and advances the status to **Under Review**, then **In Progress**. Maria gets a notification at each step.
+**4 — MDRRMO picks it up.** Ronald opens `/admin` at the start of his shift; the ticket is near the top of an urgency-sorted queue. On Ticket Detail he reads the four photos, checks the urgency breakdown (low elevation and heavy rain, not just a noisy cluster), and advances the status to **Under Review**, then **In Progress**. Maria gets a notification at each step.
 
 **5 — Field work.** Ronald creates a work order — *"Clear blocked drainage inlet, Cangatba main road"* — assigns it to a colleague, sets tomorrow's due date, and later adds the internal note *"Inlet blocked by construction debris; coordinated with MEO for hauling."* **Maria never sees any of that.** He moves the work order to *in progress*, then *completed* — which does **not** advance the ticket. That stays a human decision.
 
