@@ -113,6 +113,17 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
               Disputed {new Date(ticket.disputed_at).toLocaleDateString()}
             </Badge>
           )}
+          {/* Old combined drainage ticket (migration 0035, handoff Decision 13);
+              the correction itself arrives in Phase 3. */}
+          {ticket.category_review_required && (
+            <Badge
+              className="border-warning-edge bg-warning-tint text-warning-ink"
+              title="Category from before the manuscript split; to be corrected by staff."
+              variant="outline"
+            >
+              Category review needed
+            </Badge>
+          )}
         </div>
         <p className="mt-1.5 text-sm text-ink-500">
           {ticket.barangay_name} · {ticket.assigned_office} · {ticket.member_count} report{ticket.member_count === 1 ? "" : "s"} merged

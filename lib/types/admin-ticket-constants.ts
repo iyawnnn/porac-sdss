@@ -19,12 +19,13 @@ export const DEFAULT_PAGE_LIMIT = 15;
 export const TICKET_CATEGORIES = [
   "Pothole / Road Surface Damage",
   "Uneven Sidewalk",
-  "Drainage / Culvert / Manhole Issue",
+  "Damaged Manhole Cover",
+  "Clogged Drainage / Damaged Culvert",
   "Streetlight Out",
   "Localized Flooding",
-  "Landslide / Slope Failure",
-  "Lahar / Debris-Flow Threat",
-  "Fallen Tree / Storm-Related Obstruction",
+  "Rain-Induced Slope Failure/Landslide",
+  "Lahar or Volcanic Debris-Flow Threat",
+  "Fallen Tree or Storm-Related Road Obstruction",
   "Illegal Dumping Affecting Drainage or Road",
   "Overgrown Vegetation Obstructing Road or Signage",
   "Leaking Pipe / Water Supply Concern",
@@ -32,11 +33,13 @@ export const TICKET_CATEGORIES = [
 ] as const;
 export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
 
-// Pre-Phase-3-follow-up category strings, still valid on historical
-// tickets. Not rendered as dropdown options (a legacy category isn't
-// something you'd pick for a new ticket), but ALL_TICKET_CATEGORIES below
-// is used to validate a `?category=` query param so a deep link to a
-// legacy-categorized filter still works instead of silently resetting.
+// Retired category strings, still valid on historical tickets. Not
+// rendered as dropdown options (a legacy category isn't something you'd pick
+// for a new ticket), but ALL_TICKET_CATEGORIES below is used to validate a
+// `?category=` query param so a deep link to a legacy-categorized filter
+// still works instead of silently resetting. Mirrors api/src/contracts/
+// schemas.ts's LEGACY_CATEGORIES — the last four were retired in manuscript
+// revision Phase 2, step 2a (Decisions 6, 9, 13; see that file).
 export const LEGACY_TICKET_CATEGORIES = [
   "Flooding",
   "Clogged Drain",
@@ -49,6 +52,10 @@ export const LEGACY_TICKET_CATEGORIES = [
   "Illegal Dumping",
   "Overgrown Vegetation",
   "Other",
+  "Drainage / Culvert / Manhole Issue",
+  "Landslide / Slope Failure",
+  "Lahar / Debris-Flow Threat",
+  "Fallen Tree / Storm-Related Obstruction",
 ] as const;
 export const ALL_TICKET_CATEGORIES = [...TICKET_CATEGORIES, ...LEGACY_TICKET_CATEGORIES] as const;
 

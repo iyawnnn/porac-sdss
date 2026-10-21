@@ -16,16 +16,18 @@ export interface CategoryRouting {
 }
 
 const ROUTING_BY_CATEGORY: Record<string, CategoryRouting> = {
-  // Manuscript-aligned category strings (Phase 3 follow-up) — what new
-  // tickets are created with.
+  // Manuscript-aligned category strings (Phase 3 follow-up; names and the
+  // drainage/manhole split from manuscript revision Phase 2, step 2a) — what
+  // new tickets are created with.
   'Pothole / Road Surface Damage': { office: 'MEO', directResponsibility: true },
   'Uneven Sidewalk': { office: 'MEO', directResponsibility: true },
-  'Drainage / Culvert / Manhole Issue': { office: 'MEO', directResponsibility: true },
+  'Damaged Manhole Cover': { office: 'MEO', directResponsibility: true },
+  'Clogged Drainage / Damaged Culvert': { office: 'MEO', directResponsibility: true },
   'Streetlight Out': { office: 'MEO', directResponsibility: true },
   'Localized Flooding': { office: 'MDRRMO', directResponsibility: true },
-  'Landslide / Slope Failure': { office: 'MDRRMO', directResponsibility: true },
-  'Lahar / Debris-Flow Threat': { office: 'MDRRMO', directResponsibility: true },
-  'Fallen Tree / Storm-Related Obstruction': { office: 'MDRRMO', directResponsibility: true },
+  'Rain-Induced Slope Failure/Landslide': { office: 'MDRRMO', directResponsibility: true },
+  'Lahar or Volcanic Debris-Flow Threat': { office: 'MDRRMO', directResponsibility: true },
+  'Fallen Tree or Storm-Related Road Obstruction': { office: 'MDRRMO', directResponsibility: true },
   // Solid waste enforcement — referral/coordination concern.
   'Illegal Dumping Affecting Drainage or Road': { office: 'MEO', directResponsibility: false },
   // Barangay-level clearing — referral/coordination concern.
@@ -53,9 +55,17 @@ const ROUTING_BY_CATEGORY: Record<string, CategoryRouting> = {
   // Infrastructure Hazard" — a generic "Other" report was never truly a
   // confirmed direct MEO responsibility, just triaged there by default.
   Other: { office: 'MEO', directResponsibility: false },
+  // Retired in manuscript revision Phase 2, step 2a (see LEGACY_CATEGORIES in
+  // schemas.ts): the combined drainage category (split by Decision 6; old
+  // tickets keep it, marked for category review) and the three names
+  // replaced by the manuscript wording (Decision 9). Same routing as before.
+  'Drainage / Culvert / Manhole Issue': { office: 'MEO', directResponsibility: true },
+  'Landslide / Slope Failure': { office: 'MDRRMO', directResponsibility: true },
+  'Lahar / Debris-Flow Threat': { office: 'MDRRMO', directResponsibility: true },
+  'Fallen Tree / Storm-Related Obstruction': { office: 'MDRRMO', directResponsibility: true },
   // Stray/non-canonical value found in seed data, never a validated
   // category — routed as the closest manuscript-aligned equivalent
-  // (Landslide / Slope Failure) instead of falling through to the generic
+  // (Rain-Induced Slope Failure/Landslide) instead of falling through to the generic
   // unknown-category default, per the Phase 3 follow-up audit.
   'Soil Erosion': { office: 'MDRRMO', directResponsibility: true },
 };

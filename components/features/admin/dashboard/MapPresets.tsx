@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Droplets, MapPin, TreeDeciduous, Trash2, type LucideIcon } from "lucide-react";
+import { Disc, Droplets, MapPin, TreeDeciduous, Trash2, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -15,16 +15,18 @@ interface MapPreset {
 // value per office. Do not add a preset here for a filter that doesn't
 // already exist and apply on the map. The two "High-Urgency" presets were
 // removed in manuscript revision Phase 1, step 5, along with the map's
-// Hazard Urgency filter they depended on.
+// Hazard Urgency filter they depended on. Categories follow the manuscript
+// names and drainage/manhole split from manuscript revision Phase 2, step 2a.
 const MEO_PRESETS: MapPreset[] = [
-  { label: "Drainage Issues", icon: Droplets, params: { category: "Drainage / Culvert / Manhole Issue" } },
+  { label: "Drainage Issues", icon: Droplets, params: { category: "Clogged Drainage / Damaged Culvert" } },
+  { label: "Manhole Covers", icon: Disc, params: { category: "Damaged Manhole Cover" } },
   { label: "Potholes & Road Damage", icon: MapPin, params: { category: "Pothole / Road Surface Damage" } },
   { label: "Illegal Dumping", icon: Trash2, params: { category: "Illegal Dumping Affecting Drainage or Road" } },
 ];
 
 const MDRRMO_PRESETS: MapPreset[] = [
   { label: "Flooding Reports", icon: Droplets, params: { category: "Localized Flooding" } },
-  { label: "Fallen Trees", icon: TreeDeciduous, params: { category: "Fallen Tree / Storm-Related Obstruction" } },
+  { label: "Fallen Trees", icon: TreeDeciduous, params: { category: "Fallen Tree or Storm-Related Road Obstruction" } },
 ];
 
 function presetHref(preset: MapPreset, office?: "MEO" | "MDRRMO"): string {

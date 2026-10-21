@@ -157,12 +157,16 @@ test("restored dashboard sections render from the existing dashboard response", 
   await expect(mapPresets).toBeVisible();
   await expect(mapPresets.getByRole("link", { name: "Drainage Issues" })).toHaveAttribute(
     "href",
-    "/admin/map?category=Drainage+%2F+Culvert+%2F+Manhole+Issue",
+    "/admin/map?category=Clogged+Drainage+%2F+Damaged+Culvert",
+  );
+  await expect(mapPresets.getByRole("link", { name: "Manhole Covers" })).toHaveAttribute(
+    "href",
+    "/admin/map?category=Damaged+Manhole+Cover",
   );
   await mapPresets.getByRole("link", { name: "Drainage Issues" }).click();
-  await expect(page).toHaveURL(/\/admin\/map\?category=Drainage\+%2F\+Culvert\+%2F\+Manhole\+Issue$/);
+  await expect(page).toHaveURL(/\/admin\/map\?category=Clogged\+Drainage\+%2F\+Damaged\+Culvert$/);
   await page.getByRole("button", { name: "Filters 1", exact: true }).click();
-  await expect(page.getByRole("combobox", { name: "Category" })).toContainText("Drainage / Culvert / Manhole Issue");
+  await expect(page.getByRole("combobox", { name: "Category" })).toContainText("Clogged Drainage / Damaged Culvert");
 
   for (const account of [E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN]) {
     await page.context().clearCookies();
@@ -174,7 +178,7 @@ test("restored dashboard sections render from the existing dashboard response", 
 
     const scopedMapPresets = page.getByRole("region", { name: "Map presets" });
     const presetName = account.office === "MEO" ? "Drainage Issues" : "Flooding Reports";
-    const presetCategory = account.office === "MEO" ? "Drainage+%2F+Culvert+%2F+Manhole+Issue" : "Localized+Flooding";
+    const presetCategory = account.office === "MEO" ? "Clogged+Drainage+%2F+Damaged+Culvert" : "Localized+Flooding";
     await expect(scopedMapPresets.getByRole("link", { name: presetName })).toHaveAttribute(
       "href",
       `/admin/map?category=${presetCategory}`,

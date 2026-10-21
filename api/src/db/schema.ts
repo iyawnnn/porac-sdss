@@ -258,6 +258,14 @@ export const tickets = pgTable('tickets', {
   resolutionConfirmedAt: timestamp('resolution_confirmed_at', {
     withTimezone: true,
   }),
+  // Implementation extension (handoff Decision 13), not in the manuscript's
+  // data dictionary. Set by migration 0035 on tickets still carrying the
+  // retired combined "Drainage / Culvert / Manhole Issue" category, which
+  // can't be split automatically into its two replacements; cleared by the
+  // Phase 3 category correction. Shown as a badge and a queue filter only.
+  categoryReviewRequired: boolean('category_review_required')
+    .notNull()
+    .default(false),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

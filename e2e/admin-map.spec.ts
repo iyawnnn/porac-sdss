@@ -52,14 +52,14 @@ test("changing a map filter updates the URL", async ({ page }) => {
 
 test("refreshing the map page preserves selected filters", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto("/admin/map?category=Fallen%20Tree%20%2F%20Storm-Related%20Obstruction&status=Reported");
+  await page.goto("/admin/map?category=Fallen%20Tree%20or%20Storm-Related%20Road%20Obstruction&status=Reported");
   await waitForMapReady(page);
 
   await page.reload();
   await waitForMapReady(page);
 
   await page.getByRole("button", { name: /^Filters/ }).click();
-  await expect(page.getByLabel("Category", { exact: true })).toHaveText("Fallen Tree / Storm-Related Obstruction");
+  await expect(page.getByLabel("Category", { exact: true })).toHaveText("Fallen Tree or Storm-Related Road Obstruction");
   await expect(page.getByLabel("Status", { exact: true })).toHaveText("Reported");
 });
 

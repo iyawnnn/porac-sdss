@@ -12,6 +12,7 @@ export interface QueueFilterValues {
   category: string;
   barangayId: string;
   disputed: boolean;
+  categoryReview: boolean;
 }
 
 interface Barangay {
@@ -144,6 +145,17 @@ export function QueueFiltersPopover({
           variant={values.disputed ? "default" : "outline"}
         >
           {values.disputed ? "Showing disputed only" : "Disputed only"}
+        </Button>
+
+        {/* Old combined drainage tickets marked by migration 0035 (handoff
+            Decision 13), awaiting the Phase 3 category correction. */}
+        <Button
+          className={values.categoryReview ? "w-full" : "w-full bg-card"}
+          onClick={() => onChange({ categoryReview: !values.categoryReview })}
+          size="sm"
+          variant={values.categoryReview ? "default" : "outline"}
+        >
+          {values.categoryReview ? "Showing category review only" : "Needs category review"}
         </Button>
       </PopoverContent>
     </Popover>

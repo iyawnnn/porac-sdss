@@ -232,6 +232,52 @@ test.describe("Notification click-through", () => {
   });
 });
 
+// Manuscript revision Phase 2, step 2a (handoff Decision 6): the two halves
+// of the old combined drainage category are both MEO-direct. A fresh signup
+// for the same per-account/per-location rate-limit reasons as the
+// notification test above; this posts 2 of the full run's report budget.
+test.describe("New MEO categories", () => {
+  test("a citizen can submit Damaged Manhole Cover and Clogged Drainage / Damaged Culvert, and both land in MEO", async ({ page }) => {
+    const email = `e2e-categories-${Date.now()}@porac.ph`;
+    await page.goto("/signup");
+    await page.getByLabel("First name").fill("Category");
+    await page.getByLabel("Last name").fill("Split");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password", { exact: true }).fill("PoracDemo2026!");
+    await page.getByRole("button", { name: "Create Account" }).click();
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+
+    const { readFileSync } = await import("node:fs");
+    const jitter = () => (Math.random() - 0.5) * 0.01;
+    const categories = ["Damaged Manhole Cover", "Clogged Drainage / Damaged Culvert"];
+    for (const category of categories) {
+      const submitRes = await page.request.post("/api/reports", {
+        multipart: {
+          title: `E2E ${category} check`,
+          category,
+          citizen_severity: "Medium",
+          lat: String(15.0711 + jitter()),
+          lng: String(120.5401 + jitter()),
+          image: {
+            name: "01_poblacion.jpg",
+            mimeType: "image/jpeg",
+            buffer: readFileSync("public/uploads/reports/01_poblacion.jpg"),
+          },
+        },
+      });
+      expect(submitRes.ok()).toBe(true);
+      expect(((await submitRes.json()) as { assignedOffice: string }).assignedOffice).toBe("MEO");
+    }
+
+    const mine = await fetchMyReports(page);
+    for (const category of categories) {
+      const row = mine.find((r) => r.category === category);
+      expect(row, `a report filed as "${category}"`).toBeDefined();
+      expect(row?.assigned_office).toBe("MEO");
+    }
+  });
+});
+
 test.describe("Cross-account access", () => {
   test("citizen B cannot read citizen A's report, and the rejection is indistinguishable from a nonexistent report id", async ({ page, browser }: { page: Page; browser: Browser }) => {
     await loginCitizen(page);

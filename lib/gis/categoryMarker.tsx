@@ -13,6 +13,7 @@ import {
   Waves,
   Wrench,
   CircleDot,
+  Disc,
   type LucideIcon,
 } from "lucide-react";
 import { priorityBandHex, priorityBandLabel } from "@/lib/utils/ui/priority";
@@ -29,12 +30,15 @@ export interface CategoryMarkerSpec {
 
 export const CATEGORY_MARKER_SPEC: Record<string, CategoryMarkerSpec> = {
   // Manuscript-aligned category strings (Phase 3 follow-up).
+  // Names and the drainage/manhole split from manuscript revision Phase 2,
+  // step 2a; the renamed ones keep their old icon and colour.
   "Pothole / Road Surface Damage": { icon: CircleDot, color: "#ea580c" },
-  "Drainage / Culvert / Manhole Issue": { icon: Droplets, color: "#0891b2" },
+  "Damaged Manhole Cover": { icon: Disc, color: "#4338ca" },
+  "Clogged Drainage / Damaged Culvert": { icon: Droplets, color: "#0891b2" },
   "Localized Flooding": { icon: Waves, color: "#2563eb" },
-  "Landslide / Slope Failure": { icon: Mountain, color: "#78350f" },
-  "Lahar / Debris-Flow Threat": { icon: Waves, color: "#9a3412" },
-  "Fallen Tree / Storm-Related Obstruction": { icon: TreePine, color: "#16a34a" },
+  "Rain-Induced Slope Failure/Landslide": { icon: Mountain, color: "#78350f" },
+  "Lahar or Volcanic Debris-Flow Threat": { icon: Waves, color: "#9a3412" },
+  "Fallen Tree or Storm-Related Road Obstruction": { icon: TreePine, color: "#16a34a" },
   "Illegal Dumping Affecting Drainage or Road": { icon: Trash2, color: "#7c3aed" },
   "Overgrown Vegetation Obstructing Road or Signage": { icon: Sprout, color: "#65a30d" },
   "Leaking Pipe / Water Supply Concern": { icon: Droplet, color: "#0d9488" },
@@ -54,6 +58,12 @@ export const CATEGORY_MARKER_SPEC: Record<string, CategoryMarkerSpec> = {
   "Illegal Dumping": { icon: Trash2, color: "#7c3aed" },
   "Overgrown Vegetation": { icon: Sprout, color: "#65a30d" },
   Other: { icon: Wrench, color: "#64748b" },
+  // Retired in manuscript revision Phase 2, step 2a (see LEGACY_CATEGORIES in
+  // api/src/contracts/schemas.ts).
+  "Drainage / Culvert / Manhole Issue": { icon: Droplets, color: "#0891b2" },
+  "Landslide / Slope Failure": { icon: Mountain, color: "#78350f" },
+  "Lahar / Debris-Flow Threat": { icon: Waves, color: "#9a3412" },
+  "Fallen Tree / Storm-Related Obstruction": { icon: TreePine, color: "#16a34a" },
 };
 const DEFAULT_CATEGORY_SPEC: CategoryMarkerSpec = CATEGORY_MARKER_SPEC.Other;
 

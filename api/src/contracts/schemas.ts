@@ -1,33 +1,45 @@
 import { z } from 'zod';
 import { MUNICIPALITY } from '../domain/municipality-config';
 
-// Manuscript-aligned category set for NEW submissions (Phase 3 follow-up).
-// "Uncollected Garbage" is deliberately absent — routine solid-waste
-// collection is outside direct MEO/MDRRMO responsibility unless it's
-// specifically affecting roads/drainage (covered by the Illegal Dumping
+// Manuscript-aligned category set for NEW submissions (Phase 3 follow-up;
+// names and the drainage/manhole split from manuscript revision Phase 2,
+// step 2a). "Uncollected Garbage" is deliberately absent — routine
+// solid-waste collection is outside direct MEO/MDRRMO responsibility unless
+// it's specifically affecting roads/drainage (covered by the Illegal Dumping
 // category instead). Historical reports/tickets may still carry any of
 // LEGACY_CATEGORIES below; only new submissions are restricted to this list.
 export const CATEGORIES = [
   'Pothole / Road Surface Damage',
   'Uneven Sidewalk',
-  'Drainage / Culvert / Manhole Issue',
+  'Damaged Manhole Cover',
+  'Clogged Drainage / Damaged Culvert',
   'Streetlight Out',
   'Localized Flooding',
-  'Landslide / Slope Failure',
-  'Lahar / Debris-Flow Threat',
-  'Fallen Tree / Storm-Related Obstruction',
+  'Rain-Induced Slope Failure/Landslide',
+  'Lahar or Volcanic Debris-Flow Threat',
+  'Fallen Tree or Storm-Related Road Obstruction',
   'Illegal Dumping Affecting Drainage or Road',
   'Overgrown Vegetation Obstructing Road or Signage',
   'Leaking Pipe / Water Supply Concern',
   'Other Minor Infrastructure Hazard',
 ] as const;
 
-// Pre-Phase-3-follow-up category strings — no longer offered on the citizen
-// report form, but still legitimately stored on historical reports/tickets.
-// Admin-side filter/query validation accepts these too (ALL_CATEGORIES
-// below) so old records stay findable; new-submission validation
-// (reportSchema below) does not. See docs/database.md for the exact
-// legacy -> new semantic mapping.
+// Retired category strings — no longer offered on the citizen report form,
+// but still legitimately stored on historical reports/tickets. Admin-side
+// filter/query validation accepts these too (ALL_CATEGORIES below) so old
+// records stay findable; new-submission validation (reportSchema below) does
+// not. See docs/database.md for the exact legacy -> new semantic mapping.
+//
+// The first eleven predate the Phase 3 follow-up. The last four were retired
+// in manuscript revision Phase 2, step 2a:
+// - "Drainage / Culvert / Manhole Issue" was split into "Damaged Manhole
+//   Cover" and "Clogged Drainage / Damaged Culvert" (Decision 6). Existing
+//   tickets keep it and are marked category_review_required by migration
+//   0035, for staff to correct (Decision 13).
+// - The other three were renamed to the manuscript wording (Decision 9).
+//   Migration 0035 renames them on tickets and saved views; they stay here so
+//   reports and audit/notification history that recorded the old text, and
+//   old bookmarks, still validate.
 export const LEGACY_CATEGORIES = [
   'Flooding',
   'Clogged Drain',
@@ -40,6 +52,10 @@ export const LEGACY_CATEGORIES = [
   'Illegal Dumping',
   'Overgrown Vegetation',
   'Other',
+  'Drainage / Culvert / Manhole Issue',
+  'Landslide / Slope Failure',
+  'Lahar / Debris-Flow Threat',
+  'Fallen Tree / Storm-Related Obstruction',
 ] as const;
 
 export const ALL_CATEGORIES = [...CATEGORIES, ...LEGACY_CATEGORIES] as const;

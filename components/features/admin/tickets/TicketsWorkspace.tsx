@@ -64,6 +64,7 @@ interface QueryState {
   sort: TicketSort;
   search: string;
   disputed: boolean;
+  categoryReview: boolean;
   page: number;
   limit: number;
 }
@@ -103,6 +104,7 @@ function initialQueryState(
     sort,
     search: query.search ?? "",
     disputed: query.disputed === "true",
+    categoryReview: query.categoryReview === "true",
     page: Math.max(1, Number(query.page) || 1),
     limit,
   };
@@ -119,6 +121,7 @@ function buildParams(state: QueryState): URLSearchParams {
   if (state.barangayId) params.set("barangayId", state.barangayId);
   if (state.search) params.set("search", state.search);
   if (state.disputed) params.set("disputed", "true");
+  if (state.categoryReview) params.set("categoryReview", "true");
   return params;
 }
 
@@ -127,7 +130,7 @@ function buildParams(state: QueryState): URLSearchParams {
 // barangay filter is also narrowing the list would misreport what is on screen,
 // so an ad-hoc combination underlines nothing.
 function matchBuiltInView(state: QueryState, defaultOffice: string): BuiltInViewKey | null {
-  if (state.category || state.barangayId || state.search) return null;
+  if (state.category || state.barangayId || state.search || state.categoryReview) return null;
   // Disputed tickets are always Resolved, never active — this tab uses
   // status=all (see selectBuiltInView), so it's matched against that
   // instead of the "active" requirement every other built-in tab needs.
@@ -287,6 +290,7 @@ export function TicketsWorkspace({
       barangayId: "",
       search: "",
       disputed: key === "disputed",
+      categoryReview: false,
       page: 1,
     }));
   }
@@ -401,6 +405,7 @@ export function TicketsWorkspace({
     category: query.category,
     barangayId: query.barangayId,
     disputed: query.disputed,
+    categoryReview: query.categoryReview,
   };
 
   const barangayName = barangays.find((b) => String(b.id) === query.barangayId)?.name;
@@ -410,6 +415,7 @@ export function TicketsWorkspace({
     query.category ? { key: "category", label: `Category: ${query.category}` } : null,
     query.barangayId ? { key: "barangayId", label: `Barangay: ${barangayName ?? query.barangayId}` } : null,
     query.disputed ? { key: "disputed", label: "Disputed only" } : null,
+    query.categoryReview ? { key: "categoryReview", label: "Needs category review" } : null,
   ].filter((chip): chip is FilterChip => chip !== null);
 
   function removeChip(key: string) {
@@ -424,6 +430,8 @@ export function TicketsWorkspace({
         return updateFilter({ barangayId: "" });
       case "disputed":
         return updateFilter({ disputed: false });
+      case "categoryReview":
+        return updateFilter({ categoryReview: false });
     }
   }
 
@@ -438,6 +446,7 @@ export function TicketsWorkspace({
       barangayId: "",
       search: "",
       disputed: false,
+      categoryReview: false,
       page: 1,
     }));
   }

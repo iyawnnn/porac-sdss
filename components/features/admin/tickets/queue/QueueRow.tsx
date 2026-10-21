@@ -31,6 +31,11 @@ const NEXT_STATUS: Record<string, string> = {
 const DISPUTED_BADGE_CLASS =
   "inline-flex h-[17px] items-center rounded-[4px] bg-status-rejected-tint px-1.5 text-[10px] font-semibold tracking-[0.04em] uppercase whitespace-nowrap text-status-rejected-ink";
 
+// Old combined drainage ticket awaiting category correction (migration 0035,
+// handoff Decision 13) — the warning tokens, same chip shape as Disputed.
+const CATEGORY_REVIEW_BADGE_CLASS =
+  "inline-flex h-[17px] items-center rounded-[4px] bg-warning-tint px-1.5 text-[10px] font-semibold tracking-[0.04em] uppercase whitespace-nowrap text-warning-ink";
+
 export function QueueRow({
   ticket,
   detailHref,
@@ -90,6 +95,7 @@ export function QueueRow({
             {ticket.title ?? `Ticket #${ticket.id}`}
           </Link>
           {ticket.disputed_at && <span className={DISPUTED_BADGE_CLASS}>Disputed</span>}
+          {ticket.category_review_required && <span className={CATEGORY_REVIEW_BADGE_CLASS}>Category review</span>}
         </div>
         <div className="font-mono text-[11px] text-muted-foreground">#{ticket.id}</div>
       </div>
