@@ -123,6 +123,35 @@ test.describe("Report detail timeline", () => {
   });
 });
 
+// Manuscript revision Phase 1, step 6c: citizens are shown no system score —
+// no Hazard Urgency tile, badge or map legend anywhere on the citizen pages.
+test.describe("No system score on citizen pages", () => {
+  test("dashboard, My Reports, the public map and a report detail page show no urgency", async ({ page }) => {
+    await loginCitizen(page);
+
+    await page.goto("/dashboard");
+    await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible();
+    await expect(page.getByText(/urgency/i)).toHaveCount(0);
+
+    await page.goto("/reports");
+    await expect(page.getByRole("heading", { name: "My Reports" })).toBeVisible();
+    await expect(page.getByText(/urgency/i)).toHaveCount(0);
+
+    await page.goto("/map");
+    await expect(page.getByText("Public Hazard Map", { exact: true })).toBeVisible();
+    await expect(page.getByText("Urgency", { exact: true })).toHaveCount(0);
+
+    const reports = await fetchMyReports(page);
+    expect(reports.every((r) => !("urgency_band" in r))).toBe(true);
+    test.skip(reports.length === 0, "citizen1 has no seeded reports — run `pnpm --prefix api seed:diverse-reports` first");
+
+    await page.goto(`/dashboard/reports/${reports[0].id}`);
+    await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
+    await expect(page.getByText("Urgency", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/urgency/i)).toHaveCount(0);
+  });
+});
+
 test.describe("Mobile viewport", () => {
   test("My Reports and report detail stay overflow-free on a 375px viewport", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 800 });

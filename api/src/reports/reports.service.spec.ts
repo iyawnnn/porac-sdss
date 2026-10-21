@@ -514,3 +514,55 @@ describe('duplicate-image scan is guarded against a null phash (hardening item 5
     );
   });
 });
+
+// Manuscript revision Phase 1, step 6c: citizens are shown no system score.
+// The my-reports list, my-report detail and public map queries select no
+// Hazard Urgency (and no Operational Priority) column, and the submit
+// response no longer returns the elevation. Source-text assertions, same
+// rationale as the blocks above (no DB harness for these queries).
+describe('citizen responses carry no system score (Phase 1, step 6c)', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+  const SYSTEM_SCORE_COLUMNS =
+    /urgency_band|urgency_score|priority_score|urgency_level|priority_index/;
+
+  function methodBody(name: string): string {
+    const start = reportsServiceSource.indexOf(`async ${name}(`);
+    if (start === -1)
+      throw new Error(`method ${name} not found in reports.service.ts`);
+    const ends = ['\n  async ', '\n}']
+      .map((marker) => reportsServiceSource.indexOf(marker, start + 1))
+      .filter((i) => i !== -1);
+    // Comment lines dropped: the next method's doc comment falls inside the
+    // slice and legitimately names these columns.
+    return reportsServiceSource
+      .slice(start, Math.min(...ends))
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n');
+  }
+
+  it.each(['getMyReports', 'getMyReportDetail', 'getPublicHazardMapData'])(
+    '%s selects no Hazard Urgency or Operational Priority column',
+    (name) => {
+      expect(methodBody(name)).not.toMatch(SYSTEM_SCORE_COLUMNS);
+    },
+  );
+
+  it('the submit response has no elevationM key', () => {
+    const returned = reportsServiceSource.match(
+      /return \{\s*reportId: result\.reportId[\s\S]*?\};/,
+    );
+    expect(returned).not.toBeNull();
+    expect(returned![0]).toContain('barangay: barangay.name');
+    expect(returned![0]).not.toMatch(/elevationM/);
+
+    const resultType = reportsServiceSource.slice(
+      reportsServiceSource.indexOf('export interface SubmitReportResult'),
+      reportsServiceSource.indexOf('export interface MyReportRow'),
+    );
+    expect(resultType).not.toMatch(/elevationM\s*:/);
+  });
+});

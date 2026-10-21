@@ -73,7 +73,6 @@ export default async function MyReportsPage() {
 
   const resolvedCount = reports.filter((r) => r.status === "Resolved").length;
   const activeCount = reports.filter((r) => r.status !== "Resolved" && r.status !== "Rejected").length;
-  const criticalCount = reports.filter((r) => r.urgency_band === "High").length;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
@@ -99,7 +98,8 @@ export default async function MyReportsPage() {
         </Link>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* The "High Urgency" tile was removed in manuscript revision Phase 1, step 6c — citizens are shown no system score. */}
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StatTile
           label="Total Reports"
           value={reports.length}
@@ -123,14 +123,6 @@ export default async function MyReportsPage() {
           note="Live totals based on your submitted hazard reports."
           tint="var(--color-status-resolved-tint)"
           ink="var(--color-status-resolved-ink)"
-        />
-        <StatTile
-          label="High Urgency"
-          value={criticalCount}
-          caption="High-urgency"
-          note="Live totals based on your submitted hazard reports."
-          tint="var(--color-urgency-critical-tint)"
-          ink="var(--color-urgency-critical-ink)"
         />
       </div>
 

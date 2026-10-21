@@ -21,7 +21,7 @@ This is the single most important thing to understand, and the most common sourc
 | **Weights** | ⅓ / ⅓ / ⅓ | 0.5 / 0.25 / 0.25 |
 | **Source** | `api/src/domain/urgency.ts` | `api/src/common/utils/scoring.ts` |
 | **Scale** | 0–1, plus 0–100 restatements | 1–100 |
-| **Where shown** | Being retired (manuscript revision Phase 1): gone from the Ticket Queue, CSV, Ticket Detail, admin map, the admin overview screens (dashboard, Needs Attention, Reports page, Work Orders, Barangay Insights) and Focal Intake; still on citizen views until step 6c | Ticket Queue score/sort, Ticket Detail header and breakdown, admin map rings/popup/heatmap, dashboard "Highest Priority Actions", Work Orders list badge, Barangay profile recent-tickets badge, Focal Intake (dashboard, queue, detail, map), CSV |
+| **Where shown** | Nowhere since manuscript revision Phase 1, step 6c — removed from every admin, Focal and citizen screen and response (steps 4–6c). Still computed and stored by the recompute pass until step 7 | Ticket Queue score/sort, Ticket Detail header and breakdown, admin map rings/popup/heatmap, dashboard "Highest Priority Actions", Work Orders list badge, Barangay profile recent-tickets badge, Focal Intake (dashboard, queue, detail, map), CSV |
 
 They share no term. **Citizen-reported severity does not appear in `urgency_score` at all** — it feeds only `priority_index`. See §8.
 
@@ -139,7 +139,7 @@ Prior to Phase 2 of the manuscript-alignment work, `urgency_band` was computed i
 | **Barangay Insights** (`BarangayProfile.tsx`) | **No Hazard Urgency since Phase 1, step 6a.** The High Urgency column and KPI tile were removed (no replacement count); recent tickets show the Operational Priority badge. Elevation min/avg/max is shown as **display-only context, never a filter or scoring input** |
 | **Focal Intake** (`components/features/admin/focal/`) | **No Hazard Urgency since Phase 1, step 6b; shows Operational Priority.** The Focal dashboard and Intake Queue "Op. Priority" columns, the intake detail header badge and Decision Support card, and the Focal map's pins and popup use `priority_index` with its display band. The Hazard Urgency filter and detail card were removed, with no replacement filter |
 | **CSV export** | No Hazard Urgency since Phase 1, step 4 — an Operational Priority (`priority_index`) column instead |
-| **Citizen views** (`app/(citizen)/**`) | `urgency_band` only. Citizens never see the factor breakdown, `priority_index`, or `priority_score` — see §10.6 |
+| **Citizen views** (`app/(citizen)/**`) | **No Hazard Urgency since Phase 1, step 6c; citizens see no system score.** The dashboard and My Reports tiles, the report detail badge and tile, and the public map's colour-coded pins, clusters and legend were removed (pins and clusters are neutral), and the citizen API responses no longer carry `urgency_band`/`urgency_score`. Operational Priority (`priority_index`) is not shown to citizens either — see §10.6 |
 
 **Frontend/backend consistency was verified, not assumed.** `lib/utils/urgency.ts` and `lib/utils/scoring.ts` are duplicates of their `api/src` counterparts; a line-by-line diff shows they are **identical apart from quote style and line wrapping**. Same formulas, same weights, same thresholds, same saturation constants. The frontend copies exist for badge/label display only and are never authoritative.
 
@@ -258,7 +258,7 @@ Previously, `urgency_band` and `urgency_level` were computed independently with 
 
 ### 10.6 Precision is presented more confidently than it is warranted
 
-`priority_score` and `priority_index` render as precise integers (e.g. "73"). Given §10.1, §10.2, and §10.5, that number carries **far less precision than two significant figures implies** — the difference between 71 and 73 is not meaningful. Ticket Detail's factor breakdown mitigates this for admins by showing the inputs. Citizens see only `urgency_band`, a coarser and more honest three-way label, which is the right choice.
+`priority_score` and `priority_index` render as precise integers (e.g. "73"). Given §10.1, §10.2, and §10.5, that number carries **far less precision than two significant figures implies** — the difference between 71 and 73 is not meaningful. Ticket Detail's factor breakdown mitigates this for admins by showing the inputs. Citizens are shown no system score at all — no Hazard Urgency since manuscript revision Phase 1, step 6c, and never Operational Priority.
 
 Be careful not to describe the score as a calibrated risk probability. It is a **transparent, reproducible ranking heuristic** — which is genuinely useful for triage, and a more defensible claim.
 

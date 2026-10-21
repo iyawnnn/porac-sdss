@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { apiGetOptional } from "@/lib/api-client";
 import type { MyReportDetail, StatusHistoryStep } from "@/lib/types/citizens-reports";
-import { getUrgencyBandStyle } from "@/lib/utils/ui/urgency";
 import {
   duplicateCopy,
   mergedCopy,
@@ -110,14 +109,8 @@ function OutlineChip({ icon, children }: { icon?: React.ReactNode; children: Rea
   );
 }
 
-function UrgencyBadge({ band }: { band: string }) {
-  const style = getUrgencyBandStyle(band);
-  return (
-    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${style.className}`}>
-      {band}
-    </span>
-  );
-}
+// The Hazard Urgency badge (header chip and "Urgency" tile) was removed in
+// manuscript revision Phase 1, step 6c — citizens are shown no system score.
 
 function StatusPill({ status }: { status: string }) {
   const pill = STATUS_STYLE[status] ?? FALLBACK_STATUS_STYLE;
@@ -206,7 +199,6 @@ export default async function MyReportDetailPage({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <OutlineChip>Report Details</OutlineChip>
-              {report.urgency_band && <UrgencyBadge band={report.urgency_band} />}
               <OutlineChip>Citizen-submitted hazard</OutlineChip>
             </div>
 
@@ -348,13 +340,6 @@ export default async function MyReportDetailPage({
           <div className="mt-6 grid grid-cols-2 gap-3">
             <MiniTile label="Current Status">
               <StatusPill status={report.status} />
-            </MiniTile>
-            <MiniTile label="Urgency">
-              {report.urgency_band ? (
-                <UrgencyBadge band={report.urgency_band} />
-              ) : (
-                <span className="text-[13px] text-ink-500">Not yet scored</span>
-              )}
             </MiniTile>
             <MiniTile label="Pinned Location">
               <p className="flex items-center gap-1.5 text-[13px] font-medium text-ink-900">

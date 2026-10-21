@@ -306,7 +306,7 @@ The rules that define who sees what. Enforcement details are in [`security.md`](
 
 **5 — Internal content never reaches citizens.** Work orders, work-order notes, moderation reasoning, a citizen's own dispute reason, Focal intake actions/remarks, and Operational Assessment content are all staff-only. This is structural, not cosmetic: citizen response types have no work-order or intake-internal fields at all, and the CSV export never even selects the notes column. There is a regression test that plants a sentinel note and asserts it never appears on the citizen's page.
 
-**Citizens do see** their own reports and, on the map, city-wide ticket pins. They see an urgency **band** on their report — a coarse Low/Medium/Critical label — but never the factor breakdown, the numeric scores, Operational Priority, Operational Assessment, or Focal intake state. They do see a separate **acknowledgment** event on their own report's timeline (§1) once Focal has acknowledged it — this is not a ticket-status value and is never rendered as one.
+**Citizens do see** their own reports and, on the map, city-wide ticket pins. They see no system score at all — no Hazard Urgency (its band was removed from citizen pages in manuscript revision Phase 1, step 6c), no factor breakdown, no Operational Priority — and no Operational Assessment or Focal intake state. They do see a separate **acknowledgment** event on their own report's timeline (§1) once Focal has acknowledged it — this is not a ticket-status value and is never rendered as one.
 
 ---
 

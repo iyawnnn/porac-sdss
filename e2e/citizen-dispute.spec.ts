@@ -134,10 +134,15 @@ test.describe("Citizen resolution feedback", () => {
     // disputed-only toggle has something to show.
     await adminPage.goto("/admin/tickets?status=all");
     await adminPage.waitForLoadState("networkidle");
+    // The disputed toggle moved into the queue's Filters popover, and row
+    // links became "Open ticket N", in the queue rebuild (de4b9f6).
+    await adminPage.getByRole("button", { name: /^Filters/ }).click();
+    await expect(adminPage.getByRole("dialog")).toBeVisible();
     await adminPage.getByRole("button", { name: "Disputed only" }).click();
     await expect(adminPage).toHaveURL(/[?&]disputed=true(&|$)/);
+    await adminPage.keyboard.press("Escape");
     await adminPage.waitForLoadState("networkidle");
-    await expect(adminPage.getByRole("link", { name: `E2E dispute check dispute-${citizen.email}` })).toBeVisible();
+    await expect(adminPage.getByRole("link", { name: `Open ticket ${ticketId}`, exact: true })).toBeVisible();
     await expect(adminPage.getByText("Disputed", { exact: true }).first()).toBeVisible();
 
     await adminPage.goto(`/admin/tickets/${ticketId}`);

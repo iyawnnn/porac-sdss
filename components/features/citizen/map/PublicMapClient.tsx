@@ -10,8 +10,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { configureLeafletMarkerIcons } from "@/lib/gis/leaflet-icons";
 import { bindBarangayHoverTooltip, styleBarangayFeature, styleMunicipalBoundary } from "@/lib/gis/map-styles";
-import { getUrgencyBandStyle } from "@/lib/utils/ui/urgency";
-import { bandMarkerIcon, getPinSpec } from "@/lib/gis/markerIcon";
+import { bandMarkerIcon } from "@/lib/gis/markerIcon";
 import { clusterIcon } from "@/lib/gis/clusterIcon";
 import type { PublicTicketGeoRow } from "@/lib/types/citizens-public-map";
 import { PublicTicketPopup } from "./PublicTicketPopup";
@@ -24,31 +23,8 @@ const CITY_CENTER: [number, number] = [MUNICIPALITY.centerLat, MUNICIPALITY.cent
 // one-off arbitrary utilities rather than @theme tokens, see MapClient.tsx.
 const GLASS_PANEL = "rounded-xl border border-slate-200/60 bg-white/90 shadow-xl backdrop-blur-md";
 
-function MapLegend() {
-  return (
-    <div className={`absolute bottom-4 left-2 z-[1000] space-y-1.5 px-3 py-2 text-xs text-ink-700 ${GLASS_PANEL}`}>
-      <p className="font-medium text-ink-900">Urgency</p>
-      {(["Low", "Medium", "High"] as const).map((band) => {
-        const spec = getPinSpec(band);
-        const color = getUrgencyBandStyle(band).hex;
-        return (
-          <div key={band} className="flex items-center gap-2">
-            <span
-              className="inline-block flex-shrink-0 rounded-full border border-line-200"
-              style={{
-                width: spec.diameter,
-                height: spec.diameter,
-                backgroundColor: color,
-                boxShadow: spec.outerRing ? `0 0 0 1px ${spec.outerRing}` : undefined,
-              }}
-            />
-            <span>{band}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// Manuscript revision Phase 1, step 6c: citizens are shown no system score,
+// so every pin and cluster is neutral and the Urgency legend is gone.
 
 export default function PublicMapClient({
   barangays,
@@ -73,7 +49,6 @@ export default function PublicMapClient({
         <p className="font-medium text-ink-900">Public Hazard Map</p>
         <p>{tickets.length} active public reports</p>
       </div>
-      <MapLegend />
       <MapContainer center={CITY_CENTER} zoom={MUNICIPALITY.defaultZoom} className="h-full w-full">
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -84,7 +59,7 @@ export default function PublicMapClient({
         <GeoJSON data={barangays} style={styleBarangayFeature} onEachFeature={bindBarangayHoverTooltip} />
         <MarkerClusterGroup chunkedLoading iconCreateFunction={clusterIcon}>
           {tickets.map((ticket) => (
-            <Marker key={ticket.id} position={[ticket.lat, ticket.lng]} icon={bandMarkerIcon(ticket.urgency_band)}>
+            <Marker key={ticket.id} position={[ticket.lat, ticket.lng]} icon={bandMarkerIcon(null)}>
               <Popup>
                 <PublicTicketPopup ticket={ticket} />
               </Popup>
