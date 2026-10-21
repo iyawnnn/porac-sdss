@@ -9,16 +9,11 @@ import {
 import type { Sql, TransactionSql } from 'postgres';
 import { PG } from '../db/db.module';
 import { BarangayService } from '../domain/barangay.service';
-import { ElevationService } from '../domain/elevation.service';
-import { AppConfigService } from '../domain/app-config.service';
-import { WeatherService } from '../domain/weather.service';
 import { MediaService } from '../domain/media.service';
 import { RateLimitService } from '../domain/ratelimit.service';
-import { RecomputeService } from '../domain/recompute.service';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { officeForCategory } from '../common/utils/office';
 import { haversineMeters } from '../common/utils/distance';
-import { computeUrgency } from '../domain/urgency';
 import type { ReportInput } from '../contracts/schemas';
 import { TICKET_DISPUTE_REASON_MAX_LENGTH } from '../contracts/schemas';
 import type { CitizenSession } from '../auth/session.service';
@@ -46,7 +41,7 @@ export interface SubmitReportResult {
   memberCount: number;
   barangay: string;
   // elevationM left the response in manuscript revision Phase 1, step 6c;
-  // the elevation is still looked up and stored until step 7.
+  // since step 7a the elevation is no longer looked up or stored either.
   assignedOffice: 'MEO' | 'MDRRMO';
   flags: string[];
 }
@@ -158,12 +153,8 @@ export class ReportsService {
   constructor(
     @Inject(PG) private readonly pg: Sql,
     private readonly barangay: BarangayService,
-    private readonly elevation: ElevationService,
-    private readonly appConfig: AppConfigService,
-    private readonly weather: WeatherService,
     private readonly media: MediaService,
     private readonly rateLimit: RateLimitService,
-    private readonly recompute: RecomputeService,
     private readonly operationalPriority: OperationalPriorityService,
     private readonly notifications: NotificationsService,
   ) {}
@@ -198,11 +189,11 @@ export class ReportsService {
       throw new BadRequestException(OUTSIDE_MUNICIPALITY_MESSAGE);
     }
 
-    // Step 3: elevation, office, elevation bounds, rain.
-    const elevationM = await this.elevation.findNearestElevation(lat, lng);
+    // Step 3: office routing. The elevation lookup, elevation bounds and
+    // live rain fetch that fed Hazard Urgency were removed in manuscript
+    // revision Phase 1, step 7a — new reports and tickets leave the elevation
+    // and Hazard Urgency columns NULL (the columns are dropped in Phase 8).
     const office = officeForCategory(category);
-    const { elevMin, elevMax } = await this.appConfig.getElevationBounds();
-    const rain1hMm = await this.weather.getCurrentRain1hMm();
 
     // Step 4: server-side EXIF re-extraction + dHash — never trust
     // client-supplied EXIF, it's spoofable.
@@ -284,11 +275,11 @@ export class ReportsService {
       // went with it.
       const insertReport = (ticketId: number) => tx<{ id: number }[]>`
         INSERT INTO reports (
-          ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
+          ticket_id, citizen_id, title, description, citizen_severity, image_url,
           geom, pin_geom, exif_geom, exif_captured_at, exif_data, image_phash, location_mismatch_m, flags
         )
         VALUES (
-          ${ticketId}, ${citizen.citizenId}, ${title}, ${description ?? null}, ${citizenSeverity}, ${elevationM}, ${imageUrl},
+          ${ticketId}, ${citizen.citizenId}, ${title}, ${description ?? null}, ${citizenSeverity}, ${imageUrl},
           ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
           ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
           ${exifGeomFragment},
@@ -305,24 +296,13 @@ export class ReportsService {
         lng,
       );
 
-      const urgency = computeUrgency({
-        elevationM,
-        elevMin,
-        elevMax,
-        memberCount: 1,
-        rain1hMm,
-      });
-
       const [ticket] = await tx<{ id: number }[]>`
         INSERT INTO tickets (
-          category, barangay_id, member_count, elevation_m, assigned_office, geom,
-          elevation_factor, precipitation_factor, cluster_factor, urgency_score, urgency_band
+          category, barangay_id, member_count, assigned_office, geom
         )
         VALUES (
-          ${category}, ${barangay.id}, 1, ${elevationM}, ${office},
-          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
-          ${urgency.elevationFactor}, ${urgency.precipitationFactor}, ${urgency.clusterFactor},
-          ${urgency.urgencyScore}, ${urgency.urgencyBand}
+          ${category}, ${barangay.id}, 1, ${office},
+          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)
         )
         RETURNING id
       `;
@@ -370,7 +350,8 @@ export class ReportsService {
 
     // Step 8: post-commit, not part of the transaction — a slow recompute
     // here must never hold the submission transaction's row locks open.
-    await this.recompute.recomputeActiveTicketUrgency();
+    // (The Hazard Urgency recompute that also ran here was removed in
+    // manuscript revision Phase 1, step 7a.)
     await this.operationalPriority.recalculateActiveTickets();
 
     return {

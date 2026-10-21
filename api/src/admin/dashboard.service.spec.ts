@@ -113,8 +113,6 @@ describe('dashboard ranges', () => {
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
-      {} as never,
     );
     await expect(controller.getDashboard('31')).rejects.toThrow(BadRequestException);
   });
@@ -151,8 +149,6 @@ describe('DashboardController office performance summary assembly', () => {
     } as unknown as WorkOrdersService;
     const controller = new DashboardController(
       dashboard,
-      {} as never,
-      {} as never,
       {} as never,
       {} as never,
       {} as never,

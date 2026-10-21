@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { ArrowLeftIcon, MapPinIcon, MountainIcon, ShieldAlertIcon, ShieldCheckIcon } from "lucide-react";
+import { ArrowLeftIcon, MapPinIcon, ShieldAlertIcon, ShieldCheckIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -106,9 +106,6 @@ export function FocalIntakeDetail({ report }: { report: FocalIntakeDetailData })
               <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1"><MapPinIcon aria-hidden="true" className="size-3.5" />{report.barangayName}</span>
                 <span>{report.lat.toFixed(5)}, {report.lng.toFixed(5)}</span>
-                {report.elevationM !== null && (
-                  <span className="inline-flex items-center gap-1"><MountainIcon aria-hidden="true" className="size-3.5" />Elevation {report.elevationM.toFixed(0)}m</span>
-                )}
               </p>
             </CardContent>
           </Card>

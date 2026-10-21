@@ -74,6 +74,8 @@ Five distinct concepts. The first four are frequently conflated; the last is unr
 
 ### 4.1 Urgency — `api/src/domain/urgency.ts`
 
+> **No longer calculated since manuscript revision Phase 1, step 7a.** `api/src/domain/urgency.ts`, `RecomputeService`, `WeatherService` and `ElevationService` were deleted; report submission no longer looks up elevation or rain, and new tickets leave the Hazard Urgency columns NULL (dropped in Phase 8). The formula below is kept as the historical record of how existing values were produced; the full rewrite of this document is step 7b.
+
 ```
 elevationFactor     = (elevMax − elevationM) / (elevMax − elevMin)
 precipitationFactor = min(rain1hMm / 30, 1.0)

@@ -135,7 +135,6 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
   description: string | null;
   lat: number;
   lng: number;
-  elevationM: number | null;
   linkedTicketReference: string;
   activity: IntakeActivityRow[];
 }
@@ -250,14 +249,13 @@ export class FocalIntakeService {
         description: string | null;
         lat: number;
         lng: number;
-        elevation_m: number | null;
       })[]
     >`
       SELECT
         r.id AS report_id, t.id AS ticket_id, t.category, t.status AS ticket_status,
         t.assigned_office, t.member_count, b.name AS barangay_name,
         r.citizen_severity, r.created_at AS submitted_at, r.flags,
-        r.description, ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng, r.elevation_m,
+        r.description, ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng,
         t.priority_index AS operational_priority,
         ra.acknowledged_at, ra.acknowledged_by_name,
         latest.action_type AS latest_action_type
@@ -283,7 +281,6 @@ export class FocalIntakeService {
       description: row.description,
       lat: row.lat,
       lng: row.lng,
-      elevationM: row.elevation_m,
       linkedTicketReference: `Ticket #${row.ticket_id}`,
       activity,
     };

@@ -1,12 +1,14 @@
 name: Scheduled Cron Jobs
 
 # Calls the existing api/src/cron/cron.controller.ts endpoints on a
-# schedule — none of them have any other trigger today (urgency/weather
-# recompute also happen inline on dashboard/ticket loads, so this is a
-# safety net for them; the three cleanup jobs have no other trigger at
+# schedule — none of them have any other trigger today (Operational
+# Priority recompute also happens inline on dashboard/ticket loads, so this
+# is a safety net for it; the three cleanup jobs have no other trigger at
 # all). The 7-day ticket-escalation check was removed in manuscript
-# revision Phase 1, step 2. One daily schedule for everything
-# rather than several schedules with per-job conditionals — every job here
+# revision Phase 1, step 2, and recompute-priority replaced the Hazard
+# Urgency recompute-urgency/recompute-weather pair in step 7a. One daily
+# schedule for everything rather than several schedules with per-job
+# conditionals — every job here
 # is cheap and idempotent, so there's nothing to gain from splitting them.
 #
 # Required repository configuration (Settings > Secrets and variables > Actions):
@@ -49,8 +51,7 @@ jobs:
         run: |
           set -eu
           for path in \
-            recompute-urgency \
-            recompute-weather \
+            recompute-priority \
             cleanup-password-reset-tokens \
             cleanup-notifications \
             cleanup-rate-limit-events
