@@ -186,6 +186,31 @@ test("disputed-only filter shows only disputed tickets or the empty state", asyn
   }
 });
 
+// Manuscript revision Phase 2, step 2a (handoff Decision 13): only old
+// combined drainage tickets carry the flag (set by migration 0035), so a
+// database without any shows the empty state instead.
+test("needs-category-review filter shows only review-flagged tickets or the empty state", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto("/admin/tickets?status=all");
+  await page.waitForLoadState("networkidle");
+
+  await openQueueFilters(page);
+  await page.getByRole("button", { name: "Needs category review" }).click();
+  await expect(page).toHaveURL(/[?&]categoryReview=true(&|$)/);
+  await page.keyboard.press("Escape");
+  await page.waitForLoadState("networkidle");
+
+  const rows = queueRows(page);
+  const count = await rows.count();
+  if (count === 0) {
+    await expect(page.getByText("No tickets match this filter.")).toBeVisible();
+  } else {
+    for (let i = 0; i < count; i++) {
+      await expect(rows.nth(i).getByText("Category review", { exact: true })).toBeVisible();
+    }
+  }
+});
+
 test("reset filters clears status, search, and disputed back to defaults", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/tickets?status=all&search=zzz&disputed=true");

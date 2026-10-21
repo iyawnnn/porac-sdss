@@ -78,6 +78,10 @@ export interface AdminTicketFilters {
   // A pure list-narrowing filter, same shape as WorkOrdersService's
   // `overdue` boolean — never absent-means-false, absent means unfiltered.
   disputed?: boolean;
+  // true narrows to tickets marked tickets.category_review_required (old
+  // combined drainage tickets, migration 0035 — handoff Decision 13). Same
+  // shape as `disputed`: absent means unfiltered, never "only false".
+  categoryReview?: boolean;
   sort?: TicketSort;
   search?: string;
   page?: number;
@@ -99,6 +103,7 @@ export interface AdminTicketRow {
   status: string;
   created_at: string;
   disputed_at: string | null;
+  category_review_required: boolean;
 }
 
 export interface PaginatedTickets {
@@ -163,6 +168,9 @@ export interface TicketDetail {
   resolution_notes: string | null;
   disputed_at: string | null;
   dispute_reason: string | null;
+  // Set by migration 0035 on old combined drainage tickets (handoff
+  // Decision 13); cleared by the Phase 3 category correction.
+  category_review_required: boolean;
   // Pure function of category (api/src/common/utils/office.ts), computed at
   // read time — never stored. True means this office owns fixing it; false
   // means it's a referral/coordination concern this office merely holds
@@ -270,7 +278,12 @@ export class TicketsService {
   ): Required<Pick<AdminTicketFilters, 'status' | 'sort' | 'page' | 'limit'>> &
     Pick<
       AdminTicketFilters,
-      'office' | 'category' | 'barangayId' | 'search' | 'disputed'
+      | 'office'
+      | 'category'
+      | 'barangayId'
+      | 'search'
+      | 'disputed'
+      | 'categoryReview'
     > {
     const requestedOffice =
       query.office === 'all' ||
@@ -292,6 +305,7 @@ export class TicketsService {
       : undefined;
     const barangayId = query.barangayId ? Number(query.barangayId) : undefined;
     const disputed = query.disputed === 'true' ? true : undefined;
+    const categoryReview = query.categoryReview === 'true' ? true : undefined;
     // Default is Operational Priority (priority_index) descending — the
     // administrative queue recommendation. A retired Hazard Urgency sort
     // ('priority_desc'/'priority_asc') or an `urgency=` filter left in an old
@@ -313,6 +327,7 @@ export class TicketsService {
       office,
       status: status ?? 'active',
       disputed,
+      categoryReview,
       category,
       barangayId,
       sort,
@@ -361,6 +376,7 @@ export class TicketsService {
         t.barangay_id, b.name AS barangay_name, t.member_count,
         t.priority_index,
         t.assigned_office, t.status, t.created_at, t.disputed_at,
+        t.category_review_required,
         COUNT(*) OVER ()::int AS total_count
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
@@ -369,6 +385,7 @@ export class TicketsService {
         AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
         AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
         AND (${filters.disputed ? true : null}::boolean IS NULL OR t.disputed_at IS NOT NULL)
+        AND (${filters.categoryReview ? true : null}::boolean IS NULL OR t.category_review_required)
         AND (
           ${search}::text IS NULL
           OR b.name ILIKE '%' || ${search} || '%'
@@ -484,6 +501,7 @@ export class TicketsService {
         ${statusClause}
         AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
         AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
+        AND (${filters.categoryReview ? true : null}::boolean IS NULL OR t.category_review_required)
         AND (${dateFrom}::timestamptz IS NULL OR t.created_at >= ${dateFrom}::timestamptz)
         AND (${dateTo}::timestamptz IS NULL OR t.created_at <= ${dateTo}::timestamptz)
         AND (${ids}::int[] IS NULL OR t.id = ANY(${ids}::int[]))
@@ -533,7 +551,7 @@ export class TicketsService {
         t.status, t.assigned_office, t.member_count, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
         t.priority_index,
         t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at,
-        t.disputed_at, t.dispute_reason
+        t.disputed_at, t.dispute_reason, t.category_review_required
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
       WHERE t.id = ${id}

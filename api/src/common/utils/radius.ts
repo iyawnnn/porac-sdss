@@ -10,6 +10,16 @@ const RADIUS_BY_CATEGORY: Record<string, number> = {
   'Landslide / Slope Failure': 100,
   'Lahar / Debris-Flow Threat': 100,
   'Leaking Pipe / Water Supply Concern': 50,
+  // Added in manuscript revision Phase 2, step 2a: the two halves of the
+  // drainage/manhole split (Decision 6) and the manuscript names for the
+  // renamed categories (Decision 9), at the same radius as their old names.
+  // The old keys above stay for historical tickets. "Fallen Tree or
+  // Storm-Related Road Obstruction" is deliberately not listed: its old name
+  // never was, so both fall through to the same 50 m default.
+  'Damaged Manhole Cover': 20,
+  'Clogged Drainage / Damaged Culvert': 50,
+  'Rain-Induced Slope Failure/Landslide': 100,
+  'Lahar or Volcanic Debris-Flow Threat': 100,
   // Unchanged names, shared by both the legacy and new category sets.
   'Streetlight Out': 25,
   'Uneven Sidewalk': 25,

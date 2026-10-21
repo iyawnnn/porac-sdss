@@ -20,6 +20,9 @@ export interface AdminTicketRow {
   status: string;
   created_at: string;
   disputed_at: string | null;
+  // Old combined drainage ticket awaiting category correction (migration
+  // 0035, handoff Decision 13).
+  category_review_required: boolean;
 }
 
 export interface PaginatedTickets {
@@ -79,6 +82,9 @@ export interface TicketDetail {
   updated_at: string;
   disputed_at: string | null;
   dispute_reason: string | null;
+  // Set by migration 0035 on old combined drainage tickets (handoff
+  // Decision 13); cleared by the Phase 3 category correction.
+  category_review_required: boolean;
   // Pure function of category, computed server-side at read time — never
   // stored. False means this category is a referral/coordination concern.
   direct_responsibility: boolean;

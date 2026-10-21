@@ -4,12 +4,13 @@ describe('categoryRouting — new (manuscript-aligned) categories', () => {
   it('routes each new category to its manuscript-aligned office and responsibility', () => {
     expect(categoryRouting('Pothole / Road Surface Damage')).toEqual({ office: 'MEO', directResponsibility: true });
     expect(categoryRouting('Uneven Sidewalk')).toEqual({ office: 'MEO', directResponsibility: true });
-    expect(categoryRouting('Drainage / Culvert / Manhole Issue')).toEqual({ office: 'MEO', directResponsibility: true });
+    expect(categoryRouting('Damaged Manhole Cover')).toEqual({ office: 'MEO', directResponsibility: true });
+    expect(categoryRouting('Clogged Drainage / Damaged Culvert')).toEqual({ office: 'MEO', directResponsibility: true });
     expect(categoryRouting('Streetlight Out')).toEqual({ office: 'MEO', directResponsibility: true });
     expect(categoryRouting('Localized Flooding')).toEqual({ office: 'MDRRMO', directResponsibility: true });
-    expect(categoryRouting('Landslide / Slope Failure')).toEqual({ office: 'MDRRMO', directResponsibility: true });
-    expect(categoryRouting('Lahar / Debris-Flow Threat')).toEqual({ office: 'MDRRMO', directResponsibility: true });
-    expect(categoryRouting('Fallen Tree / Storm-Related Obstruction')).toEqual({ office: 'MDRRMO', directResponsibility: true });
+    expect(categoryRouting('Rain-Induced Slope Failure/Landslide')).toEqual({ office: 'MDRRMO', directResponsibility: true });
+    expect(categoryRouting('Lahar or Volcanic Debris-Flow Threat')).toEqual({ office: 'MDRRMO', directResponsibility: true });
+    expect(categoryRouting('Fallen Tree or Storm-Related Road Obstruction')).toEqual({ office: 'MDRRMO', directResponsibility: true });
     expect(categoryRouting('Illegal Dumping Affecting Drainage or Road')).toEqual({ office: 'MEO', directResponsibility: false });
     expect(categoryRouting('Overgrown Vegetation Obstructing Road or Signage')).toEqual({ office: 'MEO', directResponsibility: false });
     expect(categoryRouting('Leaking Pipe / Water Supply Concern')).toEqual({ office: 'MEO', directResponsibility: false });
@@ -33,6 +34,13 @@ describe('categoryRouting — legacy (pre-Phase-3-follow-up) categories', () => 
     expect(categoryRouting('Other')).toEqual({ office: 'MEO', directResponsibility: false });
   });
 
+  it('keeps the four names retired in manuscript revision Phase 2, step 2a on their old routing', () => {
+    expect(categoryRouting('Drainage / Culvert / Manhole Issue')).toEqual({ office: 'MEO', directResponsibility: true });
+    expect(categoryRouting('Landslide / Slope Failure')).toEqual({ office: 'MDRRMO', directResponsibility: true });
+    expect(categoryRouting('Lahar / Debris-Flow Threat')).toEqual({ office: 'MDRRMO', directResponsibility: true });
+    expect(categoryRouting('Fallen Tree / Storm-Related Obstruction')).toEqual({ office: 'MDRRMO', directResponsibility: true });
+  });
+
   it('routes the stray "Soil Erosion" seed value to its closest manuscript-aligned equivalent instead of the generic unknown fallback', () => {
     expect(categoryRouting('Soil Erosion')).toEqual({ office: 'MDRRMO', directResponsibility: true });
   });
@@ -50,12 +58,13 @@ describe('officeForCategory', () => {
     for (const category of [
       'Pothole / Road Surface Damage',
       'Uneven Sidewalk',
-      'Drainage / Culvert / Manhole Issue',
+      'Damaged Manhole Cover',
+      'Clogged Drainage / Damaged Culvert',
       'Streetlight Out',
       'Localized Flooding',
-      'Landslide / Slope Failure',
-      'Lahar / Debris-Flow Threat',
-      'Fallen Tree / Storm-Related Obstruction',
+      'Rain-Induced Slope Failure/Landslide',
+      'Lahar or Volcanic Debris-Flow Threat',
+      'Fallen Tree or Storm-Related Road Obstruction',
       'Illegal Dumping Affecting Drainage or Road',
       'Overgrown Vegetation Obstructing Road or Signage',
       'Leaking Pipe / Water Supply Concern',
@@ -69,6 +78,10 @@ describe('officeForCategory', () => {
       'Illegal Dumping',
       'Overgrown Vegetation',
       'Other',
+      'Drainage / Culvert / Manhole Issue',
+      'Landslide / Slope Failure',
+      'Lahar / Debris-Flow Threat',
+      'Fallen Tree / Storm-Related Obstruction',
       'Soil Erosion',
       'Not A Real Category',
     ]) {

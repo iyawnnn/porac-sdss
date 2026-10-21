@@ -93,7 +93,7 @@ MEO handles the built-environment backlog.
 
 ### 2.1 Categories that reach MEO
 
-A Phase 3 follow-up (manuscript alignment) replaced the citizen-selectable category list with a more explicit set. Pothole / Road Surface Damage, Uneven Sidewalk, Drainage / Culvert / Manhole Issue, and Streetlight Out are **MEO's direct responsibility** — routing is automatic by category, nobody assigns tickets manually on arrival. "Other Minor Infrastructure Hazard" also lands in MEO's queue but is intake/manual-review only, not automatically owned.
+A Phase 3 follow-up (manuscript alignment) replaced the citizen-selectable category list with a more explicit set. Pothole / Road Surface Damage, Uneven Sidewalk, Damaged Manhole Cover, Clogged Drainage / Damaged Culvert, and Streetlight Out are **MEO's direct responsibility** — routing is automatic by category, nobody assigns tickets manually on arrival. "Other Minor Infrastructure Hazard" also lands in MEO's queue but is intake/manual-review only, not automatically owned.
 
 Illegal Dumping Affecting Drainage or Road, Overgrown Vegetation Obstructing Road or Signage, and Leaking Pipe / Water Supply Concern also land in MEO's queue by default (MDRRMO is never a sensible custody office for these), but are flagged **Referral** — coordination concerns for an external agency (water/electric utility, solid-waste enforcement, barangay-level clearing), not direct MEO repair work. Ticket Detail shows a "Referral — coordinate externally" badge and a "Log Referral" action for these; logging a referral records the agency/target and a note as a permanent, dated history entry — it is documentation, not a live "pending" status, and doesn't change the ticket's office or lifecycle status.
 
@@ -163,7 +163,7 @@ MDRRMO handles hazard and disaster-risk incidents. **The interface is identical 
 
 ### 3.1 Categories that reach MDRRMO
 
-Four, all direct responsibility: **Localized Flooding, Landslide / Slope Failure, Lahar / Debris-Flow Threat, Fallen Tree / Storm-Related Obstruction.** A smaller set than MEO's, but the categories most tied to weather and terrain — which is where Phase 4's Hazard Information (DENR-MGB susceptibility) will matter most. (Drainage / Culvert / Manhole Issue routes to MEO — a drainage structure defect is built-environment maintenance, not a disaster-response concern, even though it can contribute to flooding. The old "Clogged Drain" legacy category routed the same way.)
+Four, all direct responsibility: **Localized Flooding, Rain-Induced Slope Failure/Landslide, Lahar or Volcanic Debris-Flow Threat, Fallen Tree or Storm-Related Road Obstruction.** A smaller set than MEO's, but the categories most tied to weather and terrain — which is where Phase 4's Hazard Information (DENR-MGB susceptibility) will matter most. (Damaged Manhole Cover and Clogged Drainage / Damaged Culvert route to MEO — a drainage structure defect is built-environment maintenance, not a disaster-response concern, even though it can contribute to flooding. The old "Clogged Drain" legacy category routed the same way.)
 
 ### 3.2 Where the emphasis differs
 

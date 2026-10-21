@@ -140,6 +140,52 @@ describe('parseTicketQuery disputed filter', () => {
   });
 });
 
+// Manuscript revision Phase 2, step 2a (handoff Decision 13): the
+// "Needs category review" queue filter, same strict-"true" shape as disputed.
+describe('parseTicketQuery categoryReview filter', () => {
+  const sql = jest.fn() as unknown as Sql;
+  const service = new TicketsService(
+    sql,
+    {} as MediaService,
+    {} as NotificationsService,
+    {} as EmailService,
+    {} as ConfigService<Env, true>,
+    {} as AdminAuditService,
+  );
+
+  it('parses categoryReview=true', () => {
+    expect(
+      service.parseTicketQuery({ categoryReview: 'true' }, MEO_OFFICER)
+        .categoryReview,
+    ).toBe(true);
+  });
+
+  it('defaults to undefined (unfiltered) when absent', () => {
+    expect(
+      service.parseTicketQuery({}, MEO_OFFICER).categoryReview,
+    ).toBeUndefined();
+  });
+
+  it('treats any non-"true" value as unfiltered', () => {
+    for (const value of ['false', '1', 'TRUE', 'yes', '']) {
+      expect(
+        service.parseTicketQuery({ categoryReview: value }, MEO_OFFICER)
+          .categoryReview,
+      ).toBeUndefined();
+    }
+  });
+
+  it('leaves the other filters alone when set', () => {
+    const filters = service.parseTicketQuery(
+      { categoryReview: 'true', status: 'all' },
+      MEO_OFFICER,
+    );
+    expect(filters.status).toBe('all');
+    expect(filters.office).toBe('MEO');
+    expect(filters.disputed).toBeUndefined();
+  });
+});
+
 describe('cross-office access to single-resource ticket endpoints', () => {
   function makeService(rows: unknown[][]) {
     let i = 0;
@@ -648,6 +694,56 @@ describe('getTicketsForAdmin disputed filter wiring', () => {
     );
     expect(detailSelect).toContain('t.disputed_at');
     expect(detailSelect).toContain('t.dispute_reason');
+  });
+});
+
+// Same no-DB source-scan approach as the disputed wiring above. The guard is
+// that the categoryReview filter rides the same office-scoped WHERE in both
+// the queue list and the CSV export (which reuses parseTicketQuery), and that
+// the flag is returned to the queue row and Ticket Detail.
+describe('categoryReview filter wiring', () => {
+  const ticketsServiceSource = readFileSync(
+    join(__dirname, 'tickets.service.ts'),
+    'utf8',
+  );
+  const CLAUSE =
+    'AND (${filters.categoryReview ? true : null}::boolean IS NULL OR t.category_review_required)';
+
+  function methodBody(name: string, endMarker: string): string {
+    const start = ticketsServiceSource.indexOf(`async ${name}(`);
+    expect(start).toBeGreaterThan(-1);
+    return ticketsServiceSource.slice(
+      start,
+      ticketsServiceSource.indexOf(endMarker, start),
+    );
+  }
+
+  it('getTicketsForAdmin selects category_review_required and narrows on it after the office clause', () => {
+    const body = methodBody('getTicketsForAdmin', 'ORDER BY ${orderBy}');
+    expect(body).toContain('t.category_review_required,');
+    const officeIdx = body.indexOf(
+      't.assigned_office = ${filters.office ?? null}::office)',
+    );
+    expect(officeIdx).toBeGreaterThan(-1);
+    expect(body.indexOf(CLAUSE)).toBeGreaterThan(officeIdx);
+  });
+
+  it('getTicketsForExport applies the same clause after the office clause', () => {
+    const body = methodBody('getTicketsForExport', 'LIMIT 5000');
+    const officeIdx = body.indexOf(
+      't.assigned_office = ${filters.office ?? null}::office)',
+    );
+    expect(officeIdx).toBeGreaterThan(-1);
+    expect(body.indexOf(CLAUSE)).toBeGreaterThan(officeIdx);
+  });
+
+  it('getTicketDetail exposes category_review_required', () => {
+    const detailStart = ticketsServiceSource.indexOf('async getTicketDetail(');
+    const detailSelect = ticketsServiceSource.slice(
+      detailStart,
+      ticketsServiceSource.indexOf('FROM tickets t', detailStart),
+    );
+    expect(detailSelect).toContain('t.category_review_required');
   });
 });
 

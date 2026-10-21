@@ -270,7 +270,7 @@ const SPECS: Spec[] = [
   ]),
   cluster(
     'Pulung Santol',
-    'Drainage / Culvert / Manhole Issue',
+    'Clogged Drainage / Damaged Culvert',
     'Reported',
     3,
     [
@@ -290,13 +290,13 @@ const SPECS: Spec[] = [
   // can be "busy" without dedup).
   standalone(
     'Sapang Uwak',
-    'Landslide / Slope Failure',
+    'Rain-Induced Slope Failure/Landslide',
     'In Progress',
     5,
   ),
   standalone(
     'Sapang Uwak',
-    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree or Storm-Related Road Obstruction',
     'Reported',
     1,
   ),
@@ -324,7 +324,7 @@ const SPECS: Spec[] = [
 
   standalone(
     'Villa Maria',
-    'Landslide / Slope Failure',
+    'Rain-Induced Slope Failure/Landslide',
     'Under Review',
     6,
   ),
@@ -345,7 +345,7 @@ const SPECS: Spec[] = [
   ),
   standalone(
     'Inararo',
-    'Drainage / Culvert / Manhole Issue',
+    'Clogged Drainage / Damaged Culvert',
     'In Progress',
     7,
   ),
@@ -353,7 +353,7 @@ const SPECS: Spec[] = [
   standalone('Pio', 'Localized Flooding', 'Reported', 2),
   standalone(
     'Pio',
-    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree or Storm-Related Road Obstruction',
     'Reported',
     0,
   ),
@@ -380,7 +380,7 @@ const SPECS: Spec[] = [
   ),
   standalone(
     'Palat',
-    'Drainage / Culvert / Manhole Issue',
+    'Clogged Drainage / Damaged Culvert',
     'In Progress',
     8,
   ),
@@ -388,7 +388,7 @@ const SPECS: Spec[] = [
 
   standalone(
     'Dolores',
-    'Lahar / Debris-Flow Threat',
+    'Lahar or Volcanic Debris-Flow Threat',
     'Reported',
     3,
     'location_mismatch',
@@ -402,13 +402,13 @@ const SPECS: Spec[] = [
 
   standalone(
     'Jalung',
-    'Landslide / Slope Failure',
+    'Rain-Induced Slope Failure/Landslide',
     'In Progress',
     9,
   ),
   standalone(
     'Jalung',
-    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree or Storm-Related Road Obstruction',
     'Reported',
     2,
   ),
@@ -429,7 +429,7 @@ const SPECS: Spec[] = [
 
   standalone(
     'Sinura',
-    'Drainage / Culvert / Manhole Issue',
+    'Clogged Drainage / Damaged Culvert',
     'Reported',
     3,
   ),
@@ -452,7 +452,7 @@ const SPECS: Spec[] = [
   ),
   standalone(
     'Calzadang Bayu',
-    'Drainage / Culvert / Manhole Issue',
+    'Clogged Drainage / Damaged Culvert',
     'Resolved',
     16,
   ),
@@ -488,17 +488,17 @@ const SPECS: Spec[] = [
     'Resolved',
     25,
   ),
-  standalone('Manuali', 'Landslide / Slope Failure', 'Reported', 2),
+  standalone('Manuali', 'Rain-Induced Slope Failure/Landslide', 'Reported', 2),
   standalone(
     'Mitla Proper',
-    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree or Storm-Related Road Obstruction',
     'Under Review',
     5,
   ),
   standalone('Pias', 'Pothole / Road Surface Damage', 'Resolved', 10),
   standalone(
     'Poblacion',
-    'Drainage / Culvert / Manhole Issue',
+    'Clogged Drainage / Damaged Culvert',
     'In Progress',
     6,
   ),
@@ -518,7 +518,7 @@ const SPECS: Spec[] = [
   // ---- Hotspot completion: San Jose Mitla (existing: 1 cluster) -> 7
   cluster(
     'San Jose Mitla',
-    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree or Storm-Related Road Obstruction',
     'Under Review',
     2,
     [
@@ -561,11 +561,17 @@ const SPECS: Spec[] = [
   ),
 
   // ---- Hotspot completion: Pulung Santol (existing: 1 cluster) -> 7
-  cluster('Pulung Santol', 'Landslide / Slope Failure', 'Reported', 1, [
-    { dLatM: 0, dLngM: 0 },
-    { dLatM: 50, dLngM: -30 },
-    { dLatM: -40, dLngM: 35 },
-  ]),
+  cluster(
+    'Pulung Santol',
+    'Rain-Induced Slope Failure/Landslide',
+    'Reported',
+    1,
+    [
+      { dLatM: 0, dLngM: 0 },
+      { dLatM: 50, dLngM: -30 },
+      { dLatM: -40, dLngM: 35 },
+    ],
+  ),
   standalone(
     'Pulung Santol',
     'Pothole / Road Surface Damage',
@@ -594,7 +600,7 @@ const SPECS: Spec[] = [
   ),
   standalone(
     'Pulung Santol',
-    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree or Storm-Related Road Obstruction',
     'Resolved',
     17,
     'clean',
@@ -603,8 +609,8 @@ const SPECS: Spec[] = [
   ),
 
   // ---- Hotspot completion: Salu (existing: 1 cluster) -> 7
-  standalone('Salu', 'Lahar / Debris-Flow Threat', 'Reported', 1),
-  standalone('Salu', 'Landslide / Slope Failure', 'In Progress', 4),
+  standalone('Salu', 'Lahar or Volcanic Debris-Flow Threat', 'Reported', 1),
+  standalone('Salu', 'Rain-Induced Slope Failure/Landslide', 'In Progress', 4),
   standalone(
     'Salu',
     'Pothole / Road Surface Damage',
@@ -615,7 +621,7 @@ const SPECS: Spec[] = [
   standalone('Salu', 'Streetlight Out', 'Reported', 0),
   standalone(
     'Salu',
-    'Drainage / Culvert / Manhole Issue',
+    'Clogged Drainage / Damaged Culvert',
     'Resolved',
     19,
     'clean',
@@ -635,14 +641,14 @@ const SPECS: Spec[] = [
   // ---- Hotspot completion: Sapang Uwak (existing: 4 standalone) -> 8
   standalone(
     'Sapang Uwak',
-    'Lahar / Debris-Flow Threat',
+    'Lahar or Volcanic Debris-Flow Threat',
     'Under Review',
     3,
   ),
   standalone('Sapang Uwak', 'Streetlight Out', 'Reported', 1),
   standalone(
     'Sapang Uwak',
-    'Drainage / Culvert / Manhole Issue',
+    'Clogged Drainage / Damaged Culvert',
     'Resolved',
     15,
     'clean',
@@ -654,7 +660,7 @@ const SPECS: Spec[] = [
   // ---- Medium-activity completion (8 barangays, target 3-5 each)
   standalone(
     'Villa Maria',
-    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree or Storm-Related Road Obstruction',
     'In Progress',
     5,
   ),
@@ -668,7 +674,7 @@ const SPECS: Spec[] = [
     { kind: 'confirm' },
   ),
 
-  standalone('Pio', 'Landslide / Slope Failure', 'Under Review', 4),
+  standalone('Pio', 'Rain-Induced Slope Failure/Landslide', 'Under Review', 4),
 
   standalone('Palat', 'Streetlight Out', 'Under Review', 3),
 
@@ -676,14 +682,14 @@ const SPECS: Spec[] = [
 
   standalone(
     'Sinura',
-    'Landslide / Slope Failure',
+    'Rain-Induced Slope Failure/Landslide',
     'In Progress',
     6,
   ),
 
   standalone(
     'Camias',
-    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree or Storm-Related Road Obstruction',
     'Under Review',
     2,
   ),
@@ -699,7 +705,7 @@ const SPECS: Spec[] = [
 
   standalone(
     'Planas',
-    'Landslide / Slope Failure',
+    'Rain-Induced Slope Failure/Landslide',
     'In Progress',
     4,
   ),
@@ -727,7 +733,7 @@ const SPECS: Spec[] = [
   standalone('Mancatian', 'Localized Flooding', 'In Progress', 3),
   standalone(
     'Babo Pangulo',
-    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree or Storm-Related Road Obstruction',
     'Resolved',
     6,
     'clean',
@@ -736,14 +742,14 @@ const SPECS: Spec[] = [
   ),
   standalone(
     'Babo Sacan',
-    'Landslide / Slope Failure',
+    'Rain-Induced Slope Failure/Landslide',
     'Reported',
     2,
   ),
   standalone('Balubad', 'Localized Flooding', 'In Progress', 5),
   standalone(
     'Balubad',
-    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree or Storm-Related Road Obstruction',
     'Resolved',
     7,
     'clean',
@@ -752,7 +758,7 @@ const SPECS: Spec[] = [
   ),
   standalone(
     'Manuali',
-    'Drainage / Culvert / Manhole Issue',
+    'Clogged Drainage / Damaged Culvert',
     'Resolved',
     9,
     'clean',
@@ -832,7 +838,7 @@ const SPECS: Spec[] = [
   ]),
 
   // Balubad — 50m drainage tier, MEO. member=3.
-  cluster('Balubad', 'Drainage / Culvert / Manhole Issue', 'Under Review', 2, [
+  cluster('Balubad', 'Clogged Drainage / Damaged Culvert', 'Under Review', 2, [
     { dLatM: 0, dLngM: 0 },
     { dLatM: 25, dLngM: -15 },
     { dLatM: -20, dLngM: 18 },
@@ -846,19 +852,31 @@ const SPECS: Spec[] = [
   ]),
 
   // Pio — default 50m tier (not in RADIUS_BY_CATEGORY), MDRRMO. member=3.
-  cluster('Pio', 'Fallen Tree / Storm-Related Obstruction', 'Reported', 1, [
-    { dLatM: 0, dLngM: 0 },
-    { dLatM: 20, dLngM: 15 },
-    { dLatM: -22, dLngM: -10 },
-  ]),
+  cluster(
+    'Pio',
+    'Fallen Tree or Storm-Related Road Obstruction',
+    'Reported',
+    1,
+    [
+      { dLatM: 0, dLngM: 0 },
+      { dLatM: 20, dLngM: 15 },
+      { dLatM: -22, dLngM: -10 },
+    ],
+  ),
 
   // Mitla Proper — 100m tier, MDRRMO. member=4 for variety in cluster size.
-  cluster('Mitla Proper', 'Landslide / Slope Failure', 'Under Review', 2, [
-    { dLatM: 0, dLngM: 0 },
-    { dLatM: 50, dLngM: -40 },
-    { dLatM: -55, dLngM: 30 },
-    { dLatM: 15, dLngM: 65 },
-  ]),
+  cluster(
+    'Mitla Proper',
+    'Rain-Induced Slope Failure/Landslide',
+    'Under Review',
+    2,
+    [
+      { dLatM: 0, dLngM: 0 },
+      { dLatM: 50, dLngM: -40 },
+      { dLatM: -55, dLngM: 30 },
+      { dLatM: 15, dLngM: 65 },
+    ],
+  ),
 ];
 
 // One manual reassignment: an MDRRMO-direct hazard whose immediate danger
@@ -868,7 +886,7 @@ const SPECS: Spec[] = [
 // event) rather than being hand-inserted.
 const REASSIGN_TARGET = {
   barangay: 'Jalung',
-  category: 'Fallen Tree / Storm-Related Obstruction',
+  category: 'Fallen Tree or Storm-Related Road Obstruction',
 };
 
 async function main() {
