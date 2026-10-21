@@ -512,7 +512,7 @@ export default function ReportForm() {
             {!detectedBarangay && position && (
               <p className="text-amber-800">Pin is inside the Porac bounding box but outside loaded barangay polygons.</p>
             )}
-            {locationError && <p className="text-urgency-critical-ink">{locationError}</p>}
+            {locationError && <p className="text-danger-ink">{locationError}</p>}
           </div>
         </section>
 
@@ -603,7 +603,7 @@ export default function ReportForm() {
             {message && (
               <p
                 className={`text-sm flex items-start gap-1.5 ${
-                  status === "error" ? "text-urgency-critical-ink" : "text-status-resolved-ink"
+                  status === "error" ? "text-danger-ink" : "text-status-resolved-ink"
                 }`}
               >
                 <span>{message}</span>

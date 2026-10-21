@@ -18,9 +18,10 @@ import {
 } from '../contracts/schemas';
 
 // MEO/MDRRMO's human Operational Assessment (Batch 3) — the third decision-
-// support layer, deliberately separate from the two system-generated ones
-// (Hazard Urgency = tickets.priority_score/urgency_level, Operational
-// Priority = tickets.priority_index — neither read nor written here).
+// support layer, deliberately separate from the system-generated Operational
+// Priority (tickets.priority_index — never read nor written here). The
+// other former system score, Hazard Urgency, was retired in manuscript
+// revision Phase 1.
 // ONE CURRENT row per ticket (operational_assessments.ticket_id UNIQUE);
 // see schema.ts's own docblock for the two-actor-snapshot rationale and why
 // there is deliberately no score/level/band column anywhere in this table.

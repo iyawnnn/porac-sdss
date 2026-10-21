@@ -57,7 +57,7 @@ export function NeedsAttention({ data, flaggedReportsPending }: { data: NeedsAtt
             description="Work orders due today"
             icon={CalendarClock}
             label="Due Today"
-            tone="text-urgency-medium"
+            tone="text-warning"
           />
           {/* The Hazard Urgency row was removed in manuscript revision Phase 1, step 6a. */}
           <AttentionRow

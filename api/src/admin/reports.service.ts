@@ -106,7 +106,7 @@ export class ReportsService {
   // The risk score the UI shows is deliberately NOT a column: computeRiskScore
   // lives in lib/utils/flag-risk.ts (frontend-only), and putting a second copy
   // of those weights in the API would create exactly the kind of drifting
-  // duplicate definition the urgency/scoring pair already has to change-control.
+  // duplicate definition the scoring.ts pair already has to change-control.
   // `Flags` carries the underlying signals the score is derived from instead.
   async flaggedCsv(
     query: Record<string, string | undefined>,

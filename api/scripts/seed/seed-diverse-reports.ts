@@ -3,7 +3,7 @@ import { resolve } from "path";
 import { sql } from "../db";
 import { generateExifImage } from "../../../lib/utils/generate-exif-image";
 import { extractExif } from "../lib/exif";
-import { recomputeActiveTicketUrgency } from "../lib/recompute";
+import { recalculateActivePriority } from "../lib/recompute";
 
 type Severity = "Low" | "Medium" | "High" | "Critical";
 
@@ -46,16 +46,13 @@ async function main() {
 
     const ticketLat = barangay.lat + spec.offset;
     const ticketLng = barangay.lng + spec.offset;
-    const [elevation] = await sql<{ elevation_m: number }[]>`
-      SELECT elevation_m FROM dem_points
-      ORDER BY geom <-> ST_SetSRID(ST_MakePoint(${ticketLng}, ${ticketLat}), 4326)
-      LIMIT 1
-    `;
+    // No elevation lookup or Hazard Urgency columns since manuscript revision
+    // Phase 1, step 7b, matching ReportsService.submit (step 7a).
     const [ticket] = await sql<{ id: number }[]>`
       INSERT INTO tickets (
-        category, barangay_id, status, member_count, elevation_m, assigned_office, geom, flagged, created_at, updated_at
+        category, barangay_id, status, member_count, assigned_office, geom, flagged, created_at, updated_at
       ) VALUES (
-        ${spec.category}, ${barangay.id}, ${spec.status}::ticket_status, ${spec.members}, ${elevation.elevation_m}, 'MEO',
+        ${spec.category}, ${barangay.id}, ${spec.status}::ticket_status, ${spec.members}, 'MEO',
         ST_SetSRID(ST_MakePoint(${ticketLng}, ${ticketLat}), 4326), ${Boolean(spec.flag)},
         now() - ${spec.ageHours} * interval '1 hour', now() - ${spec.ageHours} * interval '1 hour'
       )
@@ -74,11 +71,11 @@ async function main() {
 
       await sql`
         INSERT INTO reports (
-          ticket_id, citizen_id, title, description, citizen_severity, elevation_m, image_url,
+          ticket_id, citizen_id, title, description, citizen_severity, image_url,
           geom, pin_geom, exif_geom, exif_captured_at, exif_data, flags, created_at
         ) VALUES (
           ${ticket.id}, ${citizen.id}, ${`${spec.category} in ${spec.barangay}`}, 'Diverse demo report',
-          ${spec.severity}, ${elevation.elevation_m}, ${imageUrl},
+          ${spec.severity}, ${imageUrl},
           ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326), ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
           ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326), ${exif.capturedAt!.toISOString()},
           ${JSON.stringify(exif.data)}::jsonb, ${spec.flag ? [spec.flag] : []},
@@ -88,7 +85,7 @@ async function main() {
     }
   }
 
-  const result = await recomputeActiveTicketUrgency(0);
+  const result = await recalculateActivePriority();
   const priorities = await sql<{ barangay: string; priority_index: number }[]>`
     SELECT b.name AS barangay, t.priority_index
     FROM tickets t JOIN barangays b ON b.id = t.barangay_id

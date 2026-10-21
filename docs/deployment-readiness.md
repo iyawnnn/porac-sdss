@@ -106,16 +106,14 @@ Production-specific concerns, beyond simply setting the values:
 
 ## 6. Scheduled jobs
 
-`.github/workflows/cron.yml` runs daily at **18:00 UTC (02:00 Asia/Manila)** — deliberately low-traffic hours for this system's users — and can also be triggered manually via `workflow_dispatch`. One schedule covers all six jobs; each is cheap and idempotent, so splitting them buys nothing.
+`.github/workflows/cron.yml` runs daily at **18:00 UTC (02:00 Asia/Manila)** — deliberately low-traffic hours for this system's users — and can also be triggered manually via `workflow_dispatch`. One schedule covers all four jobs; each is cheap and idempotent, so splitting them buys nothing.
 
 | Endpoint | What it does |
 |---|---|
-| `POST /cron/recompute-urgency` | Recomputes urgency for active tickets. A safety net — this also happens inline on dashboard/ticket loads. |
-| `POST /cron/recompute-weather` | Refreshes the cached precipitation reading that feeds urgency. Also a safety net. |
+| `POST /cron/recompute-priority` | Recalculates Operational Priority (`priority_index`) for active tickets. A safety net — this also happens inline on dashboard/ticket loads. Replaced `recompute-urgency`/`recompute-weather` in manuscript revision Phase 1, step 7a. |
 | `POST /cron/cleanup-password-reset-tokens` | Deletes expired reset tokens. **No other trigger.** |
 | `POST /cron/cleanup-notifications` | Prunes read notifications past retention; unread are kept regardless of age. **No other trigger.** |
 | `POST /cron/cleanup-rate-limit-events` | Prunes both rate-limit tables past 30 days. **No other trigger.** |
-| `POST /cron/check-ticket-escalations` | Flags active tickets older than 7 days with no work order that ever reached in-progress or completed, and notifies the office once per ticket. **No other trigger.** |
 
 All six sit behind `CronSecretGuard` and are called with `Authorization: Bearer $CRON_SECRET`. The workflow uses `curl -sf`, so an HTTP error fails the step visibly rather than passing silently.
 

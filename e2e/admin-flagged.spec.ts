@@ -104,7 +104,19 @@ test("category filter narrows results, raises a chip, and Reset filters clears i
 
 test("a filter combination with no matches shows the empty state, not a blank table", async ({ page }) => {
   await loginAdmin(page);
-  const params = new URLSearchParams({ status: "all", category: "Streetlight Out", flag: "DUPLICATE_IMAGE" });
+  // This used to filter on Streetlight Out + Duplicate image, assuming no
+  // flagged report has that pair. That depends on the data: the demo seed's
+  // duplicate-image pair includes a Streetlight Out report, so the "empty" view
+  // showed one row. A search term built at run time cannot appear in any report
+  // title or citizen name, so it matches nothing whatever the seed is. The API
+  // check below confirms that with this session before testing the UI.
+  const params = new URLSearchParams({ status: "all", search: `no-match-${Date.now()}` });
+  const res = await page.request.get(`/api/admin/moderation?${params.toString()}`);
+  expect(res.ok()).toBe(true);
+  const body = (await res.json()) as { reports: unknown[]; total: number };
+  expect(body.total).toBe(0);
+  expect(body.reports).toHaveLength(0);
+
   await gotoFlagged(page, `/admin/flagged?${params.toString()}`);
 
   await expect(page.getByText("No flagged reports match this filter.").first()).toBeVisible();

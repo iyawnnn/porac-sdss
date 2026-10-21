@@ -202,9 +202,24 @@ test("range filters, tables, and chart labels remain intact", async ({ page }) =
   // rectangle — there is no .recharts-dot to grab (dots are an area/line
   // affordance). The KPI sparkline is still an AreaChart, hence scoping to
   // the trend card rather than the first [data-slot="chart"] on the page.
-  const bar = page.getByTestId("incident-trend-chart").locator(".recharts-bar-rectangle").first();
-  await bar.hover({ force: true });
-  await expect(page.getByTestId("incident-chart-tooltip")).toBeVisible();
+  //
+  // A day with no reports renders a zero-height bar, which Playwright treats
+  // as not visible, so hover the first bar that actually has height. If the
+  // whole 7-day window is empty there is nothing to hover; only the tooltip
+  // check is skipped then — the label assertions below still run.
+  const bars = page.getByTestId("incident-trend-chart").locator(".recharts-bar-rectangle");
+  let barWithHeight = null;
+  for (const candidate of await bars.all()) {
+    const box = await candidate.boundingBox();
+    if (box && box.height > 0) {
+      barWithHeight = candidate;
+      break;
+    }
+  }
+  if (barWithHeight) {
+    await barWithHeight.hover({ force: true });
+    await expect(page.getByTestId("incident-chart-tooltip")).toBeVisible();
+  }
 
   expect(data.leaderboard.length).toBeLessThanOrEqual(5);
   expect(data.categories.length).toBeLessThanOrEqual(5);

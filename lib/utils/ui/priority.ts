@@ -1,6 +1,6 @@
 // Operational Priority Index (1-100, severity/age/density model,
 // lib/utils/scoring.ts) display band — Operational Priority's OWN scale,
-// never derived from Hazard Urgency's priority_score/urgency_level. Thirds
+// never derived from the retired Hazard Urgency score. Thirds
 // (1-33 Low, 34-66 Medium, 67-100 High): a UI display convention, not a
 // manuscript-defined threshold and not stored anywhere. Used by the ticket
 // detail page's Priority breakdown and, since manuscript revision Phase 1,

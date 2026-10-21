@@ -52,7 +52,7 @@ At `/report`. The form enforces an order deliberately: **evidence first, then lo
 4. **Choose a category** (12 options) and **a severity** — Low, Medium, High, or Critical. This is the citizen's own judgement of how bad it is.
 5. **Submit.**
 
-Behind the scenes the server recomputes everything it will not take on trust: which barangay the point falls in, the elevation from the DEM, and the integrity flags. It also decides whether this report is a new ticket or joins an existing one (§1.3).
+Behind the scenes the server recomputes everything it will not take on trust: which barangay the point falls in and the integrity flags. It also decides whether this report is a new ticket or joins an existing one (§1.3).
 
 **Rate limits apply** and will surface as a clear message: 5 reports per hour per account, and 3 within 25 m of each other per 24 hours. The second exists to stop the same pothole being filed ten times.
 
@@ -83,7 +83,7 @@ Only one outstanding dispute per ticket. A dispute never moves the status backwa
 - **Notifications** arrive in a bell and link straight to the relevant report. Citizens receive: report received, report quarantined, flagged as duplicate, and each status change (under review, in progress, resolved).
 - **`/map`** shows city-wide ticket pins over the municipal boundary. It requires a citizen session — it is city-wide in *content*, not open to the public. Other people's reports are privacy-limited (manuscript Appendix L, since manuscript revision Phase 1, step 6d): the pin is approximate (about 100 m) and the popup shows only status, category, barangay, reported and last-update dates, the handling office and a short public update — no title, photo or reporter. On their own reports, "View my report" opens the full detail.
 
-**What a citizen never sees:** work orders, internal staff notes, moderation reasoning, the urgency factor breakdown, the priority index, or anyone else's report details.
+**What a citizen never sees:** work orders, internal staff notes, moderation reasoning, any system score (Operational Priority), or anyone else's report details.
 
 ---
 
@@ -109,15 +109,14 @@ Illegal Dumping Affecting Drainage or Road, Overgrown Vegetation Obstructing Roa
 - **Office Performance Summary** — pending / in progress / overdue / completed-this-week work orders, flagged reports waiting.
 - **Map Presets** — one-click into a pre-filtered map: Drainage Issues, Potholes & Road Damage, Illegal Dumping.
 
-**The Ticket Queue (`/admin/tickets`)** is the main triage surface, sorted by urgency by default. Filter by status, urgency, category, barangay, free text, or "Disputed only". Every filter is reflected in the URL, so a filtered view is a link that can be sent to a colleague. Works on a phone — the table becomes cards below tablet width.
+**The Ticket Queue (`/admin/tickets`)** is the main triage surface, sorted by Operational Priority by default. Filter by status, category, barangay, free text, or "Disputed only". Every filter is reflected in the URL, so a filtered view is a link that can be sent to a colleague. Works on a phone — the table becomes cards below tablet width.
 
 **Ticket Detail** is where the actual decision happens:
 
-- Status, assigned office, urgency badge at the top.
-- **Urgency decomposition** — the three factors with their explicit weights and contributions, not just a final number. See [`triage-model.md`](triage-model.md) for what those factors mean and their limits.
-- **Priority breakdown** — a *separate* score based on citizen severity, ticket age, and how busy the barangay is.
+- Status, assigned office, Operational Priority badge at the top.
+- **Operational Priority breakdown** — severity, age and barangay demand with their explicit weights and contributions, not just a final number. See [`triage-model.md`](triage-model.md) for what those factors mean and their limits.
 - **Evidence & reports** — every citizen report merged into this ticket, with photos and integrity flags.
-- **Location** — map, barangay, coordinates, elevation.
+- **Location** — map, barangay, coordinates.
 - **Work Orders panel** — create and manage the actual field work.
 
 ### 2.3 Moving a ticket forward
@@ -164,18 +163,13 @@ MDRRMO handles hazard and disaster-risk incidents. **The interface is identical 
 
 ### 3.1 Categories that reach MDRRMO
 
-Four, all direct responsibility: **Localized Flooding, Landslide / Slope Failure, Lahar / Debris-Flow Threat, Fallen Tree / Storm-Related Obstruction.** A smaller set than MEO's, but the categories most tied to weather and terrain — which is why the urgency model matters more here in practice. (Drainage / Culvert / Manhole Issue routes to MEO — a drainage structure defect is built-environment maintenance, not a disaster-response concern, even though it can contribute to flooding. The old "Clogged Drain" legacy category routed the same way.)
+Four, all direct responsibility: **Localized Flooding, Landslide / Slope Failure, Lahar / Debris-Flow Threat, Fallen Tree / Storm-Related Obstruction.** A smaller set than MEO's, but the categories most tied to weather and terrain — which is where Phase 4's Hazard Information (DENR-MGB susceptibility) will matter most. (Drainage / Culvert / Manhole Issue routes to MEO — a drainage structure defect is built-environment maintenance, not a disaster-response concern, even though it can contribute to flooding. The old "Clogged Drain" legacy category routed the same way.)
 
 ### 3.2 Where the emphasis differs
 
-**Urgency triage carries more weight for MDRRMO.** The urgency score combines low-lying terrain, current rainfall, and how many people have reported the same thing. During heavy rain the whole queue shifts upward and low-lying clusters rise to the top. That behaviour is the system's main decision-support claim.
+**The queue order is the same Operational Priority as MEO's** — citizen severity, ticket age and how busy the barangay is. The system computes no hazard or risk score: the former Hazard Urgency score (terrain + rainfall + cluster) was retired in manuscript revision Phase 1, and DENR-MGB flood/landslide susceptibility arrives as advisory Hazard Information in Phase 4. Until then, MDRRMO staff judge hazard themselves, and record it in the Operational Assessment.
 
-Two honest caveats staff should understand, both detailed in [`triage-model.md`](triage-model.md):
-
-- **Rainfall is a single city-wide reading**, not per-location. It moves every ticket's score together — it can tell you *the city is in a dangerous condition right now*, but it cannot tell you which of two tickets is more rain-exposed.
-- **Elevation is absolute height**, not modelled water flow. A genuine local depression that happens to sit high in the municipality will not score as low-lying.
-
-Treat the score as a **ranking aid that shows its work**, not as a calibrated risk probability. The factor breakdown on Ticket Detail exists so a decision can be sanity-checked rather than taken on faith.
+Treat the priority number as a **ranking aid that shows its work**, not as a calibrated risk probability (see [`triage-model.md`](triage-model.md)). The factor breakdown on Ticket Detail exists so a decision can be sanity-checked rather than taken on faith.
 
 **Map Presets** for MDRRMO go to Flooding Reports and Fallen Trees.
 
@@ -252,7 +246,7 @@ Focal sits between the citizen's submission and the owning office's operational 
 1. **Acknowledge** — a one-time, report-level "seen this" event. Acknowledging is not a status change: the ticket's real lifecycle status is untouched, and the citizen sees a separate, neutral notification and timeline event (§1) — never anything implying "Under Review."
 2. **Initial Screening** — records a recommendation only (continue with the current office / forward / escalate). This never executes anything by itself; it is a note for the record.
 3. **Forward**, only while the ticket is still `Reported` and no Work Order has started — an early custody correction, using the same reassignment mechanism the owning office itself would use (§2.5/§3.4), not a separate path. Once operational work has begun, Focal can no longer move it — that correction becomes the owning office's own decision.
-4. **Escalate** — flags the report for the currently-responsible office's attention. Never changes Hazard Urgency, Operational Priority, status, or office by itself.
+4. **Escalate** — flags the report for the currently-responsible office's attention. Never changes Operational Priority, status, or office by itself.
 
 ### 5.3 Read-only situational awareness
 
@@ -270,13 +264,13 @@ A flooded road in Barangay Cangatba, during the rainy season.
 
 **1 — Maria reports it.** Standing at the edge of the water, she opens `/report`, photographs the flooded stretch, and the app reads the photo's GPS and confirms it is inside Porac. She picks **Localized Flooding**, marks severity **High**, and submits.
 
-**2 — The system processes it.** The server resolves the point to Cangatba, looks up the elevation from the DEM, checks the photo for integrity problems (none — fresh photo, GPS matches the pin), and creates a **new ticket** for her report — even though a neighbour filed a Localized Flooding report nearby 40 minutes earlier. Since manuscript revision Phase 1, step 3 the system never merges reports on its own; from Phase 3 MDRRMO staff will see a "Possibly related to Ticket #…" suggestion and decide whether to merge.
+**2 — The system processes it.** The server resolves the point to Cangatba, checks the photo for integrity problems (none — fresh photo, GPS matches the pin), and creates a **new ticket** for her report — even though a neighbour filed a Localized Flooding report nearby 40 minutes earlier. Since manuscript revision Phase 1, step 3 the system never merges reports on its own; from Phase 3 MDRRMO staff will see a "Possibly related to Ticket #…" suggestion and decide whether to merge.
 
 Maria gets a "Report received" notification. Because Localized Flooding routes to MDRRMO, the ticket sits in their queue.
 
-**3 — Urgency is computed.** Low-lying ground and live rainfall near the torrential threshold — the ticket scores into the **High** band. Crossing into High fires a `ticket_critical`-typed notification to MDRRMO.
+**3 — Operational Priority is computed.** High citizen severity puts the ticket well up the queue; its priority keeps rising as it ages. There is no hazard score — the ticket's danger is for MDRRMO staff to judge.
 
-**4 — MDRRMO picks it up.** Ronald opens `/admin` at the start of his shift; the ticket is near the top of an urgency-sorted queue. On Ticket Detail he reads the four photos, checks the urgency breakdown (low elevation and heavy rain, not just a noisy cluster), and advances the status to **Under Review**, then **In Progress**. Maria gets a notification at each step.
+**4 — MDRRMO picks it up.** Ronald opens `/admin` at the start of his shift; the ticket is near the top of the Operational Priority queue. On Ticket Detail he reads the photos, checks the priority breakdown (high severity, not just a busy barangay), records an Operational Assessment of the flooding, and advances the status to **Under Review**, then **In Progress**. Maria gets a notification at each step.
 
 **5 — Field work.** Ronald creates a work order — *"Clear blocked drainage inlet, Cangatba main road"* — assigns it to a colleague, sets tomorrow's due date, and later adds the internal note *"Inlet blocked by construction debris; coordinated with MEO for hauling."* **Maria never sees any of that.** He moves the work order to *in progress*, then *completed* — which does **not** advance the ticket. That stays a human decision.
 

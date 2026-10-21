@@ -97,7 +97,7 @@ export default function AccountSecurityPanel({ initial }: { initial: SecuritySta
           className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
             message.kind === "success"
               ? "border-status-resolved-ink/20 bg-status-resolved-tint text-status-resolved-ink"
-              : "border-urgency-critical-ink/20 bg-urgency-critical-ink/5 text-urgency-critical-ink"
+              : "border-danger-ink/20 bg-danger-ink/5 text-danger-ink"
           }`}
         >
           {message.kind === "success" ? (
@@ -142,7 +142,7 @@ export default function AccountSecurityPanel({ initial }: { initial: SecuritySta
                 className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900"
               />
             </div>
-            {passwordError && <p className="text-xs text-urgency-critical-ink">{passwordError}</p>}
+            {passwordError && <p className="text-xs text-danger-ink">{passwordError}</p>}
             <button
               type="submit"
               disabled={passwordBusy}
@@ -168,7 +168,7 @@ export default function AccountSecurityPanel({ initial }: { initial: SecuritySta
                 className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900"
               />
             </div>
-            {passwordError && <p className="text-xs text-urgency-critical-ink">{passwordError}</p>}
+            {passwordError && <p className="text-xs text-danger-ink">{passwordError}</p>}
             <button
               type="submit"
               disabled={passwordBusy}

@@ -56,7 +56,7 @@ The form walks the citizen through:
 3. **Map pin + barangay search.** Placing a pin more than 100m from the photo's GPS warns that the submission will be flagged for review — it is not blocked.
 4. **Category** (12 options) and **citizen severity** (Low / Medium / High / Critical — the citizen's own subjective read, never computed; see §6.1).
 
-On submit, the server independently recomputes everything it will not trust from the client: barangay (§5.1), elevation from the DEM (§5.4), and the integrity flags (§5.5). Elevation is **never** accepted from client input.
+On submit, the server independently recomputes everything it will not trust from the client: the barangay (§4.1) and the integrity flags (§4.5). Reports carry no elevation since manuscript revision Phase 1, step 7a.
 
 ### 2.3 Tracking a report
 
@@ -105,7 +105,7 @@ Everything here is office-scoped server-side. Covered by `e2e/admin-dashboard.sp
 
 ### 3.2 Ticket Queue (`/admin/tickets`)
 
-The primary triage surface, sorted by Operational Priority (`priority_index`) descending by default (Batch 4: five-role production alignment) — the administrative queue recommendation, not the Hazard Urgency environmental score. Rebuilt to the "Precision Queue" design (`docs/design-system.md` §5.8) so an admin can act on a batch of tickets without opening each one.
+The primary triage surface, sorted by Operational Priority (`priority_index`) descending by default (Batch 4: five-role production alignment) — the administrative queue recommendation (the retired Hazard Urgency score is no longer computed). Rebuilt to the "Precision Queue" design (`docs/design-system.md` §5.8) so an admin can act on a batch of tickets without opening each one.
 
 - **View tabs with live counts:** built-in presets — All active, Disputed, and (system-admin scope only) MEO and MDRRMO — each carrying a server-computed count (`TicketsService.getViewCounts`, returned alongside the list on `GET /admin/tickets`). Counts are office-scoped to the caller, so an office admin sees no MEO/MDRRMO split at all. A tab underlines only when the filter state is *exactly* what it sets; an ad-hoc combination underlines nothing.
 - **Saved views:** "Save this view" stores the current filters, sort and page size as a personal tab (`admin_saved_views`, max 12 per admin). Private to the admin who saved it, never office-wide, and re-parsed through `parseTicketQuery` on use — a stored `office=` can never widen scope. Saved views carry no count.
@@ -130,7 +130,7 @@ Covered by `e2e/admin-tickets.spec.ts` (~21 tests) and `api/src/admin/tickets-qu
 - **Operational Priority card** ("System generated", Scoring tab) — the workflow-priority formula (§6.1) with its factor table (severity / age / barangay density) while the ticket is active; a Resolved or Rejected ticket shows its last stored value only. Labeled "Operational Priority", never bare "Priority", to stay distinct from the Operational Assessment card below. The Hazard Urgency card (three environmental factors and the live rain rate) was removed in manuscript revision Phase 1, step 5.
 - **Operational Assessment card** ("Human assessment", five-role Batch 3) — the third decision-support layer, structurally distinct from the two above: MEO/MDRRMO's own office can add/edit one current assessment per ticket (observed conditions, safety implications, operational constraints, recommended action, temporary mitigation, optional deferment/referral reason, optional remarks). Authorization follows *current* ticket ownership, so a ticket reassigned to the other office transfers edit rights with it while preserving who originally created the assessment. There is no score, level, or band anywhere in this card — saving it never changes `tickets.status`.
 - **Evidence & reports** — every merged citizen report with its photo, and its integrity flags.
-- **Location** — map, barangay, coordinates, elevation.
+- **Location** — map, barangay, coordinates (the elevation line was removed in manuscript revision Phase 1, step 7a).
 - **Work Orders panel** — create and manage work orders inline (§3.4).
 - **Dispute section** — renders only when disputed, showing the date and the citizen's reason.
 
@@ -196,7 +196,7 @@ A dedicated, municipality-wide intake-monitoring surface for Central Monitoring 
 - **Acknowledge** — a report-level "seen this" event (`report_acknowledgments`, `UNIQUE(report_id)` — a second attempt is a clean 409, not a silent duplicate). **Acknowledged ≠ Under Review**: the ticket's real status is untouched, and the citizen receives a separate, neutrally-worded notification ("Your report has been acknowledged by municipal monitoring") plus a dedicated `acknowledged` event on their report timeline (§2.3), never conflated with a status change.
 - **Initial Screening** — records only a recommendation (continue / forward / escalate) as a `report_intake_actions('screened')` row. Recording a "forward" or "escalate" recommendation does **not** execute either action itself — the dialog flow saves the screening first, then optionally opens the corresponding Forward/Escalate dialog; canceling that follow-up leaves the report in the Screened state.
 - **Forward** — reuses `TicketsService.reassignOffice` (the exact same mechanism the Assignment panel uses, §3.3) with a Focal-specific authorization branch: only while the ticket is still `Reported` and no Work Order has reached `pending`/`in_progress` on it. Writes the same `office_reassignments` row an office-admin reassignment would, plus a `report_intake_actions('forwarded')` row; ticket status is untouched.
-- **Escalate** — an attention signal only. Never changes Hazard Urgency, Operational Priority, ticket status, or office; notifies the ticket's *currently* responsible office (which may differ from the office at submission time, if already forwarded).
+- **Escalate** — an attention signal only. Never changes Operational Priority, ticket status, or office; notifies the ticket's *currently* responsible office (which may differ from the office at submission time, if already forwarded).
 - **Interactive Map** (`/admin/focal/map`, Batch 4) — municipality-wide incoming-report locations (report reference, category, barangay, coordinates, routed office, Operational Priority — pins coloured by its display band, Hazard Urgency until step 6b — and intake state), from its own narrow `GET /admin/intake/geo` query — never the operational `/admin/tickets/geo` endpoint or its heatmap/clustering machinery. Read-only; no mutation controls.
 - **Flagged Reports** (`/admin/focal/intake?flagged=true`, Batch 4) — a filter on the same Intake Queue table, not a duplicated page. Focal can inspect integrity flags relevant to intake but cannot quarantine or otherwise perform operational moderation disposition (§3.5 stays `OperationalStaffGuard`-only).
 - **Notifications** (`/admin/notifications`) — the same shared Notification Center as every other admin role (§3.8), safe for Focal as-is since its scoping is already role-aware.
@@ -229,19 +229,19 @@ Since manuscript revision Phase 1, step 3, **every report creates its own ticket
 
 Photo-level duplicate detection (`DUPLICATE_IMAGE`, perceptual hash) is a separate evidence check and still runs on every submission (§4.5).
 
-### 4.4 Urgency scoring
+### 4.4 Operational Priority
 
 ```
-urgency_score = ⅓ × elevationFactor + ⅓ × precipitationFactor + ⅓ × clusterFactor
+priority_index = round(1 + 99 × (0.5 × severity + 0.25 × min(age / 7 days, 1) + 0.25 × barangay demand)), clamped to 1–100
 ```
 
-banded **Low / Medium / High** at 0.4 / 0.7.
+- **Severity** — the highest citizen severity among the ticket's reports (Low 0.25 / Medium 0.5 / High 0.75 / Critical 1).
+- **Age** — saturates at 7 days.
+- **Barangay demand** — the barangay's active-ticket count, normalized against the busiest barangay.
 
-- **Elevation** — inverse-normalized against city-wide min/max computed once at DEM seed time. Lower ground scores higher.
-- **Precipitation** — real `rain["1h"]` millimetres from OpenWeatherMap, capped at the PAGASA 30mm/h torrential threshold, cached ~10 minutes in the database so it survives restarts.
-- **Cluster** — report density around the ticket.
+Recalculated on demand when an admin loads the dashboard, ticket list, ticket detail or map, after every report submission, and daily as a safety net by the cron workflow (`POST /cron/recompute-priority`). The Low / Medium / High band shown next to it (1–33 / 34–66 / 67–100) is a display convention, not a stored threshold. Full reference: [`triage-model.md`](triage-model.md).
 
-Recomputed on demand when an admin loads the dashboard, ticket list, ticket detail, or map, and again daily as a safety net by the cron workflow.
+The former **Hazard Urgency** score (elevation + rainfall + cluster) was retired in manuscript revision Phase 1 and is no longer calculated or shown — see `triage-model.md` §12.
 
 ### 4.5 Integrity flags
 
@@ -257,22 +257,24 @@ Flags **never block a submission**. They append to `reports.flags[]` and route t
 
 ### 4.6 Scheduled jobs
 
-Five cron routes (`api/src/cron/`), all behind a shared secret, run daily via GitHub Actions: urgency recompute, weather recompute, and three cleanup jobs (expired reset tokens, old read notifications, old rate-limit events). The former 7-day **ticket escalation check** was removed in manuscript revision Phase 1, step 2: the manuscript uses 7 days only as Operational Priority's age cap, never as an escalation rule (p. 74). Existing `ticket_escalation` notifications remain readable as history ("Ticket Needs Review"); nothing creates new ones.
+Four cron routes (`api/src/cron/`), all behind a shared secret, run daily via GitHub Actions: Operational Priority recalculation (`recompute-priority`, which replaced the Hazard Urgency `recompute-urgency`/`recompute-weather` pair in manuscript revision Phase 1, step 7a) and three cleanup jobs (expired reset tokens, old read notifications, old rate-limit events). The former 7-day **ticket escalation check** was removed in manuscript revision Phase 1, step 2: the manuscript uses 7 days only as Operational Priority's age cap, never as an escalation rule (p. 74). Existing `ticket_escalation` notifications remain readable as history ("Ticket Needs Review"); nothing creates new ones.
 
 ---
 
 ## 5. Cross-cutting notes
 
-### 5.1 Severity vs. Urgency vs. Priority
+### 5.1 Severity vs. Operational Priority vs. Operational Assessment
 
 Four distinct concepts that are easy to conflate. The authoritative definitions are in [`CLAUDE.md`](../CLAUDE.md); in short:
 
 | Term | Source | Meaning |
 |---|---|---|
 | **Severity** | Citizen input | Subjective Low/Medium/High/Critical on a report. Never computed. |
-| **Urgency** | Computed | The environmental hazard score (§4.4). `priority_score` and `urgency_level` are the *same* value rescaled 0–100 and re-banded — an urgency representation, labeled "Urgency" in the UI despite the column name. |
-| **Priority** | Computed, different formula | `priority_index` — citizen severity + ticket age + barangay density. Workflow urgency (how soon staff should act), not environmental hazard. Powers the Priority breakdown card and the map heatmap. |
+| **Operational Priority** | Computed | `priority_index` — citizen severity + ticket age + barangay demand (§4.4). How soon staff should act. Powers the queue order, the Ticket Detail Operational Priority card, the admin map and Focal Intake. Never shown to citizens. |
+| **Operational Assessment** | Staff input | MEO/MDRRMO's human assessment of a ticket. No score, level or band. |
 | **Dispute** | Citizen action | A workflow signal on a resolved ticket. Not a score, not a status. |
+
+Hazard Urgency was retired in manuscript revision Phase 1; Hazard Information (DENR-MGB susceptibility, advisory only) arrives in Phase 4.
 
 ### 5.2 Office scoping
 

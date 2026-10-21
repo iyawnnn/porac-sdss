@@ -1,17 +1,15 @@
 import { sql } from "../db";
-import { getCurrentRain1hMm } from "./openweather";
-import { getElevationBounds } from "./elevation-bounds";
 import { computePriorityIndex, severityFromRank } from "../../../lib/utils/scoring";
-import { computeUrgency } from "../../../lib/utils/urgency";
 
-export async function recomputeActiveTicketUrgency(rainOverride?: number) {
-  const rain1hMm = rainOverride ?? await getCurrentRain1hMm();
-  const { elevMin, elevMax } = await getElevationBounds();
-
+// Seed-side Operational Priority recalculation (tickets.priority_index only),
+// mirroring api/src/domain/operational-priority.service.ts: same query, same
+// inputs and the same lib/utils/scoring.ts formula. Hazard Urgency (rain,
+// elevation bounds, the urgency formula and its columns) was removed in
+// manuscript revision Phase 1, step 7b — this used to be
+// recomputeActiveTicketUrgency and also wrote the Hazard Urgency columns.
+export async function recalculateActivePriority() {
   const tickets = await sql<{
     id: number;
-    elevation_m: number;
-    member_count: number;
     created_at: string;
     severity_rank: number;
     active_barangay_count: number;
@@ -32,7 +30,7 @@ export async function recomputeActiveTicketUrgency(rainOverride?: number) {
       FROM reports
       GROUP BY ticket_id
     )
-    SELECT t.id, t.elevation_m, t.member_count, t.created_at,
+    SELECT t.id, t.created_at,
       COALESCE(s.severity_rank, 1) AS severity_rank,
       d.active_barangay_count,
       MAX(d.active_barangay_count) OVER ()::int AS max_active_barangay_count
@@ -42,68 +40,34 @@ export async function recomputeActiveTicketUrgency(rainOverride?: number) {
     WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
   `;
 
-  if (tickets.length === 0) return { updated: 0, rain1hMm };
+  if (tickets.length === 0) return { updated: 0 };
 
+  const now = new Date();
   const ids: number[] = [];
-  const elevationFactors: number[] = [];
-  const precipitationFactors: number[] = [];
-  const clusterFactors: number[] = [];
-  const urgencyScores: number[] = [];
-  const urgencyBands: string[] = [];
   const priorityIndices: number[] = [];
-  const priorityScores: number[] = [];
-  const urgencyLevels: string[] = [];
-
   for (const ticket of tickets) {
-    const urgency = computeUrgency({
-      elevationM: ticket.elevation_m,
-      elevMin,
-      elevMax,
-      memberCount: ticket.member_count,
-      rain1hMm,
-    });
     ids.push(ticket.id);
-    elevationFactors.push(urgency.elevationFactor);
-    precipitationFactors.push(urgency.precipitationFactor);
-    clusterFactors.push(urgency.clusterFactor);
-    urgencyScores.push(urgency.urgencyScore);
-    urgencyBands.push(urgency.urgencyBand);
-    priorityScores.push(urgency.priorityScore);
-    urgencyLevels.push(urgency.urgencyLevel);
     priorityIndices.push(computePriorityIndex({
       severity: severityFromRank(ticket.severity_rank),
       createdAt: ticket.created_at,
       activeBarangayCount: ticket.active_barangay_count,
       maxActiveBarangayCount: ticket.max_active_barangay_count,
+      now,
     }));
   }
 
   await sql`
     UPDATE tickets AS t SET
-      elevation_factor = u.elevation_factor,
-      precipitation_factor = u.precipitation_factor,
-      cluster_factor = u.cluster_factor,
-      urgency_score = u.urgency_score,
-      urgency_band = u.urgency_band,
       priority_index = u.priority_index,
-      priority_score = u.priority_score,
-      urgency_level = u.urgency_level,
       updated_at = now()
     FROM (
       SELECT * FROM unnest(
         ${ids}::int[],
-        ${elevationFactors}::real[],
-        ${precipitationFactors}::real[],
-        ${clusterFactors}::real[],
-        ${urgencyScores}::real[],
-        ${urgencyBands}::text[],
-        ${priorityIndices}::int[],
-        ${priorityScores}::int[],
-        ${urgencyLevels}::text[]
-      ) AS u(id, elevation_factor, precipitation_factor, cluster_factor, urgency_score, urgency_band, priority_index, priority_score, urgency_level)
+        ${priorityIndices}::int[]
+      ) AS u(id, priority_index)
     ) AS u
     WHERE t.id = u.id
   `;
 
-  return { updated: tickets.length, rain1hMm };
+  return { updated: tickets.length };
 }

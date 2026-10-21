@@ -1,5 +1,5 @@
 // The micro-caps header treatment shared by every admin data table (the
-// dashboard's Highest Urgency Actions card and the Ticket Queue). It lived as
+// dashboard's Highest Priority Actions card and the Ticket Queue). It lived as
 // a byte-identical local constant in both files before this — HEAD_CLASS in
 // TicketsWorkspace.tsx and HUA_HEAD_CLASS in DashboardClient.tsx — which is
 // exactly the "duplicate definition" drift docs/design-system.md §7 bans.

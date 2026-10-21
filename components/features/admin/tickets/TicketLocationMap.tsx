@@ -6,7 +6,7 @@ import type { Geometry } from "geojson";
 import "leaflet/dist/leaflet.css";
 import { configureLeafletMarkerIcons } from "@/lib/gis/leaflet-icons";
 import { styleBarangayFeature } from "@/lib/gis/map-styles";
-import { bandMarkerIcon } from "@/lib/gis/markerIcon";
+import { neutralMarkerIcon } from "@/lib/gis/markerIcon";
 
 configureLeafletMarkerIcons();
 
@@ -51,7 +51,7 @@ export default function TicketLocationMap({
       {barangayGeoJson && <GeoJSON data={barangayGeoJson} style={styleBarangayFeature} />}
       {/* Neutral pin: no caller passes a Hazard Urgency band since manuscript
           revision Phase 1, step 6b, and the pulse only ever fired for High. */}
-      <Marker position={[lat, lng]} icon={bandMarkerIcon(null)} />
+      <Marker position={[lat, lng]} icon={neutralMarkerIcon()} />
     </MapContainer>
   );
 }

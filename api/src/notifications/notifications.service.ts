@@ -44,7 +44,7 @@ export class NotificationsService {
   constructor(@Inject(DB) private readonly db: PostgresJsDatabase) {}
 
   // For call sites that already have an open raw-PG transaction (report
-  // submission, ticket status transition, urgency recompute) — inserting
+  // submission, ticket status transition) — inserting
   // here makes the notification atomic with the triggering mutation, no
   // separate commit, no window where one could exist without the other.
   // notifications has no geometry column, so this is a plain tagged-

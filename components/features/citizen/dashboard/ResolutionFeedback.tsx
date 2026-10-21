@@ -123,7 +123,7 @@ export default function ResolutionFeedback({
               placeholder="e.g. The pothole is still there"
             />
           </div>
-          {error && <p className="text-xs text-urgency-critical-ink">{error}</p>}
+          {error && <p className="text-xs text-danger-ink">{error}</p>}
           <div className="flex gap-2">
             <button
               type="submit"
@@ -147,7 +147,7 @@ export default function ResolutionFeedback({
         </form>
       )}
 
-      {!showForm && error && <p className="mt-3 text-xs text-urgency-critical-ink">{error}</p>}
+      {!showForm && error && <p className="mt-3 text-xs text-danger-ink">{error}</p>}
     </div>
   );
 }

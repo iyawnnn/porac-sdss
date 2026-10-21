@@ -76,8 +76,8 @@ interface QueryState {
 
 // Which surface this page's saved views belong to. The Ticket Queue passes
 // nothing and gets 'tickets'; without this the two strips would share one list
-// and a queue preset would replay `urgency=High` against a parser that has no
-// such filter.
+// and a queue preset would replay a queue filter (e.g. `status=`) against a
+// parser that has no such filter.
 const SAVED_VIEW_SURFACE = "flagged";
 
 function initialQueryState(

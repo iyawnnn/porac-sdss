@@ -47,7 +47,7 @@ The old document's own status line claimed "implemented... verified via Playwrig
 2. **Borders, not shadows — reaffirmed, now enforced with no exceptions.** The audit found the one place this rule was being violated (admin glass cards) and that violation is exactly what v2 removes. Elevation is a 1px border and, on the admin dark shell, a lightness step between `canvas` → `surface` → `surface-elevated` (§2). Shadows are reserved for genuinely floating layers: dropdowns, popovers, sheets, dialogs, map popups — the things shadcn already ships a shadow for by default.
 3. **Density is per-shell, not per-preference.** Admin is compact by design (13px text, 36–40px rows) because its users read it for hours. Citizen is generous by design (16px text, 44–48px controls) because its users are one-handed, outdoors, and often in a hurry. This was true in v1 and remains true — only the exact numbers tighten slightly on the admin side (§3).
 4. **Mono is semantic, not decorative — unchanged.** Ticket IDs, coordinates, elevation, urgency scores, timestamps, perceptual hashes: always mono. Human-authored text: never mono. Geist Mono is kept (already loaded, already correct — see §3.4 on why it isn't being swapped for a "Linear-style" mono).
-5. **The admin shell and citizen shell share tokens, not a theme.** Both read from the same semantic variable names (`--color-canvas`, `--color-brand-500`, `--color-urgency-critical`, etc.); the admin shell overrides the *neutral* and *brand-lightness* values for its dark surface via a single scoping attribute (`[data-shell="admin"]`), while urgency/status/flag/map-accent tokens stay hue-identical across both shells and only shift lightness where a dark background demands it for contrast. This is what "shared brand identity without copying the admin density" (from the brief) means concretely: one palette, two renderings.
+5. **The admin shell and citizen shell share tokens, not a theme.** Both read from the same semantic variable names (`--color-canvas`, `--color-brand-500`, `--color-danger`, etc.); the admin shell overrides the *neutral* and *brand-lightness* values for its dark surface via a single scoping attribute (`[data-shell="admin"]`), while urgency/status/flag/map-accent tokens stay hue-identical across both shells and only shift lightness where a dark background demands it for contrast. This is what "shared brand identity without copying the admin density" (from the brief) means concretely: one palette, two renderings.
 
 ---
 
@@ -224,6 +224,8 @@ Brand blue is unchanged from citizen's value in both shells — the admin canvas
 
 ### 4.4 Urgency ramp (`urgency_band`) — unchanged in v3, no shell variant needed
 
+> **Retired.** Hazard Urgency was removed in manuscript revision Phase 1 (finished in step 7b); no screen shows an urgency band any more. The same hues survive only as the stylesheet's warning/danger/info colour tokens (renamed from `urgency-*` in a follow-up commit), used for error and warning styling. Kept below as the design record.
+
 Applies to `urgency_band` only: `< 0.50` Low · `0.50–0.80` Medium · `> 0.80` Critical. **Same asymmetry rule as always: Low and Medium stay tinted, Critical stays solid** — in a 40-row queue, three equal pastels give every row the same visual weight; Critical needs to win the scan.
 
 | Band | Solid | Tint | Ink | Edge |
@@ -253,7 +255,7 @@ Three original accents for Leaflet layers (admin `/admin/map`, citizen `/map`), 
 | `--color-terrain` | `#5F7F63` | Elevation/contour shading, terrain-type overlay |
 | `--color-terrain-tint` | `rgba(95,127,99,0.15)` | Low-opacity choropleth fill |
 | `--color-waterway` | `#3B82A0` | Rivers, flood-prone-zone overlay (kept ~30° away from municipal blue's hue so the two are never confused on the same map) |
-| `--color-lahar` | `#9A6A3A` | Lahar/earth-material terrain layer — deliberately desaturated and shifted brown-warm relative to urgency-low's saturated amber, so the two never collide even though both sit in a similar hue neighborhood |
+| `--color-lahar` | `#9A6A3A` | Lahar/earth-material terrain layer — deliberately desaturated and shifted brown-warm relative to info's saturated amber, so the two never collide even though both sit in a similar hue neighborhood |
 | `--color-infra-safety` | `#D99A22` | Infrastructure-hazard iconography only (exposed wiring, damaged guardrail) in map legends — never a UI color |
 
 ### 4.8 Focus and selection
@@ -322,7 +324,7 @@ Applies to the primitives already installed (`Button`, `Badge`, `Separator`, `To
 | Component | Customize | Keep close to shadcn default |
 |---|---|---|
 | **Button** | Variant colors repointed at `--color-brand-*` per shell; radius per §7's shell scale. | Size scale, focus-ring mechanics, `asChild`/`Slot` pattern — already solid. |
-| **Badge** | Heavily — this is where urgency/status/flag chips live. Replace/extend shadcn's generic `default`/`secondary`/`destructive`/`outline` variants with semantic variants (`urgency-low`, `urgency-medium`, `urgency-critical`, `status-reported`, `status-under-review`, `status-in-progress`, `status-resolved`, `flag`) driven by the token table in §4, not shadcn's default palette. | Component structure/sizing. |
+| **Badge** | Heavily — this is where urgency/status/flag chips live. Replace/extend shadcn's generic `default`/`secondary`/`destructive`/`outline` variants with semantic variants (`info`, `warning`, `danger`, `status-reported`, `status-under-review`, `status-in-progress`, `status-resolved`, `flag`) driven by the token table in §4, not shadcn's default palette. | Component structure/sizing. |
 | **Sheet** | Surface color → `--color-surface-elevated` per shell. | Everything else — used for the mobile admin nav drawer today and is a reasonable fit for future citizen mobile filters. |
 | **DropdownMenu** | Colors → tokens. First real usage: replacing the raw `<select>` filter controls in `TicketsWorkspace.tsx`'s toolbar. | Structure/interaction — shadcn's keyboard nav and positioning are already correct, no reason to touch them. |
 | **Tooltip** | Nothing structural. | Everything — used sparingly (office-code abbreviations, truncated mono IDs). Needs a `TooltipProvider` wrap at the relevant layout root the first time it's actually used (not yet). |

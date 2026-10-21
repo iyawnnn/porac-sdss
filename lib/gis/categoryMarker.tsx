@@ -18,8 +18,8 @@ import {
 import { priorityBandHex, priorityBandLabel } from "@/lib/utils/ui/priority";
 
 // Admin-map-only category markers â€” deliberately separate from
-// lib/gis/markerIcon.ts (bandMarkerIcon/getPinSpec), which the citizen map
-// still uses and must not change. Category -> icon/color is built directly
+// lib/gis/markerIcon.ts (neutralMarkerIcon/priorityMarkerIcon), which the
+// citizen, Ticket Detail and Focal maps use. Category -> icon/color is built directly
 // from lib/types/admin-ticket-constants.ts's TICKET_CATEGORIES strings
 // (single source of truth), not a duplicated list.
 export interface CategoryMarkerSpec {

@@ -82,7 +82,7 @@ describe('SavedViewsService.create', () => {
     const { service, values } = makeService();
     jest.spyOn(service, 'list').mockResolvedValue([]);
 
-    await service.create(ADMIN, 'High urgency', 'urgency=High');
+    await service.create(ADMIN, 'Open potholes', 'category=Pothole');
 
     expect(values).toHaveBeenCalledWith(
       expect.objectContaining({ surface: 'tickets' }),

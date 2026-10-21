@@ -17,7 +17,7 @@ Two audiences, structurally separate, sharing one system:
 
 ## Product Purpose
 
-A municipal operations and citizen-reporting platform for infrastructure hazards. Citizens file reports; the system deduplicates them into tickets, computes an environmental-hazard urgency score (elevation + live precipitation + report-cluster density), and routes them to the correct municipal office. Administrators triage by computed urgency rather than reading order, monitor the barangay-level picture on a map, moderate integrity-flagged submissions, and track tickets through to resolution. Success looks like: citizens can report a hazard in under a minute standing in the rain, and staff can tell which of forty open tickets needs attention first without reading all forty.
+A municipal operations and citizen-reporting platform for infrastructure hazards. Citizens file reports; the system deduplicates them into tickets, ranks each ticket by Operational Priority (citizen severity, ticket age, barangay demand) — never a hazard or risk score — and routes them to the correct municipal office. Administrators triage by Operational Priority rather than reading order, monitor the barangay-level picture on a map, moderate integrity-flagged submissions, and track tickets through to resolution. Success looks like: citizens can report a hazard in under a minute standing in the rain, and staff can tell which of forty open tickets needs attention first without reading all forty.
 
 ## Positioning
 

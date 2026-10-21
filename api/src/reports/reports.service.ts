@@ -537,7 +537,7 @@ export class ReportsService {
   // above. No notification — unlike a dispute, a confirmation isn't
   // actionable by the office, so there's nothing for them to be alerted to.
   // Never touches any scoring field or ticket.status — see CLAUDE.md's
-  // Severity/Urgency/Priority terminology section.
+  // terminology section.
   async confirmResolution(
     citizenId: number,
     reportId: number,

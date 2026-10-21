@@ -152,7 +152,7 @@ export default function AdminLoginForm() {
             </div>
 
             {error && (
-              <p role="alert" aria-live="polite" className="flex items-center gap-2 text-xs text-urgency-critical-ink">
+              <p role="alert" aria-live="polite" className="flex items-center gap-2 text-xs text-danger-ink">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 {error}
               </p>

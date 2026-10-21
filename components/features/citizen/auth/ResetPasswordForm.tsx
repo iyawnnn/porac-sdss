@@ -97,7 +97,7 @@ export default function ResetPasswordForm() {
               <p
                 role="alert"
                 aria-live="polite"
-                className="flex items-center gap-2 rounded-md border border-urgency-critical-ink/20 bg-urgency-critical-ink/5 px-3 py-2 text-xs text-urgency-critical-ink"
+                className="flex items-center gap-2 rounded-md border border-danger-ink/20 bg-danger-ink/5 px-3 py-2 text-xs text-danger-ink"
               >
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 This reset link is invalid or has expired.
@@ -151,7 +151,7 @@ export default function ResetPasswordForm() {
                 <p
                   role="alert"
                   aria-live="polite"
-                  className="flex items-center gap-2 text-xs text-urgency-critical-ink"
+                  className="flex items-center gap-2 text-xs text-danger-ink"
                 >
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   {error}

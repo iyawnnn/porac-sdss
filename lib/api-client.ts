@@ -57,8 +57,8 @@ async function fetchApi(path: string): Promise<Response> {
   }
 }
 
-// cache: "no-store" is required on every call — urgency scores, weather,
-// and ticket/report state are recomputed live per request, not static.
+// cache: "no-store" is required on every call — Operational Priority and
+// ticket/report state are recalculated live per request, not static.
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetchApi(path);
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);

@@ -4,7 +4,7 @@
 
 Project Name: Porac SDSS (Spatial Decision Support System)
 
-Porac SDSS is a municipal infrastructure triage platform for Porac, Pampanga. It features spatial deduplication, DEM elevation risk scoring, OpenWeather telemetry, and automated photo EXIF GPS verification.
+Porac SDSS is a municipal infrastructure triage platform for Porac, Pampanga. It features Operational Priority queue ordering (citizen severity, ticket age, barangay demand), office routing by category, and automated photo EXIF GPS and duplicate-image checks.
 
 This README covers setup and running the system. For what it actually does, see [`docs/features.md`](docs/features.md); for a role-by-role walkthrough of how citizens and each admin type use it, see [`docs/user-flows.md`](docs/user-flows.md); for the urgency/priority scoring model and its limitations, see [`docs/triage-model.md`](docs/triage-model.md); for the security model, see [`docs/security.md`](docs/security.md).
 
@@ -90,7 +90,7 @@ Root `.env.local` — what's actually required:
 | `DATABASE_URL` | **Yes** | Neon's **direct/unpooled** endpoint, not the `-pooler` one root uses — see the comment in `api/.env.example` for why |
 | `JWT_SECRET` | **Yes** | Must match root's `.env.local` value exactly |
 | `CLOUDINARY_URL` | **Yes** | Photo upload storage for report submissions |
-| `OPENWEATHERMAP_API_KEY` | **Yes** | Live rainfall data feeding the urgency triage formula |
+| `OPENWEATHERMAP_API_KEY` | **Yes** | Required by the env schema; unread since manuscript revision Phase 1, step 7a (Hazard Urgency removed) and kept for Phase 4 rainfall context |
 | `CRON_SECRET` | **Yes** | Bearer/`x-cron-secret` value `CronSecretGuard` checks on every `/cron/*` route — see [Scheduled Jobs](#j-scheduled-jobs--deployment) below |
 | `PORT`, `NODE_ENV`, `RESET_TOKEN_TTL_MINUTES`, `TARGET_*` | No | Have working defaults |
 | `WEB_ORIGIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `OAUTH_STATE_SECRET` | No | Only needed to enable **Google OAuth login** — omit all of them to disable that login option entirely; no other feature depends on them |
@@ -229,7 +229,7 @@ For the full pre-production checklist — required services, production-only env
 
 ### Scheduled cron jobs (GitHub Actions)
 
-`api/src/cron/cron.controller.ts` exposes five routes behind `CronSecretGuard` (urgency recompute, weather recompute, and three cleanup jobs — expired password-reset tokens, old read notifications, old rate-limit events). The former 7-day ticket escalation check (`POST /cron/check-ticket-escalations`) was removed in manuscript revision Phase 1, step 2. `.github/workflows/cron.yml` calls all five once a day via `curl`, authenticated the same way the guard already accepts (`Authorization: Bearer $CRON_SECRET`).
+`api/src/cron/cron.controller.ts` exposes four routes behind `CronSecretGuard` (Operational Priority recalculation — `recompute-priority`, which replaced `recompute-urgency`/`recompute-weather` in manuscript revision Phase 1, step 7a — and three cleanup jobs — expired password-reset tokens, old read notifications, old rate-limit events). The former 7-day ticket escalation check (`POST /cron/check-ticket-escalations`) was removed in manuscript revision Phase 1, step 2. `.github/workflows/cron.yml` calls all four once a day via `curl`, authenticated the same way the guard already accepts (`Authorization: Bearer $CRON_SECRET`).
 
 That workflow only works once two values are set under the repository's **Settings → Secrets and variables → Actions**:
 
@@ -244,6 +244,6 @@ That workflow only works once two values are set under the repository's **Settin
 
 **Not yet decided.** Nothing in this repo commits to a hosting platform — there is no `Dockerfile`, no `vercel.json`, no `render.yaml`, nothing. `PLAN.md`'s references to Render are historical/prototype-era notes, not a current decision. What's known and fixed regardless of where this ends up hosted:
 
-- Two separate deployables: the Next.js app (root) and the NestJS API (`api/`) — the API is a long-lived process (its own Postgres connection pool, in-process weather/config caching), not a serverless function, so whatever hosts it needs to support that.
+- Two separate deployables: the Next.js app (root) and the NestJS API (`api/`) — the API is a long-lived process (its own Postgres connection pool), not a serverless function, so whatever hosts it needs to support that.
 - The API needs a public, stable origin reachable from wherever the Next.js app runs (`API_ORIGIN`/`INTERNAL_API_URL`) and from GitHub Actions (`PORAC_API_BASE_URL`, same origin).
 - [`docs/project-status.md`](docs/project-status.md) §4 and `PLAN.md` §0 track what else is still open before a real deployment (credential rotation, backup verification, monitoring, a written runbook) — read those before treating "it runs locally" as "it's ready to deploy."
