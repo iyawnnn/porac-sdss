@@ -154,6 +154,13 @@ export interface TicketDetail {
   barangay_geojson: string | null;
   status: string;
   assigned_office: string;
+  // Appendix H (manuscript revision Phase 2, step 2b): the office automatic
+  // Initial Routing first assigned; differs from assigned_office after a
+  // reassignment.
+  initial_assigned_office: string;
+  // Appendix H: set when the ticket is resolved; NULL while active and on a
+  // Rejected ticket.
+  resolution_outcome: 'MUNICIPAL_ACTION_COMPLETED' | 'EXTERNAL_REFERRAL' | null;
   member_count: number;
   lat: number;
   lng: number;
@@ -182,6 +189,9 @@ export interface TicketDetail {
 
 export interface TicketReport {
   id: number;
+  // Appendix H tracking reference (PRC-YYYY-NNNNNN), the same one the
+  // citizen sees.
+  tracking_reference: string;
   title: string;
   description: string | null;
   citizen_severity: string;
@@ -548,7 +558,8 @@ export class TicketsService {
     const sql = this.pg;
     const [ticket] = await sql<TicketDetail[]>`
       SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, ST_AsGeoJSON(b.geom) AS barangay_geojson,
-        t.status, t.assigned_office, t.member_count, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
+        t.status, t.assigned_office, t.initial_assigned_office, t.resolution_outcome,
+        t.member_count, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
         t.priority_index,
         t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at,
         t.disputed_at, t.dispute_reason, t.category_review_required
@@ -561,7 +572,7 @@ export class TicketsService {
     assertOfficeAccess(admin, ticket.assigned_office as 'MEO' | 'MDRRMO');
 
     const reports = await sql<TicketReport[]>`
-      SELECT id, title, description, citizen_severity, image_url,
+      SELECT id, tracking_reference, title, description, citizen_severity, image_url,
         exif_captured_at, exif_data, location_mismatch_m, created_at,
         flags, moderation_status
       FROM reports WHERE ticket_id = ${id} ORDER BY created_at
@@ -679,7 +690,12 @@ export class TicketsService {
 
     let resolutionImageUrl: string | null = null;
     let resolutionNotes: string | null = null;
+    // Appendix H (manuscript revision Phase 2, step 2b): resolving through
+    // this ladder is municipal action. The External Referral outcome becomes
+    // choosable in Phase 5; rejectTicket leaves the outcome NULL.
+    let resolutionOutcome: 'MUNICIPAL_ACTION_COMPLETED' | null = null;
     if (nextStatus === 'Resolved') {
+      resolutionOutcome = 'MUNICIPAL_ACTION_COMPLETED';
       resolutionNotes = notes?.trim() || null;
       if (
         resolutionNotes &&
@@ -706,6 +722,7 @@ export class TicketsService {
           status = ${nextStatus},
           resolution_image_url = COALESCE(${resolutionImageUrl}, resolution_image_url),
           resolution_notes = COALESCE(${resolutionNotes}, resolution_notes),
+          resolution_outcome = COALESCE(${resolutionOutcome}::resolution_outcome, resolution_outcome),
           updated_at = now()
         WHERE id = ${ticketId} AND status = ${ticket.status}
       `;

@@ -205,6 +205,7 @@ export default async function MyReportDetailPage({
             <h1 className="mt-3 text-[24px] font-semibold leading-[32px] tracking-[-0.01em] text-ink-900">
               {report.title}
             </h1>
+            <p className="mt-1 break-all font-mono text-[13px] text-ink-500">{report.tracking_reference}</p>
             {report.description && (
               <p className="mt-2 max-w-xl text-[15px] leading-[22px] text-ink-500">{report.description}</p>
             )}
@@ -347,8 +348,8 @@ export default async function MyReportDetailPage({
                 {report.lat.toFixed(5)}, {report.lng.toFixed(5)}
               </p>
             </MiniTile>
-            <MiniTile label="Tracking ID">
-              <p className="font-mono text-[13px] font-medium text-ink-900">#R{report.id}</p>
+            <MiniTile label="Tracking Reference">
+              <p className="break-all font-mono text-[13px] font-medium text-ink-900">{report.tracking_reference}</p>
             </MiniTile>
           </div>
 

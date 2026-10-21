@@ -38,7 +38,7 @@ function sessionCookieHeader(cookies: { name: string; value: string }[]): Record
 // has no revert endpoint to restore it with afterwards. "Pothole / Road
 // Surface Damage" always routes to MEO (api/src/common/utils/office.ts), so
 // E2E_MEO_ADMIN can act on it without any additional reassignment.
-async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Promise<{ reportId: number; ticketId: number }> {
+async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Promise<{ reportId: number; ticketId: number; trackingReference: string }> {
   // The jitter here (~±550m) mirrors citizen-dispute.spec.ts's own jitter().
   // It used to keep this report clear of the automatic dedup merge radius;
   // since manuscript revision Phase 1, step 3 every report creates its own
@@ -65,7 +65,7 @@ async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Pr
       `createThrowawayReport: POST /api/reports failed for title "${title}" — status ${res.status()} ${res.statusText()}\nbody: ${bodyText}`,
     );
   }
-  return (await res.json()) as { reportId: number; ticketId: number };
+  return (await res.json()) as { reportId: number; ticketId: number; trackingReference: string };
 }
 
 async function signupCitizen(page: Page, label: string): Promise<{ email: string; password: string }> {
@@ -736,7 +736,7 @@ test("resolving a ticket through the admin UI records notes, photo, and updates 
   const citizenContext = await browser.newContext();
   const citizenPage = await citizenContext.newPage();
   const citizen = await signupCitizen(citizenPage, "resolve");
-  const { reportId, ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+  const { reportId, ticketId, trackingReference } = await createThrowawayReport(citizenPage, `${Date.now()}`);
   await citizenContext.close();
   resolvedFixture = { reportId, ticketId, citizen };
 
@@ -780,6 +780,12 @@ test("resolving a ticket through the admin UI records notes, photo, and updates 
   // closing successfully.
   await expect(page.getByText("Before & after resolution")).toBeVisible();
   await expect(page.getByText(RESOLUTION_NOTES)).toBeVisible();
+  // Manuscript revision Phase 2, step 2b (Appendix H): resolving through the
+  // dialog records the municipal-action outcome, and the evidence list shows
+  // the report's PRC tracking reference.
+  await expect(headerRow.getByText("Outcome: Municipal action completed", { exact: true })).toBeVisible();
+  expect(trackingReference).toMatch(/^PRC-\d{4}-\d{6,}$/);
+  await expect(page.getByText(trackingReference, { exact: true })).toBeVisible();
 });
 
 test("the citizen's Case Closure Summary reflects a ticket resolved through the admin UI", async ({ page }) => {

@@ -269,6 +269,8 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
     't.assigned_office',
     't.member_count',
     'r.moderation_status',
+    // Appendix H tracking reference (manuscript revision Phase 2, step 2b).
+    'r.tracking_reference',
   ];
 
   it.each(EXPECTED_ROW_FIELDS)(
@@ -656,5 +658,61 @@ describe('submit() no longer calculates Hazard Urgency (Phase 1, step 7a)', () =
   it('no longer writes the report elevation', () => {
     expect(reportInsert.length).toBeGreaterThan(0);
     expect(reportInsert).not.toMatch(/elevation_m/);
+  });
+});
+
+// Manuscript revision Phase 2, step 2b (Appendix H): tracking_reference is
+// generated only by the reports insert trigger (migration 0036), never in
+// TypeScript, and is read back with RETURNING; submit() writes
+// submitted_category and the ticket's initial_assigned_office explicitly
+// (the triggers are the fallback for other insert paths). Source-text
+// assertions, same rationale as the blocks above.
+describe('tracking reference and initial routing fields (Phase 2, step 2b)', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+  const submitBody = reportsServiceSource.slice(
+    reportsServiceSource.indexOf('  async submit('),
+    reportsServiceSource.indexOf('  private async notifyFocalIntake('),
+  );
+  const statement = (start: string) => {
+    const i = submitBody.indexOf(start);
+    return submitBody.slice(i, submitBody.indexOf('`;', i));
+  };
+  const reportInsert = statement('INSERT INTO reports');
+  const ticketInsert = statement('INSERT INTO tickets');
+
+  it('never builds the tracking reference in TypeScript', () => {
+    expect(reportsServiceSource).not.toMatch(/['"`]PRC-/);
+    expect(reportsServiceSource).not.toMatch(/padStart/);
+    // The INSERT's column list leaves it to the trigger.
+    const columnList = reportInsert.slice(0, reportInsert.indexOf(')'));
+    expect(columnList).not.toContain('tracking_reference');
+  });
+
+  it('reads the trigger-generated reference back and returns it as trackingReference', () => {
+    expect(reportInsert).toContain('RETURNING id, tracking_reference');
+    expect(submitBody).toContain(
+      'trackingReference: report.tracking_reference,',
+    );
+    expect(submitBody).toContain(
+      'trackingReference: result.trackingReference,',
+    );
+    const resultType = reportsServiceSource.slice(
+      reportsServiceSource.indexOf('export interface SubmitReportResult'),
+      reportsServiceSource.indexOf('export interface MyReportRow'),
+    );
+    expect(resultType).toMatch(/trackingReference: string;/);
+  });
+
+  it("writes submitted_category as the citizen's chosen category", () => {
+    expect(reportInsert).toMatch(/image_url, submitted_category,/);
+    expect(reportInsert).toContain('${imageUrl}, ${category},');
+  });
+
+  it("writes the ticket's initial_assigned_office as the routed office", () => {
+    expect(ticketInsert).toMatch(/assigned_office, initial_assigned_office,/);
+    expect(ticketInsert).toContain('${barangay.id}, 1, ${office}, ${office},');
   });
 });

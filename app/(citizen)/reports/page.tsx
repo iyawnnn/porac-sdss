@@ -153,6 +153,7 @@ export default async function MyReportsPage() {
                 <h2 className="text-[18px] font-semibold leading-[26px] tracking-[-0.005em] text-ink-900">
                   {report.title}
                 </h2>
+                <p className="mt-1 break-all font-mono text-[12px] text-ink-500">{report.tracking_reference}</p>
 
                 <div className="mt-4 flex flex-1 flex-col space-y-4">
                   <div className="grid grid-cols-3 gap-3">
