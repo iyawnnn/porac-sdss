@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import type { PublicTicketGeoRow } from "@/lib/types/citizens-public-map";
+import { publicUpdateForStatus } from "@/lib/utils/ui/public-update";
 
 const STATUS_STYLE: Record<string, { tint: string; ink: string }> = {
   Reported: { tint: "#F1F3F5", ink: "#434B54" },
@@ -12,21 +12,20 @@ const STATUS_STYLE: Record<string, { tint: string; ink: string }> = {
 };
 const FALLBACK_STATUS_STYLE = { tint: "#F1F3F5", ink: "#434B54" };
 
-function ImagePlaceholderIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M21 15l-5-4-4 3-3-2-6 5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-    </svg>
-  );
+// Same long-date format as the citizen report detail page.
+const DATE_FMT: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" };
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString(undefined, DATE_FMT);
 }
 
+// The manuscript's Appendix L "Selected report" panel (Citizen Web-GIS Map),
+// manuscript revision Phase 1, step 6d: a privacy-limited view of someone
+// else's report. The heading is the category, never a citizen's title, and
+// there is no photo — the API no longer sends either. A citizen's own report
+// keeps its full detail behind "View my report".
 export function PublicTicketPopup({ ticket }: { ticket: PublicTicketGeoRow }) {
-  const [imageFailed, setImageFailed] = useState(false);
   const pill = STATUS_STYLE[ticket.status] ?? FALLBACK_STATUS_STYLE;
-  const title = ticket.title ?? ticket.category;
-  const showImage = Boolean(ticket.image_url) && !imageFailed;
 
   return (
     <div className="w-56 space-y-2 text-sm">
@@ -37,26 +36,28 @@ export function PublicTicketPopup({ ticket }: { ticket: PublicTicketGeoRow }) {
         {ticket.status}
       </span>
 
-      {showImage ? (
-        <img
-          src={ticket.image_url!}
-          alt={`Community-submitted photo for ${title} in ${ticket.barangay_name}`}
-          className="mb-2 h-32 w-full rounded-md object-cover"
-          onError={() => setImageFailed(true)}
-        />
-      ) : (
-        <div
-          className="mb-2 flex h-32 w-full items-center justify-center rounded-md bg-slate-100 text-slate-400"
-          role="img"
-          aria-label="No photo submitted for this report"
-        >
-          <ImagePlaceholderIcon />
-        </div>
-      )}
+      <p className="font-medium text-ink-900">{ticket.category}</p>
 
-      <p className="font-medium text-ink-900">{title}</p>
-      <p className="text-ink-500">
-        {ticket.category} · {ticket.barangay_name}
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+        <dt className="text-ink-500">Barangay</dt>
+        <dd className="text-ink-900">{ticket.barangay_name}</dd>
+        <dt className="text-ink-500">Location</dt>
+        <dd className="text-ink-900">Approximate</dd>
+        <dt className="text-ink-500">Reported</dt>
+        <dd className="text-ink-900">{formatDate(ticket.reported_at)}</dd>
+        <dt className="text-ink-500">Last update</dt>
+        <dd className="text-ink-900">{formatDate(ticket.last_updated_at)}</dd>
+        <dt className="text-ink-500">Handled by</dt>
+        <dd className="text-ink-900">{ticket.assigned_office}</dd>
+      </dl>
+
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-400">Public update</p>
+        <p className="text-xs text-ink-700">{publicUpdateForStatus(ticket.status)}</p>
+      </div>
+
+      <p className="text-[11px] leading-4 text-ink-400">
+        Public view: reporter identity, photos, exact pins and internal records are not shown.
       </p>
 
       {ticket.own_report_id != null && (

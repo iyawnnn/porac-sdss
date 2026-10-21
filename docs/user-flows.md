@@ -81,7 +81,7 @@ Only one outstanding dispute per ticket. A dispute never moves the status backwa
 ### 1.5 Notifications and the map
 
 - **Notifications** arrive in a bell and link straight to the relevant report. Citizens receive: report received, report quarantined, flagged as duplicate, and each status change (under review, in progress, resolved).
-- **`/map`** shows city-wide ticket pins over the municipal boundary. It requires a citizen session — it is city-wide in *content*, not open to the public.
+- **`/map`** shows city-wide ticket pins over the municipal boundary. It requires a citizen session — it is city-wide in *content*, not open to the public. Other people's reports are privacy-limited (manuscript Appendix L, since manuscript revision Phase 1, step 6d): the pin is approximate (about 100 m) and the popup shows only status, category, barangay, reported and last-update dates, the handling office and a short public update — no title, photo or reporter. On their own reports, "View my report" opens the full detail.
 
 **What a citizen never sees:** work orders, internal staff notes, moderation reasoning, the urgency factor breakdown, the priority index, or anyone else's report details.
 
@@ -306,7 +306,7 @@ The rules that define who sees what. Enforcement details are in [`security.md`](
 
 **5 — Internal content never reaches citizens.** Work orders, work-order notes, moderation reasoning, a citizen's own dispute reason, Focal intake actions/remarks, and Operational Assessment content are all staff-only. This is structural, not cosmetic: citizen response types have no work-order or intake-internal fields at all, and the CSV export never even selects the notes column. There is a regression test that plants a sentinel note and asserts it never appears on the citizen's page.
 
-**Citizens do see** their own reports and, on the map, city-wide ticket pins. They see no system score at all — no Hazard Urgency (its band was removed from citizen pages in manuscript revision Phase 1, step 6c), no factor breakdown, no Operational Priority — and no Operational Assessment or Focal intake state. They do see a separate **acknowledgment** event on their own report's timeline (§1) once Focal has acknowledged it — this is not a ticket-status value and is never rendered as one.
+**Citizens do see** their own reports in full and, on the map, city-wide ticket pins with privacy-limited details (approximate location, no title or photo — step 6d). They see no system score at all — no Hazard Urgency (its band was removed from citizen pages in manuscript revision Phase 1, step 6c), no factor breakdown, no Operational Priority — and no Operational Assessment or Focal intake state. They do see a separate **acknowledgment** event on their own report's timeline (§1) once Focal has acknowledged it — this is not a ticket-status value and is never rendered as one.
 
 ---
 
