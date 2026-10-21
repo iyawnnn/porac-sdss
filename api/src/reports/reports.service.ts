@@ -322,13 +322,15 @@ export class ReportsService {
 
       const [report] = await insertReport(ticket.id);
 
+      // New notifications name the report by its Appendix H tracking
+      // reference (Phase 2, step 2b follow-up); ones already stored keep the
+      // "Report #<id>" text they were written with.
       await this.notifications.createInTx(tx, {
         recipientType: 'citizen',
         recipientId: citizen.citizenId,
         type: 'report_received',
         title: 'Report received',
-        message:
-          'Your report has been received and routed for municipal review.',
+        message: `Your report has been received and routed for municipal review. Tracking reference: ${report.tracking_reference}.`,
         href: `/dashboard/reports/${report.id}`,
         entityType: 'ticket',
         entityId: ticket.id,
@@ -339,7 +341,7 @@ export class ReportsService {
         recipientOffice: office,
         type: 'new_citizen_report',
         title: 'New citizen report',
-        message: `${category} report in ${barangay.name} - Ticket #${ticket.id}, Report #${report.id}.`,
+        message: `${category} report in ${barangay.name} - Ticket #${ticket.id}, Report ${report.tracking_reference}.`,
         href: `/admin/tickets/${ticket.id}`,
         entityType: 'ticket',
         entityId: ticket.id,
@@ -351,6 +353,7 @@ export class ReportsService {
         barangayName: barangay.name,
         ticketId: ticket.id,
         reportId: report.id,
+        trackingReference: report.tracking_reference,
       });
 
       return {
@@ -396,6 +399,7 @@ export class ReportsService {
       barangayName: string;
       ticketId: number;
       reportId: number;
+      trackingReference: string;
     },
   ): Promise<void> {
     const focalAdmins = await tx<{ id: number }[]>`
@@ -407,7 +411,7 @@ export class ReportsService {
         recipientId: admin.id,
         type: 'new_intake_report',
         title: 'New incoming report',
-        message: `${params.category} report in ${params.barangayName}, routed to ${params.office} — Ticket #${params.ticketId}, Report #${params.reportId}.`,
+        message: `${params.category} report in ${params.barangayName}, routed to ${params.office} — Ticket #${params.ticketId}, Report ${params.trackingReference}.`,
         href: `/admin/intake/${params.reportId}`,
         entityType: 'report',
         entityId: params.reportId,

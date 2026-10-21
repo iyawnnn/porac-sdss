@@ -1,6 +1,15 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { OUTSIDE_MUNICIPALITY_MESSAGE } from './reports.service';
+import type { Sql, TransactionSql } from 'postgres';
+import {
+  OUTSIDE_MUNICIPALITY_MESSAGE,
+  ReportsService,
+} from './reports.service';
+import type { BarangayService } from '../domain/barangay.service';
+import type { MediaService } from '../domain/media.service';
+import type { RateLimitService } from '../domain/ratelimit.service';
+import type { OperationalPriorityService } from '../domain/operational-priority.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 
 describe('OUTSIDE_MUNICIPALITY_MESSAGE', () => {
   it('does not hardcode a barangay count', () => {
@@ -143,7 +152,7 @@ describe('new-report admin notification wiring', () => {
       /recipientType: 'admin',[\s\S]*?recipientOffice: office,[\s\S]*?type: 'new_citizen_report',[\s\S]*?title: 'New citizen report'/,
     );
     expect(reportsServiceSource).toMatch(
-      /category\} report in \$\{barangay\.name\}[\s\S]*?Ticket #\$\{ticket\.id\}, Report #\$\{report\.id\}/,
+      /category\} report in \$\{barangay\.name\}[\s\S]*?Ticket #\$\{ticket\.id\}, Report \$\{report\.tracking_reference\}/,
     );
     expect(reportsServiceSource).toMatch(
       /href: `\/admin\/tickets\/\$\{ticket\.id\}`/,
@@ -714,5 +723,88 @@ describe('tracking reference and initial routing fields (Phase 2, step 2b)', () 
   it("writes the ticket's initial_assigned_office as the routed office", () => {
     expect(ticketInsert).toMatch(/assigned_office, initial_assigned_office,/);
     expect(ticketInsert).toContain('${barangay.id}, 1, ${office}, ${office},');
+  });
+});
+
+// Phase 2, step 2b follow-up: new notifications name a report by its
+// tracking reference instead of "Report #<id>" (stored notifications are
+// never rewritten). Only the message text changed — type, link and
+// recipients are as before.
+describe('new notifications name the report by its tracking reference', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+
+  it('the citizen submission receipt gives the tracking reference', () => {
+    expect(reportsServiceSource).toMatch(
+      /type: 'report_received',\s*title: 'Report received',\s*message: `Your report has been received and routed for municipal review\. Tracking reference: \$\{report\.tracking_reference\}\.`,\s*href: `\/dashboard\/reports\/\$\{report\.id\}`,/,
+    );
+  });
+
+  it("the office's new-report notification names the report by its tracking reference", () => {
+    expect(reportsServiceSource).toContain(
+      'Ticket #${ticket.id}, Report ${report.tracking_reference}.',
+    );
+  });
+
+  it('no notification text in reports.service.ts uses "Report #<id>" any more', () => {
+    expect(reportsServiceSource).not.toMatch(/Report #\$\{/);
+  });
+
+  it('the Focal new-intake notification names the report by its tracking reference', async () => {
+    const createInTx = jest.fn().mockResolvedValue(undefined);
+    const service = new ReportsService(
+      {} as Sql,
+      {} as BarangayService,
+      {} as MediaService,
+      {} as RateLimitService,
+      {} as OperationalPriorityService,
+      { createInTx } as unknown as NotificationsService,
+    );
+    // The only query notifyFocalIntake runs: the active Focal accounts.
+    const tx = (() => ({
+      then(resolve: (v: unknown) => void) {
+        void Promise.resolve([{ id: 5 }, { id: 6 }]).then(resolve);
+      },
+    })) as unknown as TransactionSql;
+
+    await (
+      service as unknown as {
+        notifyFocalIntake: (
+          tx: TransactionSql,
+          params: {
+            office: 'MEO' | 'MDRRMO';
+            category: string;
+            barangayName: string;
+            ticketId: number;
+            reportId: number;
+            trackingReference: string;
+          },
+        ) => Promise<void>;
+      }
+    ).notifyFocalIntake(tx, {
+      office: 'MEO',
+      category: 'Damaged Manhole Cover',
+      barangayName: 'Pio',
+      ticketId: 12,
+      reportId: 34,
+      trackingReference: 'PRC-2026-000034',
+    });
+
+    expect(createInTx).toHaveBeenCalledTimes(2);
+    const calls = createInTx.mock.calls as [unknown, Record<string, unknown>][];
+    expect(calls[0][1]).toEqual({
+      recipientType: 'admin',
+      recipientId: 5,
+      type: 'new_intake_report',
+      title: 'New incoming report',
+      message:
+        'Damaged Manhole Cover report in Pio, routed to MEO — Ticket #12, Report PRC-2026-000034.',
+      href: '/admin/intake/34',
+      entityType: 'report',
+      entityId: 34,
+    });
+    expect(calls[1][1].recipientId).toBe(6);
   });
 });

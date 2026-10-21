@@ -440,9 +440,14 @@ export class FocalIntakeService {
     const sql = this.pg;
     await sql.begin(async (tx) => {
       const [report] = await tx<
-        { id: number; title: string; ticket_id: number }[]
+        {
+          id: number;
+          title: string;
+          ticket_id: number;
+          tracking_reference: string;
+        }[]
       >`
-        SELECT id, title, ticket_id FROM reports WHERE id = ${reportId}
+        SELECT id, title, ticket_id, tracking_reference FROM reports WHERE id = ${reportId}
       `;
       if (!report) throw new NotFoundException('Report not found.');
 
@@ -474,7 +479,9 @@ export class FocalIntakeService {
         recipientOffice: ticket.assigned_office,
         type: 'report_escalated',
         title: 'Report escalated for priority attention',
-        message: `${report.title} (Report #${reportId}) was escalated by Focal: ${reason.trim()}`,
+        // The tracking reference since the Phase 2, step 2b follow-up;
+        // stored notifications keep "Report #<id>".
+        message: `${report.title} (Report ${report.tracking_reference}) was escalated by Focal: ${reason.trim()}`,
         href: `/admin/tickets/${report.ticket_id}`,
         entityType: 'report',
         entityId: reportId,

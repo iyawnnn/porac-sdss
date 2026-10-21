@@ -383,7 +383,14 @@ describe('FocalIntakeService.escalate', () => {
 
   it('notifies the CURRENTLY responsible office, logs the action, and leaves ticket status/office untouched', async () => {
     const { service, logInPgTx, createInTx } = makeService([
-      [{ id: 1, title: 'Pothole', ticket_id: 100 }], // report lookup
+      [
+        {
+          id: 1,
+          title: 'Pothole',
+          ticket_id: 100,
+          tracking_reference: 'PRC-2026-000001',
+        },
+      ], // report lookup
       [{ assigned_office: 'MEO' }], // ticket office lookup
       [{}], // INSERT report_intake_actions
       [
@@ -417,7 +424,16 @@ describe('FocalIntakeService.escalate', () => {
       recipientType: 'admin',
       recipientOffice: 'MEO',
       type: 'report_escalated',
+      href: '/admin/tickets/100',
     });
+    // Named by its tracking reference since the Phase 2, step 2b follow-up.
+    const [, escalated] = createInTx.mock.calls[0] as [
+      unknown,
+      { message: string },
+    ];
+    expect(escalated.message).toBe(
+      'Pothole (Report PRC-2026-000001) was escalated by Focal: Needs urgent attention',
+    );
     expect(result?.ticketStatus).toBe('Reported');
     expect(result?.routedOffice).toBe('MEO');
     // No score field is ever written by escalate — the Operational Priority

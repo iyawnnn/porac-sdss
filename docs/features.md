@@ -56,11 +56,11 @@ The form walks the citizen through:
    - No GPS in the photo → prompt to place the pin manually.
    - GPS outside Porac's bounds → *"Photo GPS location is outside Porac municipality bounds."*
 3. **Map pin + barangay search.** Placing a pin more than 100m from the photo's GPS warns that the submission will be flagged for review — it is not blocked.
-4. **Category** (12 options) and **citizen severity** (Low / Medium / High / Critical — the citizen's own subjective read, never computed; see §6.1).
+4. **Category** (13 options, `CATEGORIES` in `api/src/contracts/schemas.ts`) and **citizen severity** (Low / Medium / High / Critical — the citizen's own subjective read, never computed; see §6.1).
 
 On submit, the server independently recomputes everything it will not trust from the client: the barangay (§4.1) and the integrity flags (§4.5). Reports carry no elevation since manuscript revision Phase 1, step 7a.
 
-The success message gives the report's **tracking reference** (Appendix H, manuscript revision Phase 2, step 2b): `PRC-<YYYY>-<report id, at least 6 digits>`, e.g. `PRC-2026-000123`, where YYYY is the submission year in Manila time. The database generates it (an insert trigger, `docs/database.md`), so it is the same reference staff see.
+Every report gets a **tracking reference**, given in the success message and in the "Report received" notification (Appendix H, manuscript revision Phase 2, step 2b): `PRC-<YYYY>-<report id, at least 6 digits>`, e.g. `PRC-2026-000123`, where YYYY is the submission year in Manila time. The database generates it (an insert trigger, `docs/database.md`), so it is the same reference staff see.
 
 ### 2.3 Tracking a report
 
