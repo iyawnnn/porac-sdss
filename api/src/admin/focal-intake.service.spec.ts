@@ -110,6 +110,65 @@ function makeService(rows: unknown[][]) {
   return { service, logInPgTx, createInTx, reassignOffice, sql };
 }
 
+// Manuscript revision Phase 2, step 2b: reportReference is the stored
+// Appendix H tracking reference, no longer computed as "Report #<id>". The
+// field name is unchanged so the Focal screens need no change. (Audit and
+// notification text still says "Report #<id>"; that history isn't
+// rewritten.)
+describe('FocalIntakeService reportReference is the stored tracking reference (Phase 2, step 2b)', () => {
+  const source = readFileSync(
+    join(__dirname, 'focal-intake.service.ts'),
+    'utf8',
+  );
+
+  it('maps reportReference from r.tracking_reference in the list, detail and map queries', () => {
+    expect(
+      source.match(/reportReference: row\.tracking_reference,/g),
+    ).toHaveLength(2);
+    expect(source).not.toMatch(/reportReference: `Report #/);
+    for (const method of ['listIntake', 'listIntakeGeo', 'getIntakeDetail']) {
+      const start = source.indexOf(`async ${method}(`);
+      const select = source.slice(
+        start,
+        source.indexOf('FROM reports r', start),
+      );
+      expect(select).toContain('r.tracking_reference');
+    }
+  });
+
+  it('the intake detail returns the stored reference', async () => {
+    const { service } = makeService([
+      [
+        {
+          report_id: 42,
+          tracking_reference: 'PRC-2026-000042',
+          ticket_id: 100,
+          category: 'Damaged Manhole Cover',
+          ticket_status: 'Reported',
+          assigned_office: 'MEO',
+          member_count: 1,
+          barangay_name: 'Mitla Proper',
+          citizen_severity: 'High',
+          submitted_at: '2026-01-01T00:00:00Z',
+          flags: [],
+          description: 'Open manhole',
+          lat: 15.0,
+          lng: 120.5,
+          operational_priority: 70,
+          acknowledged_at: null,
+          acknowledged_by_name: null,
+          latest_action_type: null,
+        },
+      ],
+      [], // activity
+    ]);
+
+    const detail = await service.getIntakeDetail(42);
+    expect(detail?.reportReference).toBe('PRC-2026-000042');
+    expect(detail?.linkedTicketReference).toBe('Ticket #100');
+  });
+});
+
 describe('FocalIntakeService.acknowledge', () => {
   it('404s when the report does not exist', async () => {
     const { service } = makeService([[]]);
@@ -324,7 +383,14 @@ describe('FocalIntakeService.escalate', () => {
 
   it('notifies the CURRENTLY responsible office, logs the action, and leaves ticket status/office untouched', async () => {
     const { service, logInPgTx, createInTx } = makeService([
-      [{ id: 1, title: 'Pothole', ticket_id: 100 }], // report lookup
+      [
+        {
+          id: 1,
+          title: 'Pothole',
+          ticket_id: 100,
+          tracking_reference: 'PRC-2026-000001',
+        },
+      ], // report lookup
       [{ assigned_office: 'MEO' }], // ticket office lookup
       [{}], // INSERT report_intake_actions
       [
@@ -358,7 +424,16 @@ describe('FocalIntakeService.escalate', () => {
       recipientType: 'admin',
       recipientOffice: 'MEO',
       type: 'report_escalated',
+      href: '/admin/tickets/100',
     });
+    // Named by its tracking reference since the Phase 2, step 2b follow-up.
+    const [, escalated] = createInTx.mock.calls[0] as [
+      unknown,
+      { message: string },
+    ];
+    expect(escalated.message).toBe(
+      'Pothole (Report PRC-2026-000001) was escalated by Focal: Needs urgent attention',
+    );
     expect(result?.ticketStatus).toBe('Reported');
     expect(result?.routedOffice).toBe('MEO');
     // No score field is ever written by escalate — the Operational Priority
@@ -382,6 +457,7 @@ describe('FocalIntakeService.listIntakeGeo', () => {
       [
         {
           report_id: 1,
+          tracking_reference: 'PRC-2026-000001',
           category: 'Pothole',
           barangay_name: 'Mitla Proper',
           assigned_office: 'MEO',
@@ -397,7 +473,7 @@ describe('FocalIntakeService.listIntakeGeo', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       reportId: 1,
-      reportReference: 'Report #1',
+      reportReference: 'PRC-2026-000001',
       category: 'Pothole',
       barangayName: 'Mitla Proper',
       routedOffice: 'MEO',

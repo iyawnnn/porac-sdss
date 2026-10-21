@@ -52,6 +52,7 @@
     "migrate:operational-assessments": "tsx --env-file=.env scripts/migrations/migrate-operational-assessments.ts",
     "migrate:saved-views-retire-hazard-urgency": "tsx --env-file=.env scripts/migrations/migrate-saved-views-retire-hazard-urgency.ts",
     "migrate:categories-manuscript": "tsx --env-file=.env scripts/migrations/migrate-categories-manuscript.ts",
+    "migrate:ticket-report-fields": "tsx --env-file=.env scripts/migrations/migrate-ticket-report-fields.ts",
     "import:barangays": "tsx --env-file=.env scripts/seed/import-barangays.ts",
     "import:city-boundary": "tsx --env-file=.env scripts/seed/import-city-boundary.ts",
     "seed:dem": "tsx --env-file=.env scripts/seed/seed-dem.ts",

@@ -70,6 +70,11 @@ export interface TicketDetail {
   barangay_geojson: string | null;
   status: string;
   assigned_office: string;
+  // Appendix H (manuscript revision Phase 2, step 2b): the office automatic
+  // Initial Routing first assigned, and the outcome recorded on resolution
+  // (NULL while active and on a Rejected ticket).
+  initial_assigned_office: string;
+  resolution_outcome: "MUNICIPAL_ACTION_COMPLETED" | "EXTERNAL_REFERRAL" | null;
   member_count: number;
   lat: number;
   lng: number;
@@ -115,6 +120,8 @@ export interface OperationalAssessment {
 
 export interface TicketReport {
   id: number;
+  // Appendix H tracking reference (PRC-YYYY-NNNNNN), the one the citizen sees.
+  tracking_reference: string;
   title: string;
   description: string | null;
   citizen_severity: string;

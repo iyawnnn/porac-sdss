@@ -8,12 +8,14 @@ import {
   pgTable,
   serial,
   text,
+  varchar,
   integer,
   real,
   boolean,
   jsonb,
   timestamp,
   pgEnum,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 // Tables that exist in Postgres but are intentionally absent from this
@@ -41,6 +43,13 @@ export const ticketStatusEnum = pgEnum('ticket_status', [
   'Rejected',
 ]);
 export const officeEnum = pgEnum('office', ['MEO', 'MDRRMO']);
+// Appendix H (manuscript revision Phase 2, step 2b, migration 0036). Set to
+// MUNICIPAL_ACTION_COMPLETED when a ticket is resolved through the status
+// ladder; EXTERNAL_REFERRAL becomes choosable in Phase 5.
+export const resolutionOutcomeEnum = pgEnum('resolution_outcome', [
+  'MUNICIPAL_ACTION_COMPLETED',
+  'EXTERNAL_REFERRAL',
+]);
 // 'system_admin' has no office of its own (admins.office is nullable for
 // exactly this role) — it no longer has routine operational access either
 // (Batch 1, five-role RBAC), it bypasses office scoping instead of
@@ -231,6 +240,20 @@ export const tickets = pgTable('tickets', {
   priorityScore: integer('priority_score'),
   urgencyLevel: text('urgency_level'),
   assignedOffice: officeEnum('assigned_office').notNull(),
+  // Appendix H: the office automatic Initial Routing first assigned, kept
+  // after any reassignment. ReportsService.submit writes it; the
+  // tickets_fill_initial_assigned_office insert trigger (migration 0036)
+  // fills it from assigned_office for any other insert path.
+  initialAssignedOffice: officeEnum('initial_assigned_office').notNull(),
+  // Appendix H. NULL until the ticket is resolved; a Rejected ticket stays
+  // NULL.
+  resolutionOutcome: resolutionOutcomeEnum('resolution_outcome'),
+  // Implementation extension (handoff Decision 11), not in the manuscript's
+  // data dictionary: the ticket this one was merged into. Unused until the
+  // Phase 3 human-confirmed merge.
+  mergedIntoTicketId: integer('merged_into_ticket_id').references(
+    (): AnyPgColumn => tickets.id,
+  ),
   // Set when a report attached to this ticket is quarantined during
   // moderation — surfaced to admins separately from urgency/priority,
   // which are purely environmental/cluster-driven.
@@ -287,6 +310,16 @@ export const reports = pgTable('reports', {
     .references(() => citizens.id),
   title: text('title').notNull(),
   description: text('description'),
+  // Appendix H: PRC-<YYYY>-<id zero-padded to at least 6 digits>, YYYY the
+  // submission year in Asia/Manila time. Generated only by the
+  // reports_fill_intake_fields insert trigger (migration 0036), never in
+  // TypeScript, so every insert path gets the same format.
+  trackingReference: varchar('tracking_reference', { length: 50 })
+    .notNull()
+    .unique(),
+  // Appendix H: the category the citizen picked; never changes later, even
+  // when the ticket's category is corrected (Phase 3).
+  submittedCategory: varchar('submitted_category', { length: 100 }).notNull(),
   citizenSeverity: text('citizen_severity').notNull(),
   elevationM: real('elevation_m'),
   exifCapturedAt: timestamp('exif_captured_at', { withTimezone: true }),

@@ -778,3 +778,150 @@ describe('ticket-status notification email selection', () => {
     expect(ticketsServiceSource).not.toMatch(/sendTicketInProgress/);
   });
 });
+
+// Manuscript revision Phase 2, step 2b (Appendix H): resolving through the
+// status ladder records the MUNICIPAL_ACTION_COMPLETED outcome in the same
+// UPDATE; the other transitions and rejecting leave it untouched (NULL).
+// Same fake client as the audit-logging block above, except that it also
+// records each query's text and values.
+describe('resolution_outcome on status changes (Phase 2, step 2b)', () => {
+  function makeRecordingService(rows: unknown[][]) {
+    const calls: { text: string; values: unknown[] }[] = [];
+    let i = 0;
+    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      calls.push({ text: strings.join('?'), values });
+      return {
+        then(resolve: (v: unknown) => void) {
+          void Promise.resolve(rows[i++] ?? []).then(resolve);
+        },
+      };
+    }) as unknown as Sql;
+    (
+      sql as unknown as {
+        begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
+      }
+    ).begin = (cb) => cb(sql);
+    const service = new TicketsService(
+      sql,
+      {} as MediaService,
+      { createInTx: jest.fn() } as unknown as NotificationsService,
+      {
+        sendReportResolved: jest.fn(),
+        sendReportRejected: jest.fn(),
+      } as unknown as EmailService,
+      {
+        get: jest.fn().mockReturnValue('https://porac.example'),
+      } as unknown as ConfigService<Env, true>,
+      {
+        logInPgTx: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AdminAuditService,
+    );
+    const ticketUpdate = () => {
+      const update = calls.find((c) => c.text.includes('UPDATE tickets'));
+      if (!update) throw new Error('no UPDATE tickets query was issued');
+      return update;
+    };
+    return { service, ticketUpdate };
+  }
+
+  it('sets MUNICIPAL_ACTION_COMPLETED in the same UPDATE that resolves the ticket', async () => {
+    const { service, ticketUpdate } = makeRecordingService([
+      [
+        {
+          status: 'In Progress',
+          assigned_office: 'MEO',
+          category: 'Streetlight Out',
+        },
+      ], // ticket lookup
+      [{}], // UPDATE tickets
+      [{}], // INSERT status_history
+      [], // citizenRows (no notification recipients)
+    ]);
+
+    const result = await service.advanceStatus(
+      7,
+      MEO_OFFICER as AdminSession,
+      'Lamp replaced.',
+      undefined,
+    );
+
+    expect(result).toEqual({ status: 'Resolved' });
+    const update = ticketUpdate();
+    expect(update.text).toMatch(
+      /resolution_outcome = COALESCE\(\?::resolution_outcome, resolution_outcome\)/,
+    );
+    expect(update.values).toContain('Resolved');
+    expect(update.values).toContain('MUNICIPAL_ACTION_COMPLETED');
+  });
+
+  it.each([
+    ['Reported', 'Under Review'],
+    ['Under Review', 'In Progress'],
+  ])(
+    'leaves resolution_outcome as it was when advancing %s to %s',
+    async (from, to) => {
+      const { service, ticketUpdate } = makeRecordingService([
+        [{ status: from, assigned_office: 'MEO', category: 'Streetlight Out' }],
+        [{}],
+        [{}],
+        [],
+      ]);
+
+      await service.advanceStatus(
+        7,
+        MEO_OFFICER as AdminSession,
+        undefined,
+        undefined,
+      );
+
+      const update = ticketUpdate();
+      expect(update.values).toContain(to);
+      expect(update.values).not.toContain('MUNICIPAL_ACTION_COMPLETED');
+    },
+  );
+
+  it('rejecting a ticket never writes resolution_outcome, so it stays NULL', async () => {
+    const { service, ticketUpdate } = makeRecordingService([
+      [
+        {
+          status: 'Reported',
+          assigned_office: 'MEO',
+          category: 'Streetlight Out',
+        },
+      ],
+      [{}],
+      [{}],
+      [],
+    ]);
+
+    await service.rejectTicket(
+      9,
+      MEO_OFFICER as AdminSession,
+      'Duplicate of an earlier report.',
+    );
+
+    const update = ticketUpdate();
+    expect(update.text).toContain("status = 'Rejected'");
+    expect(update.text).not.toContain('resolution_outcome');
+  });
+
+  it('getTicketDetail selects initial_assigned_office and resolution_outcome, and each report its tracking_reference', () => {
+    const source = readFileSync(join(__dirname, 'tickets.service.ts'), 'utf8');
+    const detailStart = source.indexOf('async getTicketDetail(');
+    const detailSelect = source.slice(
+      detailStart,
+      source.indexOf('FROM tickets t', detailStart),
+    );
+    expect(detailSelect).toContain('t.initial_assigned_office');
+    expect(detailSelect).toContain('t.resolution_outcome');
+    const reportsStart = source.indexOf(
+      'const reports = await sql<TicketReport[]>',
+      detailStart,
+    );
+    const reportsSelect = source.slice(
+      reportsStart,
+      source.indexOf('FROM reports WHERE ticket_id', reportsStart),
+    );
+    expect(reportsSelect).toContain('tracking_reference');
+  });
+});

@@ -37,6 +37,11 @@ const NEXT_STATUS: Record<string, string> = {
   "In Progress": "Resolved",
 };
 const ACTIVE_STATUSES = ["Reported", "Under Review", "In Progress"];
+// Appendix H resolution outcome (manuscript revision Phase 2, step 2b).
+const RESOLUTION_OUTCOME_LABEL: Record<NonNullable<TicketDetail["resolution_outcome"]>, string> = {
+  MUNICIPAL_ACTION_COMPLETED: "Municipal action completed",
+  EXTERNAL_REFERRAL: "External referral",
+};
 
 interface TicketDetailResponse {
   ticket: TicketDetail;
@@ -103,6 +108,11 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             {primaryReport ? ` — ${primaryReport.title}` : ""}
           </h1>
           <StatusPill size="lg" status={ticket.status} />
+          {ticket.status === "Resolved" && ticket.resolution_outcome && (
+            <Badge className="bg-line-100 text-ink-700" variant="outline">
+              Outcome: {RESOLUTION_OUTCOME_LABEL[ticket.resolution_outcome]}
+            </Badge>
+          )}
           {/* Manuscript revision Phase 1, step 5: the header shows Operational
               Priority (lib/utils/ui/priority.ts bands), not Hazard Urgency. */}
           <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
@@ -126,7 +136,9 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           )}
         </div>
         <p className="mt-1.5 text-sm text-ink-500">
-          {ticket.barangay_name} · {ticket.assigned_office} · {ticket.member_count} report{ticket.member_count === 1 ? "" : "s"} merged
+          {ticket.barangay_name} · {ticket.assigned_office}
+          {ticket.initial_assigned_office !== ticket.assigned_office && <> · Initially routed to {ticket.initial_assigned_office}</>} ·{" "}
+          {ticket.member_count} report{ticket.member_count === 1 ? "" : "s"} merged
           {primaryReport && <> · First reported {new Date(primaryReport.created_at).toLocaleString()}</>}
         </p>
       </div>
@@ -298,6 +310,7 @@ function ReportCard({ report }: { report: TicketReport }) {
         src={report.image_url}
       />
       <p className="mt-2 text-sm font-medium text-ink-900">{report.title}</p>
+      <p className="font-mono text-xs text-ink-500">{report.tracking_reference}</p>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         <Badge variant="outline">{report.citizen_severity}</Badge>
         {report.moderation_status && <Badge variant="outline">{moderationStatusLabel(report.moderation_status)}</Badge>}

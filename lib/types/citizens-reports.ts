@@ -2,10 +2,13 @@
 // api/src/reports/reports.service.ts (NestJS) — see PLAN blueprint Phase
 // 6/8. This file now only carries the row shapes that client components
 // still `import type`. Neither shape carries a system score: urgency_band
-// was removed in manuscript revision Phase 1, step 6c.
+// was removed in manuscript revision Phase 1, step 6c. tracking_reference is
+// the Appendix H reference (PRC-YYYY-NNNNNN, manuscript revision Phase 2,
+// step 2b).
 export interface MyReportRow {
   id: number;
   ticket_id: number;
+  tracking_reference: string;
   title: string;
   category: string;
   citizen_severity: string;
@@ -22,6 +25,7 @@ export interface MyReportRow {
 export interface MyReportDetail {
   id: number;
   ticket_id: number;
+  tracking_reference: string;
   title: string;
   description: string | null;
   citizen_severity: string;

@@ -78,6 +78,44 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 2, step 2b — ticket and report fields (Appendix H) — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
+
+Appendix H fields and the handoff's data-model table.
+
+- **New columns (migration `0036_ticket_report_fields.sql`):**
+  - `reports.tracking_reference`, `varchar(50) NOT NULL`, unique: `PRC-<YYYY>-<report id zero-padded to at least 6 digits>` (e.g. `PRC-2026-000123`), with YYYY the submission year in Asia/Manila time.
+  - `reports.submitted_category`, `varchar(100) NOT NULL`: the category the citizen picked; never changes later.
+  - `tickets.initial_assigned_office`, `office NOT NULL`: the office automatic Initial Routing first assigned; kept after reassignment.
+  - `tickets.resolution_outcome`: nullable enum `MUNICIPAL_ACTION_COMPLETED` | `EXTERNAL_REFERRAL`.
+  - `tickets.merged_into_ticket_id`: nullable FK → `tickets(id)`. An implementation extension (Decision 11), unused until Phase 3, and flagged in `docs/database.md` for the next ERD/data dictionary update.
+- **One generator:** two BEFORE INSERT triggers fill `tracking_reference`, `submitted_category` and `initial_assigned_office` whenever an insert leaves them NULL, so the app, seeds and tests all agree. The reference is never computed in TypeScript; `ReportsService.submit` reads it back with `RETURNING` and returns `trackingReference`. It also writes `submitted_category` and `initial_assigned_office` explicitly.
+- **Backfill:**
+  - `initial_assigned_office`: the `from_office` of each ticket's earliest reassignment, else `assigned_office`.
+  - `resolution_outcome`: `MUNICIPAL_ACTION_COMPLETED` on every Resolved ticket.
+  - `submitted_category`: the ticket's current category. For the three categories renamed by `0035` that is the new name.
+  - `tracking_reference`: the same expression as the trigger.
+  - Then NOT NULL, the unique index, and an index on `merged_into_ticket_id`.
+  - Script `migrate:ticket-report-fields`: one transaction, before/after counts from `0036_ticket_report_fields.check.sql`, true per-statement row counts, five sample references. Safe to re-run.
+- **Resolution outcome:** `TicketsService.advanceStatus` sets `MUNICIPAL_ACTION_COMPLETED` in the same UPDATE that resolves a ticket. Bulk advance never resolves; rejecting leaves the outcome NULL. External Referral as a choice is Phase 5.
+- **Shown:**
+  - **Citizen:** the reference in the submit message, on My Reports rows and on the report detail page, under the title and in place of `#R<id>` in the Citizen Record panel.
+  - **Ticket Detail:** each evidence report's reference; "Initially routed to {office}" when it differs from the assigned office; and "Outcome: Municipal action completed" beside the status pill on a Resolved ticket.
+  - **Focal Intake:** `reportReference` (dashboard, queue, detail, dialogs, map popup) is now the stored reference instead of the computed "Report #<id>". The field name is unchanged, so the Focal screens didn't change.
+  - **History:** audit and notification text keeps "Report #<id>".
+- **Tested on PGlite only.** The real script ran through postgres.js against a throwaway in-memory database, installed outside the repo and then deleted:
+  - **Fixture:** 5 tickets, 7 reports and 4 reassignments.
+  - **Reference boundaries:** 31 Dec 23:30 Manila → `PRC-2025-000001`; 1 Jan 00:30 Manila (still 2025 in UTC) → `PRC-2026-000002`; ids 12345 / 123456 / 1000123 → `-012345` / `-123456` / `-1000123`, not truncated.
+  - **Initial office:** taken from the earliest reassignment by date, even when it was inserted last.
+  - **Outcomes:** Resolved → `MUNICIPAL_ACTION_COMPLETED`; Rejected and active tickets stay NULL.
+  - **Triggers (plain SQL, under a US session time zone):** a new ticket got its initial office, and new reports got `PRC-2026-000042` and their ticket's category; explicit values were kept; a duplicate reference was rejected.
+  - **Second run:** 0 rows changed, tables identical. The unique index and a single FK exist.
+  - **Not yet run against a real database.**
+- **Seeds and e2e:** seeds rely on the triggers (no code change; type-checked, not run). New Playwright assertions are written but not yet run, since they need the migration. They reuse existing tests, so they post no extra reports:
+  - `citizen-reports.spec.ts`: `trackingReference` matches `/^PRC-\d{4}-\d{6,}$/` and shows on both report pages.
+  - `admin-tickets.spec.ts`: the resolve test checks the outcome badge and the evidence reference.
+- **Until the migration runs, the API errors** on report submission, the citizen dashboard, My Reports and report detail, Ticket Detail, every status advance, and all Focal Intake screens. They read or write the new columns or the `resolution_outcome` type.
+- Checks: API 51 suites / 737 tests, API build, frontend type-check, ESLint 0 errors; scripts type-check unchanged (10 pre-existing spec errors).
+
 ### Manuscript revision Phase 2, step 2a — categories — **completed (code + unit tests; migration run on a test copy of the database, production still to do)**
 
 Handoff Decisions 6, 9 and 13.

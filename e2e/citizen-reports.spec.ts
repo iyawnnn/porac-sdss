@@ -7,6 +7,7 @@ test.setTimeout(60_000);
 interface MyReportRow {
   id: number;
   ticket_id: number;
+  tracking_reference: string;
   title: string;
   category: string;
   barangay_name: string;
@@ -236,8 +237,10 @@ test.describe("Notification click-through", () => {
 // of the old combined drainage category are both MEO-direct. A fresh signup
 // for the same per-account/per-location rate-limit reasons as the
 // notification test above; this posts 2 of the full run's report budget.
+// Step 2b (Appendix H) checks the tracking reference on the same two
+// reports rather than posting more.
 test.describe("New MEO categories", () => {
-  test("a citizen can submit Damaged Manhole Cover and Clogged Drainage / Damaged Culvert, and both land in MEO", async ({ page }) => {
+  test("a citizen can submit Damaged Manhole Cover and Clogged Drainage / Damaged Culvert, both land in MEO, and each shows its PRC tracking reference", async ({ page }) => {
     const email = `e2e-categories-${Date.now()}@porac.ph`;
     await page.goto("/signup");
     await page.getByLabel("First name").fill("Category");
@@ -250,6 +253,7 @@ test.describe("New MEO categories", () => {
     const { readFileSync } = await import("node:fs");
     const jitter = () => (Math.random() - 0.5) * 0.01;
     const categories = ["Damaged Manhole Cover", "Clogged Drainage / Damaged Culvert"];
+    const submitted: { reportId: number; trackingReference: string }[] = [];
     for (const category of categories) {
       const submitRes = await page.request.post("/api/reports", {
         multipart: {
@@ -266,7 +270,10 @@ test.describe("New MEO categories", () => {
         },
       });
       expect(submitRes.ok()).toBe(true);
-      expect(((await submitRes.json()) as { assignedOffice: string }).assignedOffice).toBe("MEO");
+      const body = (await submitRes.json()) as { assignedOffice: string; reportId: number; trackingReference: string };
+      expect(body.assignedOffice).toBe("MEO");
+      expect(body.trackingReference).toMatch(/^PRC-\d{4}-\d{6,}$/);
+      submitted.push({ reportId: body.reportId, trackingReference: body.trackingReference });
     }
 
     const mine = await fetchMyReports(page);
@@ -274,6 +281,14 @@ test.describe("New MEO categories", () => {
       const row = mine.find((r) => r.category === category);
       expect(row, `a report filed as "${category}"`).toBeDefined();
       expect(row?.assigned_office).toBe("MEO");
+    }
+    for (const { reportId, trackingReference } of submitted) {
+      expect(mine.find((r) => r.id === reportId)?.tracking_reference).toBe(trackingReference);
+    }
+
+    for (const { reportId, trackingReference } of submitted) {
+      await page.goto(`/dashboard/reports/${reportId}`);
+      await expect(page.getByText(trackingReference, { exact: true }).first()).toBeVisible();
     }
   });
 });

@@ -394,7 +394,7 @@ export default function ReportForm() {
       // either way, so a short neutral note is enough here.
       const flagNote: string = data.flags?.length ? " This report has been flagged for additional review by city staff." : "";
       setMessage(
-        `Report submitted. Ticket #${data.ticketId}, barangay: ${data.barangay}, office: ${data.assignedOffice}.${flagNote}`
+        `Report submitted. Tracking reference: ${data.trackingReference}. Ticket #${data.ticketId}, barangay: ${data.barangay}, office: ${data.assignedOffice}.${flagNote}`
       );
       formRef.current?.reset();
       setFile(null);

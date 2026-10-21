@@ -62,6 +62,7 @@ function isUniqueViolation(err: unknown): boolean {
 
 interface RawIntakeRow {
   report_id: number;
+  tracking_reference: string;
   ticket_id: number;
   category: string;
   ticket_status: string;
@@ -79,6 +80,8 @@ interface RawIntakeRow {
 
 export interface FocalIntakeRow {
   reportId: number;
+  // The stored Appendix H tracking reference (PRC-YYYY-NNNNNN) since
+  // manuscript revision Phase 2, step 2b — was the computed "Report #<id>".
   reportReference: string;
   ticketId: number;
   ticketReference: string;
@@ -102,6 +105,7 @@ export interface FocalIntakeRow {
 
 interface RawIntakeGeoRow {
   report_id: number;
+  tracking_reference: string;
   category: string;
   barangay_name: string;
   assigned_office: 'MEO' | 'MDRRMO';
@@ -142,7 +146,7 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
 function mapRow(row: RawIntakeRow): FocalIntakeRow {
   return {
     reportId: row.report_id,
-    reportReference: `Report #${row.report_id}`,
+    reportReference: row.tracking_reference,
     ticketId: row.ticket_id,
     ticketReference: `Ticket #${row.ticket_id}`,
     category: row.category,
@@ -181,7 +185,7 @@ export class FocalIntakeService {
     const sql = this.pg;
     const rows = await sql<RawIntakeRow[]>`
       SELECT
-        r.id AS report_id, t.id AS ticket_id, t.category, t.status AS ticket_status,
+        r.id AS report_id, r.tracking_reference, t.id AS ticket_id, t.category, t.status AS ticket_status,
         t.assigned_office, t.member_count, b.name AS barangay_name,
         r.citizen_severity, r.created_at AS submitted_at, r.flags,
         t.priority_index AS operational_priority,
@@ -212,7 +216,7 @@ export class FocalIntakeService {
     const sql = this.pg;
     const rows = await sql<RawIntakeGeoRow[]>`
       SELECT
-        r.id AS report_id, t.category, b.name AS barangay_name,
+        r.id AS report_id, r.tracking_reference, t.category, b.name AS barangay_name,
         t.assigned_office, t.priority_index AS operational_priority,
         ra.acknowledged_at, latest.action_type AS latest_action_type,
         ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng
@@ -228,7 +232,7 @@ export class FocalIntakeService {
     `;
     return rows.map((row) => ({
       reportId: row.report_id,
-      reportReference: `Report #${row.report_id}`,
+      reportReference: row.tracking_reference,
       category: row.category,
       barangayName: row.barangay_name,
       routedOffice: row.assigned_office,
@@ -252,7 +256,7 @@ export class FocalIntakeService {
       })[]
     >`
       SELECT
-        r.id AS report_id, t.id AS ticket_id, t.category, t.status AS ticket_status,
+        r.id AS report_id, r.tracking_reference, t.id AS ticket_id, t.category, t.status AS ticket_status,
         t.assigned_office, t.member_count, b.name AS barangay_name,
         r.citizen_severity, r.created_at AS submitted_at, r.flags,
         r.description, ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng,
@@ -436,9 +440,14 @@ export class FocalIntakeService {
     const sql = this.pg;
     await sql.begin(async (tx) => {
       const [report] = await tx<
-        { id: number; title: string; ticket_id: number }[]
+        {
+          id: number;
+          title: string;
+          ticket_id: number;
+          tracking_reference: string;
+        }[]
       >`
-        SELECT id, title, ticket_id FROM reports WHERE id = ${reportId}
+        SELECT id, title, ticket_id, tracking_reference FROM reports WHERE id = ${reportId}
       `;
       if (!report) throw new NotFoundException('Report not found.');
 
@@ -470,7 +479,9 @@ export class FocalIntakeService {
         recipientOffice: ticket.assigned_office,
         type: 'report_escalated',
         title: 'Report escalated for priority attention',
-        message: `${report.title} (Report #${reportId}) was escalated by Focal: ${reason.trim()}`,
+        // The tracking reference since the Phase 2, step 2b follow-up;
+        // stored notifications keep "Report #<id>".
+        message: `${report.title} (Report ${report.tracking_reference}) was escalated by Focal: ${reason.trim()}`,
         href: `/admin/tickets/${report.ticket_id}`,
         entityType: 'report',
         entityId: reportId,
