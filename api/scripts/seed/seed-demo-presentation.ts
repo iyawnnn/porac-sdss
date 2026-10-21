@@ -1611,8 +1611,9 @@ async function seedWorkOrders(
 // ---------------------------------------------------------------------
 // Timestamp backdating — DEMO-ONLY. Shifts every real-service-stamped
 // `now()` on a ticket (and its reports/status_history/office_reassignments/
-// work_orders/work_order_status_history) backward by the spec's ageDays,
-// preserving whatever relative order the real sequence of calls produced.
+// routing_actions/work_orders/work_order_status_history) backward by the
+// spec's ageDays, preserving whatever relative order the real sequence of
+// calls produced.
 // Never touches priority_index — that stays exactly as the real
 // computePriorityIndex() set it.
 // ---------------------------------------------------------------------
@@ -1630,6 +1631,10 @@ async function backdateTimestamps(
     await sql`UPDATE reports SET created_at = created_at - make_interval(days => ${days}) WHERE ticket_id = ${t.id}`;
     await sql`UPDATE status_history SET changed_at = changed_at - make_interval(days => ${days}) WHERE ticket_id = ${t.id}`;
     await sql`UPDATE office_reassignments SET reassigned_at = reassigned_at - make_interval(days => ${days}) WHERE ticket_id = ${t.id}`;
+    // Same shift as office_reassignments, so each REASSIGN row written by
+    // reassignOffice (Phase 2, step 2c) keeps the timestamp migration 0037
+    // matches it on.
+    await sql`UPDATE routing_actions SET created_at = created_at - make_interval(days => ${days}) WHERE ticket_id = ${t.id}`;
     await sql`
       UPDATE work_order_status_history SET changed_at = changed_at - make_interval(days => ${days})
       WHERE work_order_id IN (SELECT id FROM work_orders WHERE ticket_id = ${t.id})
