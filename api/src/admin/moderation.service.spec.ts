@@ -155,13 +155,24 @@ describe('parseModerationQuery', () => {
 
   it.each([
     'LOCATION_MISMATCH',
-    'STALE_PHOTO',
-    'NO_EXIF',
+    'STALE_EVIDENCE',
+    'MISSING_METADATA',
+    'TIMESTAMP_ANOMALY',
     'DUPLICATE_IMAGE',
     'BOUNDARY_FALLBACK',
   ])('accepts a known flag type %s', (flag) => {
     expect(service.parseModerationQuery({ flag }, MEO_ADMIN).flag).toBe(flag);
   });
+
+  // Retired by migration 0040 (manuscript revision Phase 3, step 3b).
+  it.each(['STALE_PHOTO', 'NO_EXIF'])(
+    'ignores the retired flag type %s like any unknown one',
+    (flag) => {
+      expect(
+        service.parseModerationQuery({ flag }, MEO_ADMIN).flag,
+      ).toBeUndefined();
+    },
+  );
 
   it('rejects an unknown flag type', () => {
     expect(

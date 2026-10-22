@@ -2,8 +2,13 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { Sql, TransactionSql } from 'postgres';
 import {
+  LOCATION_MISMATCH_THRESHOLD_M,
   OUTSIDE_MUNICIPALITY_MESSAGE,
   ReportsService,
+  STALE_EVIDENCE_CATEGORIES,
+  STALE_EVIDENCE_HOURS,
+  TIMESTAMP_ANOMALY_TOLERANCE_HOURS,
+  evidenceCheckFlags,
 } from './reports.service';
 import type { BarangayService } from '../domain/barangay.service';
 import type { MediaService } from '../domain/media.service';
@@ -811,4 +816,193 @@ describe('new notifications name the report by its tracking reference', () => {
     });
     expect(calls[1][1].recipientId).toBe(6);
   });
+});
+
+// Manuscript revision Phase 3, step 3b: the evidence-integrity rules
+// (manuscript pp. 42–43), at every boundary.
+describe('evidenceCheckFlags (Phase 3, step 3b)', () => {
+  const SUBMITTED_AT = new Date('2026-10-20T06:00:00.000Z');
+  const MINUTE = 60 * 1000;
+  const HOUR = 60 * MINUTE;
+  const at = (offsetMs: number) => new Date(SUBMITTED_AT.getTime() + offsetMs);
+  const check = (
+    overrides: Partial<Parameters<typeof evidenceCheckFlags>[0]>,
+  ) =>
+    evidenceCheckFlags({
+      locationMismatchM: null,
+      capturedAt: at(-HOUR),
+      submittedAt: SUBMITTED_AT,
+      submittedCategory: 'Pothole / Road Surface Damage',
+      ...overrides,
+    });
+  const STALE_LISTED = [
+    'Localized Flooding',
+    'Rain-Induced Slope Failure/Landslide',
+    'Lahar or Volcanic Debris-Flow Threat',
+    'Fallen Tree or Storm-Related Road Obstruction',
+  ];
+  const STALE_LEGACY = [
+    'Flooding',
+    'Landslide / Slope Failure',
+    'Lahar / Debris-Flow Threat',
+    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree',
+  ];
+
+  it('uses the manuscript numbers and the group tolerance', () => {
+    expect(LOCATION_MISMATCH_THRESHOLD_M).toBe(50);
+    expect(STALE_EVIDENCE_HOURS).toBe(24);
+    expect(TIMESTAMP_ANOMALY_TOLERANCE_HOURS).toBe(3);
+    expect(STALE_EVIDENCE_CATEGORIES).toEqual([
+      ...STALE_LISTED,
+      ...STALE_LEGACY,
+    ]);
+  });
+
+  it('does not flag a pin exactly 50 m from the photo GPS', () => {
+    expect(check({ locationMismatchM: 50 })).toEqual([]);
+  });
+
+  it('flags LOCATION_MISMATCH at 50.1 m', () => {
+    expect(check({ locationMismatchM: 50.1 })).toEqual(['LOCATION_MISMATCH']);
+  });
+
+  it('adds no location flag at all when the photo has no usable GPS', () => {
+    expect(check({ locationMismatchM: null })).toEqual([]);
+  });
+
+  it.each(STALE_LISTED)(
+    '%s: a photo taken exactly 24 h before submission is not stale',
+    (category) => {
+      expect(
+        check({ submittedCategory: category, capturedAt: at(-24 * HOUR) }),
+      ).toEqual([]);
+    },
+  );
+
+  it.each(STALE_LISTED)(
+    '%s: 24 h + 1 min before submission is STALE_EVIDENCE',
+    (category) => {
+      expect(
+        check({
+          submittedCategory: category,
+          capturedAt: at(-24 * HOUR - MINUTE),
+        }),
+      ).toEqual(['STALE_EVIDENCE']);
+    },
+  );
+
+  it.each(STALE_LEGACY)(
+    'legacy %s is checked for staleness too',
+    (category) => {
+      expect(
+        check({
+          submittedCategory: category,
+          capturedAt: at(-24 * HOUR - MINUTE),
+        }),
+      ).toEqual(['STALE_EVIDENCE']);
+    },
+  );
+
+  it('a pothole photo is never stale, however old', () => {
+    expect(check({ capturedAt: at(-24 * HOUR - MINUTE) })).toEqual([]);
+    expect(check({ capturedAt: at(-365 * 24 * HOUR) })).toEqual([]);
+  });
+
+  it('a missing capture time is MISSING_METADATA only, with no staleness inferred', () => {
+    expect(
+      check({ capturedAt: null, submittedCategory: 'Localized Flooding' }),
+    ).toEqual(['MISSING_METADATA']);
+  });
+
+  it('a capture time exactly 3 h after submission is not an anomaly', () => {
+    expect(
+      check({
+        capturedAt: at(3 * HOUR),
+        submittedCategory: 'Localized Flooding',
+      }),
+    ).toEqual([]);
+  });
+
+  it('3 h + 1 min after submission is TIMESTAMP_ANOMALY, and is not checked for staleness', () => {
+    expect(
+      check({
+        capturedAt: at(3 * HOUR + MINUTE),
+        submittedCategory: 'Localized Flooding',
+      }),
+    ).toEqual(['TIMESTAMP_ANOMALY']);
+  });
+
+  it('keeps the location flag first when a capture-time flag also applies', () => {
+    expect(check({ locationMismatchM: 120, capturedAt: null })).toEqual([
+      'LOCATION_MISMATCH',
+      'MISSING_METADATA',
+    ]);
+  });
+});
+
+describe('submit() applies the Phase 3, step 3b evidence rules', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+  const submitSource = reportsServiceSource.slice(
+    reportsServiceSource.indexOf('  async submit('),
+    reportsServiceSource.indexOf('  private async notifyFocalIntake('),
+  );
+
+  it('runs evidenceCheckFlags on the category the citizen submitted', () => {
+    expect(submitSource).toMatch(/\.\.\.evidenceCheckFlags\(\{/);
+    expect(submitSource).toMatch(/submittedCategory: category,/);
+    expect(submitSource).toMatch(/capturedAt: exif\.capturedAt,/);
+  });
+
+  it('no longer writes the retired NO_EXIF or STALE_PHOTO codes', () => {
+    expect(reportsServiceSource).not.toMatch(/'NO_EXIF'|'STALE_PHOTO'/);
+  });
+
+  it('keeps DUPLICATE_IMAGE and BOUNDARY_FALLBACK as before', () => {
+    expect(submitSource).toContain(
+      'flags.push(`DUPLICATE_IMAGE:${duplicateMatch.id}`)',
+    );
+    expect(submitSource).toContain(
+      '`BOUNDARY_FALLBACK:${barangay.name}:${Math.round(barangay.fallbackDistanceM ?? 0)}`',
+    );
+  });
+});
+
+// The 0040 migration and its check repeat the stale category list and the
+// 50 m threshold in SQL; they must match submit()'s constants.
+describe('0040_evidence_flags matches the submit() rules', () => {
+  const drizzle = join(__dirname, '..', '..', 'drizzle');
+  const categoryLists = (text: string) =>
+    [...text.matchAll(/submitted_category (?:NOT )?IN \(([^)]*)\)/g)].map(
+      (match) => [...match[1].matchAll(/'([^']*)'/g)].map((name) => name[1]),
+    );
+
+  it.each(['0040_evidence_flags.sql', '0040_evidence_flags.check.sql'])(
+    '%s lists exactly STALE_EVIDENCE_CATEGORIES',
+    (file) => {
+      const lists = categoryLists(readFileSync(join(drizzle, file), 'utf8'));
+      expect(lists.length).toBeGreaterThan(0);
+      for (const list of lists) {
+        expect(list).toEqual([...STALE_EVIDENCE_CATEGORIES]);
+      }
+    },
+  );
+
+  it.each(['0040_evidence_flags.sql', '0040_evidence_flags.check.sql'])(
+    '%s uses the LOCATION_MISMATCH_THRESHOLD_M distance',
+    (file) => {
+      const thresholds = [
+        ...readFileSync(join(drizzle, file), 'utf8').matchAll(
+          /location_mismatch_m > (\d+)/g,
+        ),
+      ].map((match) => Number(match[1]));
+      expect(thresholds.length).toBeGreaterThan(0);
+      expect(new Set(thresholds)).toEqual(
+        new Set([LOCATION_MISMATCH_THRESHOLD_M]),
+      );
+    },
+  );
 });

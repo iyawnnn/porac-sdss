@@ -1,6 +1,11 @@
+import { execFileSync } from 'child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { v2 as cloudinary } from 'cloudinary';
 import exifr from 'exifr';
-import { MediaService } from './media.service';
+import sharp from 'sharp';
+import { MediaService, parseCaptureTime } from './media.service';
 
 jest.mock('cloudinary', () => ({
   v2: {
@@ -147,6 +152,7 @@ describe('MediaService.extractExif', () => {
   });
 
   it('maps GPS/make/model/capturedAt fields into the ExifResult when present', async () => {
+    // 16:30 Porac time (no offset in the EXIF) is 08:30 UTC.
     const capturedAt = new Date('2026-01-15T08:30:00.000Z');
     const parseMock = exifr.parse as jest.Mock;
     parseMock.mockResolvedValueOnce({
@@ -154,7 +160,7 @@ describe('MediaService.extractExif', () => {
       longitude: 120.48,
       Make: 'Google',
       Model: 'Pixel 8',
-      DateTimeOriginal: capturedAt,
+      DateTimeOriginal: '2026:01:15 16:30:00',
     });
     const service = new MediaService();
 
@@ -172,9 +178,215 @@ describe('MediaService.extractExif', () => {
         GPSLatitudeRef: 'N',
         GPSLongitudeRef: 'E',
         DateTimeOriginal: capturedAt.toISOString(),
+        DateTimeOriginalOffset: '+08:00',
+        DateTimeOriginalOffsetSource: 'Asia/Manila default',
         Make: 'Google',
         Model: 'Pixel 8',
       },
     });
+  });
+});
+
+// Manuscript revision Phase 3, step 3b: DateTimeOriginal is the camera's
+// wall-clock time. It is read with the photo's own offset, else as Porac
+// time (UTC+08:00), never in the server's time zone; unusable dates are null.
+// Real JPEGs written with piexifjs and parsed by the real exifr.
+interface PiexifLike {
+  TAGS: { Exif: Record<number, { name: string; type: string }> };
+  ImageIFD: Record<string, number>;
+  ExifIFD: Record<string, number>;
+  GPSIFD: Record<string, number>;
+  dump(data: Record<string, unknown>): string;
+  insert(exif: string, jpeg: string): string;
+}
+const piexif = jest.requireActual<PiexifLike>('piexifjs');
+// OffsetTime / OffsetTimeOriginal (EXIF 2.31) are missing from piexifjs's tag
+// table; exifr reads them.
+piexif.TAGS.Exif[36880] = { name: 'OffsetTime', type: 'Ascii' };
+piexif.TAGS.Exif[36881] = { name: 'OffsetTimeOriginal', type: 'Ascii' };
+const OFFSET_TIME = 36880;
+const OFFSET_TIME_ORIGINAL = 36881;
+
+async function jpegWithExif(exif: Record<number, string>): Promise<Buffer> {
+  const jpeg = await sharp({
+    create: {
+      width: 16,
+      height: 16,
+      channels: 3,
+      background: { r: 10, g: 20, b: 30 },
+    },
+  })
+    .jpeg()
+    .toBuffer();
+  const withExif = piexif.insert(
+    piexif.dump({
+      '0th': { [piexif.ImageIFD.Make]: 'Test' },
+      Exif: exif,
+      GPS: {
+        [piexif.GPSIFD.GPSLatitudeRef]: 'N',
+        [piexif.GPSIFD.GPSLatitude]: [
+          [15, 1],
+          [4, 1],
+          [0, 1],
+        ],
+        [piexif.GPSIFD.GPSLongitudeRef]: 'E',
+        [piexif.GPSIFD.GPSLongitude]: [
+          [120, 1],
+          [32, 1],
+          [0, 1],
+        ],
+      },
+      '1st': {},
+      thumbnail: null,
+    }),
+    `data:image/jpeg;base64,${jpeg.toString('base64')}`,
+  );
+  return Buffer.from(withExif.split(',')[1], 'base64');
+}
+
+describe('MediaService.extractExif capture time (Phase 3, step 3b)', () => {
+  // Jest runs tests in a sandbox where setting process.env.TZ never reaches
+  // Node's clock, so each time zone gets its own child process running the
+  // real extractExif through tsx, and reports the zone offset it ran under.
+  it('gives the same instant under TZ=UTC and TZ=Asia/Manila, reading a time with no offset as Porac time', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'capture-time-'));
+    try {
+      const image = join(dir, 'photo.jpg');
+      writeFileSync(
+        image,
+        await jpegWithExif({
+          [piexif.ExifIFD.DateTimeOriginal]: '2026:10:20 14:30:00',
+        }),
+      );
+      const probe = join(dir, 'probe.ts');
+      writeFileSync(
+        probe,
+        [
+          `import { readFileSync } from 'fs';`,
+          `import { MediaService } from ${JSON.stringify(join(__dirname, 'media.service'))};`,
+          `void new MediaService().extractExif(readFileSync(process.argv[2])).then((r) =>`,
+          `  console.log(JSON.stringify({ zoneOffset: new Date(2026, 0, 1).getTimezoneOffset(), capturedAt: r.capturedAt?.toISOString() ?? null, data: r.data })));`,
+        ].join('\n'),
+      );
+      const apiRoot = join(__dirname, '..', '..');
+      const runUnder = (tz: string) =>
+        JSON.parse(
+          execFileSync(
+            process.execPath,
+            [
+              join(apiRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+              probe,
+              image,
+            ],
+            { cwd: apiRoot, env: { ...process.env, TZ: tz }, encoding: 'utf8' },
+          ),
+        ) as {
+          zoneOffset: number;
+          capturedAt: string | null;
+          data: Record<string, unknown> | null;
+        };
+
+      const underUtc = runUnder('UTC');
+      const underManila = runUnder('Asia/Manila');
+
+      expect(underUtc.zoneOffset).toBe(0);
+      expect(underManila.zoneOffset).toBe(-480);
+      expect(underUtc.capturedAt).toBe('2026-10-20T06:30:00.000Z');
+      expect(underManila.capturedAt).toBe('2026-10-20T06:30:00.000Z');
+      expect(underUtc.data).toEqual(underManila.data);
+      expect(underUtc.data).toMatchObject({
+        DateTimeOriginal: '2026-10-20T06:30:00.000Z',
+        DateTimeOriginalOffset: '+08:00',
+        DateTimeOriginalOffsetSource: 'Asia/Manila default',
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('honors OffsetTimeOriginal over OffsetTime', async () => {
+    const buffer = await jpegWithExif({
+      [piexif.ExifIFD.DateTimeOriginal]: '2026:10:20 14:30:00',
+      [OFFSET_TIME_ORIGINAL]: '+02:00',
+      [OFFSET_TIME]: '+05:00',
+    });
+    const result = await new MediaService().extractExif(buffer);
+    expect(result.capturedAt?.toISOString()).toBe('2026-10-20T12:30:00.000Z');
+    expect(result.data).toMatchObject({
+      DateTimeOriginalOffset: '+02:00',
+      DateTimeOriginalOffsetSource: 'OffsetTimeOriginal',
+    });
+  });
+
+  it('uses OffsetTime when OffsetTimeOriginal is absent', async () => {
+    const buffer = await jpegWithExif({
+      [piexif.ExifIFD.DateTimeOriginal]: '2026:10:20 14:30:00',
+      [OFFSET_TIME]: '-05:00',
+    });
+    const result = await new MediaService().extractExif(buffer);
+    expect(result.capturedAt?.toISOString()).toBe('2026-10-20T19:30:00.000Z');
+    expect(result.data).toMatchObject({
+      DateTimeOriginalOffset: '-05:00',
+      DateTimeOriginalOffsetSource: 'OffsetTime',
+    });
+  });
+
+  it.each([
+    '0000:00:00 00:00:00',
+    'not a date',
+    '1999:12:31 23:59:59',
+    '2026:02:30 10:00:00',
+    '2026:13:01 10:00:00',
+    '2026:10:20 24:00:00',
+  ])(
+    'treats DateTimeOriginal %p as unusable (capturedAt null)',
+    async (value) => {
+      const buffer = await jpegWithExif({
+        [piexif.ExifIFD.DateTimeOriginal]: value,
+      });
+      const result = await new MediaService().extractExif(buffer);
+      expect(result.capturedAt).toBeNull();
+      // GPS is still read; only the capture time is dropped.
+      expect(result.lat).toBeCloseTo(15.0667, 4);
+      expect(result.data).toMatchObject({
+        DateTimeOriginal: null,
+        DateTimeOriginalOffset: null,
+        DateTimeOriginalOffsetSource: null,
+      });
+    },
+  );
+});
+
+describe('parseCaptureTime', () => {
+  it('reads a wall-clock time with no offset as UTC+08:00', () => {
+    expect(
+      parseCaptureTime('2026:10:20 14:30:00', undefined, undefined),
+    ).toEqual({
+      capturedAt: new Date('2026-10-20T06:30:00.000Z'),
+      offset: '+08:00',
+      offsetSource: 'Asia/Manila default',
+    });
+  });
+
+  it('skips a malformed or out-of-range offset to the next source', () => {
+    expect(
+      parseCaptureTime('2026:10:20 14:30:00', '+8', '-05:30')?.offsetSource,
+    ).toBe('OffsetTime');
+    expect(
+      parseCaptureTime('2026:10:20 14:30:00', '+15:00', undefined)?.offset,
+    ).toBe('+08:00');
+  });
+
+  it('applies a half-hour offset', () => {
+    expect(
+      parseCaptureTime('2026:10:20 14:30:00', '-05:30', undefined)?.capturedAt,
+    ).toEqual(new Date('2026-10-20T20:00:00.000Z'));
+  });
+
+  it('returns null for a missing or non-text capture time', () => {
+    expect(parseCaptureTime(undefined, '+08:00', undefined)).toBeNull();
+    expect(
+      parseCaptureTime(new Date('2026-10-20T06:30:00Z'), undefined, undefined),
+    ).toBeNull();
   });
 });

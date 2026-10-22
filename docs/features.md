@@ -57,7 +57,7 @@ The form walks the citizen through:
    - GPS found and inside the municipality → *"GPS Metadata Verified (EXIF Found)"*, location pre-filled.
    - No GPS in the photo → prompt to place the pin manually.
    - GPS outside Porac's bounds → *"Photo GPS location is outside Porac municipality bounds."*
-3. **Map pin + barangay search.** Placing a pin more than 100m from the photo's GPS warns that the submission will be flagged for review — it is not blocked.
+3. **Map pin + barangay search.** Placing a pin more than 100m from the photo's GPS warns that the submission will be flagged for review — it is not blocked. (The server flags `LOCATION_MISMATCH` above 50 m since manuscript revision Phase 3, step 3b; this client-side warning still uses 100 m.)
 4. **Category** (13 options, `CATEGORIES` in `api/src/contracts/schemas.ts`) and **citizen severity** (Low / Medium / High / Critical — the citizen's own subjective read, never computed; see §6.1). Since manuscript revision Phase 3, step 3a, the levels are a stacked radio list, each with its manuscript description (`SEVERITY_DESCRIPTIONS`, `lib/utils/validation.ts`), and choosing Critical opens a "Confirm Critical severity" dialog: "Choose another level" or closing it puts back the previous level, and the form submits Critical only once confirmed (`lib/utils/severity-selection.ts`). Form-only: the API accepts the same four values.
 
 On submit, the server independently recomputes everything it will not trust from the client: the barangay (§4.1) and the integrity flags (§4.5). Reports carry no elevation since manuscript revision Phase 1, step 7a.
@@ -252,15 +252,18 @@ The former **Hazard Urgency** score (elevation + rainfall + cluster) was retired
 
 ### 4.5 Integrity flags
 
-Flags **never block a submission**. They append to `reports.flags[]` and route to `/admin/flagged` for a human decision — decision support, not a gatekeeper.
+Flags **never block a submission**. They append to `reports.flags[]` and route to `/admin/flagged` for a human decision — decision support, not a gatekeeper. They are staff-only; citizens never see them. Since manuscript revision Phase 3, step 3b they follow the manuscript's evidence checks (pp. 42–43; `evidenceCheckFlags` in `api/src/reports/reports.service.ts`; full rules in [`database.md`](database.md) `reports.flags`):
 
-| Flag | Meaning |
-|---|---|
-| `NO_EXIF` | Photo carried no GPS metadata |
-| `STALE_PHOTO` | Photo timestamp is old relative to submission |
-| `LOCATION_MISMATCH` | Pin placed far from the photo's EXIF GPS |
-| `DUPLICATE_IMAGE` | Perceptual-hash match against a recent report |
-| `BOUNDARY_FALLBACK` | Snapped to nearest barangay via the OSM envelope (§4.1) |
+| Flag | Label | Meaning |
+|---|---|---|
+| `LOCATION_MISMATCH` | Location mismatch (> 50 m) | The pin is more than 50 m from the photo's GPS. A photo without usable GPS gets no location flag |
+| `STALE_EVIDENCE` | Stale evidence | Captured more than 24 h before submission, for time-sensitive categories only (Localized Flooding, Rain-Induced Slope Failure/Landslide, Lahar or Volcanic Debris-Flow Threat, Fallen Tree or Storm-Related Road Obstruction, and their legacy names) |
+| `MISSING_METADATA` | Missing metadata | No usable capture time in the photo's EXIF; no staleness is inferred |
+| `TIMESTAMP_ANOMALY` | Timestamp anomaly | Capture time more than 3 h after submission (a study parameter chosen by the group); not checked for staleness |
+| `DUPLICATE_IMAGE` | Duplicate image | Perceptual-hash match against a recent report |
+| `BOUNDARY_FALLBACK` | Boundary fallback | Snapped to nearest barangay via the OSM envelope (§4.1); an implementation extension |
+
+The capture time is EXIF `DateTimeOriginal` read in the photo's own offset, else Porac time (UTC+08:00), never the server's time zone. `STALE_PHOTO` and `NO_EXIF` were retired; migration `0040_evidence_flags.sql` brought existing reports and Flagged Reports saved views in line.
 
 ### 4.6 Scheduled jobs
 

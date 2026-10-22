@@ -215,9 +215,12 @@ describe('ReportsService.flaggedCsv', () => {
       .mockReturnValue({ office: 'MEO', status: 'pending' });
     const { service, moderation } = makeService({ parseModerationQuery });
 
-    await service.flaggedCsv({ flag: 'NO_EXIF' }, MEO_OFFICER);
+    await service.flaggedCsv({ flag: 'MISSING_METADATA' }, MEO_OFFICER);
 
-    expect(parseModerationQuery).toHaveBeenCalledWith({ flag: 'NO_EXIF' }, MEO_OFFICER);
+    expect(parseModerationQuery).toHaveBeenCalledWith(
+      { flag: 'MISSING_METADATA' },
+      MEO_OFFICER,
+    );
     expect(moderation.getModerationForExport).toHaveBeenCalledWith(
       expect.objectContaining({ office: 'MEO', status: 'pending' }),
     );

@@ -78,6 +78,21 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 3, step 3b — evidence-integrity flags, EXIF time-zone fix, flag migration — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
+
+- **New-report rules** (manuscript pp. 42–43, Appendix H REPORTS.flags; `evidenceCheckFlags` in `reports.service.ts`, one named constant per number):
+  - `LOCATION_MISMATCH` above 50 m (was 100 m). A photo with no usable GPS gets no location flag at all; `NO_EXIF` is gone.
+  - `STALE_EVIDENCE` (replaces `STALE_PHOTO`) when the capture time is more than 24 h before submission, only for Localized Flooding, Rain-Induced Slope Failure/Landslide, Lahar or Volcanic Debris-Flow Threat (always, by group decision) and Fallen Tree or Storm-Related Road Obstruction, plus their legacy names.
+  - `MISSING_METADATA` when there is no usable capture time.
+  - `TIMESTAMP_ANOMALY` when the capture time is more than 3 h after submission (a study parameter chosen by the group), with no stale check.
+  - `DUPLICATE_IMAGE` and `BOUNDARY_FALLBACK` unchanged; flags stay non-blocking and staff-only.
+- **EXIF time zone:** `DateTimeOriginal` is read as wall-clock time with the photo's own offset, else Asia/Manila, independent of the server's time zone (it used to follow the server's zone). Zero, unparseable and pre-2000 dates are unusable. `exif_data` also records the offset used.
+- **Migration `0040_evidence_flags.sql`** (`migrate:evidence-flags`): recomputes the managed codes on existing reports from stored values, keeps `DUPLICATE_IMAGE` / `BOUNDARY_FALLBACK` / `TIMESTAMP_ANOMALY`, adds no `TIMESTAMP_ANOMALY` to old reports (their times may carry the old time-zone shift), never touches moderation decisions, and rewrites Flagged Reports saved views (`STALE_PHOTO` → `STALE_EVIDENCE`, `NO_EXIF` filter dropped). Reports newly flagged join the pending queue; reports left without flags leave it — the check counts both.
+- **Labels:** "Location mismatch (> 50 m)", "Stale evidence", "Missing metadata", "Timestamp anomaly" in the flag-type filter and review drawer.
+- **Tested on PGlite only:** run 1 changed 12 of 14 fixture reports and 2 of 4 saved views exactly as expected, moderation columns unchanged; run 2 changed 0; the check reported 0 where required. **Run 0040 before or with deploying this API** — old codes are otherwise left in the data and the flag filter no longer offers them.
+- Not changed: the seed scripts (`seed-demo-presentation.ts` and `api/scripts/lib/exif.ts` still copy the old rules and time handling; Phase 8 seed rework) and the citizen form's 100 m pin warning.
+- Checks: API unit tests (52 suites / 874 tests), API build, root tsc, ESLint.
+
 ### Manuscript revision Phase 3, step 3a — severity guidance, Critical confirmation, Focal intake link — **completed (code + unit tests + e2e; no database change)**
 
 - **Severity guidance:** the citizen report form's severity picker is a stacked radio list (still a real `required` radio group with the same stored values), each level with its manuscript description (`SEVERITY_DESCRIPTIONS`, next to `SEVERITIES` in `lib/utils/validation.ts`).
