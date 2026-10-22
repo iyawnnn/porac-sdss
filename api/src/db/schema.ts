@@ -50,6 +50,12 @@ export const resolutionOutcomeEnum = pgEnum('resolution_outcome', [
   'MUNICIPAL_ACTION_COMPLETED',
   'EXTERNAL_REFERRAL',
 ]);
+// Appendix H ROUTING_ACTIONS (manuscript revision Phase 2, step 2c,
+// migration 0037). See routingActions below.
+export const routingActionTypeEnum = pgEnum('routing_action_type', [
+  'REASSIGN',
+  'REFER',
+]);
 // 'system_admin' has no office of its own (admins.office is nullable for
 // exactly this role) — it no longer has routine operational access either
 // (Batch 1, five-role RBAC), it bypasses office scoping instead of
@@ -372,6 +378,48 @@ export const officeReassignments = pgTable('office_reassignments', {
   adminId: integer('admin_id'),
   adminName: text('admin_name'),
   reassignedAt: timestamp('reassigned_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// The reason recorded for every reassignment, and for a referral logged
+// without a note, until Phase 5 makes reasons required. Migration 0037 uses
+// the same text for the rows it backfills.
+export const ROUTING_REASON_NOT_RECORDED =
+  'Reason not recorded (before reasons were required)';
+// routing_actions.admin_name is varchar(100) (Appendix H) while admin names
+// have no length limit, so the app's writes cut the snapshot name to this
+// (left() in the INSERT) rather than fail the reassign or referral.
+export const ROUTING_ADMIN_NAME_MAX_LENGTH = 100;
+
+// Appendix H ROUTING_ACTIONS (manuscript revision Phase 2, step 2c,
+// migration 0037): one row per office reassignment (REASSIGN) or external
+// referral (REFER). TicketsService writes a row in the same transaction as
+// every office_reassignments insert and every ticket_referral_noted audit
+// event; the screens keep reading those until Phase 5 moves the reads here.
+// admin_id has a real FK to admins(id), as Appendix H defines it — an
+// intentional departure from the FK-less actor-snapshot convention of
+// office_reassignments/status_history/admin_audit_events, so an admin
+// referenced here can no longer be deleted (admins are deactivated, not
+// deleted). The (ticket_id, created_at) index is in the SQL only, like this
+// repo's other raw-SQL indexes.
+export const routingActions = pgTable('routing_actions', {
+  id: serial('id').primaryKey(),
+  ticketId: integer('ticket_id')
+    .notNull()
+    .references(() => tickets.id),
+  actionType: routingActionTypeEnum('action_type').notNull(),
+  fromOffice: officeEnum('from_office'),
+  toOffice: officeEnum('to_office'),
+  referralTarget: varchar('referral_target', { length: 255 }),
+  reason: text('reason').notNull(),
+  adminId: integer('admin_id')
+    .notNull()
+    .references(() => admins.id),
+  adminName: varchar('admin_name', {
+    length: ROUTING_ADMIN_NAME_MAX_LENGTH,
+  }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
 });

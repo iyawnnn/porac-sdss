@@ -78,6 +78,23 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 2, step 2c — routing_actions (Appendix H) — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
+
+- **New table `routing_actions`** (migration `0037_routing_actions.sql`, enum `routing_action_type` REASSIGN | REFER), with a real FK from `admin_id` to `admins(id)` as Appendix H defines it. It is the one actor column in the schema with an FK.
+- **Backfill:** one REASSIGN row per `office_reassignments` row and one REFER row per `ticket_referral_noted` audit event. A referral's `from_office` is the office the ticket was in at the time: the latest earlier reassignment's `to_office`, else `initial_assigned_office`. Reasons use the referral note, else "Reason not recorded (before reasons were required)".
+  - Safe to re-run: rows already present, by ticket, type, time and offices or agency, are skipped.
+  - A guard aborts the whole migration with counts if any source row has no matching admin, or another unmappable value. No placeholder admins, no skipped rows.
+  - Script `migrate:routing-actions`: one transaction, before/after counts from `0037_routing_actions.check.sql`, true per-statement counts.
+- **Dual-write, no visible change:** `TicketsService.reassignOffice` (all callers, including Focal's Forward) and `logReferral` now also write their routing row in the same transaction, with the same `now()`, so re-running 0037 never duplicates them. The demo seed's back-dating shifts `routing_actions` together with `office_reassignments`. Every read, response, page and validation is unchanged. **Reads move to `routing_actions` in Phase 5**, together with a required reason.
+- **Tested on PGlite only.** The real script ran through postgres.js against a throwaway database, installed outside the repo and deleted after:
+  - **Fixture:** two reassignments on one ticket; referrals before and after a reassignment and on a never-reassigned ticket; one with a note, a null note and a blank note.
+  - **Run 1:** inserted 2 REASSIGN and 3 REFER rows. Each referral got the right `from_office`, and the note was trimmed into the reason.
+  - **Runs 2 and 3:** run 2 inserted 0, and so did run 3 after an app-style reassign and referral.
+  - **Check:** `check.sql` reports 0 missing, duplicate and NULL-office rows.
+  - **Guard:** a NULL `admin_id` and a 101-character admin name each aborted with the guard message and left no table or enum behind.
+  - **Not yet run against a real database.** Run 0037 before deploying this API: the new writes fail until the table exists.
+- Checks: API unit tests, API build, ESLint 0 errors.
+
 ### Manuscript revision Phase 2, step 2b — ticket and report fields (Appendix H) — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
 
 Appendix H fields and the handoff's data-model table.

@@ -29,6 +29,10 @@ import {
   TICKET_REJECTION_REASON_MAX_LENGTH,
 } from '../contracts/schemas';
 import { categoryRouting } from '../common/utils/office';
+import {
+  ROUTING_ADMIN_NAME_MAX_LENGTH,
+  ROUTING_REASON_NOT_RECORDED,
+} from '../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EMAIL_SERVICE, type EmailService } from '../citizens/email.service';
 import type { Env } from '../config/env';
@@ -866,6 +870,18 @@ export class TicketsService {
         INSERT INTO office_reassignments (ticket_id, from_office, to_office, admin_id, admin_name)
         VALUES (${ticketId}, ${ticket.assigned_office}, ${toOffice}, ${admin.adminId}, ${admin.adminName})
       `;
+      // Appendix H routing_actions (manuscript revision Phase 2, step 2c),
+      // written alongside office_reassignments until the reads move in
+      // Phase 5. Same transaction, so now() equals reassigned_at — the key
+      // migration 0037 uses to skip rows it already has. Reassign has no
+      // reason field yet (Phase 5).
+      await tx`
+        INSERT INTO routing_actions (ticket_id, action_type, from_office, to_office, reason, admin_id, admin_name, created_at)
+        VALUES (
+          ${ticketId}, 'REASSIGN', ${ticket.assigned_office}, ${toOffice}, ${ROUTING_REASON_NOT_RECORDED},
+          ${admin.adminId}, left(${admin.adminName}::text, ${ROUTING_ADMIN_NAME_MAX_LENGTH}::int), now()
+        )
+      `;
       await this.audit.logInPgTx(tx, {
         actor: {
           adminId: admin.adminId,
@@ -935,6 +951,20 @@ export class TicketsService {
         targetSummary: `Ticket #${ticketId} (${ticket.category})`,
         metadata: { agency, note: note ?? null },
       });
+      // Appendix H routing_actions (manuscript revision Phase 2, step 2c),
+      // written alongside the audit event until the reads move in Phase 5.
+      // Same transaction, so now() equals the event's created_at, and
+      // referral_target is the agency exactly as stored in its metadata —
+      // the key migration 0037 uses to skip rows it already has. The note
+      // stays optional until Phase 5; without one the reason is the
+      // not-recorded text.
+      await tx`
+        INSERT INTO routing_actions (ticket_id, action_type, from_office, to_office, referral_target, reason, admin_id, admin_name, created_at)
+        VALUES (
+          ${ticketId}, 'REFER', ${ticket.assigned_office}, NULL, ${agency}, ${note?.trim() || ROUTING_REASON_NOT_RECORDED},
+          ${admin.adminId}, left(${admin.adminName}::text, ${ROUTING_ADMIN_NAME_MAX_LENGTH}::int), now()
+        )
+      `;
     });
   }
 

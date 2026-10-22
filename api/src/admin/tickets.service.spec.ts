@@ -14,6 +14,10 @@ import type { Env } from '../config/env';
 import type { AdminAuditService } from './admin-audit.service';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import {
+  ROUTING_ADMIN_NAME_MAX_LENGTH,
+  ROUTING_REASON_NOT_RECORDED,
+} from '../db/schema';
 
 const MEO_OFFICER = { role: 'officer', office: 'MEO' } as Pick<
   AdminSession,
@@ -923,5 +927,242 @@ describe('resolution_outcome on status changes (Phase 2, step 2b)', () => {
       source.indexOf('FROM reports WHERE ticket_id', reportsStart),
     );
     expect(reportsSelect).toContain('tracking_reference');
+  });
+});
+
+// Manuscript revision Phase 2, step 2c (Appendix H ROUTING_ACTIONS): every
+// office_reassignments insert and every ticket_referral_noted audit event is
+// joined by one routing_actions row in the same transaction. Same fake client
+// as the blocks above; it also records each query's text, values, and
+// whether it ran inside the sql.begin callback. An Error in `rows` makes
+// that query reject.
+describe('routing_actions dual-write (Phase 2, step 2c)', () => {
+  const MEO_ADMIN = {
+    adminId: 4,
+    adminName: 'Maria Santos',
+    email: 'maria@porac.gov.ph',
+    role: 'officer',
+    office: 'MEO',
+  } as AdminSession;
+  const FOCAL_ADMIN = {
+    adminId: 9,
+    adminName: 'Diana Torres',
+    email: 'focal@porac.gov.ph',
+    role: 'focal',
+    office: 'MDRRMO',
+  } as AdminSession;
+
+  function makeRecordingService(rows: unknown[]) {
+    const calls: { text: string; values: unknown[]; inTx: boolean }[] = [];
+    let i = 0;
+    let inTx = false;
+    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      calls.push({ text: strings.join('?'), values, inTx });
+      const row = rows[i++] ?? [];
+      return {
+        then(resolve: (v: unknown) => void, reject: (e: unknown) => void) {
+          if (row instanceof Error) reject(row);
+          else void Promise.resolve(row).then(resolve);
+        },
+      };
+    }) as unknown as Sql;
+    (
+      sql as unknown as {
+        begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
+      }
+    ).begin = async (cb) => {
+      inTx = true;
+      try {
+        return await cb(sql);
+      } finally {
+        inTx = false;
+      }
+    };
+    const logInPgTx = jest.fn().mockResolvedValue(undefined);
+    const service = new TicketsService(
+      sql,
+      {} as MediaService,
+      { createInTx: jest.fn() } as unknown as NotificationsService,
+      {} as EmailService,
+      {} as ConfigService<Env, true>,
+      { logInPgTx } as unknown as AdminAuditService,
+    );
+    const routingInserts = () =>
+      calls.filter((c) => c.text.includes('INSERT INTO routing_actions'));
+    return { service, calls, routingInserts };
+  }
+
+  it('reassignOffice writes exactly one REASSIGN row, in the same transaction as office_reassignments', async () => {
+    const { service, calls, routingInserts } = makeRecordingService([
+      [{ assigned_office: 'MEO', category: 'Pothole', status: 'In Progress' }], // ticket lookup
+      [{}], // UPDATE tickets
+      [{}], // INSERT office_reassignments
+      [{}], // INSERT routing_actions
+    ]);
+
+    await service.reassignOffice(21, MEO_ADMIN, 'MDRRMO');
+
+    const inserts = routingInserts();
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].inTx).toBe(true);
+    expect(inserts[0].text).toContain("'REASSIGN'");
+    expect(inserts[0].text).toMatch(/now\(\)\s*\)\s*$/);
+    expect(inserts[0].values).toEqual([
+      21,
+      'MEO',
+      'MDRRMO',
+      ROUTING_REASON_NOT_RECORDED,
+      4,
+      'Maria Santos',
+      ROUTING_ADMIN_NAME_MAX_LENGTH,
+    ]);
+    const reassignment = calls.find((c) =>
+      c.text.includes('INSERT INTO office_reassignments'),
+    );
+    expect(reassignment?.inTx).toBe(true);
+    expect(reassignment?.values).toEqual([
+      21,
+      'MEO',
+      'MDRRMO',
+      4,
+      'Maria Santos',
+    ]);
+  });
+
+  it("Focal's Forward (same reassignOffice path) writes one REASSIGN row too", async () => {
+    const { service, routingInserts } = makeRecordingService([
+      [{ assigned_office: 'MEO', category: 'Pothole', status: 'Reported' }], // ticket lookup
+      [{ count: 0 }], // active work-order count
+      [{}], // UPDATE tickets
+      [{}], // INSERT office_reassignments
+      [{}], // INSERT routing_actions
+    ]);
+
+    await service.reassignOffice(22, FOCAL_ADMIN, 'MDRRMO');
+
+    const inserts = routingInserts();
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].inTx).toBe(true);
+    expect(inserts[0].values).toEqual([
+      22,
+      'MEO',
+      'MDRRMO',
+      ROUTING_REASON_NOT_RECORDED,
+      9,
+      'Diana Torres',
+      ROUTING_ADMIN_NAME_MAX_LENGTH,
+    ]);
+  });
+
+  it('a reassign rejected before the transaction writes no routing row', async () => {
+    const { service, routingInserts } = makeRecordingService([
+      [{ assigned_office: 'MDRRMO', category: 'Pothole', status: 'Reported' }],
+    ]);
+
+    await expect(
+      service.reassignOffice(23, MEO_ADMIN, 'MDRRMO'),
+    ).rejects.toThrow(ForbiddenException);
+    expect(routingInserts()).toHaveLength(0);
+  });
+
+  it('a reassign whose office_reassignments insert fails writes no routing row (the transaction rolls back)', async () => {
+    const { service, routingInserts } = makeRecordingService([
+      [{ assigned_office: 'MEO', category: 'Pothole', status: 'In Progress' }],
+      [{}], // UPDATE tickets
+      new Error('insert failed'), // INSERT office_reassignments
+    ]);
+
+    await expect(
+      service.reassignOffice(24, MEO_ADMIN, 'MDRRMO'),
+    ).rejects.toThrow('insert failed');
+    expect(routingInserts()).toHaveLength(0);
+  });
+
+  it('logReferral writes exactly one REFER row in its transaction, with the note as the reason', async () => {
+    const { service, routingInserts } = makeRecordingService([
+      [{ assigned_office: 'MEO', category: 'Leaking Pipe' }], // ticket lookup
+      [{}], // INSERT routing_actions
+    ]);
+
+    await service.logReferral(
+      31,
+      MEO_ADMIN,
+      'Water district',
+      '  Called the hotline  ',
+    );
+
+    const inserts = routingInserts();
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].inTx).toBe(true);
+    expect(inserts[0].text).toMatch(/'REFER', \?, NULL, \?/);
+    expect(inserts[0].values).toEqual([
+      31,
+      'MEO', // from_office: the ticket's current office
+      'Water district', // referral_target: the agency as stored in the audit metadata
+      'Called the hotline',
+      4,
+      'Maria Santos',
+      ROUTING_ADMIN_NAME_MAX_LENGTH,
+    ]);
+  });
+
+  it.each([
+    ['a blank note', '   '],
+    ['no note', undefined],
+  ])(
+    'logReferral with %s records the not-recorded reason',
+    async (_label, note) => {
+      const { service, routingInserts } = makeRecordingService([
+        [{ assigned_office: 'MDRRMO', category: 'Leaking Pipe' }],
+        [{}],
+      ]);
+
+      await service.logReferral(
+        32,
+        { ...MEO_ADMIN, office: 'MDRRMO' },
+        'MENRO',
+        note,
+      );
+
+      expect(routingInserts()).toHaveLength(1);
+      expect(routingInserts()[0].values[3]).toBe(ROUTING_REASON_NOT_RECORDED);
+    },
+  );
+
+  it('caps the admin name at the varchar(100) limit in SQL, for both inserts', async () => {
+    const { service, routingInserts } = makeRecordingService([
+      [{ assigned_office: 'MEO', category: 'Pothole', status: 'In Progress' }],
+      [{}],
+      [{}],
+      [{}],
+      [{ assigned_office: 'MDRRMO', category: 'Leaking Pipe' }],
+      [{}],
+    ]);
+
+    await service.reassignOffice(34, MEO_ADMIN, 'MDRRMO');
+    await service.logReferral(
+      34,
+      { ...MEO_ADMIN, office: 'MDRRMO' },
+      'MENRO',
+      undefined,
+    );
+
+    const inserts = routingInserts();
+    expect(inserts).toHaveLength(2);
+    for (const insert of inserts) {
+      expect(insert.text).toContain('left(?::text, ?::int)');
+      expect(insert.values.at(-1)).toBe(ROUTING_ADMIN_NAME_MAX_LENGTH);
+    }
+  });
+
+  it('migration 0037 backfills with the same not-recorded text as the app', () => {
+    const migration = readFileSync(
+      join(__dirname, '..', '..', 'drizzle', '0037_routing_actions.sql'),
+      'utf8',
+    );
+    // The REASSIGN and REFER backfills.
+    expect(migration.split(`'${ROUTING_REASON_NOT_RECORDED}'`).length - 1).toBe(
+      2,
+    );
   });
 });
