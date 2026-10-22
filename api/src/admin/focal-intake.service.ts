@@ -308,9 +308,22 @@ export class FocalIntakeService {
         `;
         if (!report) throw new NotFoundException('Report not found.');
 
+        const trimmedRemarks = remarks?.trim() || null;
         await tx`
           INSERT INTO report_acknowledgments (report_id, acknowledged_by_admin_id, acknowledged_by_name, remarks)
-          VALUES (${reportId}, ${admin.adminId}, ${admin.adminName}, ${remarks?.trim() || null})
+          VALUES (${reportId}, ${admin.adminId}, ${admin.adminName}, ${trimmedRemarks})
+        `;
+        // Appendix H ticket-level acknowledgments (manuscript revision Phase
+        // 2, step 2d): the first acknowledged report on a ticket creates its
+        // row; later reports on the same ticket add nothing (ON CONFLICT).
+        // Same transaction, so now() equals the report row's acknowledged_at.
+        // Acknowledging the same report twice never reaches this insert — the
+        // report_acknowledgments UNIQUE above raises first, which is the 409.
+        // Every read stays on report_acknowledgments for now.
+        await tx`
+          INSERT INTO acknowledgments (ticket_id, acknowledged_by_admin_id, remarks, acknowledged_at)
+          VALUES (${report.ticket_id}, ${admin.adminId}, ${trimmedRemarks}, now())
+          ON CONFLICT (ticket_id) DO NOTHING
         `;
 
         await this.audit.logInPgTx(tx, {

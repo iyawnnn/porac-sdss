@@ -78,6 +78,25 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 2, step 2d — ticket-level acknowledgments (Appendix H) — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
+
+- **New table `acknowledgments`** (migration `0038_ticket_acknowledgments.sql`): at most one row per ticket (`ticket_id` UNIQUE), with `acknowledged_by_admin_id` (a real FK to `admins`, as Appendix H and `routing_actions` have it), `remarks` and `acknowledged_at`. There is no name column. It is separate from ticket status.
+- **Backfill:** each ticket's earliest report acknowledgment, by `acknowledged_at` then `id`. Tickets with no acknowledged report get no row.
+  - Safe to re-run: the insert uses `ON CONFLICT (ticket_id) DO NOTHING`.
+  - A guard aborts the whole migration with counts if an acknowledgment has no matching admin, or its report has no ticket.
+  - Script `migrate:ticket-acknowledgments`: one transaction, before/after counts from `0038_ticket_acknowledgments.check.sql`, true per-statement counts.
+- **Dual-write, no visible change:** `FocalIntakeService.acknowledge` also writes the ticket row, in the same transaction and with the same remarks and `now()`. The first acknowledged report on a ticket creates it; later ones add nothing.
+  - Acknowledging the same report twice is still a 409, and it writes no ticket row.
+  - Every read (Focal intake states, citizen timeline, notifications, API responses) stays on `report_acknowledgments`. **Reads move in a later phase**, and `report_acknowledgments` is dropped in Phase 8.
+- **Tested on PGlite only.** The real script ran through postgres.js against a throwaway database, installed outside the repo and deleted after:
+  - **Fixture:** a ticket with two acknowledged reports, where the earlier one has remarks and a higher id; a ticket with one acknowledged and one unacknowledged report; a ticket with none.
+  - **Run 1:** inserted 2 rows and kept the earliest acknowledgment. The ticket with none got no row.
+  - **Runs 2 and 3:** both inserted 0. Run 3 followed app-style acknowledgments: a second report on a ticket added nothing; a first report created a row with the same `acknowledged_at`; a duplicate failed with 23505 and changed nothing.
+  - **Check:** `check.sql` reports 0 missing, extra and mismatched rows.
+  - **Guard:** a NULL-admin and a missing-admin acknowledgment aborted with the guard message and left no table behind.
+  - **Not yet run against a real database.** Run 0038 before deploying this API: acknowledging fails until the table exists.
+- Checks: API unit tests, API build, ESLint 0 errors.
+
 ### Manuscript revision Phase 2, step 2c — routing_actions (Appendix H) — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
 
 - **New table `routing_actions`** (migration `0037_routing_actions.sql`, enum `routing_action_type` REASSIGN | REFER), with a real FK from `admin_id` to `admins(id)` as Appendix H defines it. It is the one actor column in the schema with an FK.
