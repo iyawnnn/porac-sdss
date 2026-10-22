@@ -448,6 +448,35 @@ export const reportAcknowledgments = pgTable('report_acknowledgments', {
     .defaultNow(),
 });
 
+// Appendix H ACKNOWLEDGMENTS (manuscript revision Phase 2, step 2d,
+// migration 0038): TICKET-level, at most one per ticket (ticket_id UNIQUE) —
+// the first time Focal acknowledged any report on the ticket. Separate from
+// tickets.status: acknowledging never changes the status. Replaces
+// report_acknowledgments above: FocalIntakeService.acknowledge writes both
+// in one transaction (ON CONFLICT (ticket_id) DO NOTHING here, so later
+// reports on the ticket add nothing), every screen still reads
+// report_acknowledgments until a later phase moves the reads here, and that
+// table is then read-only history until it is dropped in Phase 8. No name
+// column — Appendix H has none; the name comes from the admin row.
+// acknowledged_by_admin_id has a real FK to admins(id), as Appendix H defines
+// it, like routing_actions — an intentional departure from the FK-less
+// actor-snapshot convention, so an admin referenced here can no longer be
+// deleted (admins are deactivated, not deleted).
+export const acknowledgments = pgTable('acknowledgments', {
+  id: serial('id').primaryKey(),
+  ticketId: integer('ticket_id')
+    .notNull()
+    .references(() => tickets.id)
+    .unique(),
+  acknowledgedByAdminId: integer('acknowledged_by_admin_id')
+    .notNull()
+    .references(() => admins.id),
+  remarks: text('remarks'),
+  acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // Append-only Focal intake activity trail — screened/forwarded/escalated.
 // Deliberately NOT a mutable "intake status" column: the citizen-/admin-
 // facing "New | Acknowledged | Screened | Forwarded | Escalated" display

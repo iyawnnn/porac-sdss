@@ -181,6 +181,7 @@ describe('FocalIntakeService.acknowledge', () => {
     const { service, logInPgTx, createInTx } = makeService([
       [{ id: 1, citizen_id: 5, ticket_id: 100, title: 'Pothole' }], // report lookup
       [{}], // INSERT report_acknowledgments
+      [{}], // INSERT acknowledgments (ticket-level, Phase 2 step 2d)
       // getIntakeDetail's two queries:
       [
         {
@@ -522,5 +523,161 @@ describe('focal-intake.service.ts reads no Hazard Urgency column', () => {
       'utf8',
     );
     expect(source).not.toMatch(/elevation_m|elevationM/);
+  });
+});
+
+// Manuscript revision Phase 2, step 2d (Appendix H ACKNOWLEDGMENTS): the
+// first acknowledged report on a ticket also writes one ticket-level row in
+// the same transaction (ON CONFLICT (ticket_id) DO NOTHING); every read stays
+// on report_acknowledgments. Same fake client as makeService above, except
+// that it records each query's text, values, and whether it ran inside the
+// sql.begin callback.
+describe('ticket-level acknowledgments dual-write (Phase 2, step 2d)', () => {
+  const DETAIL_ROW = {
+    report_id: 1,
+    tracking_reference: 'PRC-2026-000001',
+    ticket_id: 100,
+    category: 'Pothole',
+    ticket_status: 'Reported',
+    assigned_office: 'MEO',
+    member_count: 1,
+    barangay_name: 'Mitla Proper',
+    citizen_severity: 'Medium',
+    submitted_at: '2026-01-01T00:00:00Z',
+    flags: [],
+    description: 'A pothole',
+    lat: 15.0,
+    lng: 120.5,
+    operational_priority: 50,
+    acknowledged_at: '2026-01-02T00:00:00Z',
+    acknowledged_by_name: 'Diana Torres',
+    latest_action_type: null,
+  };
+
+  function makeRecordingService(rows: unknown[]) {
+    const calls: { text: string; values: unknown[]; inTx: boolean }[] = [];
+    let i = 0;
+    let inTx = false;
+    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      calls.push({ text: strings.join('?'), values, inTx });
+      const next = rows[i++] ?? [];
+      return {
+        then(resolve: (v: unknown) => void, reject?: (e: unknown) => void) {
+          if (next instanceof Error) {
+            void Promise.reject(next).then(resolve, reject);
+          } else {
+            void Promise.resolve(next).then(resolve, reject);
+          }
+        },
+      };
+    }) as unknown as Sql;
+    (
+      sql as unknown as {
+        begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
+      }
+    ).begin = async (cb) => {
+      inTx = true;
+      try {
+        return await cb(sql);
+      } finally {
+        inTx = false;
+      }
+    };
+    const logInPgTx = jest.fn().mockResolvedValue(undefined);
+    const createInTx = jest.fn().mockResolvedValue(undefined);
+    const service = new FocalIntakeService(
+      sql,
+      {} as TicketsService,
+      { createInTx } as unknown as NotificationsService,
+      { logInPgTx } as unknown as AdminAuditService,
+    );
+    const inserts = (table: string) =>
+      calls.filter((c) => c.text.includes(`INSERT INTO ${table} `));
+    return { service, calls, inserts, logInPgTx, createInTx };
+  }
+
+  const uniqueViolation = () =>
+    Object.assign(new Error('duplicate key value violates unique constraint'), {
+      code: '23505',
+    });
+
+  it('the first acknowledgment on a ticket writes one ticket row, in the same transaction, after the report row', async () => {
+    const { service, calls, inserts } = makeRecordingService([
+      [{ id: 1, citizen_id: 5, ticket_id: 100, title: 'Pothole' }], // report lookup
+      [{}], // INSERT report_acknowledgments
+      Object.assign([], { count: 1 }), // INSERT acknowledgments: new row
+      [DETAIL_ROW], // getIntakeDetail
+      [], // activity
+    ]);
+
+    const result = await service.acknowledge(1, FOCAL, '  looks fine  ');
+
+    const ticketRows = inserts('acknowledgments');
+    expect(ticketRows).toHaveLength(1);
+    expect(ticketRows[0].inTx).toBe(true);
+    expect(ticketRows[0].text).toContain('ON CONFLICT (ticket_id) DO NOTHING');
+    expect(ticketRows[0].text).toMatch(/now\(\)\s*\)/);
+    // The report's ticket, the acting admin, and the same trimmed remarks as
+    // the report row.
+    expect(ticketRows[0].values).toEqual([100, 10, 'looks fine']);
+    const reportRow = inserts('report_acknowledgments')[0];
+    expect(reportRow.values[3]).toBe('looks fine');
+    expect(calls.indexOf(reportRow)).toBeLessThan(calls.indexOf(ticketRows[0]));
+    expect(result?.intakeState).toBe('Acknowledged');
+  });
+
+  it('a second report on the same ticket adds no row and leaves the first one unchanged', async () => {
+    const { service, calls, inserts } = makeRecordingService([
+      [{ id: 2, citizen_id: 6, ticket_id: 100, title: 'Same pothole' }],
+      [{}], // INSERT report_acknowledgments
+      Object.assign([], { count: 0 }), // INSERT acknowledgments: conflict, nothing inserted
+      [{ ...DETAIL_ROW, report_id: 2 }],
+      [],
+    ]);
+
+    await expect(
+      service.acknowledge(2, FOCAL, undefined),
+    ).resolves.not.toBeNull();
+
+    // Only DO NOTHING on conflict: the ticket's existing row is never updated.
+    const ticketRows = inserts('acknowledgments');
+    expect(ticketRows).toHaveLength(1);
+    expect(ticketRows[0].text).not.toMatch(/DO UPDATE/);
+    expect(ticketRows[0].values).toEqual([100, 10, null]);
+    expect(calls.some((c) => /UPDATE acknowledgments/.test(c.text))).toBe(
+      false,
+    );
+  });
+
+  it('acknowledging the same report twice still 409s and writes no ticket row', async () => {
+    const { service, inserts, logInPgTx, createInTx } = makeRecordingService([
+      [{ id: 1, citizen_id: 5, ticket_id: 100, title: 'Pothole' }],
+      uniqueViolation(), // INSERT report_acknowledgments: already acknowledged
+    ]);
+
+    await expect(service.acknowledge(1, FOCAL, undefined)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(inserts('acknowledgments')).toHaveLength(0);
+    expect(logInPgTx).not.toHaveBeenCalled();
+    expect(createInTx).not.toHaveBeenCalled();
+  });
+
+  it('a failed acknowledgment writes nothing', async () => {
+    const missing = makeRecordingService([[]]); // report lookup: none
+    await expect(
+      missing.service.acknowledge(404, FOCAL, undefined),
+    ).rejects.toThrow(NotFoundException);
+    expect(missing.inserts('report_acknowledgments')).toHaveLength(0);
+    expect(missing.inserts('acknowledgments')).toHaveLength(0);
+
+    const broken = makeRecordingService([
+      [{ id: 1, citizen_id: 5, ticket_id: 100, title: 'Pothole' }],
+      new Error('connection lost'), // INSERT report_acknowledgments fails
+    ]);
+    await expect(
+      broken.service.acknowledge(1, FOCAL, undefined),
+    ).rejects.toThrow('connection lost');
+    expect(broken.inserts('acknowledgments')).toHaveLength(0);
   });
 });
