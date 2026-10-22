@@ -21,6 +21,17 @@ export const CATEGORIES = [
 ] as const;
 
 export const SEVERITIES = ["Low", "Medium", "High", "Critical"] as const;
+export type Severity = (typeof SEVERITIES)[number];
+
+// The manuscript's description of each severity level, shown beside it on
+// the citizen report form (manuscript revision Phase 3, step 3a). Guidance
+// only: the stored value is still the level name.
+export const SEVERITY_DESCRIPTIONS: Record<Severity, string> = {
+  Low: "Minor impact. Normal access or use is mostly unaffected.",
+  Medium: "Noticeable impact. Access or use is still possible with caution.",
+  High: "Major disruption or a clear safety concern.",
+  Critical: "Immediate serious danger, or the area or service is effectively blocked or unusable.",
+};
 
 export const reportSchema = z.object({
   title: z.string().min(1).max(200),

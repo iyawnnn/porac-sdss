@@ -78,6 +78,13 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 3, step 3a — severity guidance, Critical confirmation, Focal intake link — **completed (code + unit tests + e2e; no database change)**
+
+- **Severity guidance:** the citizen report form's severity picker is a stacked radio list (still a real `required` radio group with the same stored values), each level with its manuscript description (`SEVERITY_DESCRIPTIONS`, next to `SEVERITIES` in `lib/utils/validation.ts`).
+- **Critical confirmation:** choosing Critical opens "Confirm Critical severity", with the reminder that a report does not dispatch help. "Choose another level", Escape or the overlay puts back the previous level (or none). The form submits Critical only once confirmed, and asks again if the level changes away and back (`lib/utils/severity-selection.ts`). Form-only: no API or validation change. The form's map box is now `isolate`, so Leaflet's layers can't draw over the dialog.
+- **Focal intake link:** `new_intake_report` notifications link to the intake detail page `/admin/focal/intake/{reportId}` instead of `/admin/intake/{reportId}`, an API path with no page (404 signed in, login redirect signed out). Existing rows keep the old link and are not migrated (119 on the test copy).
+- Checks: API unit tests (52 suites / 829 tests), `lib/utils/severity-selection.test.ts`, API build, root tsc, ESLint, and a new e2e test in `smoke.spec.ts`. Its submit is stubbed with `page.route`, so a full run still posts ~17 real reports.
+
 ### Manuscript revision Phase 2, step 2e — staff account types (Appendix H ADMINS) — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
 
 - **New fields** (migration `0039_staff_account_types.sql`): `admins.account_type` (`PERSONNEL` | `SYSTEM_ADMIN`) and `admins.is_focal`, `NOT NULL` with no default, under the CHECK `admins_account_type_office_focal_check`. Also `admin_audit_events.actor_account_type` beside the historical `actor_role`, which is never rewritten.

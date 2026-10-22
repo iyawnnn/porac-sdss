@@ -805,7 +805,7 @@ describe('new notifications name the report by its tracking reference', () => {
       title: 'New incoming report',
       message:
         'Damaged Manhole Cover report in Pio, routed to MEO — Ticket #12, Report PRC-2026-000034.',
-      href: '/admin/intake/34',
+      href: '/admin/focal/intake/34',
       entityType: 'report',
       entityId: 34,
     });

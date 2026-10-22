@@ -413,7 +413,8 @@ export class ReportsService {
         type: 'new_intake_report',
         title: 'New incoming report',
         message: `${params.category} report in ${params.barangayName}, routed to ${params.office} — Ticket #${params.ticketId}, Report ${params.trackingReference}.`,
-        href: `/admin/intake/${params.reportId}`,
+        // The Focal intake detail page; /admin/intake/* is the API path.
+        href: `/admin/focal/intake/${params.reportId}`,
         entityType: 'report',
         entityId: params.reportId,
       });

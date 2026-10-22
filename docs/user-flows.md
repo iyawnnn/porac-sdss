@@ -49,7 +49,13 @@ At `/report`. The form enforces an order deliberately: **evidence first, then lo
    - *No GPS in the photo* → prompt to place the pin manually on the map.
    - *GPS outside Porac* → "Photo GPS location is outside Porac municipality bounds."
 3. **Confirm or place the pin.** Moving the pin more than 100 m from the photo's GPS shows a warning that the submission will be flagged for review. **It does not block submission** — the citizen can still file it.
-4. **Choose a category** (12 options) and **a severity** — Low, Medium, High, or Critical. This is the citizen's own judgement of how bad it is.
+4. **Choose a category** (13 options) and **a severity** — Low, Medium, High, or Critical. This is the citizen's own judgement of how bad it is, and each level is listed with the manuscript's description:
+   - *Low* — minor impact; normal access or use is mostly unaffected.
+   - *Medium* — noticeable impact; access or use is still possible with caution.
+   - *High* — major disruption or a clear safety concern.
+   - *Critical* — immediate serious danger, or the area or service is effectively blocked or unusable.
+
+   **Choosing Critical asks for confirmation** ("Confirm Critical severity"), with a reminder that a report does not dispatch help and that anyone in immediate danger should call emergency hotlines. "Choose another level" (or closing the dialog) puts back the previous level. The form submits Critical only once it is confirmed, and asks again if the citizen changes the level away and back.
 5. **Submit.**
 
 Behind the scenes the server recomputes everything it will not take on trust: which barangay the point falls in and the integrity flags. It also decides whether this report is a new ticket or joins an existing one (§1.3).
