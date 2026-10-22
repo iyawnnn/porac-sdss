@@ -109,7 +109,7 @@ export class ModerationService {
   // cannot widen it by passing 'all' or the other office in the query.
   parseModerationQuery(
     query: Record<string, string | undefined>,
-    admin: Pick<AdminSession, 'role' | 'office'>,
+    admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
   ): ModerationFilters {
     const requestedOffice =
       query.office === 'all' ||
@@ -415,7 +415,7 @@ export class ModerationService {
           adminId: admin.adminId,
           adminName: admin.adminName,
           email: admin.email,
-          role: admin.role,
+          accountType: admin.accountType,
           office: admin.office,
         },
         actionType: 'report_moderated',

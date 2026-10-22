@@ -1111,10 +1111,11 @@ async function loadAdmins() {
       first_name: string;
       last_name: string;
       office: 'MEO' | 'MDRRMO' | null;
-      role: string;
+      account_type: AdminSession['accountType'];
+      is_focal: boolean;
     }[]
   >`
-    SELECT id, email, first_name, last_name, office, role
+    SELECT id, email, first_name, last_name, office, account_type, is_focal
     FROM admins WHERE is_active = true
   `;
   const meo = rows.filter((r) => r.office === 'MEO');
@@ -1128,8 +1129,9 @@ async function loadAdmins() {
     adminId: r.id,
     email: r.email,
     adminName: `${r.first_name} ${r.last_name}`,
+    accountType: r.account_type,
+    isFocal: r.is_focal,
     office: r.office,
-    role: r.role as AdminSession['role'],
   });
   return { MEO: meo.map(toSession), MDRRMO: mdrrmo.map(toSession) };
 }

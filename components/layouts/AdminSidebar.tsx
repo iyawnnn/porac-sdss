@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Bell, Building2, ClipboardList, FileBarChart2, Inbox, LayoutDashboard, Map, ShieldAlert, ShieldUser, Ticket, Wrench, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
-import { isFocal, isSystemAdmin } from "@/lib/utils/adminScope";
+import { accountLabel, isFocalPersonnel, isSystemAdmin } from "@/lib/utils/adminScope";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail, useSidebar } from "@/components/ui/sidebar";
 import { AdminSearch } from "@/components/layouts/AdminSearch";
 import { AdminSidebarTrigger } from "@/components/layouts/AdminSidebarTrigger";
@@ -29,7 +29,7 @@ interface NavItem { href: string; label: string; icon: LucideIcon; }
 // the Batch 2 report's "intentionally deferred" section). This is UI
 // convenience only; the backend guards are what actually enforce these
 // boundaries.
-function buildNavSections(session: Pick<AdminSession, "role">): { heading: string; items: NavItem[] }[] {
+function buildNavSections(session: Pick<AdminSession, "accountType" | "isFocal">): { heading: string; items: NavItem[] }[] {
   if (isSystemAdmin(session)) {
     return [
       { heading: "System Administration", items: [
@@ -38,7 +38,7 @@ function buildNavSections(session: Pick<AdminSession, "role">): { heading: strin
       ] },
     ];
   }
-  if (isFocal(session)) {
+  if (isFocalPersonnel(session)) {
     return [
       { heading: "Main", items: [
         { href: "/admin/focal", label: "Dashboard", icon: LayoutDashboard },
@@ -81,14 +81,13 @@ function initialsOf(name: string): string {
   return (first + last).toUpperCase();
 }
 
-// Never "All Offices" for system_admin — that phrasing implies operational
-// authority it no longer has (Batch 1). Focal also gets its own wording
-// rather than "My Office: MDRRMO", since that would read as operational
-// office membership rather than the organizational-only relationship it
-// actually has to MDRRMO.
-function footerSubtitle(session: Pick<AdminSession, "role" | "office">): string {
-  if (isSystemAdmin(session)) return "System Administrator / MIS";
-  if (isFocal(session)) return "Central Monitoring / Focal Personnel";
+// Never "All Offices" for the System Administrator — that phrasing implies
+// operational authority it no longer has (Batch 1). Focal also gets its own
+// wording rather than "My Office: MDRRMO", since that would read as
+// operational office membership rather than the organizational-only
+// relationship it actually has to MDRRMO. Labels per Phase 2, step 2e.
+function footerSubtitle(session: Pick<AdminSession, "accountType" | "isFocal" | "office">): string {
+  if (isSystemAdmin(session) || isFocalPersonnel(session)) return accountLabel(session);
   return `My Office: ${session.office}`;
 }
 

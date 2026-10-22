@@ -1,59 +1,76 @@
 import { ForbiddenException } from '@nestjs/common';
 import {
   assertOfficeAccess,
-  isFocal,
-  isOperationalStaff,
+  isFocalPersonnel,
+  isOperationalPersonnel,
   isSystemAdmin,
   resolveOfficeScope,
 } from './admin-scope';
 
-const MEO_OFFICER = { role: 'officer' as const, office: 'MEO' as const };
-const MDRRMO_SUPERVISOR = {
-  role: 'supervisor' as const,
+// Manuscript revision Phase 2, step 2e: the helpers read account_type /
+// office / is_focal. access-parity.spec.ts compares every decision with the
+// old role-based logic; this file keeps the per-helper cases.
+const MEO_PERSONNEL = {
+  accountType: 'PERSONNEL' as const,
+  isFocal: false,
+  office: 'MEO' as const,
+};
+const MDRRMO_PERSONNEL = {
+  accountType: 'PERSONNEL' as const,
+  isFocal: false,
   office: 'MDRRMO' as const,
 };
-const FOCAL = { role: 'focal' as const, office: 'MDRRMO' as const };
-const SYSTEM_ADMIN = { role: 'system_admin' as const, office: null };
+const FOCAL = {
+  accountType: 'PERSONNEL' as const,
+  isFocal: true,
+  office: 'MDRRMO' as const,
+};
+const SYSTEM_ADMIN = {
+  accountType: 'SYSTEM_ADMIN' as const,
+  isFocal: false,
+  office: null,
+};
 
 describe('isSystemAdmin', () => {
-  it('is true only for role system_admin', () => {
+  it('is true only for account type SYSTEM_ADMIN', () => {
     expect(isSystemAdmin(SYSTEM_ADMIN)).toBe(true);
-    expect(isSystemAdmin(MEO_OFFICER)).toBe(false);
-    expect(isSystemAdmin(MDRRMO_SUPERVISOR)).toBe(false);
+    expect(isSystemAdmin(MEO_PERSONNEL)).toBe(false);
+    expect(isSystemAdmin(MDRRMO_PERSONNEL)).toBe(false);
     expect(isSystemAdmin(FOCAL)).toBe(false);
   });
 });
 
-describe('isFocal', () => {
-  it('is true only for role focal', () => {
-    expect(isFocal(FOCAL)).toBe(true);
-    expect(isFocal(MEO_OFFICER)).toBe(false);
-    expect(isFocal(MDRRMO_SUPERVISOR)).toBe(false);
-    expect(isFocal(SYSTEM_ADMIN)).toBe(false);
+describe('isFocalPersonnel', () => {
+  it('is true only for Personnel with is_focal', () => {
+    expect(isFocalPersonnel(FOCAL)).toBe(true);
+    expect(isFocalPersonnel(MEO_PERSONNEL)).toBe(false);
+    expect(isFocalPersonnel(MDRRMO_PERSONNEL)).toBe(false);
+    expect(isFocalPersonnel(SYSTEM_ADMIN)).toBe(false);
   });
 });
 
-describe('isOperationalStaff', () => {
-  it('is true only for officer or supervisor', () => {
-    expect(isOperationalStaff(MEO_OFFICER)).toBe(true);
-    expect(isOperationalStaff(MDRRMO_SUPERVISOR)).toBe(true);
+describe('isOperationalPersonnel', () => {
+  it('is true only for Personnel that is not Focal', () => {
+    expect(isOperationalPersonnel(MEO_PERSONNEL)).toBe(true);
+    expect(isOperationalPersonnel(MDRRMO_PERSONNEL)).toBe(true);
   });
 
-  // The whole point of this helper (Batch 1, five-role RBAC): neither focal
-  // nor system_admin is routine operational staff, even though focal also
-  // carries an office value. Never derive this from `!isSystemAdmin(...)`.
-  it('is false for focal and system_admin', () => {
-    expect(isOperationalStaff(FOCAL)).toBe(false);
-    expect(isOperationalStaff(SYSTEM_ADMIN)).toBe(false);
+  // The whole point of this helper (Batch 1, five-role RBAC): neither Focal
+  // Personnel nor the System Administrator is routine operational staff,
+  // even though Focal also carries an office value. Never derive this from
+  // the office alone or from `!isSystemAdmin(...)`.
+  it('is false for Focal Personnel and the System Administrator', () => {
+    expect(isOperationalPersonnel(FOCAL)).toBe(false);
+    expect(isOperationalPersonnel(SYSTEM_ADMIN)).toBe(false);
   });
 });
 
 describe('resolveOfficeScope', () => {
-  it('clamps an officer/supervisor to their own office regardless of the requested value', () => {
-    expect(resolveOfficeScope(MEO_OFFICER, undefined)).toBe('MEO');
-    expect(resolveOfficeScope(MEO_OFFICER, 'all')).toBe('MEO');
-    expect(resolveOfficeScope(MEO_OFFICER, 'MDRRMO')).toBe('MEO');
-    expect(resolveOfficeScope(MDRRMO_SUPERVISOR, 'MEO')).toBe('MDRRMO');
+  it('clamps operational Personnel to their own office regardless of the requested value', () => {
+    expect(resolveOfficeScope(MEO_PERSONNEL, undefined)).toBe('MEO');
+    expect(resolveOfficeScope(MEO_PERSONNEL, 'all')).toBe('MEO');
+    expect(resolveOfficeScope(MEO_PERSONNEL, 'MDRRMO')).toBe('MEO');
+    expect(resolveOfficeScope(MDRRMO_PERSONNEL, 'MEO')).toBe('MDRRMO');
   });
 
   // Batch 1's explicit correction: system_admin no longer gets city-wide
@@ -71,7 +88,7 @@ describe('resolveOfficeScope', () => {
   // Focal has an office value (MDRRMO) for organizational/reporting
   // purposes only — it must not inherit MDRRMO's operational office scope
   // through this helper just because admin.office === 'MDRRMO'.
-  it('rejects focal outright, even though it carries office=MDRRMO', () => {
+  it('rejects Focal Personnel outright, even though it carries office=MDRRMO', () => {
     expect(() => resolveOfficeScope(FOCAL, undefined)).toThrow(
       ForbiddenException,
     );
@@ -82,16 +99,16 @@ describe('resolveOfficeScope', () => {
 });
 
 describe('assertOfficeAccess', () => {
-  it('passes for officer/supervisor accessing their own office', () => {
-    expect(() => assertOfficeAccess(MEO_OFFICER, 'MEO')).not.toThrow();
-    expect(() => assertOfficeAccess(MDRRMO_SUPERVISOR, 'MDRRMO')).not.toThrow();
+  it('passes for operational Personnel accessing their own office', () => {
+    expect(() => assertOfficeAccess(MEO_PERSONNEL, 'MEO')).not.toThrow();
+    expect(() => assertOfficeAccess(MDRRMO_PERSONNEL, 'MDRRMO')).not.toThrow();
   });
 
-  it('throws ForbiddenException for officer/supervisor accessing another office', () => {
-    expect(() => assertOfficeAccess(MEO_OFFICER, 'MDRRMO')).toThrow(
+  it('throws ForbiddenException for operational Personnel accessing another office', () => {
+    expect(() => assertOfficeAccess(MEO_PERSONNEL, 'MDRRMO')).toThrow(
       ForbiddenException,
     );
-    expect(() => assertOfficeAccess(MDRRMO_SUPERVISOR, 'MEO')).toThrow(
+    expect(() => assertOfficeAccess(MDRRMO_PERSONNEL, 'MEO')).toThrow(
       ForbiddenException,
     );
   });
@@ -109,7 +126,7 @@ describe('assertOfficeAccess', () => {
 
   // Focal must not gain MDRRMO operational resource access just because
   // its own office value happens to be MDRRMO.
-  it('throws for focal against MDRRMO resources, despite office=MDRRMO', () => {
+  it('throws for Focal Personnel against MDRRMO resources, despite office=MDRRMO', () => {
     expect(() => assertOfficeAccess(FOCAL, 'MDRRMO')).toThrow(
       ForbiddenException,
     );

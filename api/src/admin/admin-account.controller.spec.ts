@@ -15,7 +15,8 @@ const actor: AdminSession = {
   email: 'officer@example.com',
   adminName: 'Officer One',
   office: 'MEO',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 };
 
 function makeConfig(): ConfigService<Env, true> {

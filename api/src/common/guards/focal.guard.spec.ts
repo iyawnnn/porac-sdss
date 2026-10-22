@@ -19,7 +19,8 @@ describe('FocalGuard', () => {
       email: 'a@b.com',
       adminName: 'A',
       office: 'MDRRMO',
-      role: 'focal',
+      accountType: 'PERSONNEL',
+      isFocal: true,
     });
     expect(guard.canActivate(ctx)).toBe(true);
   });
@@ -34,7 +35,8 @@ describe('FocalGuard', () => {
       email: 'a@b.com',
       adminName: 'A',
       office: 'MEO',
-      role: 'officer',
+      accountType: 'PERSONNEL',
+      isFocal: false,
     });
     expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
   });
@@ -45,7 +47,8 @@ describe('FocalGuard', () => {
       email: 'a@b.com',
       adminName: 'A',
       office: 'MDRRMO',
-      role: 'supervisor',
+      accountType: 'PERSONNEL',
+      isFocal: false,
     });
     expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
   });
@@ -56,7 +59,8 @@ describe('FocalGuard', () => {
       email: 'a@b.com',
       adminName: 'A',
       office: null,
-      role: 'system_admin',
+      accountType: 'SYSTEM_ADMIN',
+      isFocal: false,
     });
     expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
   });

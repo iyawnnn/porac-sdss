@@ -37,7 +37,8 @@ export class NotificationsController {
           type: 'admin',
           adminId: session.adminId,
           office: session.office,
-          role: session.role,
+          accountType: session.accountType,
+          isFocal: session.isFocal,
         };
       }
     }

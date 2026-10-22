@@ -12,7 +12,8 @@ const ADMIN: AdminSession = {
   email: 'officer@example.com',
   adminName: 'MEO Officer',
   office: 'MEO',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 };
 
 // Same fake-drizzle shape as admins.service.spec.ts: chains the builder calls

@@ -22,7 +22,8 @@ const adminSession: AdminSession = {
   email: 'admin@example.com',
   adminName: 'Admin',
   office: 'MEO',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 };
 
 const citizenSession: CitizenSession = {

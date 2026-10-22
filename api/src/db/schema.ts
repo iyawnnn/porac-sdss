@@ -56,20 +56,37 @@ export const routingActionTypeEnum = pgEnum('routing_action_type', [
   'REASSIGN',
   'REFER',
 ]);
-// 'system_admin' has no office of its own (admins.office is nullable for
-// exactly this role) — it no longer has routine operational access either
-// (Batch 1, five-role RBAC), it bypasses office scoping instead of
-// belonging to a third office value. 'focal' always has office = 'MDRRMO'
-// (organizationally MDRRMO/QRT) but is also not routine operational staff.
-// See api/src/common/authz/admin-scope.ts's isOperationalStaff — the
-// allowlist of exactly officer/supervisor — and drizzle/
-// 0030_admin_focal_role.sql for the additive enum migration this type must
+// History / sync mirror only since manuscript revision Phase 2, step 2e
+// (migration 0039): admins.role and admin_audit_events.actor_role keep this
+// type until both are dropped in Phase 8, and NOTHING may read either for
+// access — access is decided by admins.account_type / office / is_focal
+// (adminAccountTypeEnum below, api/src/common/authz/admin-scope.ts). The app
+// keeps admins.role in sync on create/update (see AdminsService) so the NOT
+// NULL column stays valid; actor_role is never rewritten. drizzle/
+// 0030_admin_focal_role.sql is the additive enum migration this type must
 // stay in sync with.
 export const adminRoleEnum = pgEnum('admin_role', [
   'officer',
   'supervisor',
   'focal',
   'system_admin',
+]);
+// Appendix H ADMINS account_type (manuscript revision Phase 2, step 2e,
+// migration 0039). With admins.office and admins.is_focal it decides every
+// access check:
+//   SYSTEM_ADMIN                     no office, never Focal — account
+//                                    administration only, no operational
+//                                    access (Batch 1, five-role RBAC);
+//   PERSONNEL, is_focal false        office-scoped operational staff (the
+//                                    old officer/supervisor, which had
+//                                    identical permissions);
+//   PERSONNEL, is_focal true         Focal Personnel, always MDRRMO —
+//                                    intake/screening only, and its MDRRMO
+//                                    office grants NO operational access.
+// The CHECK admins_account_type_office_focal_check enforces those shapes.
+export const adminAccountTypeEnum = pgEnum('admin_account_type', [
+  'PERSONNEL',
+  'SYSTEM_ADMIN',
 ]);
 // 'facebook' is retained in the enum only because Postgres can't cheaply
 // drop an enum value (would need a full type-rebuild migration) — no code
@@ -620,7 +637,16 @@ export const admins = pgTable('admins', {
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   office: officeEnum('office'),
+  // Sync mirror only (see adminRoleEnum): written on create/update, never
+  // read for access. Dropped in Phase 8.
   role: adminRoleEnum('role').notNull(),
+  // Appendix H (Phase 2, step 2e): these two and office decide access — see
+  // adminAccountTypeEnum and the CHECK admins_account_type_office_focal_check
+  // (System Administrator: no office, not Focal; Personnel: an office, and
+  // only MDRRMO Personnel can be Focal). No defaults: the app always sets
+  // both explicitly.
+  accountType: adminAccountTypeEnum('account_type').notNull(),
+  isFocal: boolean('is_focal').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -735,7 +761,16 @@ export const adminAuditEvents = pgTable('admin_audit_events', {
   actorAdminId: integer('actor_admin_id').notNull(),
   actorName: text('actor_name').notNull(),
   actorEmail: text('actor_email').notNull(),
+  // History only: the role the event was written with, never rewritten;
+  // new events take it from the actor's stored admins.role mirror. Dropped
+  // in Phase 8.
   actorRole: adminRoleEnum('actor_role').notNull(),
+  // Appendix H actor account type (Phase 2, step 2e). Keeping it beside the
+  // historical actor_role is an implementation extension. 0039 filled it
+  // for old rows from actor_role; new events set it from the actor's
+  // account type, and an insert trigger fills it from actor_role for older
+  // code that leaves it out.
+  actorAccountType: adminAccountTypeEnum('actor_account_type').notNull(),
   actorOffice: officeEnum('actor_office'),
   actionType: text('action_type').notNull(),
   targetType: text('target_type').notNull(),

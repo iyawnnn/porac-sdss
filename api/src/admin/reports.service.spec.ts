@@ -10,7 +10,8 @@ const MEO_OFFICER: AdminSession = {
   email: 'meo@example.com',
   adminName: 'MEO Officer',
   office: 'MEO',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 };
 
 function makeService(overrides: {

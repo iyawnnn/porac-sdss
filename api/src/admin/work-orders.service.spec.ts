@@ -15,21 +15,24 @@ const MEO_OFFICER: AdminSession = {
   email: 'meo@example.com',
   adminName: 'MEO Officer',
   office: 'MEO',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 };
 const MDRRMO_SUPERVISOR: AdminSession = {
   adminId: 2,
   email: 'mdrrmo@example.com',
   adminName: 'MDRRMO Supervisor',
   office: 'MDRRMO',
-  role: 'supervisor',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 };
 const SYSTEM_ADMIN: AdminSession = {
   adminId: 3,
   email: 'sysadmin@example.com',
   adminName: 'System Admin',
   office: null,
-  role: 'system_admin',
+  accountType: 'SYSTEM_ADMIN',
+  isFocal: false,
 };
 
 // Same fake drizzle chain as admins.service.spec.ts — chains

@@ -78,6 +78,18 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 2, step 2e — staff account types (Appendix H ADMINS) — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
+
+- **New fields** (migration `0039_staff_account_types.sql`): `admins.account_type` (`PERSONNEL` | `SYSTEM_ADMIN`) and `admins.is_focal`, `NOT NULL` with no default, under the CHECK `admins_account_type_office_focal_check`. Also `admin_audit_events.actor_account_type` beside the historical `actor_role`, which is never rewritten.
+- **Mapping:** officer/supervisor → Personnel (same office); focal → Focal Personnel on MDRRMO; system_admin → System Administrator (no office).
+  - A guard aborts the whole migration with counts if an account can't be mapped cleanly.
+  - An insert trigger fills `actor_account_type` from `actor_role` for older code, so the old API keeps writing audit events.
+- **Everyone is logged out once.** The mapping UPDATE sets `session_valid_after = now()`; a re-run maps 0 rows and logs nobody out again. Tokens without `accountType` are also rejected.
+- **Access is unchanged.** Every check reads `account_type` / `office` / `is_focal` (`isSystemAdmin` / `isFocalPersonnel` / `isOperationalPersonnel`). `access-parity.spec.ts` compares every old role × office with the old logic. `admins.role` is a write-only sync mirror until Phase 8.
+- **Labels:** Personnel / Focal Personnel / System Administrator everywhere; "Supervisor" and "/ MIS" are gone from the UI. The full staff form with separate fields is Phase 7.
+- **Tested on PGlite only.** Run 1 mapped every role and logged everyone out; run 2 changed 0 rows; the check queries reported 0 where required; all three guard fixtures aborted cleanly. **Run 0039 before deploying this API:** the new code reads columns that don't exist until then.
+- Checks: API unit tests (52 suites / 823 tests), `lib/utils/adminScope.test.ts`, API build, root tsc, ESLint.
+
 ### Manuscript revision Phase 2, step 2d — ticket-level acknowledgments (Appendix H) — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
 
 - **New table `acknowledgments`** (migration `0038_ticket_acknowledgments.sql`): at most one row per ticket (`ticket_id` UNIQUE), with `acknowledged_by_admin_id` (a real FK to `admins`, as Appendix H and `routing_actions` have it), `remarks` and `acknowledged_at`. There is no name column. It is separate from ticket status.

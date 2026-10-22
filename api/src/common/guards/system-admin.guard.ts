@@ -4,9 +4,9 @@ import { isSystemAdmin } from '../authz/admin-scope';
 
 // Must run after AdminSessionGuard (which populates req.adminSession) —
 // used together via @UseGuards(AdminSessionGuard, SystemAdminGuard), never
-// on its own. Office-scoped admins (officer/supervisor) are rejected
-// outright here rather than clamped, since admin-management endpoints have
-// no office-scoped equivalent to fall back to.
+// on its own. Personnel (operational or Focal) are rejected outright here
+// rather than clamped, since admin-management endpoints have no
+// office-scoped equivalent to fall back to.
 @Injectable()
 export class SystemAdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {

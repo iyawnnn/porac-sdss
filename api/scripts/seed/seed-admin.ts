@@ -9,7 +9,10 @@ async function main() {
     console.error(
       "Usage: tsx scripts/seed-admin.ts <email> <password> <MEO|MDRRMO|-> <officer|supervisor|focal|system_admin> [firstName] [lastName]\n" +
         "  Use '-' for office when role is system_admin (system admins have no office).\n" +
-        "  focal must always be seeded with office MDRRMO (organizationally MDRRMO/QRT)."
+        '  focal must always be seeded with office MDRRMO (organizationally MDRRMO/QRT).\n' +
+        '  The role picks the account type (Phase 2, step 2e): officer/supervisor -> Personnel,\n' +
+        '  focal -> Focal Personnel, system_admin -> System Administrator; it is also stored as the\n' +
+        '  admins.role sync mirror.',
     );
     process.exit(1);
   }
@@ -39,6 +42,10 @@ async function main() {
     process.exit(1);
   }
   const office = officeArg === "-" ? null : (officeArg as "MEO" | "MDRRMO");
+  // The Phase 2, step 2e mapping (migration 0039); the checks above already
+  // keep every combination inside admins_account_type_office_focal_check.
+  const accountType = role === 'system_admin' ? 'SYSTEM_ADMIN' : 'PERSONNEL';
+  const isFocal = role === 'focal';
 
   const passwordHash = await bcrypt.hash(password, 10);
 
@@ -51,6 +58,8 @@ async function main() {
       email,
       passwordHash,
       office,
+      accountType,
+      isFocal,
       role: role as "officer" | "supervisor" | "focal" | "system_admin",
       firstName: firstName ?? "Test",
       lastName: lastName ?? "Admin",
@@ -60,6 +69,8 @@ async function main() {
       set: {
         passwordHash,
         office,
+        accountType,
+        isFocal,
         role: role as "officer" | "supervisor" | "focal" | "system_admin",
         firstName: firstName ?? "Test",
         lastName: lastName ?? "Admin",
@@ -67,7 +78,9 @@ async function main() {
     })
     .returning();
 
-  console.log(`Seeded admin: ${admin.email} (${admin.office}, ${admin.role})`);
+  console.log(
+    `Seeded admin: ${admin.email} (${admin.office}, ${admin.accountType}${admin.isFocal ? ', Focal' : ''})`,
+  );
   await client.end();
 }
 

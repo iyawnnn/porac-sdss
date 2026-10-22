@@ -12,17 +12,38 @@ describe('SystemAdminGuard', () => {
   const guard = new SystemAdminGuard();
 
   it('allows a system_admin session through', () => {
-    const ctx = makeContext({ adminId: 1, email: 'a@b.com', adminName: 'A', office: null, role: 'system_admin' });
+    const ctx = makeContext({
+      adminId: 1,
+      email: 'a@b.com',
+      adminName: 'A',
+      office: null,
+      accountType: 'SYSTEM_ADMIN',
+      isFocal: false,
+    });
     expect(guard.canActivate(ctx)).toBe(true);
   });
 
   it('rejects an officer session (office-scoped, not system-wide)', () => {
-    const ctx = makeContext({ adminId: 2, email: 'a@b.com', adminName: 'A', office: 'MEO', role: 'officer' });
+    const ctx = makeContext({
+      adminId: 2,
+      email: 'a@b.com',
+      adminName: 'A',
+      office: 'MEO',
+      accountType: 'PERSONNEL',
+      isFocal: false,
+    });
     expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
   });
 
   it('rejects a supervisor session (office-scoped, not system-wide)', () => {
-    const ctx = makeContext({ adminId: 3, email: 'a@b.com', adminName: 'A', office: 'MDRRMO', role: 'supervisor' });
+    const ctx = makeContext({
+      adminId: 3,
+      email: 'a@b.com',
+      adminName: 'A',
+      office: 'MDRRMO',
+      accountType: 'PERSONNEL',
+      isFocal: false,
+    });
     expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
   });
 

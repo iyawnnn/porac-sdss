@@ -15,7 +15,8 @@ const ACTOR: AdminSession = {
   email: 'officer@example.com',
   adminName: 'Officer One',
   office: 'MEO',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 };
 
 // select() chain: from/where resolve via .then, mirroring the other

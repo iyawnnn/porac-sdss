@@ -153,7 +153,7 @@ function actorFrom(admin: AdminSession) {
     adminId: admin.adminId,
     adminName: admin.adminName,
     email: admin.email,
-    role: admin.role,
+    accountType: admin.accountType,
     office: admin.office,
   };
 }
@@ -188,7 +188,7 @@ export class WorkOrdersService {
 
   parseQuery(
     query: Record<string, string | undefined>,
-    admin: Pick<AdminSession, 'role' | 'office' | 'adminId'>,
+    admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office' | 'adminId'>,
   ): WorkOrderFilters {
     const requestedOffice =
       query.office === 'all' ||
@@ -276,7 +276,7 @@ export class WorkOrdersService {
 
   async get(
     id: number,
-    admin: Pick<AdminSession, 'role' | 'office'>,
+    admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
   ): Promise<WorkOrderRow> {
     const [row] = await this.db
       .select(SAFE_COLUMNS)

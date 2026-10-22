@@ -1,4 +1,4 @@
-import type { AdminOffice, AdminRole } from "./admin-admins";
+import type { AdminAccountType, AdminOffice, AdminRole } from "./admin-admins";
 
 export type AdminAuditActionType =
   | "admin_created"
@@ -23,7 +23,9 @@ export interface AdminAuditRow {
   actor_admin_id: number;
   actor_name: string;
   actor_email: string;
+  // History: the role the event was written with (never rewritten).
   actor_role: AdminRole;
+  actor_account_type: AdminAccountType;
   actor_office: AdminOffice | null;
   action_type: AdminAuditActionType;
   target_type: AdminAuditTargetType;

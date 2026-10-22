@@ -14,35 +14,40 @@ const MEO_OFFICER = {
   adminId: 1,
   adminName: 'Juan Cruz',
   email: 'juan@meo.gov.ph',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
   office: 'MEO',
 } as AdminSession;
 const MEO_SUPERVISOR = {
   adminId: 2,
   adminName: 'Ana Reyes',
   email: 'ana@meo.gov.ph',
-  role: 'supervisor',
+  accountType: 'PERSONNEL',
+  isFocal: false,
   office: 'MEO',
 } as AdminSession;
 const MDRRMO_OFFICER = {
   adminId: 3,
   adminName: 'Mark Santos',
   email: 'mark@mdrrmo.gov.ph',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
   office: 'MDRRMO',
 } as AdminSession;
 const FOCAL = {
   adminId: 4,
   adminName: 'Diana Torres',
   email: 'diana@focal.gov.ph',
-  role: 'focal',
+  accountType: 'PERSONNEL',
+  isFocal: true,
   office: 'MDRRMO',
 } as AdminSession;
 const SYSTEM_ADMIN = {
   adminId: 5,
   adminName: 'MIS Admin',
   email: 'mis@porac.gov.ph',
-  role: 'system_admin',
+  accountType: 'SYSTEM_ADMIN',
+  isFocal: false,
   office: null,
 } as AdminSession;
 

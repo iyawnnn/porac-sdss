@@ -17,7 +17,8 @@ const FOCAL: AdminSession = {
   email: 'focal@example.com',
   adminName: 'Diana Torres',
   office: 'MDRRMO',
-  role: 'focal',
+  accountType: 'PERSONNEL',
+  isFocal: true,
 };
 
 describe('deriveIntakeState', () => {

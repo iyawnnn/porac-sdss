@@ -4,6 +4,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { TransactionSql } from 'postgres';
 import { DB } from '../db/db.module';
 import { adminAuditEvents } from '../db/schema';
+import type { AdminAccountType } from '../auth/session.service';
 import type { AdminRole } from './admins.service';
 
 // One append-only row per administrative action — System Administrator
@@ -42,11 +43,14 @@ export type AdminAuditActionType =
 
 export type AdminAuditTargetType = 'admin' | 'ticket' | 'report' | 'work_order';
 
+// actor_role is not passed in: every write takes it from the actor's
+// stored admins.role mirror (a subquery in the INSERT), since the session
+// no longer carries a role. actor_account_type comes from accountType here.
 export interface AdminAuditActor {
   adminId: number;
   adminName: string;
   email: string;
-  role: AdminRole;
+  accountType: AdminAccountType;
   office: 'MEO' | 'MDRRMO' | null;
 }
 
@@ -64,7 +68,9 @@ export interface AdminAuditRow {
   actor_admin_id: number;
   actor_name: string;
   actor_email: string;
+  // History: the role the event was written with (never rewritten).
   actor_role: AdminRole;
+  actor_account_type: AdminAccountType;
   actor_office: 'MEO' | 'MDRRMO' | null;
   action_type: AdminAuditActionType;
   target_type: AdminAuditTargetType;
@@ -127,6 +133,7 @@ const SAFE_COLUMNS = {
   actor_name: adminAuditEvents.actorName,
   actor_email: adminAuditEvents.actorEmail,
   actor_role: adminAuditEvents.actorRole,
+  actor_account_type: adminAuditEvents.actorAccountType,
   actor_office: adminAuditEvents.actorOffice,
   action_type: adminAuditEvents.actionType,
   target_type: adminAuditEvents.targetType,
@@ -136,12 +143,20 @@ const SAFE_COLUMNS = {
   created_at: adminAuditEvents.createdAt,
 };
 
+// actor_role still has to be written (NOT NULL until Phase 8): it is the
+// actor's stored admins.role mirror, read in the same INSERT so it can't
+// drift from what the admins row says.
+function actorRoleOf(adminId: number) {
+  return dsql<AdminRole>`(SELECT role FROM admins WHERE id = ${adminId})`;
+}
+
 function values(input: LogAdminAuditInput) {
   return {
     actorAdminId: input.actor.adminId,
     actorName: input.actor.adminName,
     actorEmail: input.actor.email,
-    actorRole: input.actor.role,
+    actorRole: actorRoleOf(input.actor.adminId),
+    actorAccountType: input.actor.accountType,
     actorOffice: input.actor.office,
     actionType: input.actionType,
     targetType: input.targetType,
@@ -171,10 +186,11 @@ export class AdminAuditService {
     const v = values(input);
     await tx`
       INSERT INTO admin_audit_events (
-        actor_admin_id, actor_name, actor_email, actor_role, actor_office,
+        actor_admin_id, actor_name, actor_email, actor_role, actor_account_type, actor_office,
         action_type, target_type, target_id, target_summary, metadata
       ) VALUES (
-        ${v.actorAdminId}, ${v.actorName}, ${v.actorEmail}, ${v.actorRole}, ${v.actorOffice ?? null},
+        ${v.actorAdminId}, ${v.actorName}, ${v.actorEmail},
+        (SELECT role FROM admins WHERE id = ${v.actorAdminId}), ${v.actorAccountType}, ${v.actorOffice ?? null},
         ${v.actionType}, ${v.targetType}, ${v.targetId}, ${v.targetSummary},
         ${v.metadata ? JSON.stringify(v.metadata) : null}::jsonb
       )

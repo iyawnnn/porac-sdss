@@ -15,11 +15,16 @@ async function main() {
   for (const account of E2E_ADMIN_ACCOUNTS) {
     const passwordHash = await bcrypt.hash(account.password, 10);
     await sql`
-      INSERT INTO admins (first_name, last_name, email, password_hash, office, role)
-      VALUES (${account.firstName}, ${account.lastName}, ${account.email}, ${passwordHash}, ${account.office}::office, ${account.role}::admin_role)
+      INSERT INTO admins (first_name, last_name, email, password_hash, office, account_type, is_focal, role)
+      VALUES (
+        ${account.firstName}, ${account.lastName}, ${account.email}, ${passwordHash}, ${account.office}::office,
+        ${account.accountType}::admin_account_type, ${account.isFocal}, ${account.role}::admin_role
+      )
       ON CONFLICT (email) DO UPDATE SET
         password_hash = EXCLUDED.password_hash,
         office = EXCLUDED.office,
+        account_type = EXCLUDED.account_type,
+        is_focal = EXCLUDED.is_focal,
         role = EXCLUDED.role,
         is_active = true
     `;

@@ -7,11 +7,16 @@
 export interface E2EAdminAccount {
   email: string;
   password: string;
-  // null only for role: "system_admin" — see api/src/common/authz/admin-scope.ts.
-  // "focal" always carries office "MDRRMO" (organizationally MDRRMO/QRT),
-  // per that same file's invariant — never treated as MDRRMO operational
-  // staff despite the office value (see isOperationalStaff).
+  // Appendix H staff fields (manuscript revision Phase 2, step 2e), kept
+  // inside admins_account_type_office_focal_check: office is null only for
+  // SYSTEM_ADMIN; Focal Personnel (PERSONNEL + isFocal) always carries office
+  // "MDRRMO" — never treated as MDRRMO operational staff despite the office
+  // value (see isOperationalPersonnel in api/src/common/authz/admin-scope.ts).
+  accountType: "PERSONNEL" | "SYSTEM_ADMIN";
+  isFocal: boolean;
   office: "MEO" | "MDRRMO" | null;
+  // Only the admins.role sync mirror seed-e2e-admins.ts writes (NOT NULL
+  // until Phase 8). Nothing reads it.
   role: "officer" | "supervisor" | "system_admin" | "focal";
   firstName: string;
   lastName: string;
@@ -21,10 +26,10 @@ export interface E2EAdminAccount {
 const DEMO_PASSWORD = process.env.E2E_DEMO_PASSWORD ?? "PoracDemo2026!";
 
 export const E2E_ADMIN_ACCOUNTS: readonly E2EAdminAccount[] = [
-  { email: "meo@porac.gov.ph", password: DEMO_PASSWORD, office: "MEO", role: "supervisor", firstName: "MEO", lastName: "Supervisor" },
-  { email: "mdrrmo@porac.gov.ph", password: DEMO_PASSWORD, office: "MDRRMO", role: "supervisor", firstName: "MDRRMO", lastName: "Supervisor" },
-  { email: "sysadmin@porac.gov.ph", password: DEMO_PASSWORD, office: null, role: "system_admin", firstName: "System", lastName: "Administrator" },
-  { email: "focal@porac.gov.ph", password: DEMO_PASSWORD, office: "MDRRMO", role: "focal", firstName: "Focal", lastName: "Personnel" },
+  { email: "meo@porac.gov.ph", password: DEMO_PASSWORD, accountType: "PERSONNEL", isFocal: false, office: "MEO", role: "supervisor", firstName: "MEO", lastName: "Supervisor" },
+  { email: "mdrrmo@porac.gov.ph", password: DEMO_PASSWORD, accountType: "PERSONNEL", isFocal: false, office: "MDRRMO", role: "supervisor", firstName: "MDRRMO", lastName: "Supervisor" },
+  { email: "sysadmin@porac.gov.ph", password: DEMO_PASSWORD, accountType: "SYSTEM_ADMIN", isFocal: false, office: null, role: "system_admin", firstName: "System", lastName: "Administrator" },
+  { email: "focal@porac.gov.ph", password: DEMO_PASSWORD, accountType: "PERSONNEL", isFocal: true, office: "MDRRMO", role: "focal", firstName: "Focal", lastName: "Personnel" },
 ];
 
 export const E2E_MEO_ADMIN = E2E_ADMIN_ACCOUNTS[0];

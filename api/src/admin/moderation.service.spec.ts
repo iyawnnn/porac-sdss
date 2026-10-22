@@ -19,19 +19,22 @@ const MEO_ADMIN = {
   adminId: 1,
   adminName: 'Admin A',
   office: 'MEO',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 } as AdminSession;
 const MDRRMO_ADMIN = {
   adminId: 2,
   adminName: 'Admin B',
   office: 'MDRRMO',
-  role: 'supervisor',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 } as AdminSession;
 const SYSTEM_ADMIN = {
   adminId: 3,
   adminName: 'Sys Admin',
   office: null,
-  role: 'system_admin',
+  accountType: 'SYSTEM_ADMIN',
+  isFocal: false,
 } as AdminSession;
 
 // Captures the mock as a local, typed function rather than reading it back

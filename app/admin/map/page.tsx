@@ -56,7 +56,7 @@ export default async function AdminMapPage({
   if (systemAdmin) {
     return (
       <AdminErrorCard
-        message="System Administrator / MIS accounts do not have operational map access."
+        message="System Administrator accounts do not have operational map access."
         title="Interactive Map Unavailable"
       />
     );

@@ -19,7 +19,7 @@ import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
   assertOfficeAccess,
-  isFocal,
+  isFocalPersonnel,
 } from '../common/authz/admin-scope';
 import {
   ALL_CATEGORIES,
@@ -288,7 +288,7 @@ export class TicketsService {
   // client refetch route, so the two never drift.
   parseTicketQuery(
     query: Record<string, string | undefined>,
-    admin: Pick<AdminSession, 'role' | 'office'>,
+    admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
   ): Required<Pick<AdminTicketFilters, 'status' | 'sort' | 'page' | 'limit'>> &
     Pick<
       AdminTicketFilters,
@@ -435,7 +435,7 @@ export class TicketsService {
   // for the office that is not theirs (resolveOfficeScope clamps them), and
   // the UI hides that tab rather than rendering a permanent zero.
   async getViewCounts(
-    admin: Pick<AdminSession, 'role' | 'office'>,
+    admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
   ): Promise<TicketViewCounts> {
     const sql = this.pg;
     const office = resolveOfficeScope(admin, undefined) ?? null;
@@ -533,7 +533,7 @@ export class TicketsService {
   }
 
   async getTicketsGeo(
-    admin: Pick<AdminSession, 'role' | 'office'>,
+    admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
     requestedOffice: 'MEO' | 'MDRRMO' | 'all' | undefined,
   ): Promise<AdminTicketGeoRow[]> {
     const office = resolveOfficeScope(admin, requestedOffice) ?? null;
@@ -557,7 +557,7 @@ export class TicketsService {
 
   async getTicketDetail(
     id: number,
-    admin: Pick<AdminSession, 'role' | 'office'>,
+    admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
   ) {
     const sql = this.pg;
     const [ticket] = await sql<TicketDetail[]>`
@@ -620,7 +620,7 @@ export class TicketsService {
   // only and freezes once resolved/rejected.
   async getTicketPriorityContext(
     ticketId: number,
-    admin: Pick<AdminSession, 'role' | 'office'>,
+    admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
   ): Promise<TicketPriorityContext | null> {
     const sql = this.pg;
     const [row] = await sql<
@@ -744,7 +744,7 @@ export class TicketsService {
           adminId: admin.adminId,
           adminName: admin.adminName,
           email: admin.email,
-          role: admin.role,
+          accountType: admin.accountType,
           office: admin.office,
         },
         actionType: 'ticket_status_advanced',
@@ -834,7 +834,7 @@ export class TicketsService {
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
 
-    if (isFocal(admin)) {
+    if (isFocalPersonnel(admin)) {
       // Focal may only forward a report before operational work has begun
       // — the ticket must still be at its initial Reported state, with no
       // work order already in progress. Checked immediately before the
@@ -887,7 +887,7 @@ export class TicketsService {
           adminId: admin.adminId,
           adminName: admin.adminName,
           email: admin.email,
-          role: admin.role,
+          accountType: admin.accountType,
           office: admin.office,
         },
         actionType: 'ticket_reassigned',
@@ -942,7 +942,7 @@ export class TicketsService {
           adminId: admin.adminId,
           adminName: admin.adminName,
           email: admin.email,
-          role: admin.role,
+          accountType: admin.accountType,
           office: admin.office,
         },
         actionType: 'ticket_referral_noted',
@@ -1019,7 +1019,7 @@ export class TicketsService {
           adminId: admin.adminId,
           adminName: admin.adminName,
           email: admin.email,
-          role: admin.role,
+          accountType: admin.accountType,
           office: admin.office,
         },
         actionType: 'ticket_rejected',

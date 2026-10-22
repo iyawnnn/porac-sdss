@@ -10,20 +10,27 @@ import bcrypt from 'bcryptjs';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
 import { admins } from '../db/schema';
-import type { AdminSession } from '../auth/session.service';
-import { isOperationalStaff, resolveOfficeScope } from '../common/authz/admin-scope';
+import type { AdminAccountType, AdminSession } from '../auth/session.service';
+import {
+  isOperationalPersonnel,
+  resolveOfficeScope,
+} from '../common/authz/admin-scope';
 import { AdminAuditService } from './admin-audit.service';
 
+// The old role values. Since manuscript revision Phase 2, step 2e this is
+// only the type of the admins.role sync mirror and of the historical
+// admin_audit_events.actor_role — never read for access (Phase 8 drops both).
 export type AdminRole = 'officer' | 'supervisor' | 'focal' | 'system_admin';
 export type AdminOffice = 'MEO' | 'MDRRMO';
-const ADMIN_ROLES: AdminRole[] = ['officer', 'supervisor', 'focal', 'system_admin'];
 
+// No role here: the mirror is write-only (see roleMirror below).
 export interface AdminAccountRow {
   id: number;
   first_name: string;
   last_name: string;
   email: string;
-  role: AdminRole;
+  account_type: AdminAccountType;
+  is_focal: boolean;
   office: AdminOffice | null;
   created_at: Date;
   is_active: boolean;
@@ -34,7 +41,8 @@ const SAFE_COLUMNS = {
   first_name: admins.firstName,
   last_name: admins.lastName,
   email: admins.email,
-  role: admins.role,
+  account_type: admins.accountType,
+  is_focal: admins.isFocal,
   office: admins.office,
   created_at: admins.createdAt,
   is_active: admins.isActive,
@@ -49,44 +57,74 @@ export interface AdminDirectoryRow {
   name: string;
   email: string;
   office: AdminOffice | null;
-  role: AdminRole;
+  account_type: AdminAccountType;
+  is_focal: boolean;
 }
 
-// Shared by create and update — an admin's role and office must always
-// agree: system_admin implies no office, focal implies exactly MDRRMO
-// (organizationally MDRRMO/QRT — not a free choice), officer/supervisor
-// implies exactly one office. There is no "clamp" here (unlike ticket/
-// report office scoping) — an invalid combination is always a hard
-// rejection. This is the one place the role↔office invariant is enforced,
-// per the Batch 1 design: centralize it rather than duplicating
-// inconsistent conditionals across create()/update().
-function assertRoleOfficeCombination(
-  role: unknown,
+interface AccountFields {
+  accountType: AdminAccountType;
+  isFocal: boolean;
+  office: AdminOffice | null;
+}
+
+// Shared by create and update — the API side of the database CHECK
+// admins_account_type_office_focal_check (migration 0039), so a bad
+// combination is a clear 400 instead of a database error:
+//   SYSTEM_ADMIN — no office, never Focal;
+//   PERSONNEL    — office MEO or MDRRMO; Focal Personnel only on MDRRMO
+//                  (organizationally MDRRMO/QRT — not a free choice).
+// isFocal may be left out (= not Focal). There is no "clamp" here (unlike
+// ticket/report office scoping) — an invalid combination is always a hard
+// rejection. This is the one place the account_type/office/is_focal
+// invariant is enforced, per the Batch 1 design: centralize it rather than
+// duplicating inconsistent conditionals across create()/update().
+function assertAccountFields(
+  accountType: unknown,
+  isFocal: unknown,
   office: unknown,
-): { role: AdminRole; office: AdminOffice | null } {
-  if (typeof role !== 'string' || !ADMIN_ROLES.includes(role as AdminRole)) {
+): AccountFields {
+  if (accountType !== 'PERSONNEL' && accountType !== 'SYSTEM_ADMIN') {
     throw new BadRequestException(
-      'role must be officer, supervisor, focal, or system_admin.',
+      'accountType must be PERSONNEL or SYSTEM_ADMIN.',
     );
   }
-  if (role === 'system_admin') {
-    if (office !== null && office !== undefined) {
-      throw new BadRequestException('system_admin must not have an office.');
-    }
-    return { role, office: null };
+  if (isFocal !== undefined && typeof isFocal !== 'boolean') {
+    throw new BadRequestException('isFocal must be true or false.');
   }
-  if (role === 'focal') {
-    if (office !== 'MDRRMO') {
-      throw new BadRequestException('focal must have office MDRRMO.');
+  const focal = isFocal === true;
+  if (accountType === 'SYSTEM_ADMIN') {
+    if (office !== null && office !== undefined) {
+      throw new BadRequestException('A System Administrator has no office.');
     }
-    return { role, office: 'MDRRMO' };
+    if (focal) {
+      throw new BadRequestException(
+        'A System Administrator cannot be Focal Personnel.',
+      );
+    }
+    return { accountType, isFocal: false, office: null };
   }
   if (office !== 'MEO' && office !== 'MDRRMO') {
-    throw new BadRequestException(
-      'office must be MEO or MDRRMO for officer/supervisor.',
-    );
+    throw new BadRequestException('Personnel must have office MEO or MDRRMO.');
   }
-  return { role: role as AdminRole, office };
+  if (focal && office !== 'MDRRMO') {
+    throw new BadRequestException('Focal Personnel must have office MDRRMO.');
+  }
+  return { accountType, isFocal: focal, office };
+}
+
+// The admins.role sync mirror (NOT NULL until Phase 8, never read for
+// access): Focal Personnel -> 'focal', System Administrator ->
+// 'system_admin', other Personnel keep an existing officer/supervisor value
+// (the two had identical permissions), else 'officer'.
+export function roleMirror(
+  fields: Pick<AccountFields, 'accountType' | 'isFocal'>,
+  existingRole?: AdminRole,
+): AdminRole {
+  if (fields.accountType === 'SYSTEM_ADMIN') return 'system_admin';
+  if (fields.isFocal) return 'focal';
+  return existingRole === 'officer' || existingRole === 'supervisor'
+    ? existingRole
+    : 'officer';
 }
 
 @Injectable()
@@ -106,15 +144,16 @@ export class AdminsService {
   // Office-scoped read used by the Work Orders assignment picker — distinct
   // from list() above (System-Administrator-only, unscoped, full account
   // shape). Reuses resolveOfficeScope, which now rejects any non-
-  // operational-staff caller outright (Batch 1) — this endpoint is routine
-  // operational scaffolding, not something focal or system_admin can call
-  // at all. The role filter below is a defense-in-depth *allowlist* of
-  // officer/supervisor (not a denylist of one excluded role), so a future
-  // role addition can never silently become directory-eligible the way an
-  // exclusion list would allow — see the Batch 1 work-order-assignee
-  // safety fix this replaces.
+  // operational caller outright (Batch 1) — this endpoint is routine
+  // operational scaffolding, not something Focal Personnel or the System
+  // Administrator can call at all. The filter below is a defense-in-depth
+  // *allowlist* of operational Personnel (not a denylist of one excluded
+  // kind), so a future account kind can never silently become
+  // directory-eligible the way an exclusion list would allow — and a Focal
+  // account's MDRRMO office never puts it in MDRRMO's directory. See the
+  // Batch 1 work-order-assignee safety fix this replaces.
   async listDirectory(
-    admin: Pick<AdminSession, 'role' | 'office'>,
+    admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
     requestedOffice: 'MEO' | 'MDRRMO' | 'all' | undefined,
   ): Promise<AdminDirectoryRow[]> {
     const office = resolveOfficeScope(admin, requestedOffice);
@@ -125,7 +164,8 @@ export class AdminsService {
         lastName: admins.lastName,
         email: admins.email,
         office: admins.office,
-        role: admins.role,
+        accountType: admins.accountType,
+        isFocal: admins.isFocal,
       })
       .from(admins)
       .where(
@@ -137,13 +177,14 @@ export class AdminsService {
       .orderBy(asc(admins.firstName), asc(admins.lastName));
 
     return rows
-      .filter((row) => isOperationalStaff({ role: row.role }))
+      .filter((row) => isOperationalPersonnel(row))
       .map((row) => ({
         id: row.id,
         name: `${row.firstName} ${row.lastName}`,
         email: row.email,
         office: row.office,
-        role: row.role,
+        account_type: row.accountType,
+        is_focal: row.isFocal,
       }));
   }
 
@@ -153,7 +194,8 @@ export class AdminsService {
       password: unknown;
       firstName: unknown;
       lastName: unknown;
-      role: unknown;
+      accountType: unknown;
+      isFocal: unknown;
       office: unknown;
     },
     actor: AdminSession,
@@ -176,8 +218,9 @@ export class AdminsService {
         'password must be at least 8 characters.',
       );
     }
-    const { role, office } = assertRoleOfficeCombination(
-      input.role,
+    const fields = assertAccountFields(
+      input.accountType,
+      input.isFocal,
       input.office,
     );
 
@@ -197,21 +240,32 @@ export class AdminsService {
     const row = await this.db.transaction(async (tx) => {
       const [created] = await tx
         .insert(admins)
-        .values({ email, passwordHash, firstName, lastName, role, office })
+        .values({
+          email,
+          passwordHash,
+          firstName,
+          lastName,
+          ...fields,
+          role: roleMirror(fields),
+        })
         .returning(SAFE_COLUMNS);
       await this.audit.logInTx(tx, {
         actor: {
           adminId: actor.adminId,
           adminName: actor.adminName,
           email: actor.email,
-          role: actor.role,
+          accountType: actor.accountType,
           office: actor.office,
         },
         actionType: 'admin_created',
         targetType: 'admin',
         targetId: created.id,
         targetSummary: `${created.first_name} ${created.last_name} <${created.email}>`,
-        metadata: { role: created.role, office: created.office },
+        metadata: {
+          accountType: created.account_type,
+          isFocal: created.is_focal,
+          office: created.office,
+        },
       });
       return created;
     });
@@ -220,7 +274,7 @@ export class AdminsService {
 
   async update(
     id: number,
-    input: { role: unknown; office: unknown },
+    input: { accountType: unknown; isFocal: unknown; office: unknown },
     actor: AdminSession,
   ): Promise<AdminAccountRow> {
     const [existing] = await this.db
@@ -229,21 +283,25 @@ export class AdminsService {
       .where(eq(admins.id, id));
     if (!existing) throw new NotFoundException('Admin not found.');
 
-    const { role, office } = assertRoleOfficeCombination(
-      input.role,
+    const fields = assertAccountFields(
+      input.accountType,
+      input.isFocal,
       input.office,
     );
 
-    // Prevent locking every system admin out: only blocks the transition
-    // when this row is currently the last system_admin and the change
-    // would move it to officer/supervisor. Changing an already
-    // officer/supervisor row, or a system_admin staying system_admin, is
+    // Prevent locking every System Administrator out: only blocks the
+    // transition when this row is currently the last System Administrator
+    // (active or not, as before) and the change would make it Personnel.
+    // Changing a Personnel row, or a System Administrator staying one, is
     // unaffected.
-    if (existing.role === 'system_admin' && role !== 'system_admin') {
+    if (
+      existing.accountType === 'SYSTEM_ADMIN' &&
+      fields.accountType !== 'SYSTEM_ADMIN'
+    ) {
       const [{ systemAdminCount }] = await this.db
         .select({ systemAdminCount: count() })
         .from(admins)
-        .where(eq(admins.role, 'system_admin'));
+        .where(eq(admins.accountType, 'SYSTEM_ADMIN'));
       if (systemAdminCount <= 1) {
         throw new ConflictException(
           'Cannot remove the last System Administrator.',
@@ -254,7 +312,7 @@ export class AdminsService {
     const row = await this.db.transaction(async (tx) => {
       const [updated] = await tx
         .update(admins)
-        .set({ role, office })
+        .set({ ...fields, role: roleMirror(fields, existing.role) })
         .where(eq(admins.id, id))
         .returning(SAFE_COLUMNS);
       await this.audit.logInTx(tx, {
@@ -262,7 +320,7 @@ export class AdminsService {
           adminId: actor.adminId,
           adminName: actor.adminName,
           email: actor.email,
-          role: actor.role,
+          accountType: actor.accountType,
           office: actor.office,
         },
         actionType: 'admin_role_updated',
@@ -270,8 +328,16 @@ export class AdminsService {
         targetId: updated.id,
         targetSummary: `${updated.first_name} ${updated.last_name} <${updated.email}>`,
         metadata: {
-          from: { role: existing.role, office: existing.office },
-          to: { role: updated.role, office: updated.office },
+          from: {
+            accountType: existing.accountType,
+            isFocal: existing.isFocal,
+            office: existing.office,
+          },
+          to: {
+            accountType: updated.account_type,
+            isFocal: updated.is_focal,
+            office: updated.office,
+          },
         },
       });
       return updated;
@@ -279,12 +345,13 @@ export class AdminsService {
     return row as AdminAccountRow;
   }
 
-  // Deactivation/reactivation. Mirrors update()'s last-system_admin lockout
-  // above, scoped to *active* system admins — losing login access is
-  // functionally equivalent to losing the role, so removing the last active
-  // system_admin must be blocked here too (this also covers a system_admin
-  // deactivating themselves when they're the only one left, since they're
-  // still counted as active at the time of this check).
+  // Deactivation/reactivation. Mirrors update()'s last-System-Administrator
+  // lockout above, scoped to *active* System Administrators — losing login
+  // access is functionally equivalent to losing the account type, so
+  // removing the last active System Administrator must be blocked here too
+  // (this also covers a System Administrator deactivating themselves when
+  // they're the only one left, since they're still counted as active at the
+  // time of this check).
   async setActive(
     id: number,
     active: boolean,
@@ -296,12 +363,15 @@ export class AdminsService {
       .where(eq(admins.id, id));
     if (!existing) throw new NotFoundException('Admin not found.');
 
-    if (existing.role === 'system_admin' && !active) {
+    if (existing.accountType === 'SYSTEM_ADMIN' && !active) {
       const [{ systemAdminCount }] = await this.db
         .select({ systemAdminCount: count() })
         .from(admins)
         .where(
-          and(eq(admins.role, 'system_admin'), eq(admins.isActive, true)),
+          and(
+            eq(admins.accountType, 'SYSTEM_ADMIN'),
+            eq(admins.isActive, true),
+          ),
         );
       if (systemAdminCount <= 1) {
         throw new ConflictException(
@@ -329,7 +399,7 @@ export class AdminsService {
           adminId: actor.adminId,
           adminName: actor.adminName,
           email: actor.email,
-          role: actor.role,
+          accountType: actor.accountType,
           office: actor.office,
         },
         actionType: active ? 'admin_reactivated' : 'admin_deactivated',

@@ -13,7 +13,8 @@ const SYSTEM_ADMIN: AdminSession = {
   email: 'sysadmin@example.com',
   adminName: 'Sys Admin',
   office: null,
-  role: 'system_admin',
+  accountType: 'SYSTEM_ADMIN',
+  isFocal: false,
 };
 
 describe('AdminsController.resetPassword — error mapping', () => {

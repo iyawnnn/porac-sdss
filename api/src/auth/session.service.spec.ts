@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { SignJWT } from 'jose';
 import {
   SessionService,
   type AdminSession,
@@ -38,7 +39,8 @@ const adminPayload: AdminSession = {
   email: 'admin@example.com',
   adminName: 'Admin Name',
   office: 'MEO',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 };
 
 const citizenPayload: CitizenSession = {
@@ -177,6 +179,90 @@ describe('SessionService', () => {
       // compose: sign a token "now", then simulate logout having bumped
       // session_valid_after a second later, then verify against that state.
       const sessions = makeSessionService(new Date(Date.now() + 1_000));
+      const token = await sessions.signAdminSession(adminPayload);
+      await expect(sessions.verifyAdminSession(token)).resolves.toBeNull();
+    });
+  });
+
+  // Manuscript revision Phase 2, step 2e: the session carries the Appendix
+  // H account fields and no role; tokens signed before the switch are
+  // rejected, and so is any token issued before the one-time logout that
+  // migration 0039 records in session_valid_after.
+  describe('account fields (Phase 2, step 2e)', () => {
+    const SECRET = new TextEncoder().encode(
+      'a-test-secret-that-is-at-least-32-bytes-long',
+    );
+    const signRaw = (claims: Record<string, unknown>) =>
+      new SignJWT(claims)
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setAudience('admin')
+        .setExpirationTime('8h')
+        .sign(SECRET);
+
+    function makeServiceWithSelectSpy() {
+      const config = {
+        get: () => 'a-test-secret-that-is-at-least-32-bytes-long',
+      } as unknown as ConfigService<Env, true>;
+      const select = jest
+        .fn()
+        .mockReturnValue(chain([{ sessionValidAfter: null, isActive: true }]));
+      const db = { select } as unknown as PostgresJsDatabase;
+      return { sessions: new SessionService(config, db), select };
+    }
+
+    it('a valid session carries accountType, isFocal and office, and no role', async () => {
+      const sessions = makeSessionService();
+      const token = await sessions.signAdminSession({
+        ...adminPayload,
+        accountType: 'PERSONNEL',
+        isFocal: true,
+        office: 'MDRRMO',
+      });
+      const verified = await sessions.verifyAdminSession(token);
+      expect(verified).toMatchObject({
+        accountType: 'PERSONNEL',
+        isFocal: true,
+        office: 'MDRRMO',
+      });
+      expect(verified).not.toHaveProperty('role');
+    });
+
+    it('rejects a token signed before the switch (role, no accountType) without reading the database', async () => {
+      const { sessions, select } = makeServiceWithSelectSpy();
+      const oldToken = await signRaw({
+        adminId: 1,
+        email: 'admin@example.com',
+        adminName: 'Admin Name',
+        office: 'MEO',
+        role: 'supervisor',
+      });
+      await expect(sessions.verifyAdminSession(oldToken)).resolves.toBeNull();
+      expect(select).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['accountType but no isFocal', { accountType: 'PERSONNEL' }],
+      ['an unknown accountType', { accountType: 'officer', isFocal: false }],
+      ['a non-boolean isFocal', { accountType: 'PERSONNEL', isFocal: 'false' }],
+      [
+        'a role alongside a missing accountType',
+        { role: 'system_admin', isFocal: false },
+      ],
+    ])('rejects a token with %s', async (_label, claims) => {
+      const { sessions } = makeServiceWithSelectSpy();
+      const token = await signRaw({
+        adminId: 1,
+        email: 'admin@example.com',
+        adminName: 'Admin Name',
+        office: 'MEO',
+        ...claims,
+      });
+      await expect(sessions.verifyAdminSession(token)).resolves.toBeNull();
+    });
+
+    it('rejects a token with the new fields issued before session_valid_after (the 0039 one-time logout)', async () => {
+      const sessions = makeSessionService(new Date(Date.now() + 60_000));
       const token = await sessions.signAdminSession(adminPayload);
       await expect(sessions.verifyAdminSession(token)).resolves.toBeNull();
     });

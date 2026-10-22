@@ -135,8 +135,8 @@ test("Work Order assignee directory excludes Focal even when querying MDRRMO (fo
     headers: sessionCookie ? { cookie: `${sessionCookie.name}=${sessionCookie.value}` } : {},
   });
   expect(res.ok()).toBe(true);
-  const admins: { role: string; email: string }[] = await res.json();
-  expect(admins.every((a) => a.role === "officer" || a.role === "supervisor")).toBe(true);
+  const admins: { account_type: string; is_focal: boolean; email: string }[] = await res.json();
+  expect(admins.every((a) => a.account_type === "PERSONNEL" && a.is_focal === false)).toBe(true);
   expect(admins.some((a) => a.email === E2E_FOCAL_ADMIN.email)).toBe(false);
 });
 
