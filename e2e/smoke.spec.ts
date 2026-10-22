@@ -133,3 +133,92 @@ test("citizen report form validates EXIF GPS, dynamic barangay search, and Porac
 
   await expect.poll(() => failures, { timeout: 10_000 }).toEqual([]);
 });
+
+// Manuscript revision Phase 3, step 3a. The submit at the end is stubbed
+// with page.route (as admin-flagged.spec.ts does for its error card): the
+// form-only rule under test is that a confirmed Critical gets sent, and a
+// real report would add an 18th submission against the 20/hour IP limit
+// (docs/testing.md §6) plus a Critical ticket at the top of MEO's queue on
+// every run.
+test("citizen report form explains each severity and confirms Critical before it can be submitted", async ({ page }) => {
+  const failures: string[] = [];
+  page.on("pageerror", error => failures.push(`pageerror: ${error.message}`));
+  page.on("response", response => { if (response.status() >= 500) failures.push(`${response.status()} ${response.url()}`); });
+
+  await loginCitizen(page);
+  // Phone width (after login, which uses the desktop header links).
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/report");
+  await expect(page.getByRole("heading", { name: "Report a Hazard" })).toBeVisible();
+
+  const descriptions = {
+    Low: "Minor impact. Normal access or use is mostly unaffected.",
+    Medium: "Noticeable impact. Access or use is still possible with caution.",
+    High: "Major disruption or a clear safety concern.",
+    Critical: "Immediate serious danger, or the area or service is effectively blocked or unusable.",
+  };
+  for (const [level, description] of Object.entries(descriptions)) {
+    const option = page.getByRole("radio", { name: level, exact: true });
+    await expect(option).toHaveAccessibleDescription(description);
+    await expect(page.getByText(description, { exact: true })).toBeVisible();
+  }
+  // Stacked list, phone width: no horizontal scroll.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  const high = page.getByRole("radio", { name: "High", exact: true });
+  const critical = page.getByRole("radio", { name: "Critical", exact: true });
+  const dialog = page.getByRole("dialog", { name: "Confirm Critical severity" });
+
+  // "Choose another level" puts back the previous level.
+  await high.click();
+  await expect(high).toBeChecked();
+  await critical.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Critical means immediate serious danger, or the area or service is effectively blocked or unusable. Is that what you're seeing?");
+  await expect(dialog).toContainText("If someone is in immediate danger, call emergency hotlines. Submitting a report does not dispatch help.");
+  await dialog.getByRole("button", { name: "Choose another level" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(high).toBeChecked();
+  await expect(critical).not.toBeChecked();
+
+  // Escape counts as "Choose another level".
+  await critical.click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(high).toBeChecked();
+
+  // A confirmed Critical changed away and back is asked again.
+  await critical.click();
+  await dialog.getByRole("button", { name: "Yes, it's Critical" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(critical).toBeChecked();
+  await high.click();
+  await critical.click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Yes, it's Critical" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(critical).toBeChecked();
+
+  // Confirmed, the form submits Critical.
+  await page.locator('input[type="file"]').setInputFiles(poblacionFixture);
+  await expect(page.getByText("GPS Metadata Verified (EXIF Found)")).toBeVisible();
+  await page.getByLabel("Title", { exact: true }).fill("E2E Critical confirmation (stubbed submit)");
+  let submittedSeverity: string | null = null;
+  await page.route("**/api/reports", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const body = route.request().postDataBuffer()?.toString("latin1") ?? "";
+    submittedSeverity = /name="citizen_severity"\r\n\r\n([^\r]*)/.exec(body)?.[1] ?? null;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ trackingReference: "E2E-STUB", ticketId: 0, barangay: "Poblacion", assignedOffice: "MEO", flags: [] }),
+    });
+  });
+  await page.getByRole("button", { name: "Submit Report" }).click();
+  await expect(page.getByText(/Report submitted\. Tracking reference: E2E-STUB\./)).toBeVisible();
+  expect(submittedSeverity).toBe("Critical");
+  await expect(critical).not.toBeChecked();
+
+  await expect.poll(() => failures, { timeout: 10_000 }).toEqual([]);
+});

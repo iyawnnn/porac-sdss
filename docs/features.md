@@ -58,7 +58,7 @@ The form walks the citizen through:
    - No GPS in the photo → prompt to place the pin manually.
    - GPS outside Porac's bounds → *"Photo GPS location is outside Porac municipality bounds."*
 3. **Map pin + barangay search.** Placing a pin more than 100m from the photo's GPS warns that the submission will be flagged for review — it is not blocked.
-4. **Category** (13 options, `CATEGORIES` in `api/src/contracts/schemas.ts`) and **citizen severity** (Low / Medium / High / Critical — the citizen's own subjective read, never computed; see §6.1).
+4. **Category** (13 options, `CATEGORIES` in `api/src/contracts/schemas.ts`) and **citizen severity** (Low / Medium / High / Critical — the citizen's own subjective read, never computed; see §6.1). Since manuscript revision Phase 3, step 3a, the levels are a stacked radio list, each with its manuscript description (`SEVERITY_DESCRIPTIONS`, `lib/utils/validation.ts`), and choosing Critical opens a "Confirm Critical severity" dialog: "Choose another level" or closing it puts back the previous level, and the form submits Critical only once confirmed (`lib/utils/severity-selection.ts`). Form-only: the API accepts the same four values.
 
 On submit, the server independently recomputes everything it will not trust from the client: the barangay (§4.1) and the integrity flags (§4.5). Reports carry no elevation since manuscript revision Phase 1, step 7a.
 
@@ -208,7 +208,7 @@ A dedicated, municipality-wide intake-monitoring surface for Focal Personnel —
 - **Flagged Reports** (`/admin/focal/intake?flagged=true`, Batch 4) — a filter on the same Intake Queue table, not a duplicated page. Focal can inspect integrity flags relevant to intake but cannot quarantine or otherwise perform operational moderation disposition (§3.5 stays `OperationalStaffGuard`-only).
 - **Notifications** (`/admin/notifications`) — the same shared Notification Center as every other admin account (§3.8), safe for Focal as-is since its scoping already tells operational Personnel, Focal Personnel and the System Administrator apart.
 
-New-report fan-out: every report routed to MEO or MDRRMO sends a direct, per-admin `new_intake_report` notification to each active Focal account (`ReportsService.notifyFocalIntake`) — never `recipientOffice: 'MDRRMO'`, which would incorrectly mix Focal-intake traffic into MDRRMO's own operational notification stream.
+New-report fan-out: every report routed to MEO or MDRRMO sends a direct, per-admin `new_intake_report` notification to each active Focal account (`ReportsService.notifyFocalIntake`) — never `recipientOffice: 'MDRRMO'`, which would incorrectly mix Focal-intake traffic into MDRRMO's own operational notification stream. It links to the intake detail page, `/admin/focal/intake/{reportId}` (since manuscript revision Phase 3, step 3a; older rows keep `/admin/intake/{reportId}`, the API path, which has no page; `next.config.ts` redirects it to the intake detail page for numeric ids).
 
 ---
 

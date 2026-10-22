@@ -7,7 +7,23 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import exifr from "exifr";
 import imageCompression from "browser-image-compression";
-import { CATEGORIES, SEVERITIES } from "@/lib/utils/validation";
+import { CATEGORIES, SEVERITIES, SEVERITY_DESCRIPTIONS } from "@/lib/utils/validation";
+import {
+  NO_SEVERITY,
+  chooseAnotherLevel,
+  chooseSeverity,
+  confirmCritical,
+  needsCriticalConfirmation,
+} from "@/lib/utils/severity-selection";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { createDefaultMarkerIcon } from "@/lib/gis/leaflet-icons";
 import { bindBarangayHoverTooltip, styleBarangayFeature, styleMunicipalBoundary } from "@/lib/gis/map-styles";
@@ -250,6 +266,8 @@ export default function ReportForm() {
   const [locationError, setLocationError] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  // Critical needs the citizen's confirmation (lib/utils/severity-selection.ts).
+  const [severityChoice, setSeverityChoice] = useState(NO_SEVERITY);
   const formRef = useRef<HTMLFormElement>(null);
   const mapEnabled = Boolean(file) && !processingPhoto;
 
@@ -359,6 +377,17 @@ export default function ReportForm() {
     setProcessingPhoto(false);
   }
 
+  // When the Critical dialog closes, focus the level that is now selected
+  // (the restored one after "Choose another level"), not the Critical option
+  // that opened it.
+  function focusSelectedSeverity(event: Event) {
+    const options = formRef.current?.querySelectorAll<HTMLInputElement>('input[name="citizen_severity"]');
+    const selected = Array.from(options ?? []).find((option) => option.checked) ?? options?.[0];
+    if (!selected) return;
+    event.preventDefault();
+    selected.focus();
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!file) {
@@ -374,6 +403,10 @@ export default function ReportForm() {
     if (!isInsidePoracBounds(position)) {
       setStatus("error");
       setMessage("Selected location is outside Porac municipality bounds.");
+      return;
+    }
+    if (needsCriticalConfirmation(severityChoice)) {
+      setSeverityChoice((s) => ({ ...s, confirming: s.confirming ?? { previous: null } }));
       return;
     }
 
@@ -403,6 +436,7 @@ export default function ReportForm() {
       setSearchTarget(null);
       setLocationSource("default");
       setExifStatus("idle");
+      setSeverityChoice(NO_SEVERITY);
     } else {
       setStatus("error");
       setMessage(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
@@ -456,7 +490,10 @@ export default function ReportForm() {
             </select>
           </div>
 
-          <div className={`relative h-125 sm:h-140 w-full my-1 rounded-xl overflow-hidden border border-line-200 ${!mapEnabled ? "bg-line-100" : ""}`}>
+          {/* isolate keeps Leaflet's panes and controls (z-index 400-1000) and
+              the photo-first overlay inside the map box, below the Critical
+              severity dialog (z-50). */}
+          <div className={`relative isolate h-125 sm:h-140 w-full my-1 rounded-xl overflow-hidden border border-line-200 ${!mapEnabled ? "bg-line-100" : ""}`}>
             <div className={!mapEnabled ? "h-full w-full opacity-45 grayscale pointer-events-none" : "h-full w-full"}>
               <MapContainer
                 center={CITY_CENTER}
@@ -576,20 +613,37 @@ export default function ReportForm() {
             </select>
           </div>
 
-          <div>
-            <span className={LABEL_CLASS}>Severity</span>
-            <div className="grid grid-cols-4 gap-2 sm:gap-3">
+          <fieldset className="min-w-0">
+            <legend className={LABEL_CLASS}>Severity</legend>
+            <div className="flex flex-col gap-2">
               {SEVERITIES.map((s) => (
                 <label
                   key={s}
-                  className="flex h-12 items-center justify-center rounded-lg border border-line-200 text-sm font-medium text-ink-700 cursor-pointer transition-colors hover:border-brand-300 hover:bg-brand-50 has-checked:border-brand-500 has-checked:bg-brand-500 has-checked:text-white has-checked:hover:bg-brand-600"
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-line-200 px-4 py-3 transition-colors hover:border-brand-300 hover:bg-brand-50 has-checked:border-brand-500 has-checked:bg-brand-50 has-focus-visible:ring-2 has-focus-visible:ring-brand-300"
                 >
-                  <input type="radio" name="citizen_severity" value={s} required className="sr-only" />
-                  {s}
+                  <input
+                    type="radio"
+                    name="citizen_severity"
+                    value={s}
+                    required
+                    checked={severityChoice.severity === s}
+                    onChange={() => setSeverityChoice((current) => chooseSeverity(current, s))}
+                    aria-labelledby={`severity-${s.toLowerCase()}-name`}
+                    aria-describedby={`severity-${s.toLowerCase()}-description`}
+                    className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-brand-500"
+                  />
+                  <span className="min-w-0">
+                    <span id={`severity-${s.toLowerCase()}-name`} className="block text-sm font-medium text-ink-900">
+                      {s}
+                    </span>
+                    <span id={`severity-${s.toLowerCase()}-description`} className="mt-0.5 block text-sm text-ink-500">
+                      {SEVERITY_DESCRIPTIONS[s]}
+                    </span>
+                  </span>
                 </label>
               ))}
             </div>
-          </div>
+          </fieldset>
 
           <button
             type="submit"
@@ -612,6 +666,37 @@ export default function ReportForm() {
           </div>
         </section>
       </form>
+
+      {/* Closing with Escape or the overlay counts as "Choose another level". */}
+      <Dialog
+        open={severityChoice.confirming !== null}
+        onOpenChange={(open) => {
+          if (!open) setSeverityChoice(chooseAnotherLevel);
+        }}
+      >
+        <DialogContent className="sm:max-w-md" showCloseButton={false} onCloseAutoFocus={focusSelectedSeverity}>
+          <DialogHeader>
+            <DialogTitle>Confirm Critical severity</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Critical means immediate serious danger, or the area or service is effectively blocked or unusable.
+                  Is that what you&apos;re seeing?
+                </p>
+                <p className="font-medium text-danger-ink">
+                  If someone is in immediate danger, call emergency hotlines. Submitting a report does not dispatch help.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSeverityChoice(chooseAnotherLevel)}>
+              Choose another level
+            </Button>
+            <Button onClick={() => setSeverityChoice(confirmCritical)}>Yes, it&apos;s Critical</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
