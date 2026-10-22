@@ -5,6 +5,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AdminSession } from '../../auth/session.service';
 import { AdminsService } from '../../admin/admins.service';
 import type { AdminAuditService } from '../../admin/admin-audit.service';
+import { WorkOrdersService } from '../../admin/work-orders.service';
 import { notifications } from '../../db/schema';
 import {
   NotificationsService,
@@ -228,6 +229,40 @@ describe('access parity: account_type / office / is_focal vs the old role logic'
     }
   });
 
+  // The one deliberate change from the old rules: the old Work Order
+  // assignee check (WorkOrdersService.assertValidAssignee) was office-only,
+  // and Focal accounts now carry office MDRRMO. Every other account must be
+  // accepted or rejected exactly as before; a Focal account never is an
+  // assignee.
+  it('Work Order assignees: same as before, except Focal is never accepted', async () => {
+    const oldAccepts = (a: OldAdmin, office: Office) => a.office === office;
+    for (const [label, a] of COMBINATIONS) {
+      for (const office of OFFICES) {
+        const row = { ...mapped(a), isActive: true };
+        const db = {
+          select: () => ({
+            from: () => ({ where: () => Promise.resolve([row]) }),
+          }),
+        } as unknown as PostgresJsDatabase;
+        const service = new WorkOrdersService(
+          db,
+          {} as NotificationsService,
+          {} as AdminAuditService,
+        );
+        const accepted = await (
+          service as unknown as {
+            assertValidAssignee(id: number, office: Office): Promise<void>;
+          }
+        )
+          .assertValidAssignee(1, office)
+          .then(() => true)
+          .catch(() => false);
+        const expected = old.isFocal(a) ? false : oldAccepts(a, office);
+        expect([label, office, accepted]).toEqual([label, office, expected]);
+      }
+    }
+  });
+
   describe('Focal Personnel keeps intake/screening only', () => {
     const focal = mapped({ role: 'focal', office: 'MDRRMO' });
     const session = { adminId: 3, email: 'f@x', adminName: 'F', ...focal };
@@ -242,6 +277,28 @@ describe('access parity: account_type / office / is_focal vs the old role logic'
 
     it('is allowed Focal Intake (FocalGuard)', () => {
       expect(guardAllows(new FocalGuard(), session)).toEqual({ result: true });
+    });
+
+    it('is never a valid Work Order assignee, even on an MDRRMO work order', async () => {
+      const db = {
+        select: () => ({
+          from: () => ({
+            where: () => Promise.resolve([{ ...focal, isActive: true }]),
+          }),
+        }),
+      } as unknown as PostgresJsDatabase;
+      const service = new WorkOrdersService(
+        db,
+        {} as NotificationsService,
+        {} as AdminAuditService,
+      );
+      await expect(
+        (
+          service as unknown as {
+            assertValidAssignee(id: number, office: Office): Promise<void>;
+          }
+        ).assertValidAssignee(3, 'MDRRMO'),
+      ).rejects.toThrow('must be an active Personnel account');
     });
 
     it('is denied Work Orders and every other operational surface (OperationalStaffGuard)', () => {

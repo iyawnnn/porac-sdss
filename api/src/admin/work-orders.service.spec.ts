@@ -34,6 +34,8 @@ const SYSTEM_ADMIN: AdminSession = {
   accountType: 'SYSTEM_ADMIN',
   isFocal: false,
 };
+// Account fields of an assignee row (assertValidAssignee's lookup).
+const PERSONNEL = { accountType: 'PERSONNEL', isFocal: false } as const;
 
 // Same fake drizzle chain as admins.service.spec.ts — chains
 // from/where/orderBy/values/set the way production code calls them, and
@@ -366,7 +368,9 @@ describe('WorkOrdersService.create', () => {
     const db = makeDb();
     db.select
       .mockReturnValueOnce(chain({ assignedOffice: 'MEO' })) // ticket lookup
-      .mockReturnValueOnce(chain({ office: 'MEO', isActive: true })); // assignee lookup
+      .mockReturnValueOnce(
+        chain({ ...PERSONNEL, office: 'MEO', isActive: true }),
+      ); // assignee lookup
     db.insert.mockReturnValueOnce(
       chain(workOrderRow({ assigned_admin_id: 7 })),
     );
@@ -394,7 +398,9 @@ describe('WorkOrdersService.create', () => {
     const db = makeDb();
     db.select
       .mockReturnValueOnce(chain({ assignedOffice: 'MEO' })) // ticket lookup
-      .mockReturnValueOnce(chain({ office: 'MDRRMO', isActive: true })); // assignee is MDRRMO
+      .mockReturnValueOnce(
+        chain({ ...PERSONNEL, office: 'MDRRMO', isActive: true }),
+      ); // assignee is MDRRMO
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 
@@ -413,11 +419,85 @@ describe('WorkOrdersService.create', () => {
     expect(db.insert).not.toHaveBeenCalled();
   });
 
+  // Phase 2, step 2e: Focal Personnel carries office MDRRMO but is
+  // intake-only — never an assignee, even on an MDRRMO ticket. The System
+  // Administrator (no office) never is either.
+  it.each([
+    [
+      'a Focal account on MDRRMO',
+      { accountType: 'PERSONNEL', isFocal: true, office: 'MDRRMO' },
+    ],
+    [
+      'a System Administrator',
+      { accountType: 'SYSTEM_ADMIN', isFocal: false, office: null },
+    ],
+  ])(
+    'rejects %s as the assignee of an MDRRMO work order',
+    async (_label, assignee) => {
+      const db = makeDb();
+      db.select
+        .mockReturnValueOnce(chain({ assignedOffice: 'MDRRMO' })) // ticket lookup
+        .mockReturnValueOnce(chain({ ...assignee, isActive: true })); // assignee lookup
+      const { audit, notifications, notifyCreate } = makeDeps();
+      const service = new WorkOrdersService(db, notifications, audit);
+
+      await expect(
+        service.create(
+          {
+            ticketId: 5,
+            title: 'Fix it',
+            notes: null,
+            assignedAdminId: 8,
+            dueDate: null,
+          },
+          MDRRMO_SUPERVISOR,
+        ),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'assignedAdminId must be an active Personnel account belonging to this office.',
+        ),
+      );
+      expect(db.insert.mock.calls).toHaveLength(0);
+      expect(notifyCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts MDRRMO Personnel as the assignee of an MDRRMO work order', async () => {
+    const db = makeDb();
+    db.select
+      .mockReturnValueOnce(chain({ assignedOffice: 'MDRRMO' })) // ticket lookup
+      .mockReturnValueOnce(
+        chain({ ...PERSONNEL, office: 'MDRRMO', isActive: true }),
+      );
+    db.insert.mockReturnValueOnce(
+      chain(workOrderRow({ assigned_office: 'MDRRMO', assigned_admin_id: 9 })),
+    );
+    const { audit, notifications, notifyCreate } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    const result = await service.create(
+      {
+        ticketId: 5,
+        title: 'Clear the drain',
+        notes: null,
+        assignedAdminId: 9,
+        dueDate: null,
+      },
+      MDRRMO_SUPERVISOR,
+    );
+    expect(result.assigned_admin_id).toBe(9);
+    expect(notifyCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ recipientId: 9, type: 'work_order_assigned' }),
+    );
+  });
+
   it('rejects an inactive assignedAdminId even when the office matches', async () => {
     const db = makeDb();
     db.select
       .mockReturnValueOnce(chain({ assignedOffice: 'MEO' }))
-      .mockReturnValueOnce(chain({ office: 'MEO', isActive: false }));
+      .mockReturnValueOnce(
+        chain({ ...PERSONNEL, office: 'MEO', isActive: false }),
+      );
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 
@@ -690,7 +770,9 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
           workOrderRow({ assigned_office: 'MEO', assigned_admin_id: null }),
         ),
       )
-      .mockReturnValueOnce(chain({ office: 'MEO', isActive: true }));
+      .mockReturnValueOnce(
+        chain({ ...PERSONNEL, office: 'MEO', isActive: true }),
+      );
     db.update.mockReturnValueOnce(
       chain(workOrderRow({ assigned_admin_id: 7 })),
     );
@@ -723,7 +805,9 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
     const db = makeDb();
     db.select
       .mockReturnValueOnce(chain(workOrderRow({ assigned_office: 'MEO' })))
-      .mockReturnValueOnce(chain({ office: 'MDRRMO', isActive: true }));
+      .mockReturnValueOnce(
+        chain({ ...PERSONNEL, office: 'MDRRMO', isActive: true }),
+      );
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 
@@ -742,11 +826,43 @@ describe('WorkOrdersService cross-office access to single-resource endpoints', (
     expect(db.update).not.toHaveBeenCalled();
   });
 
+  it('update() rejects reassigning an MDRRMO work order to a Focal account', async () => {
+    const db = makeDb();
+    db.select
+      .mockReturnValueOnce(chain(workOrderRow({ assigned_office: 'MDRRMO' })))
+      .mockReturnValueOnce(
+        chain({
+          accountType: 'PERSONNEL',
+          isFocal: true,
+          office: 'MDRRMO',
+          isActive: true,
+        }),
+      );
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    await expect(
+      service.update(
+        10,
+        {
+          title: undefined,
+          notes: undefined,
+          assignedAdminId: 8,
+          dueDate: undefined,
+        },
+        MDRRMO_SUPERVISOR,
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(db.update.mock.calls).toHaveLength(0);
+  });
+
   it('update() rejects reassigning to an inactive admin', async () => {
     const db = makeDb();
     db.select
       .mockReturnValueOnce(chain(workOrderRow({ assigned_office: 'MEO' })))
-      .mockReturnValueOnce(chain({ office: 'MEO', isActive: false }));
+      .mockReturnValueOnce(
+        chain({ ...PERSONNEL, office: 'MEO', isActive: false }),
+      );
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 

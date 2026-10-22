@@ -1118,11 +1118,17 @@ async function loadAdmins() {
     SELECT id, email, first_name, last_name, office, account_type, is_focal
     FROM admins WHERE is_active = true
   `;
-  const meo = rows.filter((r) => r.office === 'MEO');
-  const mdrrmo = rows.filter((r) => r.office === 'MDRRMO');
+  // Operational Personnel only (PERSONNEL, not Focal): this seed acts as
+  // these admins and assigns work orders to them, and a Focal account's
+  // MDRRMO office makes it neither (Phase 2, step 2e).
+  const operational = rows.filter(
+    (r) => r.account_type === 'PERSONNEL' && !r.is_focal,
+  );
+  const meo = operational.filter((r) => r.office === 'MEO');
+  const mdrrmo = operational.filter((r) => r.office === 'MDRRMO');
   if (meo.length === 0 || mdrrmo.length === 0) {
     throw new Error(
-      'Need at least one active MEO admin and one active MDRRMO admin already seeded (pnpm --prefix api seed:admin ...) before running this script.',
+      'Need at least one active MEO and one active MDRRMO Personnel account (not Focal) already seeded (pnpm --prefix api seed:admin ...) before running this script.',
     );
   }
   const toSession = (r: (typeof rows)[number]): AdminSession => ({

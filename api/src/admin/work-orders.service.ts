@@ -23,6 +23,7 @@ import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
   assertOfficeAccess,
+  isOperationalPersonnel,
 } from '../common/authz/admin-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminAuditService } from './admin-audit.service';
@@ -166,22 +167,37 @@ export class WorkOrdersService {
     private readonly audit: AdminAuditService,
   ) {}
 
-  // A work order's assignee must be an active admin who belongs to *this*
-  // work order's office — never the caller's own office, since a system
-  // admin's office is null and an office admin's is already guaranteed to
-  // match by assertOfficeAccess before this runs. This is the one place
-  // that would let a cross-office leak into assigned_admin_id if skipped.
+  // A work order's assignee must be an active operational Personnel
+  // account (PERSONNEL, not Focal) on *this* work order's office — never the
+  // caller's own office, since a System Administrator's office is null and
+  // an operational caller's is already guaranteed to match by
+  // assertOfficeAccess before this runs. The office alone is not enough:
+  // Focal Personnel carries office 'MDRRMO' but is intake-only and never an
+  // assignee, so the same isOperationalPersonnel allowlist the assignee
+  // picker uses (AdminsService.listDirectory) applies here. This is the one
+  // place that would let a cross-office or non-operational account leak
+  // into assigned_admin_id if skipped.
   private async assertValidAssignee(
     assignedAdminId: number,
     office: 'MEO' | 'MDRRMO',
   ): Promise<void> {
     const [assignee] = await this.db
-      .select({ office: admins.office, isActive: admins.isActive })
+      .select({
+        office: admins.office,
+        isActive: admins.isActive,
+        accountType: admins.accountType,
+        isFocal: admins.isFocal,
+      })
       .from(admins)
       .where(eq(admins.id, assignedAdminId));
-    if (!assignee || !assignee.isActive || assignee.office !== office) {
+    if (
+      !assignee ||
+      !assignee.isActive ||
+      !isOperationalPersonnel(assignee) ||
+      assignee.office !== office
+    ) {
       throw new BadRequestException(
-        'assignedAdminId must be an active admin belonging to this office.',
+        'assignedAdminId must be an active Personnel account belonging to this office.',
       );
     }
   }
