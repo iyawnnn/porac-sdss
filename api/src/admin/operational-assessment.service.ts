@@ -284,7 +284,7 @@ export class OperationalAssessmentService {
           adminId: admin.adminId,
           adminName: admin.adminName,
           email: admin.email,
-          role: admin.role,
+          accountType: admin.accountType,
           office: admin.office,
         },
         actionType: inserted

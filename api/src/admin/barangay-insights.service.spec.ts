@@ -4,10 +4,22 @@ import type { AdminSession } from '../auth/session.service';
 import { BarangayInsightsController } from './barangay-insights.controller';
 import { BarangayInsightsService } from './barangay-insights.service';
 
-type SessionShape = Pick<AdminSession, 'role' | 'office'>;
-const MEO_OFFICER = { role: 'officer', office: 'MEO' } as SessionShape as AdminSession;
-const MDRRMO_SUPERVISOR = { role: 'supervisor', office: 'MDRRMO' } as SessionShape as AdminSession;
-const SYSTEM_ADMIN = { role: 'system_admin', office: null } as SessionShape as AdminSession;
+type SessionShape = Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>;
+const MEO_OFFICER = {
+  accountType: 'PERSONNEL',
+  isFocal: false,
+  office: 'MEO',
+} as SessionShape as AdminSession;
+const MDRRMO_SUPERVISOR = {
+  accountType: 'PERSONNEL',
+  isFocal: false,
+  office: 'MDRRMO',
+} as SessionShape as AdminSession;
+const SYSTEM_ADMIN = {
+  accountType: 'SYSTEM_ADMIN',
+  isFocal: false,
+  office: null,
+} as SessionShape as AdminSession;
 
 describe('BarangayInsightsService.listInsights', () => {
   it('scopes the office filter into the tickets JOIN, not a WHERE clause, so every barangay is still returned', async () => {

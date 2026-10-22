@@ -14,18 +14,20 @@ test("office admin sidebar shows a fixed office label, not an all-offices toggle
   await expect(page.getByText("All Offices")).toHaveCount(0);
 });
 
-// Batch 1/4 (five-role RBAC): system_admin's sidebar footer reads "System
-// Administrator / MIS", never "All Offices" — that phrasing implied
-// operational authority the role no longer has (see AdminSidebar.tsx's
-// footerSubtitle and lib/utils/adminScope.ts's officeDisplay). This test
-// previously asserted the pre-Batch-1 wording and would have silently kept
-// passing against a regressed build — it now pins the current, correct copy
-// AND explicitly asserts "All Offices" is gone everywhere in the shell.
-test("system admin sidebar shows System Administrator / MIS, never All Offices", async ({ page }) => {
+// Batch 1/4 (five-role RBAC): the System Administrator's sidebar footer
+// never reads "All Offices" — that phrasing implied operational authority
+// the account no longer has (see AdminSidebar.tsx's footerSubtitle). Phase
+// 2, step 2e: the label is now "System Administrator" (it was "System
+// Administrator / MIS"). This test pins the current, correct copy AND
+// explicitly asserts "All Offices" is gone everywhere in the shell.
+test("system admin sidebar shows System Administrator, never All Offices", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
-  // exact: true — same sr-only "Signed in as {name} · System Administrator
-  // / MIS" substring collision as the MEO test above.
-  await expect(page.getByText("System Administrator / MIS", { exact: true })).toBeVisible();
+  // The demo account's own name is also "System Administrator", and the
+  // Admin Management page lists the label too, so assert the footer's own
+  // text, sr-only "Signed in as {name} · {label}" summary included.
+  const footer = page.locator('[data-sidebar="footer"]');
+  await expect(footer).toContainText("Signed in as System Administrator \u00b7 System Administrator");
+  await expect(page.getByText("System Administrator / MIS")).toHaveCount(0);
   await expect(page.getByText("All Offices")).toHaveCount(0);
   await expect(page.getByText(/^My Office:/)).toHaveCount(0);
 });

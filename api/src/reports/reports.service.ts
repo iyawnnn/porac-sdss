@@ -403,7 +403,8 @@ export class ReportsService {
     },
   ): Promise<void> {
     const focalAdmins = await tx<{ id: number }[]>`
-      SELECT id FROM admins WHERE role = 'focal' AND is_active = true
+      SELECT id FROM admins
+      WHERE account_type = 'PERSONNEL' AND is_focal = true AND is_active = true
     `;
     for (const admin of focalAdmins) {
       await this.notifications.createInTx(tx, {

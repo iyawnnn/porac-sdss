@@ -194,7 +194,11 @@ describe('Focal intake fan-out wiring (new report notifications)', () => {
       reportsServiceSource.indexOf('private async notifyFocalIntake('),
       reportsServiceSource.indexOf('async getMyReports('),
     );
-    expect(method).toMatch(/role = 'focal' AND is_active = true/);
+    // Phase 2, step 2e: Focal is picked by account type, never by role.
+    expect(method).toMatch(
+      /account_type = 'PERSONNEL' AND is_focal = true AND is_active = true/,
+    );
+    expect(method).not.toMatch(/\brole\b/);
     expect(method).toMatch(/recipientId: admin\.id/);
     expect(method).not.toMatch(/recipientOffice/);
   });

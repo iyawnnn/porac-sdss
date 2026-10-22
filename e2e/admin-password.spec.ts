@@ -19,7 +19,7 @@ async function createThrowawayAdmin(
   const email = `e2e-pw-${Date.now()}-${Math.random().toString(36).slice(2)}@porac.gov.ph`;
   const res = await request.post("/api/admin/admins", {
     headers: { ...authHeaders(systemAdminCookies), "content-type": "application/json" },
-    data: { firstName: "Throwaway", lastName: "Admin", email, password, role: "officer", office: "MEO" },
+    data: { firstName: "Throwaway", lastName: "Admin", email, password, accountType: "PERSONNEL", isFocal: false, office: "MEO" },
   });
   expect(res.status()).toBe(201);
   const body = (await res.json()) as { id: number; email: string };

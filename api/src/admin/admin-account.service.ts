@@ -24,7 +24,7 @@ function actorSnapshot(actor: AdminSession) {
     adminId: actor.adminId,
     adminName: actor.adminName,
     email: actor.email,
-    role: actor.role,
+    accountType: actor.accountType,
     office: actor.office,
   };
 }

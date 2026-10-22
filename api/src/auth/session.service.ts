@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { eq } from 'drizzle-orm';
-import { SignJWT, jwtVerify } from 'jose';
+import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
 import { admins, citizens } from '../db/schema';
@@ -21,17 +21,36 @@ export const CITIZEN_SESSION_COOKIE = 'ac_citizen_session';
 export const CITIZEN_REAUTH_COOKIE = 'ac_citizen_reauth';
 const REAUTH_TTL = '10m';
 
+// Appendix H ADMINS account_type (manuscript revision Phase 2, step 2e).
+export type AdminAccountType = 'PERSONNEL' | 'SYSTEM_ADMIN';
+
 export interface AdminSession {
   adminId: number;
   email: string;
   adminName: string;
-  // null only for role: 'system_admin'. 'focal' is always 'MDRRMO'
-  // (organizationally MDRRMO/QRT). Every officer/supervisor is pinned to
-  // exactly one office. See api/src/common/authz/admin-scope.ts —
-  // isOperationalStaff (officer/supervisor only) is the routine-operational
-  // allowlist; focal's office value does not grant it operational access.
+  // accountType / isFocal / office are the only fields access is decided
+  // from — see api/src/common/authz/admin-scope.ts. office is null only for
+  // SYSTEM_ADMIN; every other account is pinned to exactly one office. Focal
+  // Personnel (PERSONNEL with isFocal) is always 'MDRRMO', and that office
+  // grants it NO operational access (isOperationalPersonnel excludes it).
+  // There is deliberately no `role`: admins.role is a sync mirror nothing
+  // may read for access, so the session doesn't carry it.
+  accountType: AdminAccountType;
+  isFocal: boolean;
   office: 'MEO' | 'MDRRMO' | null;
-  role: 'officer' | 'supervisor' | 'focal' | 'system_admin';
+}
+
+// Tokens signed before Phase 2, step 2e carry `role` and no
+// accountType/isFocal. They are rejected as invalid (the staff member just
+// logs in again) rather than mapped, so access is never derived from a
+// stale role claim. Migration 0039 also bumps every account's
+// session_valid_after, which rejects them in verifyAdminSession anyway.
+function hasAccountFields(payload: JWTPayload): boolean {
+  return (
+    (payload.accountType === 'PERSONNEL' ||
+      payload.accountType === 'SYSTEM_ADMIN') &&
+    typeof payload.isFocal === 'boolean'
+  );
 }
 
 export interface CitizenSession {
@@ -93,6 +112,7 @@ export class SessionService {
       const { payload } = await jwtVerify(token, this.secret, {
         audience: 'admin',
       });
+      if (!hasAccountFields(payload)) return null;
       const session = payload as unknown as AdminSession;
 
       const [admin] = await this.db

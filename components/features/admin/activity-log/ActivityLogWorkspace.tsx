@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 import type { AdminAuditActionType, AdminAuditTargetType, PaginatedAdminAudit } from "@/lib/types/admin-audit";
-import { officeDisplay } from "@/lib/utils/adminScope";
+import { actorDescription } from "@/lib/utils/adminScope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -90,14 +90,14 @@ function formatTime(value: string): string {
   return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-// Batch 4: never "All Offices" for a system_admin actor (see
-// lib/utils/adminScope.ts's officeDisplay) — an Activity Log entry made by
-// MIS should read the same unambiguous way anywhere else that role's
-// office is shown.
+// Batch 4: never "All Offices" for a System Administrator actor — an
+// Activity Log entry reads the same unambiguous way as anywhere else an
+// admin is described. Phase 2, step 2e: every event, old or new, shows the
+// Personnel / Focal Personnel / System Administrator label mapped from its
+// stored actor_role (see lib/utils/adminScope.ts's actorDescription); the
+// stored values are never touched.
 function actorOfficeLine(actorOffice: string | null, actorRole: string): string {
-  const display = officeDisplay({ role: actorRole, office: actorOffice });
-  const isOperational = actorRole === "officer" || actorRole === "supervisor";
-  return isOperational ? `${display} · ${actorRole}` : display;
+  return actorDescription(actorRole, actorOffice);
 }
 
 export function ActivityLogWorkspace({

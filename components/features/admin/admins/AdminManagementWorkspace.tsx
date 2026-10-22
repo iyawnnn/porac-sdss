@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { KeyRound, UserCheck, UserPlus, UserX } from "lucide-react";
-import type { AdminAccountRow, AdminOffice, AdminRole } from "@/lib/types/admin-admins";
+import type { AdminAccountRow, AdminAccountType, AdminOffice } from "@/lib/types/admin-admins";
+import { accountLabel } from "@/lib/utils/adminScope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,25 +21,41 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "../shared/EmptyState";
 
-const ROLE_LABELS: Record<AdminRole, string> = {
-  officer: "Officer",
-  supervisor: "Supervisor",
-  focal: "Central Monitoring / Focal Personnel",
-  system_admin: "System Administrator",
-};
+// The three account choices (manuscript revision Phase 2, step 2e), mapped
+// to the API's accountType / isFocal / office. The full staff form with
+// separate fields arrives in Phase 7.
+type AccountKind = "PERSONNEL" | "FOCAL" | "SYSTEM_ADMIN";
+const ACCOUNT_KINDS: { value: AccountKind; label: string }[] = [
+  { value: "PERSONNEL", label: "Personnel" },
+  { value: "FOCAL", label: "Focal Personnel" },
+  { value: "SYSTEM_ADMIN", label: "System Administrator" },
+];
 
-// focal's office is fixed to MDRRMO (organizationally MDRRMO/QRT) and
-// system_admin's is fixed to null — neither is a free choice, unlike
-// officer/supervisor. Mirrors AdminsService.assertRoleOfficeCombination on
-// the backend, which remains the authoritative check regardless of what
-// this picks. `hasFixedOffice` distinguishes "fixed to null" from "not
-// fixed" — a plain `?? draft.office` fallback would wrongly treat
-// system_admin's fixed null as "no fixed value" and fall through.
-function hasFixedOffice(role: AdminRole): boolean {
-  return role === "system_admin" || role === "focal";
+function kindOf(admin: Pick<AdminAccountRow, "account_type" | "is_focal">): AccountKind {
+  if (admin.account_type === "SYSTEM_ADMIN") return "SYSTEM_ADMIN";
+  return admin.is_focal ? "FOCAL" : "PERSONNEL";
 }
-function fixedOfficeForRole(role: AdminRole): AdminOffice | null {
-  return role === "focal" ? "MDRRMO" : null;
+
+// Focal Personnel's office is fixed to MDRRMO (organizationally MDRRMO/QRT)
+// and the System Administrator's to null — neither is a free choice, unlike
+// Personnel. Mirrors AdminsService's assertAccountFields on the backend,
+// which (with the database CHECK) remains the authoritative check
+// regardless of what this picks. `hasFixedOffice` distinguishes "fixed to
+// null" from "not fixed" — a plain `?? draft.office` fallback would wrongly
+// treat the System Administrator's fixed null as "no fixed value" and fall
+// through.
+function hasFixedOffice(kind: AccountKind): boolean {
+  return kind !== "PERSONNEL";
+}
+function fixedOfficeFor(kind: AccountKind): AdminOffice | null {
+  return kind === "FOCAL" ? "MDRRMO" : null;
+}
+function accountFields(kind: AccountKind, office: AdminOffice): { accountType: AdminAccountType; isFocal: boolean; office: AdminOffice | null } {
+  return {
+    accountType: kind === "SYSTEM_ADMIN" ? "SYSTEM_ADMIN" : "PERSONNEL",
+    isFocal: kind === "FOCAL",
+    office: hasFixedOffice(kind) ? fixedOfficeFor(kind) : office,
+  };
 }
 
 function formatCreatedDate(value: string): string {
@@ -46,7 +63,7 @@ function formatCreatedDate(value: string): string {
 }
 
 function emptyDraft() {
-  return { firstName: "", lastName: "", email: "", password: "", role: "officer" as AdminRole, office: "MEO" as AdminOffice };
+  return { firstName: "", lastName: "", email: "", password: "", kind: "PERSONNEL" as AccountKind, office: "MEO" as AdminOffice };
 }
 
 function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) => void }) {
@@ -74,8 +91,7 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
         lastName: draft.lastName,
         email: draft.email,
         password: draft.password,
-        role: draft.role,
-        office: hasFixedOffice(draft.role) ? fixedOfficeForRole(draft.role) : draft.office,
+        ...accountFields(draft.kind, draft.office),
       }),
     });
 
@@ -130,23 +146,22 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-role">Role</label>
-              <Select onValueChange={(v) => setDraft((d) => ({ ...d, role: v as AdminRole }))} value={draft.role}>
-                <SelectTrigger aria-label="Role" id="admin-role"><SelectValue /></SelectTrigger>
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-account-type">Account type</label>
+              <Select onValueChange={(v) => setDraft((d) => ({ ...d, kind: v as AccountKind }))} value={draft.kind}>
+                <SelectTrigger aria-label="Account type" id="admin-account-type"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="officer">Officer</SelectItem>
-                  <SelectItem value="supervisor">Supervisor</SelectItem>
-                  <SelectItem value="focal">Central Monitoring / Focal Personnel</SelectItem>
-                  <SelectItem value="system_admin">System Administrator</SelectItem>
+                  {ACCOUNT_KINDS.map(({ value, label }) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-office">Office</label>
               <Select
-                disabled={hasFixedOffice(draft.role)}
+                disabled={hasFixedOffice(draft.kind)}
                 onValueChange={(v) => setDraft((d) => ({ ...d, office: v as AdminOffice }))}
-                value={hasFixedOffice(draft.role) ? (fixedOfficeForRole(draft.role) ?? "") : draft.office}
+                value={hasFixedOffice(draft.kind) ? (fixedOfficeFor(draft.kind) ?? "") : draft.office}
               >
                 <SelectTrigger aria-label="Office" id="admin-office"><SelectValue placeholder="—" /></SelectTrigger>
                 <SelectContent>
@@ -166,12 +181,12 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
   );
 }
 
-function RoleOfficeEditor({ admin, onUpdated }: { admin: AdminAccountRow; onUpdated: (admin: AdminAccountRow) => void }) {
-  const [role, setRole] = useState<AdminRole>(admin.role);
+function AccountOfficeEditor({ admin, onUpdated }: { admin: AdminAccountRow; onUpdated: (admin: AdminAccountRow) => void }) {
+  const [kind, setKind] = useState<AccountKind>(kindOf(admin));
   const [office, setOffice] = useState<AdminOffice>(admin.office ?? "MEO");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const dirty = role !== admin.role || (!hasFixedOffice(role) && office !== (admin.office ?? "MEO"));
+  const dirty = kind !== kindOf(admin) || (!hasFixedOffice(kind) && office !== (admin.office ?? "MEO"));
 
   async function handleSave() {
     setSaving(true);
@@ -179,7 +194,7 @@ function RoleOfficeEditor({ admin, onUpdated }: { admin: AdminAccountRow; onUpda
     const res = await fetch(`/api/admin/admins/${admin.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role, office: hasFixedOffice(role) ? fixedOfficeForRole(role) : office }),
+      body: JSON.stringify(accountFields(kind, office)),
     });
     if (res.ok) {
       onUpdated((await res.json()) as AdminAccountRow);
@@ -193,19 +208,18 @@ function RoleOfficeEditor({ admin, onUpdated }: { admin: AdminAccountRow; onUpda
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-2">
-        <Select onValueChange={(v) => setRole(v as AdminRole)} value={role}>
-          <SelectTrigger aria-label={`Role for ${admin.first_name} ${admin.last_name}`} className="h-8 w-40" size="sm"><SelectValue /></SelectTrigger>
+        <Select onValueChange={(v) => setKind(v as AccountKind)} value={kind}>
+          <SelectTrigger aria-label={`Account type for ${admin.first_name} ${admin.last_name}`} className="h-8 w-40" size="sm"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="officer">Officer</SelectItem>
-            <SelectItem value="supervisor">Supervisor</SelectItem>
-            <SelectItem value="focal">Central Monitoring / Focal Personnel</SelectItem>
-            <SelectItem value="system_admin">System Administrator</SelectItem>
+            {ACCOUNT_KINDS.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select
-          disabled={hasFixedOffice(role)}
+          disabled={hasFixedOffice(kind)}
           onValueChange={(v) => setOffice(v as AdminOffice)}
-          value={hasFixedOffice(role) ? (fixedOfficeForRole(role) ?? "") : office}
+          value={hasFixedOffice(kind) ? (fixedOfficeFor(kind) ?? "") : office}
         >
           <SelectTrigger aria-label={`Office for ${admin.first_name} ${admin.last_name}`} className="h-8 w-28" size="sm"><SelectValue placeholder="—" /></SelectTrigger>
           <SelectContent>
@@ -419,7 +433,7 @@ export function AdminManagementWorkspace({
   currentAdminId?: number;
 }) {
   const [admins, setAdmins] = useState(initialAdmins);
-  const activeSystemAdminCount = admins.filter((a) => a.role === "system_admin" && a.is_active).length;
+  const activeSystemAdminCount = admins.filter((a) => a.account_type === "SYSTEM_ADMIN" && a.is_active).length;
 
   function handleCreated(created: AdminAccountRow) {
     setAdmins((prev) => [created, ...prev]);
@@ -428,7 +442,7 @@ export function AdminManagementWorkspace({
     setAdmins((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
   }
   function deactivateDisabledReason(admin: AdminAccountRow): string | undefined {
-    if (admin.role === "system_admin" && admin.is_active && activeSystemAdminCount <= 1) {
+    if (admin.account_type === "SYSTEM_ADMIN" && admin.is_active && activeSystemAdminCount <= 1) {
       return "Cannot deactivate the last active System Administrator.";
     }
     return undefined;
@@ -454,7 +468,7 @@ export function AdminManagementWorkspace({
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Role &amp; office</TableHead>
+                  <TableHead>Account type &amp; office</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Password</TableHead>
@@ -466,7 +480,7 @@ export function AdminManagementWorkspace({
                   <TableRow key={admin.id}>
                     <TableCell className="font-medium">{admin.first_name} {admin.last_name}</TableCell>
                     <TableCell className="text-muted-foreground">{admin.email}</TableCell>
-                    <TableCell><RoleOfficeEditor admin={admin} onUpdated={handleUpdated} /></TableCell>
+                    <TableCell><AccountOfficeEditor admin={admin} onUpdated={handleUpdated} /></TableCell>
                     <TableCell><StatusBadge active={admin.is_active} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatCreatedDate(admin.created_at)}</TableCell>
                     <TableCell>
@@ -496,13 +510,13 @@ export function AdminManagementWorkspace({
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-medium text-ink-900">{admin.first_name} {admin.last_name}</p>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">{ROLE_LABELS[admin.role]}</Badge>
+                      <Badge variant="outline">{accountLabel({ accountType: admin.account_type, isFocal: admin.is_focal })}</Badge>
                       <StatusBadge active={admin.is_active} />
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground">{admin.email}</p>
                   <p className="text-xs text-muted-foreground">Created {formatCreatedDate(admin.created_at)}</p>
-                  <RoleOfficeEditor admin={admin} onUpdated={handleUpdated} />
+                  <AccountOfficeEditor admin={admin} onUpdated={handleUpdated} />
                   {admin.id === currentAdminId ? (
                     <p className="text-xs text-muted-foreground">Use Account &amp; Security to change your own password.</p>
                   ) : (

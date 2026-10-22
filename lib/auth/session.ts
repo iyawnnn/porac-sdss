@@ -11,16 +11,25 @@ export interface AdminSession {
   adminId: number;
   email: string;
   adminName: string;
-  // null only for role: "system_admin". "focal" is always "MDRRMO"
-  // (organizationally MDRRMO/QRT). Every officer/supervisor is pinned to
-  // exactly one office. See lib/utils/adminScope.ts.
+  // Appendix H staff fields (manuscript revision Phase 2, step 2e) — what
+  // every UI gate reads (lib/utils/adminScope.ts). office is null only for
+  // "SYSTEM_ADMIN"; Focal Personnel (PERSONNEL + isFocal) is always
+  // "MDRRMO"; every other account is pinned to exactly one office. No role:
+  // the API session doesn't carry one.
+  accountType: "PERSONNEL" | "SYSTEM_ADMIN";
+  isFocal: boolean;
   office: "MEO" | "MDRRMO" | null;
-  role: "officer" | "supervisor" | "focal" | "system_admin";
 }
 
 export async function verifySession(token: string): Promise<AdminSession | null> {
   try {
     const { payload } = await jwtVerify(token, secret, { audience: "admin" });
+    // A token signed before Phase 2, step 2e (a role, no accountType) is no
+    // session at all, as in the API's verifyAdminSession — the page
+    // redirects to /admin/login instead of rendering half a session.
+    if ((payload.accountType !== "PERSONNEL" && payload.accountType !== "SYSTEM_ADMIN") || typeof payload.isFocal !== "boolean") {
+      return null;
+    }
     return payload as unknown as AdminSession;
   } catch {
     return null;

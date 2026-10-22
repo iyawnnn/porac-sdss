@@ -4,23 +4,24 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { TransactionSql } from 'postgres';
 import { DB } from '../db/db.module';
 import { notifications } from '../db/schema';
-import { isOperationalStaff } from '../common/authz/admin-scope';
-import type { AdminRole } from '../admin/admins.service';
+import { isOperationalPersonnel } from '../common/authz/admin-scope';
+import type { AdminAccountType } from '../auth/session.service';
 
 export type NotificationPrincipal =
-  // office is null only for a system_admin admin session — see
-  // api/src/common/authz/admin-scope.ts. `role` is what actually decides
-  // office-wide matching below (Batch 2 fix) — office alone used to be
-  // treated as "null = show every office," which meant system_admin
-  // silently received every MEO+MDRRMO office-wide notification. focal also
-  // carries office: 'MDRRMO' (organizationally) but must not inherit
-  // MDRRMO's office-wide operational notifications either — only
-  // isOperationalStaff (officer/supervisor) does.
+  // office is null only for a System Administrator session — see
+  // api/src/common/authz/admin-scope.ts. accountType/isFocal is what
+  // actually decides office-wide matching below (Batch 2 fix) — office
+  // alone used to be treated as "null = show every office," which meant the
+  // System Administrator silently received every MEO+MDRRMO office-wide
+  // notification. Focal Personnel also carries office: 'MDRRMO' but must not
+  // inherit MDRRMO's office-wide operational notifications either — only
+  // isOperationalPersonnel does.
   | {
       type: 'admin';
       adminId: number;
       office: 'MEO' | 'MDRRMO' | null;
-      role: AdminRole;
+      accountType: AdminAccountType;
+      isFocal: boolean;
     }
   | { type: 'citizen'; citizenId: number };
 
@@ -80,11 +81,11 @@ export class NotificationsService {
   // Authorization boundary: a citizen only ever sees rows addressed to
   // their own citizenId. An admin always sees rows addressed directly to
   // their own adminId; ADDITIONALLY sees office-wide (recipientOffice) rows
-  // only when they're operational staff (officer/supervisor) — never focal
-  // (which carries office: 'MDRRMO' organizationally but has no operational
-  // office notifications) and never system_admin (office: null used to be
-  // treated as "show every office," the fixed Batch 2 bug — system_admin
-  // gets direct notifications only, same as any other non-operational role).
+  // only when they're operational Personnel — never Focal Personnel (which
+  // carries office: 'MDRRMO' but has no operational office notifications)
+  // and never the System Administrator (office: null used to be treated as
+  // "show every office," the fixed Batch 2 bug — it gets direct
+  // notifications only, same as any other non-operational account).
   private scopeFilter(principal: NotificationPrincipal) {
     if (principal.type === 'citizen') {
       return and(
@@ -93,7 +94,7 @@ export class NotificationsService {
       );
     }
     const officeCondition =
-      isOperationalStaff({ role: principal.role }) && principal.office
+      isOperationalPersonnel(principal) && principal.office
         ? eq(notifications.recipientOffice, principal.office)
         : undefined;
     return and(

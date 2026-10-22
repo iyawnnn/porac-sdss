@@ -6,48 +6,64 @@ import type { AdminSession } from '../../auth/session.service';
 // PLAN.md-adjacent audit: office scoping used to be a client-suppliable
 // default, not a restriction — these helpers make it a hard clamp.
 //
-// Batch 1 (five-role RBAC) correction: system_admin previously bypassed
-// office scoping entirely (city-wide operational access). That bypass is
-// removed — System Administrator / MIS is a system/account-administration
-// role now, with no routine operational authority at all. `focal` also
-// carries an office value (always 'MDRRMO', organizationally) but must not
-// inherit MDRRMO's operational access through that — office scoping below
-// is granted only to `isOperationalStaff`, never derived from
-// `!isSystemAdmin(...)`.
+// Batch 1 (five-role RBAC) correction: the System Administrator previously
+// bypassed office scoping entirely (city-wide operational access). That
+// bypass is removed — the System Administrator is account administration
+// only now, with no routine operational authority at all. Focal Personnel
+// also carries an office value (always 'MDRRMO') but must not inherit
+// MDRRMO's operational access through that — office scoping below is
+// granted only to `isOperationalPersonnel`, never derived from the office
+// alone or from `!isSystemAdmin(...)`.
+//
+// Manuscript revision Phase 2, step 2e: every decision here reads the
+// Appendix H account_type / office / is_focal (the session's accountType /
+// office / isFocal), never admins.role, which is now only a sync mirror.
+// The old officer and supervisor had identical permissions everywhere and
+// are both plain Personnel. lib/utils/adminScope.ts has the same helpers,
+// with the same names, for UI gating.
 
-export function isSystemAdmin(admin: Pick<AdminSession, 'role'>): boolean {
-  return admin.role === 'system_admin';
+export function isSystemAdmin(
+  admin: Pick<AdminSession, 'accountType'>,
+): boolean {
+  return admin.accountType === 'SYSTEM_ADMIN';
 }
 
-export function isFocal(admin: Pick<AdminSession, 'role'>): boolean {
-  return admin.role === 'focal';
+// Focal Personnel: intake/screening only (FocalGuard). No Work Orders, no
+// assessments, and no MDRRMO operational queue or office scope, even though
+// its office is MDRRMO.
+export function isFocalPersonnel(
+  admin: Pick<AdminSession, 'accountType' | 'isFocal'>,
+): boolean {
+  return admin.accountType === 'PERSONNEL' && admin.isFocal === true;
 }
 
-// The only two roles with routine operational (Ticket/Work Order/Dashboard/
-// Map/Moderation/Reports) authority. Every operational scope/access helper
-// below requires this explicitly rather than assuming "not system_admin" —
-// see the module docblock for why that assumption broke once `focal` (an
-// office-bearing, non-operational role) was introduced.
-export function isOperationalStaff(admin: Pick<AdminSession, 'role'>): boolean {
-  return admin.role === 'officer' || admin.role === 'supervisor';
+// The only accounts with routine operational (Ticket/Work Order/Dashboard/
+// Map/Moderation/Reports) authority, office-scoped. Every operational
+// scope/access helper below requires this explicitly rather than assuming
+// "not a System Administrator" — see the module docblock for why that
+// assumption broke once Focal (office-bearing, non-operational) existed.
+export function isOperationalPersonnel(
+  admin: Pick<AdminSession, 'accountType' | 'isFocal'>,
+): boolean {
+  return admin.accountType === 'PERSONNEL' && admin.isFocal === false;
 }
 
-// Only operational staff (officer/supervisor) get an office scope at all —
-// a requested office is silently ignored (clamped to the caller's own),
-// not honored and not rejected, since it's not the caller's fault the UI
-// still sends one. Anyone else (focal, system_admin) is rejected outright:
-// this is defense in depth for a route that should already be behind
-// OperationalStaffGuard, not a legitimate access path for either role.
+// Only operational Personnel get an office scope at all — a requested
+// office is silently ignored (clamped to the caller's own), not honored and
+// not rejected, since it's not the caller's fault the UI still sends one.
+// Anyone else (Focal Personnel, the System Administrator) is rejected
+// outright: this is defense in depth for a route that should already be
+// behind OperationalStaffGuard, not a legitimate access path for either.
 export function resolveOfficeScope(
-  admin: Pick<AdminSession, 'role' | 'office'>,
+  admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
   // Kept for call-site compatibility (every caller still passes the parsed
   // query office through) but no longer consulted: an operational admin is
-  // always clamped to their own office now, and no other role reaches this
-  // line without throwing first.
+  // always clamped to their own office now, and no other account reaches
+  // this line without throwing first.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   requestedOffice: 'MEO' | 'MDRRMO' | 'all' | undefined,
 ): 'MEO' | 'MDRRMO' {
-  if (!isOperationalStaff(admin) || !admin.office) {
+  if (!isOperationalPersonnel(admin) || !admin.office) {
     throw new ForbiddenException('Operational access required.');
   }
   return admin.office;
@@ -55,12 +71,13 @@ export function resolveOfficeScope(
 
 // Guards single-resource access (ticket detail, status change, reassignment,
 // report moderation) where there's no "clamp" equivalent — anyone other
-// than the resource's own office's operational staff is rejected outright.
+// than the resource's own office's operational Personnel is rejected
+// outright (an MDRRMO Focal account included).
 export function assertOfficeAccess(
-  admin: Pick<AdminSession, 'role' | 'office'>,
+  admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
   resourceOffice: 'MEO' | 'MDRRMO',
 ): void {
-  if (!isOperationalStaff(admin) || admin.office !== resourceOffice) {
+  if (!isOperationalPersonnel(admin) || admin.office !== resourceOffice) {
     throw new ForbiddenException(
       "You do not have access to this office's data.",
     );

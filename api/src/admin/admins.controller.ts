@@ -33,20 +33,25 @@ export class AdminsController {
     @Body('password') password: unknown,
     @Body('firstName') firstName: unknown,
     @Body('lastName') lastName: unknown,
-    @Body('role') role: unknown,
+    @Body('accountType') accountType: unknown,
+    @Body('isFocal') isFocal: unknown,
     @Body('office') office: unknown,
   ) {
-    return this.admins.create({ email, password, firstName, lastName, role, office }, actor);
+    return this.admins.create(
+      { email, password, firstName, lastName, accountType, isFocal, office },
+      actor,
+    );
   }
 
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
     @CurrentAdmin() actor: AdminSession,
-    @Body('role') role: unknown,
+    @Body('accountType') accountType: unknown,
+    @Body('isFocal') isFocal: unknown,
     @Body('office') office: unknown,
   ) {
-    return this.admins.update(id, { role, office }, actor);
+    return this.admins.update(id, { accountType, isFocal, office }, actor);
   }
 
   // System Admin only (inherited from the class-level guard) — setting a
@@ -78,7 +83,7 @@ export class AdminsController {
   }
 
   // System Admin only (inherited from the class-level guard). Blocks
-  // deactivating/reactivating the last active system_admin — see
+  // deactivating the last active System Administrator — see
   // AdminsService.setActive.
   @Post(':id/deactivate')
   @HttpCode(HttpStatus.OK)

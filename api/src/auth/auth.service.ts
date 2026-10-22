@@ -71,7 +71,7 @@ export class AuthService {
             adminId: admin.id,
             adminName: `${admin.firstName} ${admin.lastName}`,
             email: admin.email,
-            role: admin.role,
+            accountType: admin.accountType,
             office: admin.office,
           },
           actionType: 'admin_login_failed',
@@ -94,12 +94,14 @@ export class AuthService {
 
     await this.rateLimit.resetAdminLoginFailures(normalized);
 
+    // accountType / isFocal / office only — never role (see AdminSession).
     const token = await this.sessions.signAdminSession({
       adminId: admin.id,
       email: admin.email,
       adminName: `${admin.firstName} ${admin.lastName}`,
+      accountType: admin.accountType,
+      isFocal: admin.isFocal,
       office: admin.office,
-      role: admin.role,
     });
 
     await this.adminAudit.logBestEffort({
@@ -107,7 +109,7 @@ export class AuthService {
         adminId: admin.id,
         adminName: `${admin.firstName} ${admin.lastName}`,
         email: admin.email,
-        role: admin.role,
+        accountType: admin.accountType,
         office: admin.office,
       },
       actionType: 'admin_login',

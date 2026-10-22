@@ -55,6 +55,7 @@
     "migrate:ticket-report-fields": "tsx --env-file=.env scripts/migrations/migrate-ticket-report-fields.ts",
     "migrate:routing-actions": "tsx --env-file=.env scripts/migrations/migrate-routing-actions.ts",
     "migrate:ticket-acknowledgments": "tsx --env-file=.env scripts/migrations/migrate-ticket-acknowledgments.ts",
+    "migrate:staff-account-types": "tsx --env-file=.env scripts/migrations/migrate-staff-account-types.ts",
     "import:barangays": "tsx --env-file=.env scripts/seed/import-barangays.ts",
     "import:city-boundary": "tsx --env-file=.env scripts/seed/import-city-boundary.ts",
     "seed:dem": "tsx --env-file=.env scripts/seed/seed-dem.ts",

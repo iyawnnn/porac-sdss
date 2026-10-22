@@ -82,28 +82,35 @@ export async function settleAdminPage(page: Page, ready: Locator): Promise<void>
 }
 
 // Five-role RBAC (Batch 1/5): /admin only ever renders the operational
-// Dashboard for officer/supervisor — focal and system_admin are redirected
-// server-side before any HTML is sent (see app/admin/page.tsx), so both the
-// expected post-login URL and the "page has loaded" landmark text differ by
-// role. Landing/heading pairs below are what each role's redirect target
-// actually renders; getting either wrong here silently made every focal/
-// system_admin spec pass or fail for the wrong reason instead of asserting
-// their own page state.
-const ADMIN_LANDING: Record<string, { url: RegExp; ready: (page: Page) => Locator }> = {
-  officer: { url: /\/admin$/, ready: (page) => page.getByText("Incident Reports Over Time") },
-  supervisor: { url: /\/admin$/, ready: (page) => page.getByText("Incident Reports Over Time") },
+// Dashboard for operational Personnel — Focal Personnel and the System
+// Administrator are redirected server-side before any HTML is sent (see
+// app/admin/page.tsx), so both the expected post-login URL and the "page
+// has loaded" landmark text differ by account. Landing/heading pairs below
+// are what each account's redirect target actually renders; getting either
+// wrong here silently made every Focal/System Administrator spec pass or
+// fail for the wrong reason instead of asserting their own page state.
+// Picked from accountType/isFocal (Phase 2, step 2e), never a role.
+const ADMIN_LANDING: Record<"personnel" | "focal" | "systemAdmin", { url: RegExp; ready: (page: Page) => Locator }> = {
+  personnel: { url: /\/admin$/, ready: (page) => page.getByText("Incident Reports Over Time") },
   focal: { url: /\/admin\/focal$/, ready: (page) => page.getByText("Focal Dashboard") },
   // getByText("Admin Management") is ambiguous here — the sidebar nav link
   // and the header breadcrumb both render that exact string too — so this
   // one needs the semantic heading role the page's actual <h1> carries.
-  system_admin: { url: /\/admin\/admins$/, ready: (page) => page.getByRole("heading", { name: "Admin Management" }) },
+  systemAdmin: { url: /\/admin\/admins$/, ready: (page) => page.getByRole("heading", { name: "Admin Management" }) },
 };
+
+// An account with no accountType (e.g. a throwaway admin a spec just
+// created) is plain Personnel.
+function landingFor(account: { accountType?: string; isFocal?: boolean }) {
+  if (account.accountType === "SYSTEM_ADMIN") return ADMIN_LANDING.systemAdmin;
+  return account.isFocal ? ADMIN_LANDING.focal : ADMIN_LANDING.personnel;
+}
 
 export async function loginAdmin(
   page: Page,
-  account: { email: string; password: string; role?: string },
+  account: { email: string; password: string; accountType?: string; isFocal?: boolean },
 ): Promise<void> {
-  const landing = ADMIN_LANDING[account.role ?? "officer"] ?? ADMIN_LANDING.officer;
+  const landing = landingFor(account);
   await page.goto("/admin/login");
   const email = page.getByLabel("Email");
   await settleAdminPage(page, email);

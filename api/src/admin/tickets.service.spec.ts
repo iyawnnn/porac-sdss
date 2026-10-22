@@ -19,18 +19,21 @@ import {
   ROUTING_REASON_NOT_RECORDED,
 } from '../db/schema';
 
-const MEO_OFFICER = { role: 'officer', office: 'MEO' } as Pick<
-  AdminSession,
-  'role' | 'office'
->;
+const MEO_OFFICER = {
+  accountType: 'PERSONNEL',
+  isFocal: false,
+  office: 'MEO',
+} as Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>;
 const MDRRMO_SUPERVISOR = {
-  role: 'supervisor',
+  accountType: 'PERSONNEL',
+  isFocal: false,
   office: 'MDRRMO',
-} as Pick<AdminSession, 'role' | 'office'>;
-const SYSTEM_ADMIN = { role: 'system_admin', office: null } as Pick<
-  AdminSession,
-  'role' | 'office'
->;
+} as Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>;
+const SYSTEM_ADMIN = {
+  accountType: 'SYSTEM_ADMIN',
+  isFocal: false,
+  office: null,
+} as Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>;
 
 describe('parseTicketQuery category filter', () => {
   const sql = jest.fn() as unknown as Sql;
@@ -422,7 +425,11 @@ describe('admin audit logging for ticket mutations', () => {
   // authorization branch (early-intake Forward) alongside the existing
   // assertOfficeAccess path for operational staff — same reassignment
   // mechanism, same office_reassignments/audit write, different gate.
-  const FOCAL = { role: 'focal', office: 'MDRRMO' } as AdminSession;
+  const FOCAL = {
+    accountType: 'PERSONNEL',
+    isFocal: true,
+    office: 'MDRRMO',
+  } as AdminSession;
 
   it('allows Focal to reassign a Reported ticket with no active work order', async () => {
     const { service, logInPgTx } = makeService([
@@ -941,14 +948,16 @@ describe('routing_actions dual-write (Phase 2, step 2c)', () => {
     adminId: 4,
     adminName: 'Maria Santos',
     email: 'maria@porac.gov.ph',
-    role: 'officer',
+    accountType: 'PERSONNEL',
+    isFocal: false,
     office: 'MEO',
   } as AdminSession;
   const FOCAL_ADMIN = {
     adminId: 9,
     adminName: 'Diana Torres',
     email: 'focal@porac.gov.ph',
-    role: 'focal',
+    accountType: 'PERSONNEL',
+    isFocal: true,
     office: 'MDRRMO',
   } as AdminSession;
 

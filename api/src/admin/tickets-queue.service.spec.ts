@@ -21,18 +21,21 @@ const ticketsServiceSource = readFileSync(
   'utf8',
 );
 
-const MEO_OFFICER = { role: 'officer', office: 'MEO' } as Pick<
-  AdminSession,
-  'role' | 'office'
->;
-const MDRRMO_SUPERVISOR = { role: 'supervisor', office: 'MDRRMO' } as Pick<
-  AdminSession,
-  'role' | 'office'
->;
-const SYSTEM_ADMIN = { role: 'system_admin', office: null } as Pick<
-  AdminSession,
-  'role' | 'office'
->;
+const MEO_OFFICER = {
+  accountType: 'PERSONNEL',
+  isFocal: false,
+  office: 'MEO',
+} as Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>;
+const MDRRMO_SUPERVISOR = {
+  accountType: 'PERSONNEL',
+  isFocal: false,
+  office: 'MDRRMO',
+} as Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>;
+const SYSTEM_ADMIN = {
+  accountType: 'SYSTEM_ADMIN',
+  isFocal: false,
+  office: null,
+} as Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>;
 
 function buildService(sql: Sql): TicketsService {
   return new TicketsService(
@@ -178,7 +181,11 @@ describe('TicketsService.bulkAdvanceStatus eligibility', () => {
     return { service, advanceStatus };
   }
 
-  const ADMIN = { role: 'system_admin', office: null } as AdminSession;
+  const ADMIN = {
+    accountType: 'SYSTEM_ADMIN',
+    isFocal: false,
+    office: null,
+  } as AdminSession;
 
   it('skips a ticket bound for Resolved instead of resolving it with no photo', async () => {
     const { service, advanceStatus } = makeService([
@@ -267,7 +274,11 @@ describe('TicketsService.bulkReassign', () => {
     return { service, reassignOffice };
   }
 
-  const ADMIN = { role: 'system_admin', office: null } as AdminSession;
+  const ADMIN = {
+    accountType: 'SYSTEM_ADMIN',
+    isFocal: false,
+    office: null,
+  } as AdminSession;
 
   it('delegates every id to reassignOffice', async () => {
     const { service, reassignOffice } = makeService();

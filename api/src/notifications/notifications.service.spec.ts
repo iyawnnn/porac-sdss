@@ -64,25 +64,29 @@ const adminPrincipal: NotificationPrincipal = {
   type: 'admin',
   adminId: 5,
   office: 'MEO',
-  role: 'officer',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 };
 const supervisorPrincipal: NotificationPrincipal = {
   type: 'admin',
   adminId: 6,
   office: 'MDRRMO',
-  role: 'supervisor',
+  accountType: 'PERSONNEL',
+  isFocal: false,
 };
 const focalPrincipal: NotificationPrincipal = {
   type: 'admin',
   adminId: 7,
   office: 'MDRRMO',
-  role: 'focal',
+  accountType: 'PERSONNEL',
+  isFocal: true,
 };
 const systemAdminPrincipal: NotificationPrincipal = {
   type: 'admin',
   adminId: 8,
   office: null,
-  role: 'system_admin',
+  accountType: 'SYSTEM_ADMIN',
+  isFocal: false,
 };
 
 describe('NotificationsService.createInTx', () => {

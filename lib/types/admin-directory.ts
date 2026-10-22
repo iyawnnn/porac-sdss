@@ -3,5 +3,8 @@ export interface AdminDirectoryRow {
   name: string;
   email: string;
   office: "MEO" | "MDRRMO" | null;
-  role: "officer" | "supervisor" | "system_admin";
+  // Always operational Personnel (PERSONNEL, not Focal) — the API filters
+  // everyone else out.
+  account_type: "PERSONNEL" | "SYSTEM_ADMIN";
+  is_focal: boolean;
 }

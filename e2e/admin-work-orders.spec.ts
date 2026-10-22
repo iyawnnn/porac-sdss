@@ -301,7 +301,7 @@ test("assigning a deactivated admin is rejected with 400 and creates nothing", a
   const email = `e2e-inactive-wo-${Date.now()}@porac.gov.ph`;
   const createAdminRes = await request.post("/api/admin/admins", {
     headers: sysAdminHeaders,
-    data: { email, password: "longenoughpassword", firstName: "Inactive", lastName: "Assignee", role: "officer", office: "MEO" },
+    data: { email, password: "longenoughpassword", firstName: "Inactive", lastName: "Assignee", accountType: "PERSONNEL", isFocal: false, office: "MEO" },
   });
   expect(createAdminRes.ok()).toBe(true);
   const inactiveAdmin = await createAdminRes.json();

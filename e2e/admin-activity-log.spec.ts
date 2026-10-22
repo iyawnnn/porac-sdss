@@ -49,7 +49,7 @@ test("creating an admin account writes an audit event that a system admin can se
   const email = `e2e-audit-${Date.now()}@porac.gov.ph`;
   const create = await request.post("/api/admin/admins", {
     headers,
-    data: { firstName: "Audit", lastName: "Target", email, password: "longenoughpassword", role: "officer", office: "MEO" },
+    data: { firstName: "Audit", lastName: "Target", email, password: "longenoughpassword", accountType: "PERSONNEL", isFocal: false, office: "MEO" },
   });
   expect(create.status()).toBe(201);
 

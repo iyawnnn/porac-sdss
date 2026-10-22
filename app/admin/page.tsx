@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
+import { isFocalPersonnel, isSystemAdmin } from "@/lib/utils/adminScope";
 import type {
   BarangayRiskRow,
   CategoryDistributionRow,
@@ -77,8 +78,8 @@ async function DashboardData() {
 // this page does.
 export default async function AdminDashboardPage() {
   const session = await getAdminSessionFromApi();
-  if (session?.role === "system_admin") redirect("/admin/admins");
-  if (session?.role === "focal") redirect("/admin/focal");
+  if (session && isSystemAdmin(session)) redirect("/admin/admins");
+  if (session && isFocalPersonnel(session)) redirect("/admin/focal");
 
   return <Suspense fallback={<DashboardSkeleton />}><DashboardData /></Suspense>;
 }

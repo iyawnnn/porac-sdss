@@ -40,7 +40,7 @@ for (const [name, account] of [["MEO", E2E_MEO_ADMIN], ["MDRRMO", E2E_MDRRMO_ADM
 
     const create = await request.post("/api/admin/admins", {
       headers,
-      data: { firstName: "X", lastName: "Y", email: `blocked-${Date.now()}@example.com`, password: "longenoughpassword", role: "officer", office: "MEO" },
+      data: { firstName: "X", lastName: "Y", email: `blocked-${Date.now()}@example.com`, password: "longenoughpassword", accountType: "PERSONNEL", isFocal: false, office: "MEO" },
     });
     expect(create.status()).toBe(403);
   });
@@ -59,8 +59,10 @@ test("system admin can create a new office admin account and it appears in the l
   await dialog.getByLabel("Last name").fill("ByTest");
   await dialog.getByLabel("Email").fill(email);
   await dialog.getByLabel("Temporary password").fill("longenoughpassword");
-  await dialog.getByLabel("Role").click();
-  await page.getByRole("option", { name: "Supervisor" }).click();
+  await dialog.getByLabel("Account type").click();
+  // The three Phase 2, step 2e choices; "Supervisor" is gone from the UI.
+  await expect(page.getByRole("option")).toHaveText(["Personnel", "Focal Personnel", "System Administrator"]);
+  await page.getByRole("option", { name: "Personnel", exact: true }).click();
   await dialog.getByLabel("Office").click();
   await page.getByRole("option", { name: "MDRRMO", exact: true }).click();
 
@@ -73,7 +75,7 @@ test("system admin can create a new office admin account and it appears in the l
   await expect(page.getByText("Created ByTest").first()).toBeVisible();
 });
 
-test("system admin cannot save an invalid role/office combination from the inline editor", async ({ page, request }) => {
+test("system admin cannot save an invalid account type/office combination from the inline editor", async ({ page, request }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   const cookies = await page.context().cookies();
   const sessionCookie = cookies.find((c) => c.name === "ac_admin_session");
@@ -82,13 +84,13 @@ test("system admin cannot save an invalid role/office combination from the inlin
     : { "content-type": "application/json" };
 
   const list = await request.get("/api/admin/admins", { headers });
-  const admins = (await list.json()) as Array<{ id: number; role: string }>;
-  const officeAdmin = admins.find((a) => a.role !== "system_admin");
+  const admins = (await list.json()) as Array<{ id: number; account_type: string }>;
+  const officeAdmin = admins.find((a) => a.account_type !== "SYSTEM_ADMIN");
   expect(officeAdmin).toBeTruthy();
 
   const invalid = await request.patch(`/api/admin/admins/${officeAdmin!.id}`, {
     headers,
-    data: { role: "system_admin", office: "MEO" },
+    data: { accountType: "SYSTEM_ADMIN", isFocal: false, office: "MEO" },
   });
   expect(invalid.status()).toBe(400);
 });
@@ -170,8 +172,8 @@ test("cannot deactivate the last active System Administrator (server-side)", asy
   const headers: Record<string, string> = sessionCookie ? { cookie: `${sessionCookie.name}=${sessionCookie.value}` } : {};
 
   const list = await request.get("/api/admin/admins", { headers });
-  const admins = (await list.json()) as Array<{ id: number; role: string; is_active: boolean }>;
-  const activeSystemAdmins = admins.filter((a) => a.role === "system_admin" && a.is_active);
+  const admins = (await list.json()) as Array<{ id: number; account_type: string; is_active: boolean }>;
+  const activeSystemAdmins = admins.filter((a) => a.account_type === "SYSTEM_ADMIN" && a.is_active);
   // The seeded demo data always has exactly one system_admin, so this
   // assertion documents the precondition the test relies on rather than
   // guessing which id to target.
