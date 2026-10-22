@@ -38,7 +38,7 @@ function sessionCookieHeader(cookies: { name: string; value: string }[]): Record
 // has no revert endpoint to restore it with afterwards. "Pothole / Road
 // Surface Damage" always routes to MEO (api/src/common/utils/office.ts), so
 // E2E_MEO_ADMIN can act on it without any additional reassignment.
-async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Promise<{ reportId: number; ticketId: number; trackingReference: string }> {
+async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Promise<{ reportId: number; ticketId: number; trackingReference: string; title: string }> {
   // The jitter here (~±550m) mirrors citizen-dispute.spec.ts's own jitter().
   // It used to keep this report clear of the automatic dedup merge radius;
   // since manuscript revision Phase 1, step 3 every report creates its own
@@ -65,7 +65,8 @@ async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Pr
       `createThrowawayReport: POST /api/reports failed for title "${title}" — status ${res.status()} ${res.statusText()}\nbody: ${bodyText}`,
     );
   }
-  return (await res.json()) as { reportId: number; ticketId: number; trackingReference: string };
+  const body = (await res.json()) as { reportId: number; ticketId: number; trackingReference: string };
+  return { ...body, title };
 }
 
 async function signupCitizen(page: Page, label: string): Promise<{ email: string; password: string }> {
@@ -403,7 +404,7 @@ test("MEO admin can reassign a ticket's office through the UI, and office scopin
   const citizenContext = await browser.newContext();
   const citizenPage = await citizenContext.newPage();
   await signupCitizen(citizenPage, "reassign");
-  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+  const { ticketId, title } = await createThrowawayReport(citizenPage, `${Date.now()}`);
   await citizenContext.close();
 
   await loginAs(page, E2E_MEO_ADMIN);
@@ -450,21 +451,24 @@ test("MEO admin can reassign a ticket's office through the UI, and office scopin
   }
 
   // Confirm the restore actually took: MEO's own list has it back, MDRRMO's
-  // own list no longer does. Both lists are searched by this ticket's id
-  // (the queue's search matches t.id exactly for a numeric term) rather than
-  // read as "the first 50 rows": a fresh Low-severity throwaway ticket ranks
-  // near the bottom of the Operational Priority order, and once the dev
-  // database holds more than 50 tickets for an office it falls off page one
-  // even when the restore worked.
+  // own list no longer does. Both lists are searched by this report's full
+  // title, whose timestamp suffix matches only this ticket, rather than by
+  // its id or read as "the first rows": a numeric search also matches every
+  // report title containing those digits (other runs' timestamped titles),
+  // the list returns 15 rows per page, and a fresh Low-severity throwaway
+  // ranks near the bottom of the Operational Priority order, so it can fall
+  // off page one even when the restore worked. (The title, not the bare
+  // timestamp: an all-digit term is also compared with t.id as an integer.)
+  const search = encodeURIComponent(title);
   const meoCookies = await page.context().cookies();
-  const meoRes = await request.get(`/api/admin/tickets?status=all&search=${ticketId}`, { headers: sessionCookieHeader(meoCookies) });
+  const meoRes = await request.get(`/api/admin/tickets?status=all&search=${search}`, { headers: sessionCookieHeader(meoCookies) });
   const meoBody = await meoRes.json();
   expect(meoBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(true);
 
   const mdrrmoContext = await browser.newContext();
   const mdrrmoPage = await mdrrmoContext.newPage();
   await loginAs(mdrrmoPage, E2E_MDRRMO_ADMIN);
-  const mdrrmoRes = await request.get(`/api/admin/tickets?status=all&search=${ticketId}`, { headers: sessionCookieHeader(await mdrrmoContext.cookies()) });
+  const mdrrmoRes = await request.get(`/api/admin/tickets?status=all&search=${search}`, { headers: sessionCookieHeader(await mdrrmoContext.cookies()) });
   const mdrrmoBody = await mdrrmoRes.json();
   expect(mdrrmoBody.tickets.some((t: { id: number }) => t.id === ticketId)).toBe(false);
   await mdrrmoContext.close();
