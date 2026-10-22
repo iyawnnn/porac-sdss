@@ -61,6 +61,37 @@ test("Focal intake detail shows the Operational Priority card and no Hazard Urge
   await expect(page.getByText(/Hazard Urgency/)).toHaveCount(0);
 });
 
+// Manuscript revision Phase 3, step 3a: Focal intake notifications created
+// before the step link to /admin/intake/{id} (the API path, no page);
+// next.config.ts redirects numeric ids to the intake detail page. Uses an
+// existing intake row, so it creates no report.
+test("an old Focal notification link /admin/intake/{id} lands on the intake detail page", async ({ page, request, browser }) => {
+  await loginAs(page, E2E_FOCAL_ADMIN);
+  const intakeRes = await request.get("/api/admin/intake", { headers: sessionCookieHeader(await page.context().cookies()) });
+  expect(intakeRes.ok()).toBe(true);
+  const rows: { reportId: number }[] = await intakeRes.json();
+  test.skip(rows.length === 0, "No intake rows in this environment's data.");
+  const { reportId } = rows[0];
+
+  const response = await page.goto(`/admin/intake/${reportId}`);
+  await expect(page).toHaveURL(new RegExp(`/admin/focal/intake/${reportId}$`));
+  expect(response?.request().redirectedFrom()?.url()).toMatch(new RegExp(`/admin/intake/${reportId}$`));
+  expect(response?.status()).toBe(200);
+  await expect(page.getByText("Decision Support", { exact: true })).toBeVisible();
+
+  // Only numeric ids are redirected.
+  const other = await page.goto("/admin/intake/not-a-report");
+  expect(other?.status()).toBe(404);
+  await expect(page).toHaveURL(/\/admin\/intake\/not-a-report$/);
+
+  // Access rules still apply on the target: signed out ends at the login page.
+  const signedOut = await browser.newContext();
+  const signedOutPage = await signedOut.newPage();
+  await signedOutPage.goto(`/admin/intake/${reportId}`);
+  await expect(signedOutPage).toHaveURL(/\/admin\/login$/);
+  await signedOut.close();
+});
+
 test("Focal cannot reach the operational Ticket Queue, Work Orders, or Admin Management", async ({ page }) => {
   await loginAs(page, E2E_FOCAL_ADMIN);
 

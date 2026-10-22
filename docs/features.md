@@ -208,7 +208,7 @@ A dedicated, municipality-wide intake-monitoring surface for Focal Personnel —
 - **Flagged Reports** (`/admin/focal/intake?flagged=true`, Batch 4) — a filter on the same Intake Queue table, not a duplicated page. Focal can inspect integrity flags relevant to intake but cannot quarantine or otherwise perform operational moderation disposition (§3.5 stays `OperationalStaffGuard`-only).
 - **Notifications** (`/admin/notifications`) — the same shared Notification Center as every other admin account (§3.8), safe for Focal as-is since its scoping already tells operational Personnel, Focal Personnel and the System Administrator apart.
 
-New-report fan-out: every report routed to MEO or MDRRMO sends a direct, per-admin `new_intake_report` notification to each active Focal account (`ReportsService.notifyFocalIntake`) — never `recipientOffice: 'MDRRMO'`, which would incorrectly mix Focal-intake traffic into MDRRMO's own operational notification stream. It links to the intake detail page, `/admin/focal/intake/{reportId}` (since manuscript revision Phase 3, step 3a; older rows keep `/admin/intake/{reportId}`, the API path, which has no page).
+New-report fan-out: every report routed to MEO or MDRRMO sends a direct, per-admin `new_intake_report` notification to each active Focal account (`ReportsService.notifyFocalIntake`) — never `recipientOffice: 'MDRRMO'`, which would incorrectly mix Focal-intake traffic into MDRRMO's own operational notification stream. It links to the intake detail page, `/admin/focal/intake/{reportId}` (since manuscript revision Phase 3, step 3a; older rows keep `/admin/intake/{reportId}`, the API path, which has no page; `next.config.ts` redirects it to the intake detail page for numeric ids).
 
 ---
 

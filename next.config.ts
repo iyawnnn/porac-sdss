@@ -5,6 +5,20 @@ import type { NextConfig } from "next";
 const API_ORIGIN = process.env.API_ORIGIN ?? "http://127.0.0.1:3001";
 
 const nextConfig: NextConfig = {
+  redirects() {
+    return [
+      {
+        // Focal intake notifications created before manuscript revision
+        // Phase 3, step 3a link to /admin/intake/{id}, the API path, which
+        // has no page. Send them to the intake detail page, where proxy.ts
+        // and the page's own Focal-only API read still decide access.
+        // Numeric ids only; temporary (307) like the app's other redirects.
+        source: "/admin/intake/:id(\\d+)",
+        destination: "/admin/focal/intake/:id",
+        permanent: false,
+      },
+    ];
+  },
   rewrites() {
     return {
       // beforeFiles is still required even with app/api/** gone entirely
