@@ -8,6 +8,7 @@ import "leaflet/dist/leaflet.css";
 import exifr from "exifr";
 import imageCompression from "browser-image-compression";
 import { CATEGORIES, SEVERITIES, SEVERITY_DESCRIPTIONS } from "@/lib/utils/validation";
+import { LOCATION_MISMATCH_THRESHOLD_M, isLocationMismatch } from "@/lib/utils/location-mismatch";
 import {
   NO_SEVERITY,
   chooseAnotherLevel,
@@ -81,7 +82,6 @@ const PORAC_BOUNDS: L.LatLngBoundsExpression = [
   [MUNICIPALITY.maxLat, MUNICIPALITY.maxLng],
 ];
 const PORAC_BOUNDS_OBJ = L.latLngBounds(PORAC_BOUNDS);
-const EXIF_MISMATCH_THRESHOLD_M = 100;
 
 const FIELD_CLASS =
   "w-full h-12 px-4 text-base rounded-lg border border-line-200 bg-surface text-ink-900";
@@ -541,9 +541,9 @@ export default function ReportForm() {
                 Detected Barangay: {detectedBarangay}
               </p>
             )}
-            {exifPosition && exifMismatchM > EXIF_MISMATCH_THRESHOLD_M && (
+            {exifPosition && isLocationMismatch(exifMismatchM) && (
               <p className={`${BADGE_BASE} border-amber-300 bg-amber-50 text-amber-900`}>
-                Pin placed &gt;100m away from photo GPS. This submission will be flagged for review.
+                Pin placed &gt;{LOCATION_MISMATCH_THRESHOLD_M}m away from photo GPS. This submission will be flagged for review.
               </p>
             )}
             {!detectedBarangay && position && (

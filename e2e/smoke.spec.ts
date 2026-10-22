@@ -119,7 +119,7 @@ test("citizen report form validates EXIF GPS, dynamic barangay search, and Porac
   await page.getByLabel("Barangay Search").selectOption({ label: "Villa Maria" });
   await page.waitForTimeout(1_000);
   await page.locator(".leaflet-container").click({ position: { x: 300, y: 200 } });
-  await expect(page.getByText("Pin placed >100m away from photo GPS. This submission will be flagged for review.")).toBeVisible();
+  await expect(page.getByText("Pin placed >50m away from photo GPS. This submission will be flagged for review.")).toBeVisible();
 
   await page.locator('input[type="file"]').setInputFiles(noExifFixture);
   await expect(page.getByText("No GPS Metadata Found in Photo. Please click the map to select the hazard location manually.")).toBeVisible();
