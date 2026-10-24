@@ -87,7 +87,7 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 - Checks: API unit tests (54 suites / 952 tests), API build, root tsc, ESLint.
 - Not changed: the seed scripts that call `radiusForCategory` (`seed-demo-presentation.ts`, `seed-bulk-reports.ts`) now get the new radii; their clusters were laid out for the old 25 m tier (Phase 8 seed rework).
 
-### Manuscript revision Phase 3, step 3b — evidence-integrity flags, EXIF time-zone fix, flag migration — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
+### Manuscript revision Phase 3, step 3b — evidence-integrity flags, EXIF time-zone fix, flag migration — **completed (code + unit tests; migration 0040 run on the phase2-test copy and on production)**
 
 - **New-report rules** (manuscript pp. 42–43, Appendix H REPORTS.flags; `evidenceCheckFlags` in `reports.service.ts`, one named constant per number):
   - `LOCATION_MISMATCH` above 50 m (was 100 m). A photo with no usable GPS gets no location flag at all; `NO_EXIF` is gone.
@@ -98,7 +98,8 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 - **EXIF time zone:** `DateTimeOriginal` is read as wall-clock time with the photo's own offset, else Asia/Manila, independent of the server's time zone (it used to follow the server's zone). Zero, unparseable and pre-2000 dates are unusable. `exif_data` also records the offset used.
 - **Migration `0040_evidence_flags.sql`** (`migrate:evidence-flags`): recomputes the managed codes on existing reports from stored values, keeps `DUPLICATE_IMAGE` / `BOUNDARY_FALLBACK` / `TIMESTAMP_ANOMALY`, adds no `TIMESTAMP_ANOMALY` to old reports (their times may carry the old time-zone shift), never touches moderation decisions, and rewrites Flagged Reports saved views (`STALE_PHOTO` → `STALE_EVIDENCE`, `NO_EXIF` filter dropped). Reports newly flagged join the pending queue; reports left without flags leave it — the check counts both.
 - **Labels:** "Location mismatch (> 50 m)", "Stale evidence", "Missing metadata", "Timestamp anomaly" in the flag-type filter and review drawer.
-- **Tested on PGlite only:** run 1 changed 12 of 14 fixture reports and 2 of 4 saved views exactly as expected, moderation columns unchanged; run 2 changed 0; the check reported 0 where required. **Run 0040 before or with deploying this API** — old codes are otherwise left in the data and the flag filter no longer offers them.
+- **Tested on PGlite first:** run 1 changed 12 of 14 fixture reports and 2 of 4 saved views exactly as expected, moderation columns unchanged; run 2 changed 0; the check reported 0 where required.
+- **Run on the phase2-test copy and on production.** On the copy, the full e2e suite passed (230, plus 3 first-compile flakes that passed on re-run), and a read-only check found no report in a stale-list category with a photo over 24 h old that lacks `STALE_EVIDENCE`. The API from this step expects 0040: without it, old codes stay in the data and the flag filter no longer offers them.
 - The citizen form's pin warning uses the same 50 m (`lib/utils/location-mismatch.ts`, tested equal to the API constant); it stays non-blocking.
 - Not changed: the seed scripts (`seed-demo-presentation.ts` and `api/scripts/lib/exif.ts` still copy the old rules and time handling; Phase 8 seed rework).
 - Checks: API unit tests (52 suites / 874 tests), API build, root tsc, ESLint.
