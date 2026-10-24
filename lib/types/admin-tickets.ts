@@ -144,6 +144,14 @@ export interface TicketReport {
   created_at: string;
   flags: string[] | null;
   moderation_status: string | null;
+  // The citizen's originals (manuscript revision Phase 3, step 3e): what
+  // they picked and where they pinned it, never changed by a staff
+  // correction; pin_distance_m is the pin's distance from the ticket's
+  // current location.
+  submitted_category: string;
+  pin_lat: number;
+  pin_lng: number;
+  pin_distance_m: number;
 }
 
 export interface TicketStatusHistoryRow {
@@ -159,6 +167,20 @@ export interface TicketReassignmentRow {
   to_office: string;
   admin_name: string | null;
   reassigned_at: string;
+  // The routing reason, when one was given (a category correction's).
+  reason: string | null;
+}
+
+// A staff category or location correction on the Ticket Detail timeline
+// (manuscript revision Phase 3, step 3e), from its audit event: old and new
+// value, reason, who and when.
+export interface TicketCorrectionRow {
+  field: "category" | "location";
+  old_value: string;
+  new_value: string;
+  reason: string | null;
+  admin_name: string;
+  corrected_at: string;
 }
 
 // Historical record only — a referral being recorded does not mean it is

@@ -251,13 +251,25 @@ export default async function MyReportDetailPage({
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {/* The ticket's current category and location, which staff may have
+              corrected (manuscript revision Phase 3, step 3e); what the citizen
+              reported stays visible beside it. */}
           <StatTile
             icon={<PinIcon />}
             label="Location"
             value={report.barangay_name}
-            sub={`${report.lat.toFixed(5)}, ${report.lng.toFixed(5)}`}
+            sub={
+              report.corrected_lat !== null && report.corrected_lng !== null
+                ? `Corrected by staff to ${report.corrected_lat.toFixed(5)}, ${report.corrected_lng.toFixed(5)}`
+                : `${report.lat.toFixed(5)}, ${report.lng.toFixed(5)}`
+            }
           />
-          <StatTile icon={<TagIcon />} label="Category" value={report.category} sub="Hazard classification" />
+          <StatTile
+            icon={<TagIcon />}
+            label="Category"
+            value={report.category}
+            sub={report.submitted_category !== report.category ? `You reported: ${report.submitted_category}` : "Hazard classification"}
+          />
           <StatTile
             icon={<CalendarIcon />}
             label="Submitted"

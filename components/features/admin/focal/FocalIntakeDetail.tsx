@@ -13,7 +13,10 @@ import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import type { FocalIntakeDetail as FocalIntakeDetailData, ScreeningRecommendation } from "@/lib/types/admin-focal-intake";
 import type { RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
+import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
+import { distanceMeters } from "@/lib/utils/distance";
 import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
+import { TicketCorrectionActions } from "@/components/features/admin/tickets/corrections/TicketCorrectionActions";
 import { AcknowledgeDialog } from "@/components/features/admin/focal/dialogs/AcknowledgeDialog";
 import { InitialScreeningDialog } from "@/components/features/admin/focal/dialogs/InitialScreeningDialog";
 import { ForwardEscalateDialog } from "@/components/features/admin/focal/dialogs/ForwardEscalateDialog";
@@ -37,12 +40,20 @@ type DialogKey = "acknowledge" | "screening" | "forward" | "escalate" | null;
 export function FocalIntakeDetail({
   report,
   related,
+  correction,
 }: {
   report: FocalIntakeDetailData;
   related: RelatedTicketCandidates | null;
+  correction: CorrectionAvailability | null;
 }) {
   const router = useRouter();
   const [openDialog, setOpenDialog] = useState<DialogKey>(null);
+  // The map shows the ticket's current location; the citizen's pin is
+  // listed when a staff correction moved the ticket away from it
+  // (manuscript revision Phase 3, step 3e).
+  const pinDistance = Math.round(
+    distanceMeters({ lat: report.lat, lng: report.lng }, { lat: report.ticketLat, lng: report.ticketLng }),
+  );
 
   function handleScreened(outcome: ScreeningRecommendation) {
     if (outcome === "forward") {
@@ -91,6 +102,7 @@ export function FocalIntakeDetail({
         <Button onClick={() => setOpenDialog("forward")} variant="outline">Forward</Button>
         <Button onClick={() => setOpenDialog("escalate")} variant="outline">Escalate</Button>
       </div>
+      {correction && <TicketCorrectionActions afterMove="refresh" availability={correction} />}
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
         <div className="flex min-w-0 flex-col gap-4 lg:col-span-7">
@@ -102,6 +114,11 @@ export function FocalIntakeDetail({
                 <Badge variant="outline">Citizen severity: {report.citizenSeverity}</Badge>
                 {report.memberCount > 1 && <Badge variant="outline">{report.memberCount} reports merged</Badge>}
               </div>
+              {report.submittedCategory !== report.category && (
+                <p className="mt-2 text-xs text-muted-foreground" data-testid="citizen-category">
+                  Citizen-reported category: {report.submittedCategory}
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -110,12 +127,17 @@ export function FocalIntakeDetail({
               <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Location</p>
               {/* isolate keeps Leaflet's pane z-indexes below dialogs. */}
               <div className="isolate h-64 overflow-hidden rounded-lg border border-border">
-                <TicketLocationMapLoader barangayGeoJson={null} lat={report.lat} lng={report.lng} />
+                <TicketLocationMapLoader barangayGeoJson={null} lat={report.ticketLat} lng={report.ticketLng} />
               </div>
-              <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" data-testid="ticket-location">
                 <span className="inline-flex items-center gap-1"><MapPinIcon aria-hidden="true" className="size-3.5" />{report.barangayName}</span>
-                <span>{report.lat.toFixed(5)}, {report.lng.toFixed(5)}</span>
+                <span>{report.ticketLat.toFixed(5)}, {report.ticketLng.toFixed(5)}</span>
               </p>
+              {pinDistance >= 1 && (
+                <p className="mt-1 text-xs text-muted-foreground" data-testid="citizen-pin">
+                  Citizen pin: {report.lat.toFixed(5)}, {report.lng.toFixed(5)} · {pinDistance} m from the ticket location
+                </p>
+              )}
             </CardContent>
           </Card>
 
