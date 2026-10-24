@@ -70,6 +70,7 @@ Behind the scenes the server recomputes everything it will not take on trust: wh
 Two situations get their own explanation on that page:
 
 - **Merged into an existing ticket.** Shown only for reports that belong to a ticket with earlier reports (historical automatic merges; since manuscript revision Phase 3, step 3d, merges confirmed by staff). The page says *"Merged with an existing issue"* and *"Grouped with N other report(s)."* The citizen is told their report joined a group — not that it was rejected or ignored. The status shown is always that of the ticket the report belongs to now, so after a merge it is the surviving ticket's status; the regrouping itself sends no notification.
+- **Corrected by staff.** Staff may correct a ticket's category or location (manuscript revision Phase 3, step 3e). The report page then shows the current category with *"You reported: …"* under it, and the corrected location; the citizen's own pin stays on their report. No notification is sent.
 - **Held for review (quarantined).** If an admin quarantines the report, the citizen sees a deliberately neutral banner: the report *"needs another look before it appears on the public map"*, and explicitly that **this does not affect the ticket's progress**. The admin's internal reasoning for the quarantine is never shown.
 - **Acknowledged by municipal monitoring** (five-role Batch 2). Once Focal Personnel acknowledges the report (§5), the timeline gains its own **"Acknowledged by municipal monitoring"** event, sourced from `report_acknowledgments.acknowledged_at` — a municipal-monitoring signal, not a ticket-status value. **Acknowledged ≠ Under Review**: the report's status line above can still read `Reported` at the same time the timeline shows it acknowledged, and that is correct, not a bug.
 
@@ -133,6 +134,13 @@ The system never groups reports by itself (manuscript revision Phase 1, step 3);
 A merge is refused, with the reason in the dialog or the disabled button's tooltip, when the tickets have different categories (correct the category first), different offices (Reassign or Refer first), or the ticket being merged away still has a pending or in-progress Work Order (finish or cancel it first). Staff act only on their own office's tickets.
 
 A report that does not belong on its ticket can be **removed** (it gets a new ticket, routed exactly as a new report would be) or **moved** to a related ticket of the same category and office. Every one of these actions needs a reason and appears in the Activity Log.
+
+#### Correcting the category or location
+
+A report can arrive with the wrong category or a pin in the wrong spot. **Correct category…** and **Correct location…** under the Ticket Detail header fix the ticket (manuscript revision Phase 3, step 3e); the citizen's own report keeps what they submitted, and Ticket Detail shows it as "Citizen-reported category" and "Citizen pin". Both need a reason, and both appear on the ticket's timeline and in the Activity Log.
+
+- A category the other office handles moves the ticket there in the same step, recorded as a Reassign with the same reason. That is refused while the ticket has a pending or in-progress Work Order — finish or cancel it first. Once the ticket has moved, it belongs to the other office's queue.
+- A location is picked on a small map (or typed); it must be inside a Porac barangay, the barangay follows the point, and Operational Priority is recalculated.
 
 ### 2.3 Moving a ticket forward
 
@@ -263,6 +271,7 @@ Focal sits between the citizen's submission and the owning office's operational 
 3. **Forward**, only while the ticket is still `Reported` and no Work Order has started — an early custody correction, using the same reassignment mechanism the owning office itself would use (§2.5/§3.4), not a separate path. Once operational work has begun, Focal can no longer move it — that correction becomes the owning office's own decision.
 4. **Escalate** — flags the report for the currently-responsible office's attention. Never changes Operational Priority, status, or office by itself.
 5. **Merge** a possibly related ticket (manuscript revision Phase 3, step 3d), under the Forward rule: only while every ticket involved is still `Reported` with no active Work Order, in either office. The same category and office rules apply as for MEO/MDRRMO staff (§2.2, Grouping reports), so two reports routed to different offices need a Forward first.
+6. **Correct the category or location** of the report's ticket (step 3e), under the same rule: only while it is still `Reported` with no active Work Order, in either office. A category the other office handles moves the ticket there, as a Forward would.
 
 ### 5.3 Read-only situational awareness
 
