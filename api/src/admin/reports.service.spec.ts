@@ -93,17 +93,37 @@ describe('ReportsService.ticketsCsv', () => {
         member_count: 3,
         created_at: '2026-01-05T00:00:00.000Z',
         updated_at: '2026-01-06T00:00:00.000Z',
+        merged_into_ticket_id: null,
+      },
+      // A merged-away ticket (manuscript revision Phase 3, step 3d), as a
+      // status=all export lists it.
+      {
+        id: 43,
+        status: 'Reported',
+        assigned_office: 'MEO',
+        category: 'Pothole',
+        barangay_name: 'Poblacion',
+        priority_index: 40,
+        member_count: 1,
+        created_at: '2026-01-07T00:00:00.000Z',
+        updated_at: '2026-01-08T00:00:00.000Z',
+        merged_into_ticket_id: 42,
       },
     ]);
     const { service } = makeService({ getTicketsForExport });
 
     const csv = await service.ticketsCsv({}, MEO_OFFICER);
 
-    const [header, row] = csv.trim().split('\r\n');
+    const [header, row, mergedRow] = csv.trim().split('\r\n');
     expect(header).toBe(
-      'Ticket ID,Status,Assigned Office,Operational Priority,Category,Barangay,Report Count,Created At,Updated At',
+      'Ticket ID,Status,Assigned Office,Operational Priority,Category,Barangay,Report Count,Created At,Updated At,Merged into',
     );
-    expect(row).toBe('42,Reported,MEO,64,Pothole,Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z');
+    expect(row).toBe(
+      '42,Reported,MEO,64,Pothole,Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z,',
+    );
+    expect(mergedRow).toBe(
+      '43,Reported,MEO,40,Pothole,Poblacion,1,2026-01-07T00:00:00.000Z,2026-01-08T00:00:00.000Z,42',
+    );
   });
 
   // Manuscript revision Phase 1, step 4: no Hazard Urgency column or value

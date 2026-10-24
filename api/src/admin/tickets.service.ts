@@ -37,6 +37,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { EMAIL_SERVICE, type EmailService } from '../citizens/email.service';
 import type { Env } from '../config/env';
 import { AdminAuditService } from './admin-audit.service';
+import { assertNotMergedAway } from './ticket-grouping.rules';
 import {
   TICKET_STATUSES,
   PAGE_LIMITS,
@@ -132,6 +133,9 @@ export interface AdminTicketExportRow {
   member_count: number;
   created_at: string;
   updated_at: string;
+  // Set on a ticket merged into another (manuscript revision Phase 3, step
+  // 3d). Such rows appear only in a status=all export.
+  merged_into_ticket_id: number | null;
 }
 
 export interface AdminTicketGeoRow {
@@ -148,6 +152,16 @@ export interface AdminTicketGeoRow {
   lng: number;
   title: string | null;
   image_url: string | null;
+}
+
+// The read-only banner on a merged-away ticket (manuscript revision Phase
+// 3, step 3d). mergedAt/mergedByName/reason come from the ticket_merged audit
+// event and are null only if that event can't be found.
+export interface TicketMergedInto {
+  ticketId: number;
+  mergedAt: string | null;
+  mergedByName: string | null;
+  reason: string | null;
 }
 
 export interface TicketDetail {
@@ -187,6 +201,9 @@ export interface TicketDetail {
   // means it's a referral/coordination concern this office merely holds
   // custody of for triage. See CategoryRouting.
   direct_responsibility: boolean;
+  // Manuscript revision Phase 3, step 3d: set once this ticket is merged
+  // into another; it is then read-only history.
+  merged_into_ticket_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -396,6 +413,8 @@ export class TicketsService {
       JOIN barangays b ON b.id = t.barangay_id
       WHERE (${filters.office ?? null}::text IS NULL OR t.assigned_office = ${filters.office ?? null}::office)
         ${statusClause}
+        -- A merged-away ticket is history (Phase 3, step 3d), never queued.
+        AND t.merged_into_ticket_id IS NULL
         AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
         AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
         AND (${filters.disputed ? true : null}::boolean IS NULL OR t.disputed_at IS NOT NULL)
@@ -459,10 +478,12 @@ export class TicketsService {
         (
           SELECT COUNT(*)::int FROM tickets t2
           WHERE t2.disputed_at IS NOT NULL
+            AND t2.merged_into_ticket_id IS NULL
             AND (${office}::text IS NULL OR t2.assigned_office = ${office}::office)
         ) AS disputed
       FROM tickets t
       WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
+        AND t.merged_into_ticket_id IS NULL
         AND (${office}::text IS NULL OR t.assigned_office = ${office}::office)
     `;
     return {
@@ -508,11 +529,15 @@ export class TicketsService {
 
     return sql<AdminTicketExportRow[]>`
       SELECT t.id, t.status, t.assigned_office, t.category, b.name AS barangay_name,
-        t.priority_index, t.member_count, t.created_at, t.updated_at
+        t.priority_index, t.member_count, t.created_at, t.updated_at,
+        t.merged_into_ticket_id
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
       WHERE (${filters.office ?? null}::text IS NULL OR t.assigned_office = ${filters.office ?? null}::office)
         ${statusClause}
+        -- Merged-away tickets only in the historical (status=all) export,
+        -- where the "Merged into" column says where their reports went.
+        AND (t.merged_into_ticket_id IS NULL OR ${status} = 'all')
         AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
         AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
         AND (${filters.categoryReview ? true : null}::boolean IS NULL OR t.category_review_required)
@@ -551,6 +576,7 @@ export class TicketsService {
         LIMIT 1
       ) r ON true
       WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
+        AND t.merged_into_ticket_id IS NULL
         AND (${office}::text IS NULL OR t.assigned_office = ${office}::office)
     `;
   }
@@ -566,7 +592,8 @@ export class TicketsService {
         t.member_count, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
         t.priority_index,
         t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at,
-        t.disputed_at, t.dispute_reason, t.category_review_required
+        t.disputed_at, t.dispute_reason, t.category_review_required,
+        t.merged_into_ticket_id
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
       WHERE t.id = ${id}
@@ -611,7 +638,45 @@ export class TicketsService {
       ticket.category,
     ).directResponsibility;
 
-    return { ticket, reports, history, reassignments, referrals };
+    // Manuscript revision Phase 3, step 3d. For a merged-away ticket: who
+    // merged it into which ticket, when and why (from the ticket_merged
+    // audit event written in the same transaction). For any ticket: the
+    // tickets merged into it.
+    let mergedInto: TicketMergedInto | null = null;
+    if (ticket.merged_into_ticket_id !== null) {
+      const [event] = await sql<
+        { actor_name: string; created_at: string; reason: string | null }[]
+      >`
+        SELECT actor_name, created_at, metadata->>'reason' AS reason
+        FROM admin_audit_events
+        WHERE action_type = 'ticket_merged' AND target_type = 'ticket'
+          AND target_id = ${ticket.merged_into_ticket_id}
+          AND metadata->>'mergedTicketId' = ${String(id)}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      mergedInto = {
+        ticketId: ticket.merged_into_ticket_id,
+        mergedAt: event?.created_at ?? null,
+        mergedByName: event?.actor_name ?? null,
+        reason: event?.reason ?? null,
+      };
+    }
+    const mergedFrom = (
+      await sql<{ id: number }[]>`
+        SELECT id FROM tickets WHERE merged_into_ticket_id = ${id} ORDER BY id
+      `
+    ).map((row) => row.id);
+
+    return {
+      ticket,
+      reports,
+      history,
+      reassignments,
+      referrals,
+      mergedInto,
+      mergedFrom,
+    };
   }
 
   // Live re-derivation of the same inputs OperationalPriorityService uses for this one
@@ -637,6 +702,7 @@ export class TicketsService {
         SELECT barangay_id, COUNT(*)::int AS active_barangay_count
         FROM tickets
         WHERE status IN ('Reported', 'Under Review', 'In Progress')
+          AND merged_into_ticket_id IS NULL
         GROUP BY barangay_id
       )
       SELECT t.barangay_id, t.created_at, t.assigned_office,
@@ -678,12 +744,14 @@ export class TicketsService {
         status: TicketStatus;
         assigned_office: 'MEO' | 'MDRRMO';
         category: string;
+        merged_into_ticket_id: number | null;
       }[]
     >`
-      SELECT status, assigned_office, category FROM tickets WHERE id = ${ticketId}
+      SELECT status, assigned_office, category, merged_into_ticket_id FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
     assertOfficeAccess(admin, ticket.assigned_office);
+    assertNotMergedAway({ id: ticketId, ...ticket });
 
     const nextStatus = NEXT_STATUS[ticket.status];
     if (!nextStatus) {
@@ -828,9 +896,14 @@ export class TicketsService {
   ): Promise<{ assignedOffice: 'MEO' | 'MDRRMO' }> {
     const sql = this.pg;
     const [ticket] = await sql<
-      { assigned_office: 'MEO' | 'MDRRMO'; category: string; status: string }[]
+      {
+        assigned_office: 'MEO' | 'MDRRMO';
+        category: string;
+        status: string;
+        merged_into_ticket_id: number | null;
+      }[]
     >`
-      SELECT assigned_office, category, status FROM tickets WHERE id = ${ticketId}
+      SELECT assigned_office, category, status, merged_into_ticket_id FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
 
@@ -857,6 +930,7 @@ export class TicketsService {
     } else {
       assertOfficeAccess(admin, ticket.assigned_office);
     }
+    assertNotMergedAway({ id: ticketId, ...ticket });
 
     if (ticket.assigned_office === toOffice) {
       throw new BadRequestException(
@@ -929,12 +1003,17 @@ export class TicketsService {
 
     const sql = this.pg;
     const [ticket] = await sql<
-      { assigned_office: 'MEO' | 'MDRRMO'; category: string }[]
+      {
+        assigned_office: 'MEO' | 'MDRRMO';
+        category: string;
+        merged_into_ticket_id: number | null;
+      }[]
     >`
-      SELECT assigned_office, category FROM tickets WHERE id = ${ticketId}
+      SELECT assigned_office, category, merged_into_ticket_id FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
     assertOfficeAccess(admin, ticket.assigned_office);
+    assertNotMergedAway({ id: ticketId, ...ticket });
 
     await sql.begin(async (tx) => {
       await this.audit.logInPgTx(tx, {
@@ -995,12 +1074,14 @@ export class TicketsService {
         status: TicketStatus;
         assigned_office: 'MEO' | 'MDRRMO';
         category: string;
+        merged_into_ticket_id: number | null;
       }[]
     >`
-      SELECT status, assigned_office, category FROM tickets WHERE id = ${ticketId}
+      SELECT status, assigned_office, category, merged_into_ticket_id FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
     assertOfficeAccess(admin, ticket.assigned_office);
+    assertNotMergedAway({ id: ticketId, ...ticket });
 
     if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) {
       throw new BadRequestException(

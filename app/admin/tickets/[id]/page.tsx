@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
@@ -11,9 +11,10 @@ import type {
   TicketReferralRow,
   TicketPriorityContext,
   OperationalAssessment,
+  TicketMergedInto,
 } from "@/lib/types/admin-tickets";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
-import type { RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
+import type { RelatedTicketCandidate, RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { StatusPill } from "@/components/features/admin/shared/StatusPill";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
@@ -29,6 +30,7 @@ import { RejectTicketPanel } from "@/components/features/admin/tickets/RejectTic
 import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersPanel";
 import { OperationalAssessmentPanel } from "@/components/features/admin/tickets/OperationalAssessmentPanel";
 import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
+import { ReportGroupingActions } from "@/components/features/admin/tickets/grouping/ReportGroupingActions";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
 import { HorizontalStatusTracker } from "@/components/features/admin/tickets/HorizontalStatusTracker";
 import { TicketDetailSkeleton } from "@/components/features/admin/tickets/TicketDetailSkeleton";
@@ -52,6 +54,20 @@ interface TicketDetailResponse {
   reassignments: TicketReassignmentRow[];
   referrals: TicketReferralRow[];
   operationalAssessment: OperationalAssessment | null;
+  // Manuscript revision Phase 3, step 3d.
+  mergedInto: TicketMergedInto | null;
+  mergedFrom: number[];
+}
+
+// Per-report Remove / Move on a multi-report active ticket (manuscript
+// revision Phase 3, step 3d). Remove's availability and the eligible Move
+// targets come from the related-candidates response, which applies the
+// server's own grouping rules for this viewer.
+interface ReportGrouping {
+  ticketId: number;
+  removeBlocked: string | null;
+  moveTargets: RelatedTicketCandidate[];
+  moveBlocked: string | null;
 }
 
 async function TicketDetailData({ ticketId, from }: { ticketId: number; from: string | undefined }) {
@@ -62,7 +78,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
     // NestJS's GET /admin/tickets/:id recomputes before reading, matching
     // this page's original SSR behavior.
     data = await apiGetOptional<TicketDetailResponse>(`/admin/tickets/${ticketId}`, [401, 404]);
-    if (data && ACTIVE_STATUSES.includes(data.ticket.status)) {
+    if (data && ACTIVE_STATUSES.includes(data.ticket.status) && data.ticket.merged_into_ticket_id === null) {
       priorityContext = await apiGetOptional<TicketPriorityContext>(`/admin/tickets/${ticketId}/priority-context`, [401, 404]);
     }
     if (data) {
@@ -92,7 +108,11 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
     related = null;
   }
 
-  const { ticket, reports, history, reassignments, referrals, operationalAssessment } = data;
+  const { ticket, reports, history, reassignments, referrals, operationalAssessment, mergedInto, mergedFrom } = data;
+  // A merged-away ticket stays viewable as history, with no actions
+  // (manuscript revision Phase 3, step 3d; the API refuses them too).
+  const mergedAway = ticket.merged_into_ticket_id !== null;
+  const grouping = reportGrouping(ticket, reports.length, related);
 
   // Only trust a same-origin queue URL forwarded from the ticket list —
   // never redirect off /admin/tickets based on an arbitrary query param.
@@ -149,19 +169,60 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
         <p className="mt-1.5 text-sm text-ink-500">
           {ticket.barangay_name} · {ticket.assigned_office}
           {ticket.initial_assigned_office !== ticket.assigned_office && <> · Initially routed to {ticket.initial_assigned_office}</>} ·{" "}
-          {ticket.member_count} report{ticket.member_count === 1 ? "" : "s"} merged
+          {mergedAway ? (
+            <>Reports moved to Ticket #{ticket.merged_into_ticket_id}</>
+          ) : (
+            <>
+              {ticket.member_count} report{ticket.member_count === 1 ? "" : "s"} merged
+            </>
+          )}
           {primaryReport && <> · First reported {new Date(primaryReport.created_at).toLocaleString()}</>}
         </p>
+        {mergedFrom.length > 0 && (
+          <p className="mt-1 text-sm text-ink-700" data-testid="merged-from">
+            Includes reports merged from{" "}
+            {mergedFrom.map((id, i) => (
+              <span key={id}>
+                {i > 0 && ", "}
+                <Link className="text-brand-600 hover:text-brand-700 hover:underline" href={`/admin/tickets/${id}`}>
+                  Ticket #{id}
+                </Link>
+              </span>
+            ))}
+          </p>
+        )}
       </div>
 
-      <HorizontalStatusTracker createdAt={ticket.created_at} currentStatus={ticket.status} history={history} nextStatus={nextStatus} ticketId={ticket.id} />
+      {mergedInto && (
+        <div className="rounded-lg border border-warning-edge bg-warning-tint p-4 text-sm text-warning-ink" data-testid="merged-into-banner" role="status">
+          <p>
+            Merged into{" "}
+            <Link className="font-medium underline" href={`/admin/tickets/${mergedInto.ticketId}`}>
+              Ticket #{mergedInto.ticketId}
+            </Link>
+            {mergedInto.mergedAt && <> on {new Date(mergedInto.mergedAt).toLocaleDateString()}</>}
+            {mergedInto.mergedByName && <> by {mergedInto.mergedByName}</>}. Reason: {mergedInto.reason ?? "—"}
+          </p>
+          <p className="mt-1 text-xs">This ticket is read-only history. Its reports continue on Ticket #{mergedInto.ticketId}.</p>
+        </div>
+      )}
+
+      <HorizontalStatusTracker
+        createdAt={ticket.created_at}
+        currentStatus={ticket.status}
+        history={history}
+        nextStatus={mergedAway ? undefined : nextStatus}
+        readOnlyNote={mergedAway ? `Read-only: merged into Ticket #${ticket.merged_into_ticket_id}.` : undefined}
+        ticketId={ticket.id}
+      />
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
         <div className="flex min-w-0 flex-col gap-4 lg:col-span-7">
           <Card>
             <CardContent className="p-4">
               <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Location</p>
-              <div className="h-72 overflow-hidden rounded-lg border border-line-100">
+              {/* isolate keeps Leaflet's pane z-indexes below dialogs. */}
+              <div className="isolate h-72 overflow-hidden rounded-lg border border-line-100">
                 <TicketLocationMapLoader barangayGeoJson={barangayGeometry} lat={ticket.lat} lng={ticket.lng} />
               </div>
               <p className="mt-2 text-xs text-ink-500">
@@ -170,13 +231,15 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             </CardContent>
           </Card>
 
-          <EvidenceCard primaryReport={primaryReport} reportCount={reports.length} reports={reports} />
+          <EvidenceCard grouping={grouping} primaryReport={primaryReport} reportCount={reports.length} reports={reports} />
 
-          <Card>
-            <CardContent className="p-4">
-              <RelatedTicketsPanel linkTo="ticket" related={related} />
-            </CardContent>
-          </Card>
+          {!mergedAway && (
+            <Card>
+              <CardContent className="p-4">
+                <RelatedTicketsPanel linkTo="ticket" related={related} />
+              </CardContent>
+            </Card>
+          )}
 
           {ticket.resolution_image_url && primaryReport && (
             <BeforeAfterCard afterUrl={ticket.resolution_image_url} beforeUrl={primaryReport.image_url} notes={ticket.resolution_notes} title={primaryReport.title} />
@@ -196,6 +259,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
         </div>
 
         <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
+          {!mergedAway && (
           <Card>
             <CardContent className="p-4">
               <div className="mb-2 flex items-center gap-2">
@@ -207,8 +271,9 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
               <AssignmentPanel currentOffice={ticket.assigned_office} ticketId={ticket.id} />
             </CardContent>
           </Card>
+          )}
 
-          {!ticket.direct_responsibility && (
+          {!mergedAway && !ticket.direct_responsibility && (
             <Card>
               <CardContent className="p-4">
                 <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Referral</p>
@@ -217,7 +282,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             </Card>
           )}
 
-          {ACTIVE_STATUSES.includes(ticket.status) && (
+          {!mergedAway && ACTIVE_STATUSES.includes(ticket.status) && (
             <Card>
               <CardContent className="p-4">
                 <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Reject</p>
@@ -228,13 +293,13 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
 
           <Card>
             <CardContent className="p-4">
-              <WorkOrdersPanel initialWorkOrders={workOrders} office={ticket.assigned_office as "MEO" | "MDRRMO"} ticketId={ticket.id} />
+              <WorkOrdersPanel initialWorkOrders={workOrders} office={ticket.assigned_office as "MEO" | "MDRRMO"} readOnly={mergedAway} ticketId={ticket.id} />
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="p-4">
-              <OperationalAssessmentPanel assessment={operationalAssessment} ticketId={ticket.id} />
+              <OperationalAssessmentPanel assessment={operationalAssessment} readOnly={mergedAway} ticketId={ticket.id} />
             </CardContent>
           </Card>
 
@@ -278,14 +343,37 @@ export default async function TicketDetailPage({
   );
 }
 
+function reportGrouping(
+  ticket: TicketDetail,
+  reportCount: number,
+  related: RelatedTicketCandidates | null,
+): ReportGrouping | null {
+  if (ticket.merged_into_ticket_id !== null || !ACTIVE_STATUSES.includes(ticket.status) || reportCount < 2) return null;
+  const moveTargets = related?.candidates.filter((c) => c.blockedReasons.moveReportHere === null) ?? [];
+  let moveBlocked: string | null = null;
+  if (moveTargets.length === 0) {
+    if (related === null) moveBlocked = "Possibly related tickets couldn't load, so there is no ticket to move it to.";
+    else if (related.candidates.length === 0) moveBlocked = `No active ${ticket.category} ticket within ${related.radiusM} m to move it to.`;
+    else moveBlocked = [...new Set(related.candidates.map((c) => c.blockedReasons.moveReportHere))].join(" ");
+  }
+  return {
+    ticketId: ticket.id,
+    removeBlocked: related?.viewed.blockedReasons.removeReport ?? null,
+    moveTargets,
+    moveBlocked,
+  };
+}
+
 function EvidenceCard({
   primaryReport,
   reportCount,
   reports,
+  grouping,
 }: {
   primaryReport: TicketReport | undefined;
   reportCount: number;
   reports: TicketReport[];
+  grouping: ReportGrouping | null;
 }) {
   return (
     <Card>
@@ -295,7 +383,21 @@ function EvidenceCard({
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {reports.map((report) => (
-            <ReportCard key={report.id} report={report} />
+            <ReportCard
+              actions={
+                grouping && (
+                  <ReportGroupingActions
+                    moveBlocked={grouping.moveBlocked}
+                    moveTargets={grouping.moveTargets}
+                    removeBlocked={grouping.removeBlocked}
+                    report={report}
+                    ticketId={grouping.ticketId}
+                  />
+                )
+              }
+              key={report.id}
+              report={report}
+            />
           ))}
           {reports.length === 0 && <p className="text-sm text-ink-400">No member reports on this ticket.</p>}
         </div>
@@ -304,7 +406,7 @@ function EvidenceCard({
   );
 }
 
-function ReportCard({ report }: { report: TicketReport }) {
+function ReportCard({ report, actions }: { report: TicketReport; actions?: ReactNode }) {
   const exif = report.exif_data;
   const gpsLat = typeof exif?.GPSLatitude === "number" ? exif.GPSLatitude : null;
   const gpsLng = typeof exif?.GPSLongitude === "number" ? exif.GPSLongitude : null;
@@ -321,7 +423,7 @@ function ReportCard({ report }: { report: TicketReport }) {
   const flags = report.flags ?? [];
 
   return (
-    <div className="rounded-lg border border-line-100 p-3">
+    <div className="rounded-lg border border-line-100 p-3" data-testid={`report-card-${report.id}`}>
       <ImageLightbox
         alt={`Hazard evidence photo submitted for "${report.title}", reported ${new Date(report.created_at).toLocaleDateString()}`}
         src={report.image_url}
@@ -336,6 +438,7 @@ function ReportCard({ report }: { report: TicketReport }) {
         ))}
       </div>
       {metaParts.length > 0 && <p className="mt-1.5 text-xs text-ink-400">{metaParts.join(" · ")}</p>}
+      {actions}
     </div>
   );
 }

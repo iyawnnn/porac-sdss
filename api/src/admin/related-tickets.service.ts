@@ -8,16 +8,36 @@ import {
 } from '../common/authz/admin-scope';
 import { radiusForCategory } from '../common/utils/radius';
 import type { TicketStatus } from './ticket-constants';
+import {
+  type GroupingActor,
+  type GroupingTicketFacts,
+  mergeBlock,
+  regroupBlock,
+  removeBlock,
+} from './ticket-grouping.rules';
 
 // Suggested related tickets (manuscript pp. 31, 78 and the PostGIS section;
 // handoff Decision 1; manuscript revision Phase 3, step 3c). Suggestions
 // only: distance and category alone don't establish the same incident, so
 // nothing here merges, groups, writes, audits or notifies. Staff confirm
-// (step 3d).
+// with Merge / Move (step 3d, TicketGroupingService); the blocked reasons
+// below tell the panel which of those the viewer may do, from the same rules.
 export const RELATED_CANDIDATES_LIMIT = 10;
 
+// Why an action is not available, in the words the action itself would
+// answer with; null when it is.
+export interface CandidateBlockedReasons {
+  // Merge the candidate into the viewed ticket (the viewed one survives).
+  mergeIntoViewed: string | null;
+  // Merge the viewed ticket into the candidate.
+  mergeViewedInto: string | null;
+  // Move one of the viewed ticket's reports to the candidate.
+  moveReportHere: string | null;
+}
+
 // Only what the panel shows: no citizen identity, photos, descriptions,
-// flags, Work Order or assessment data.
+// flags, Work Order or assessment data (whether a Work Order blocks an
+// action shows only as that action's blocked reason).
 export interface RelatedTicketCandidate {
   ticketId: number;
   category: string;
@@ -26,22 +46,37 @@ export interface RelatedTicketCandidate {
   barangayName: string;
   distanceM: number;
   memberCount: number;
+  createdAt: string;
   // The earliest member report: its submission time, tracking reference,
   // and id (Focal opens intake detail by report).
   reportedAt: string | null;
   trackingReference: string | null;
   firstReportId: number | null;
+  blockedReasons: CandidateBlockedReasons;
 }
 
 export interface RelatedTicketCandidates {
   radiusM: number;
+  viewed: {
+    ticketId: number;
+    createdAt: string;
+    reportCount: number;
+    mergedIntoTicketId: number | null;
+    // Taking one of its reports out into a ticket of its own.
+    blockedReasons: { removeReport: string | null };
+  };
   candidates: RelatedTicketCandidate[];
 }
 
 interface ViewedTicket {
   id: number;
   category: string;
+  status: TicketStatus;
   assigned_office: 'MEO' | 'MDRRMO';
+  merged_into_ticket_id: number | null;
+  created_at: string;
+  report_count: number;
+  active_work_orders: number;
 }
 
 interface CandidateRow {
@@ -52,6 +87,8 @@ interface CandidateRow {
   barangay_name: string;
   distance_m: number;
   member_count: number;
+  created_at: string;
+  active_work_orders: number;
   first_report_id: number | null;
   tracking_reference: string | null;
   reported_at: string | null;
@@ -67,14 +104,18 @@ export class RelatedTicketsService {
   // own office only (the ticket's office, just checked).
   async forTicket(
     ticketId: number,
-    admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
+    admin: GroupingActor,
   ): Promise<RelatedTicketCandidates | null> {
     const [ticket] = await this.pg<ViewedTicket[]>`
-      SELECT id, category, assigned_office FROM tickets WHERE id = ${ticketId}
+      SELECT t.id, t.category, t.status, t.assigned_office, t.merged_into_ticket_id, t.created_at,
+        (SELECT count(*)::int FROM reports rc WHERE rc.ticket_id = t.id) AS report_count,
+        (SELECT count(*)::int FROM work_orders wo
+          WHERE wo.ticket_id = t.id AND wo.status IN ('pending', 'in_progress')) AS active_work_orders
+      FROM tickets t WHERE t.id = ${ticketId}
     `;
     if (!ticket) return null;
     assertOfficeAccess(admin, ticket.assigned_office);
-    return this.candidates(ticket, ticket.assigned_office);
+    return this.candidates(ticket, ticket.assigned_office, admin);
   }
 
   // Focal intake works from a report, so this uses that report's ticket.
@@ -82,18 +123,21 @@ export class RelatedTicketsService {
   // offices. The route is behind FocalGuard; checked again here.
   async forReport(
     reportId: number,
-    admin: Pick<AdminSession, 'accountType' | 'isFocal'>,
+    admin: GroupingActor,
   ): Promise<RelatedTicketCandidates | null> {
     if (!isFocalPersonnel(admin)) {
       throw new ForbiddenException('Focal Intake access required.');
     }
     const [ticket] = await this.pg<ViewedTicket[]>`
-      SELECT t.id, t.category, t.assigned_office
+      SELECT t.id, t.category, t.status, t.assigned_office, t.merged_into_ticket_id, t.created_at,
+        (SELECT count(*)::int FROM reports rc WHERE rc.ticket_id = t.id) AS report_count,
+        (SELECT count(*)::int FROM work_orders wo
+          WHERE wo.ticket_id = t.id AND wo.status IN ('pending', 'in_progress')) AS active_work_orders
       FROM reports r JOIN tickets t ON t.id = r.ticket_id
       WHERE r.id = ${reportId}
     `;
     if (!ticket) return null;
-    return this.candidates(ticket, null);
+    return this.candidates(ticket, null, admin);
   }
 
   // Active tickets (Reported / Under Review / In Progress) of the same
@@ -106,13 +150,16 @@ export class RelatedTicketsService {
   private async candidates(
     viewed: ViewedTicket,
     office: 'MEO' | 'MDRRMO' | null,
+    admin: GroupingActor,
   ): Promise<RelatedTicketCandidates> {
     const radiusM = radiusForCategory(viewed.category);
     const rows = await this.pg<CandidateRow[]>`
       SELECT
         t.id, t.category, t.status, t.assigned_office, b.name AS barangay_name,
         round(ST_Distance(t.geom::geography, v.geom::geography))::int AS distance_m,
-        t.member_count,
+        t.member_count, t.created_at,
+        (SELECT count(*)::int FROM work_orders wo
+          WHERE wo.ticket_id = t.id AND wo.status IN ('pending', 'in_progress')) AS active_work_orders,
         first_report.id AS first_report_id,
         first_report.tracking_reference,
         first_report.created_at AS reported_at
@@ -135,20 +182,70 @@ export class RelatedTicketsService {
       ORDER BY ST_Distance(t.geom::geography, v.geom::geography), t.id
       LIMIT ${RELATED_CANDIDATES_LIMIT}
     `;
+
+    const viewedFacts: GroupingTicketFacts = {
+      id: viewed.id,
+      status: viewed.status,
+      assignedOffice: viewed.assigned_office,
+      category: viewed.category,
+      mergedIntoTicketId: viewed.merged_into_ticket_id ?? null,
+      activeWorkOrders: viewed.active_work_orders ?? 0,
+    };
+    const reason = (block: { message: string } | null) =>
+      block?.message ?? null;
+
     return {
       radiusM,
-      candidates: rows.map((row) => ({
-        ticketId: row.id,
-        category: row.category,
-        status: row.status,
-        assignedOffice: row.assigned_office,
-        barangayName: row.barangay_name,
-        distanceM: row.distance_m,
-        memberCount: row.member_count,
-        reportedAt: row.reported_at,
-        trackingReference: row.tracking_reference,
-        firstReportId: row.first_report_id,
-      })),
+      viewed: {
+        ticketId: viewed.id,
+        createdAt: viewed.created_at,
+        reportCount: viewed.report_count,
+        mergedIntoTicketId: viewed.merged_into_ticket_id ?? null,
+        blockedReasons: {
+          removeReport: reason(
+            removeBlock(admin, viewedFacts, viewed.report_count),
+          ),
+        },
+      },
+      candidates: rows.map((row) => {
+        const candidateFacts: GroupingTicketFacts = {
+          id: row.id,
+          status: row.status,
+          assignedOffice: row.assigned_office,
+          category: row.category,
+          mergedIntoTicketId: null,
+          activeWorkOrders: row.active_work_orders ?? 0,
+        };
+        return {
+          ticketId: row.id,
+          category: row.category,
+          status: row.status,
+          assignedOffice: row.assigned_office,
+          barangayName: row.barangay_name,
+          distanceM: row.distance_m,
+          memberCount: row.member_count,
+          createdAt: row.created_at,
+          reportedAt: row.reported_at,
+          trackingReference: row.tracking_reference,
+          firstReportId: row.first_report_id,
+          blockedReasons: {
+            mergeIntoViewed: reason(
+              mergeBlock(admin, viewedFacts, candidateFacts),
+            ),
+            mergeViewedInto: reason(
+              mergeBlock(admin, candidateFacts, viewedFacts),
+            ),
+            moveReportHere: reason(
+              regroupBlock(
+                admin,
+                viewedFacts,
+                candidateFacts,
+                viewed.report_count,
+              ),
+            ),
+          },
+        };
+      }),
     };
   }
 }

@@ -9,6 +9,7 @@ import { PG } from '../db/db.module';
 import type { AdminSession } from '../auth/session.service';
 import { assertOfficeAccess } from '../common/authz/admin-scope';
 import { AdminAuditService } from './admin-audit.service';
+import { assertNotMergedAway } from './ticket-grouping.rules';
 import {
   OPERATIONAL_CONSTRAINTS,
   OPERATIONAL_ASSESSMENT_TEXT_MAX_LENGTH,
@@ -243,11 +244,17 @@ export class OperationalAssessmentService {
     input: OperationalAssessmentInput,
   ): Promise<OperationalAssessmentRow | null> {
     const sql = this.pg;
-    const [ticket] = await sql<{ assigned_office: 'MEO' | 'MDRRMO' }[]>`
-      SELECT assigned_office FROM tickets WHERE id = ${ticketId}
+    const [ticket] = await sql<
+      {
+        assigned_office: 'MEO' | 'MDRRMO';
+        merged_into_ticket_id: number | null;
+      }[]
+    >`
+      SELECT assigned_office, merged_into_ticket_id FROM tickets WHERE id = ${ticketId}
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
     assertOfficeAccess(admin, ticket.assigned_office);
+    assertNotMergedAway({ id: ticketId, ...ticket });
 
     const normalized = normalizeAndValidate(input);
 

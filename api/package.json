@@ -63,6 +63,8 @@
     "seed:admin": "tsx --env-file=.env scripts/seed/seed-admin.ts",
     "seed:e2e-admins": "tsx --env-file=.env scripts/seed/seed-e2e-admins.ts",
     "cleanup:e2e-admins": "tsx --env-file=.env scripts/seed/cleanup-e2e-admins.ts",
+    "seed:e2e-grouping-fixtures": "tsx --env-file=.env scripts/seed/seed-e2e-grouping-fixtures.ts",
+    "cleanup:e2e-grouping-fixtures": "tsx --env-file=.env scripts/seed/seed-e2e-grouping-fixtures.ts --cleanup",
     "seed:users": "tsx --env-file=.env scripts/seed/seed-users.ts",
     "seed:mock-report": "tsx --env-file=.env scripts/seed/seed-mock-report.ts",
     "seed:bulk-reports": "tsx --env-file=.env scripts/seed/seed-bulk-reports.ts",

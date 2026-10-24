@@ -24,7 +24,9 @@ export interface OperationalPriorityRecalcResult {
 //
 // Only active tickets (Reported / Under Review / In Progress) are
 // recalculated; Resolved/Rejected tickets keep their last value, same as
-// before the split.
+// before the split. A ticket merged into another (manuscript revision Phase
+// 3, step 3d) is neither recalculated nor counted in barangay demand: it
+// keeps its old status as history but is no longer an open ticket.
 //
 // Severity is still the MAX citizen_severity across the ticket's linked
 // reports (same rank mapping as before). The median rule is a later phase.
@@ -48,6 +50,7 @@ export class OperationalPriorityService {
         SELECT barangay_id, COUNT(*)::int AS active_barangay_count
         FROM tickets
         WHERE status IN ('Reported', 'Under Review', 'In Progress')
+          AND merged_into_ticket_id IS NULL
         GROUP BY barangay_id
       ), severity_by_ticket AS (
         SELECT ticket_id, MAX(CASE citizen_severity
@@ -67,6 +70,7 @@ export class OperationalPriorityService {
       JOIN barangay_density d ON d.barangay_id = t.barangay_id
       LEFT JOIN severity_by_ticket s ON s.ticket_id = t.id
       WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
+        AND t.merged_into_ticket_id IS NULL
     `;
 
     if (tickets.length === 0) return { updated: 0 };

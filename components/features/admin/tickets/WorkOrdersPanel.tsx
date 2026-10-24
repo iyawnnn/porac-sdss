@@ -16,10 +16,14 @@ export function WorkOrdersPanel({
   ticketId,
   office,
   initialWorkOrders,
+  readOnly = false,
 }: {
   ticketId: number;
   office: "MEO" | "MDRRMO";
   initialWorkOrders: WorkOrderRow[];
+  // A merged-away ticket (manuscript revision Phase 3, step 3d): its Work
+  // Orders stay listed as history, with no create or edit controls.
+  readOnly?: boolean;
 }) {
   const [workOrders, setWorkOrders] = useState(initialWorkOrders);
 
@@ -34,7 +38,7 @@ export function WorkOrdersPanel({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Work orders ({workOrders.length})</p>
-        <CreateWorkOrderDialog office={office} onCreated={handleCreated} ticketId={ticketId} />
+        {!readOnly && <CreateWorkOrderDialog office={office} onCreated={handleCreated} ticketId={ticketId} />}
       </div>
       {workOrders.length === 0 ? (
         <EmptyState className="items-start p-0 text-left" title="No work orders yet for this ticket." />
@@ -46,12 +50,18 @@ export function WorkOrdersPanel({
                 <p className="min-w-0 truncate text-sm font-medium text-ink-900">{wo.title}</p>
                 <WorkOrderStatusBadge status={wo.status} />
               </div>
-              <WorkOrderNotesEditor onUpdated={handleUpdated} workOrder={wo} />
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <WorkOrderStatusSelect onUpdated={handleUpdated} workOrder={wo} />
-                <WorkOrderAssigneeSelect onUpdated={handleUpdated} workOrder={wo} />
-                <WorkOrderDueDateEditor onUpdated={handleUpdated} workOrder={wo} />
-              </div>
+              {readOnly ? (
+                wo.notes && <p className="mt-1 text-xs whitespace-pre-wrap text-ink-500">{wo.notes}</p>
+              ) : (
+                <>
+                  <WorkOrderNotesEditor onUpdated={handleUpdated} workOrder={wo} />
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <WorkOrderStatusSelect onUpdated={handleUpdated} workOrder={wo} />
+                    <WorkOrderAssigneeSelect onUpdated={handleUpdated} workOrder={wo} />
+                    <WorkOrderDueDateEditor onUpdated={handleUpdated} workOrder={wo} />
+                  </div>
+                </>
+              )}
             </li>
           ))}
         </ul>

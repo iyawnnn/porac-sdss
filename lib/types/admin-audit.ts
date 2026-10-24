@@ -9,6 +9,10 @@ export type AdminAuditActionType =
   | "ticket_reassigned"
   | "ticket_referral_noted"
   | "ticket_rejected"
+  // Manuscript revision Phase 3, step 3d: staff Merge / Remove / Regroup.
+  | "ticket_merged"
+  | "report_removed_from_ticket"
+  | "report_regrouped"
   | "report_moderated"
   | "work_order_created"
   | "work_order_updated"

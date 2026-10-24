@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -27,6 +28,7 @@ import {
 } from '../common/authz/admin-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminAuditService } from './admin-audit.service';
+import { assertNotMergedAway } from './ticket-grouping.rules';
 import {
   WORK_ORDER_TITLE_MAX_LENGTH,
   WORK_ORDER_NOTES_MAX_LENGTH,
@@ -379,11 +381,19 @@ export class WorkOrdersService {
     }
 
     const [ticket] = await this.db
-      .select({ assignedOffice: tickets.assignedOffice })
+      .select({
+        assignedOffice: tickets.assignedOffice,
+        mergedIntoTicketId: tickets.mergedIntoTicketId,
+      })
       .from(tickets)
       .where(eq(tickets.id, ticketId));
     if (!ticket) throw new NotFoundException('Ticket not found.');
     assertOfficeAccess(admin, ticket.assignedOffice);
+    // A merged-away ticket is read-only history (Phase 3, step 3d).
+    assertNotMergedAway({
+      id: ticketId,
+      merged_into_ticket_id: ticket.mergedIntoTicketId,
+    });
     if (assignedAdminId != null) {
       await this.assertValidAssignee(assignedAdminId, ticket.assignedOffice);
     }
@@ -587,8 +597,20 @@ export class WorkOrdersService {
       const [updated] = await tx
         .update(workOrders)
         .set({ status: nextStatus, completedAt, updatedAt: new Date() })
-        .where(eq(workOrders.id, id))
+        .where(
+          and(
+            eq(workOrders.id, id),
+            // A merged-away ticket's Work Orders are read-only history
+            // (Phase 3, step 3d), so none can be reopened.
+            dsql`NOT EXISTS (SELECT 1 FROM tickets t WHERE t.id = ${workOrders.ticketId} AND t.merged_into_ticket_id IS NOT NULL)`,
+          ),
+        )
         .returning(SAFE_COLUMNS);
+      if (!updated) {
+        throw new ConflictException(
+          `Work order #${id} belongs to a ticket that was merged into another and is read-only.`,
+        );
+      }
       // Append-only status timeline, in the same transaction as the status
       // write itself so the two can never disagree. This is what makes the
       // dashboard's Pending Work Orders sparkline reconstructable — the

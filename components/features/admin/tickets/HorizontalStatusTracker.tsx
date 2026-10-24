@@ -57,12 +57,15 @@ export function HorizontalStatusTracker({
   createdAt,
   history,
   nextStatus,
+  readOnlyNote,
 }: {
   ticketId: number;
   currentStatus: string;
   createdAt: string;
   history: { status: string; changed_at: string }[];
   nextStatus: string | undefined;
+  // Shown instead of the advance button on a read-only (merged-away) ticket.
+  readOnlyNote?: string;
 }) {
   const router = useRouter();
   const [advancing, setAdvancing] = useState(false);
@@ -127,7 +130,9 @@ export function HorizontalStatusTracker({
         </div>
 
         <div className="shrink-0 sm:pl-4 sm:border-l sm:border-line-200">
-          {nextStatus ? (
+          {readOnlyNote ? (
+            <p className="text-sm text-ink-500">{readOnlyNote}</p>
+          ) : nextStatus ? (
             <Button className="w-full sm:w-auto" disabled={advancing} onClick={handleAdvanceClick}>
               {advancing ? "Updating..." : `Advance to ${nextStatus}`}
             </Button>
