@@ -1,7 +1,7 @@
 
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
+import { E2E_FOCAL_ADMIN, E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
 import { loginAdmin as loginAs, loginCitizen, settleAdminPage } from "./helpers";
 
 test.setTimeout(60_000);
@@ -822,15 +822,18 @@ test("the citizen's Case Closure Summary reflects a ticket resolved through the 
 // that still routes to MEO custody (api/src/common/utils/office.ts) — same
 // reasoning as Pothole above, but exercises the non-direct-responsibility
 // path instead.
-async function createReferralReport(citizenPage: Page, titleSuffix: string): Promise<{ ticketId: number }> {
-  const jitter = () => (Math.random() - 0.5) * 0.01;
+async function createReferralReport(
+  citizenPage: Page,
+  titleSuffix: string,
+  at: { lat: number; lng: number },
+): Promise<{ ticketId: number; reportId: number }> {
   const res = await citizenPage.request.post("/api/reports", {
     multipart: {
       title: `E2E referral ${titleSuffix}`,
       category: "Leaking Pipe / Water Supply Concern",
       citizen_severity: "Low",
-      lat: String(15.0711 + jitter()),
-      lng: String(120.5401 + jitter()),
+      lat: String(at.lat),
+      lng: String(at.lng),
       image: {
         name: "01_poblacion.jpg",
         mimeType: "image/jpeg",
@@ -842,45 +845,109 @@ async function createReferralReport(citizenPage: Page, titleSuffix: string): Pro
     const bodyText = await res.text().catch((e) => `<failed to read body: ${e}>`);
     throw new Error(`createReferralReport: POST /api/reports failed — status ${res.status()} ${res.statusText()}\nbody: ${bodyText}`);
   }
-  return (await res.json()) as { ticketId: number };
+  return (await res.json()) as { ticketId: number; reportId: number };
 }
 
-test("a Referral-classified ticket shows the badge and Log Referral action; a Direct-responsibility ticket shows neither", async ({ page, browser }) => {
-  const citizenContext = await browser.newContext();
-  const citizenPage = await citizenContext.newPage();
-  await signupCitizen(citizenPage, "referral");
-  const { ticketId: referralTicketId } = await createReferralReport(citizenPage, `${Date.now()}`);
-  await citizenContext.close();
+// Manuscript revision Phase 3, step 3c: the two referral tickets also serve
+// the "Possibly related tickets" panel, so it costs no extra report (a full
+// run already posts 20, the per-IP hourly limit; docs/testing.md §6). The
+// second is placed 8 m north of the first, inside Leaking Pipe's 50 m radius.
+// The area is a point in Jalung that had no ticket of any kind within 400 m,
+// away from the Poblacion box the other fixtures use, and both tickets are
+// rejected afterward, so a later run starts from an empty area. Serial: the
+// later tests use the earlier tests' tickets (--workers=1).
+const REFERRAL_AREA = { lat: 15.06, lng: 120.53 };
+const NEARBY_OFFSET_DEG = 8 / 111_320; // 8 m north
 
-  await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto(`/admin/tickets/${referralTicketId}`);
-  await expect(page.getByText("Referral — coordinate externally", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Referral agency", { exact: true })).toBeVisible();
+test.describe.serial("Referral tickets and their related-ticket suggestions", () => {
+  // About ±165 m, so a run whose cleanup failed doesn't sit on the next one.
+  const jitter = () => (Math.random() - 0.5) * 0.003;
+  const referralAt = { lat: REFERRAL_AREA.lat + jitter(), lng: REFERRAL_AREA.lng + jitter() };
+  let referral: { ticketId: number; reportId: number } | undefined;
+  let nearby: { ticketId: number; reportId: number } | undefined;
 
-  // A Direct-responsibility ticket (Pothole) shows neither.
-  await page.goto(`/admin/tickets/${sharedReadOnlyTicketId}`);
-  await expect(page.getByText("Referral — coordinate externally", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Referral agency", { exact: true })).toHaveCount(0);
-});
+  test.afterAll(async ({ browser }) => {
+    const ticketIds = [referral?.ticketId, nearby?.ticketId].filter((id): id is number => id !== undefined);
+    if (ticketIds.length === 0) return;
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await loginAs(page, E2E_MEO_ADMIN);
+    for (const id of ticketIds) {
+      await page.request.post(`/api/admin/tickets/${id}/reject`, {
+        data: { reason: "E2E cleanup: related-ticket suggestion fixture." },
+      });
+    }
+    await context.close();
+  });
 
-test("logging a referral persists and appears in the ticket timeline", async ({ page, browser }) => {
-  const citizenContext = await browser.newContext();
-  const citizenPage = await citizenContext.newPage();
-  await signupCitizen(citizenPage, "referral-log");
-  const { ticketId } = await createReferralReport(citizenPage, `${Date.now()}`);
-  await citizenContext.close();
+  test("a Referral-classified ticket shows the badge and Log Referral action; a Direct-responsibility ticket shows neither; alone in its area, it has no related suggestions", async ({ page, browser }) => {
+    const citizenContext = await browser.newContext();
+    const citizenPage = await citizenContext.newPage();
+    await signupCitizen(citizenPage, "referral");
+    referral = await createReferralReport(citizenPage, `${Date.now()}`, referralAt);
+    await citizenContext.close();
 
-  await loginAs(page, E2E_MEO_ADMIN);
-  await page.goto(`/admin/tickets/${ticketId}`);
+    await loginAs(page, E2E_MEO_ADMIN);
+    await page.goto(`/admin/tickets/${referral.ticketId}`);
+    await expect(page.getByText("Referral — coordinate externally", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Referral agency", { exact: true })).toBeVisible();
+    await expect(page.getByText("Possibly related tickets", { exact: true })).toBeVisible();
+    await expect(page.getByText("Suggested by distance and category only. Staff confirm whether reports are related.")).toBeVisible();
+    await expect(page.getByText("No active tickets of the same category within 50 m.", { exact: true })).toBeVisible();
 
-  await page.getByLabel("Referral agency", { exact: true }).click();
-  await page.getByRole("option", { name: "MENRO", exact: true }).click();
-  await page.getByLabel("Referral note", { exact: true }).fill("E2E referral note");
-  await page.getByRole("button", { name: "Log Referral" }).click();
+    // A Direct-responsibility ticket (Pothole) shows neither.
+    await page.goto(`/admin/tickets/${sharedReadOnlyTicketId}`);
+    await expect(page.getByText("Referral — coordinate externally", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Referral agency", { exact: true })).toHaveCount(0);
+  });
 
-  await expect(page.getByRole("button", { name: "Recording..." })).toHaveCount(0);
-  await page.getByRole("tab", { name: "Timeline" }).click();
-  await expect(page.getByText(/Referral recorded — MENRO: E2E referral note/)).toBeVisible();
+  test("logging a referral persists and appears in the ticket timeline", async ({ page, browser }) => {
+    const citizenContext = await browser.newContext();
+    const citizenPage = await citizenContext.newPage();
+    await signupCitizen(citizenPage, "referral-log");
+    nearby = await createReferralReport(citizenPage, `${Date.now()}`, {
+      lat: referralAt.lat + NEARBY_OFFSET_DEG,
+      lng: referralAt.lng,
+    });
+    await citizenContext.close();
+
+    await loginAs(page, E2E_MEO_ADMIN);
+    await page.goto(`/admin/tickets/${nearby.ticketId}`);
+
+    await page.getByLabel("Referral agency", { exact: true }).click();
+    await page.getByRole("option", { name: "MENRO", exact: true }).click();
+    await page.getByLabel("Referral note", { exact: true }).fill("E2E referral note");
+    await page.getByRole("button", { name: "Log Referral" }).click();
+
+    await expect(page.getByRole("button", { name: "Recording..." })).toHaveCount(0);
+    await page.getByRole("tab", { name: "Timeline" }).click();
+    await expect(page.getByText(/Referral recorded — MENRO: E2E referral note/)).toBeVisible();
+  });
+
+  test("the ticket 8 m away is suggested as possibly related on Ticket Detail (MEO) and on Focal intake detail", async ({ page, browser }) => {
+    const [first, second] = [referral!, nearby!];
+    const label = new RegExp(`^Ticket #${second.ticketId} · (\\d+) m away$`);
+
+    await loginAs(page, E2E_MEO_ADMIN);
+    await page.goto(`/admin/tickets/${first.ticketId}`);
+    const link = page.getByRole("link", { name: label });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", `/admin/tickets/${second.ticketId}`);
+    const metres = Number(label.exec((await link.textContent()) ?? "")?.[1]);
+    expect(metres).toBeGreaterThanOrEqual(6);
+    expect(metres).toBeLessThanOrEqual(10);
+    await expect(page.getByText("No active tickets of the same category within 50 m.", { exact: true })).toHaveCount(0);
+
+    // Focal works from reports: the same suggestion, linking to its intake detail.
+    const focalContext = await browser.newContext();
+    const focalPage = await focalContext.newPage();
+    await loginAs(focalPage, E2E_FOCAL_ADMIN);
+    await focalPage.goto(`/admin/focal/intake/${first.reportId}`);
+    const focalLink = focalPage.getByRole("link", { name: label });
+    await expect(focalLink).toBeVisible();
+    await expect(focalLink).toHaveAttribute("href", `/admin/focal/intake/${second.reportId}`);
+    await focalContext.close();
+  });
 });
 
 // --- 9. Reject (Phase 4 workflow completeness) --------------------------------

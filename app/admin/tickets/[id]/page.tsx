@@ -13,6 +13,7 @@ import type {
   OperationalAssessment,
 } from "@/lib/types/admin-tickets";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
+import type { RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { StatusPill } from "@/components/features/admin/shared/StatusPill";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
@@ -27,6 +28,7 @@ import { ReferralPanel } from "@/components/features/admin/tickets/ReferralPanel
 import { RejectTicketPanel } from "@/components/features/admin/tickets/RejectTicketPanel";
 import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersPanel";
 import { OperationalAssessmentPanel } from "@/components/features/admin/tickets/OperationalAssessmentPanel";
+import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
 import { HorizontalStatusTracker } from "@/components/features/admin/tickets/HorizontalStatusTracker";
 import { TicketDetailSkeleton } from "@/components/features/admin/tickets/TicketDetailSkeleton";
@@ -80,6 +82,15 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
     );
   }
   if (!data) notFound();
+
+  // Suggested related tickets (manuscript revision Phase 3, step 3c), fetched
+  // on their own so a failure only affects that panel.
+  let related: RelatedTicketCandidates | null = null;
+  try {
+    related = await apiGetOptional<RelatedTicketCandidates>(`/admin/tickets/${ticketId}/related-candidates`, [401, 404]);
+  } catch {
+    related = null;
+  }
 
   const { ticket, reports, history, reassignments, referrals, operationalAssessment } = data;
 
@@ -160,6 +171,12 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           </Card>
 
           <EvidenceCard primaryReport={primaryReport} reportCount={reports.length} reports={reports} />
+
+          <Card>
+            <CardContent className="p-4">
+              <RelatedTicketsPanel linkTo="ticket" related={related} />
+            </CardContent>
+          </Card>
 
           {ticket.resolution_image_url && primaryReport && (
             <BeforeAfterCard afterUrl={ticket.resolution_image_url} beforeUrl={primaryReport.image_url} notes={ticket.resolution_notes} title={primaryReport.title} />

@@ -26,6 +26,7 @@ import {
   OperationalAssessmentService,
   type OperationalAssessmentInput,
 } from './operational-assessment.service';
+import { RelatedTicketsService } from './related-tickets.service';
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|png|webp)$/;
@@ -59,6 +60,7 @@ export class TicketsController {
     private readonly tickets: TicketsService,
     private readonly operationalPriority: OperationalPriorityService,
     private readonly assessments: OperationalAssessmentService,
+    private readonly related: RelatedTicketsService,
   ) {}
 
   @Get()
@@ -136,6 +138,18 @@ export class TicketsController {
     const context = await this.tickets.getTicketPriorityContext(id, admin);
     if (!context) throw new NotFoundException();
     return context;
+  }
+
+  // Suggested related tickets (manuscript revision Phase 3, step 3c):
+  // read-only, same 403/404 as GET /admin/tickets/:id, own office only.
+  @Get(':id/related-candidates')
+  async relatedCandidates(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+  ) {
+    const related = await this.related.forTicket(id, admin);
+    if (!related) throw new NotFoundException();
+    return related;
   }
 
   // These MUST stay declared above the @Post(':id/...') routes below. Nest

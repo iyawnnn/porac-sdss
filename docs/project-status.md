@@ -78,7 +78,16 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
-### Manuscript revision Phase 3, step 3b — evidence-integrity flags, EXIF time-zone fix, flag migration — **completed (code + unit tests; migration written and tested on PGlite, not yet run on a real database)**
+### Manuscript revision Phase 3, step 3c — suggested related tickets by category radius — **completed (code + unit tests + e2e; no database change)**
+
+- **Radius table** (`RADIUS_BY_CATEGORY`, `api/src/common/utils/radius.ts`, manuscript pp. 31, 78): 20 m point defects, 50 m linear/local, 100 m area hazards; categories the manuscript doesn't name are the group's classification. Every current and legacy category has an explicit entry (legacy names take their current name's radius); unknown → 50 m. Pothole and Streetlight Out moved from 25 m to 20 m, Uneven Sidewalk from 25 m to 50 m.
+- **API** (`RelatedTicketsService`, read-only): `GET /admin/tickets/:id/related-candidates` (operational Personnel; same 403/404 as Ticket Detail; own office only) and `GET /admin/intake/:reportId/related-candidates` (Focal; the report's ticket; both offices). The System Administrator stays rejected by both guards. Candidates: active, not merged away, same current category, `ST_DWithin` on geography within the viewed ticket's radius, nearest first, at most 10. Only ticket id, category, status, office, barangay, distance, report count, reported date, first report's tracking reference and id.
+- **UI:** a "Possibly related tickets" panel on Ticket Detail and Focal Intake Detail, with the "distance and category only" note and an empty state. No merge buttons (step 3d).
+- **Tested:** unit tests for the radius table, the query's rules, scoping, access and response fields; the real query against PostGIS 3.6 (PGlite, outside the repo) for the 19/21, 49/51 and 99/101 m boundaries, exclusions, scoping, the limit and the GiST index; e2e on Ticket Detail (MEO) and Focal Intake Detail using the two referral fixtures 8 m apart, so a full run still posts 20 reports.
+- Checks: API unit tests (54 suites / 952 tests), API build, root tsc, ESLint.
+- Not changed: the seed scripts that call `radiusForCategory` (`seed-demo-presentation.ts`, `seed-bulk-reports.ts`) now get the new radii; their clusters were laid out for the old 25 m tier (Phase 8 seed rework).
+
+### Manuscript revision Phase 3, step 3b — evidence-integrity flags, EXIF time-zone fix, flag migration — **completed (code + unit tests; migration 0040 run on the phase2-test copy and on production)**
 
 - **New-report rules** (manuscript pp. 42–43, Appendix H REPORTS.flags; `evidenceCheckFlags` in `reports.service.ts`, one named constant per number):
   - `LOCATION_MISMATCH` above 50 m (was 100 m). A photo with no usable GPS gets no location flag at all; `NO_EXIF` is gone.
@@ -89,7 +98,8 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 - **EXIF time zone:** `DateTimeOriginal` is read as wall-clock time with the photo's own offset, else Asia/Manila, independent of the server's time zone (it used to follow the server's zone). Zero, unparseable and pre-2000 dates are unusable. `exif_data` also records the offset used.
 - **Migration `0040_evidence_flags.sql`** (`migrate:evidence-flags`): recomputes the managed codes on existing reports from stored values, keeps `DUPLICATE_IMAGE` / `BOUNDARY_FALLBACK` / `TIMESTAMP_ANOMALY`, adds no `TIMESTAMP_ANOMALY` to old reports (their times may carry the old time-zone shift), never touches moderation decisions, and rewrites Flagged Reports saved views (`STALE_PHOTO` → `STALE_EVIDENCE`, `NO_EXIF` filter dropped). Reports newly flagged join the pending queue; reports left without flags leave it — the check counts both.
 - **Labels:** "Location mismatch (> 50 m)", "Stale evidence", "Missing metadata", "Timestamp anomaly" in the flag-type filter and review drawer.
-- **Tested on PGlite only:** run 1 changed 12 of 14 fixture reports and 2 of 4 saved views exactly as expected, moderation columns unchanged; run 2 changed 0; the check reported 0 where required. **Run 0040 before or with deploying this API** — old codes are otherwise left in the data and the flag filter no longer offers them.
+- **Tested on PGlite first:** run 1 changed 12 of 14 fixture reports and 2 of 4 saved views exactly as expected, moderation columns unchanged; run 2 changed 0; the check reported 0 where required.
+- **Run on the phase2-test copy and on production.** On the copy, the full e2e suite passed (230, plus 3 first-compile flakes that passed on re-run), and a read-only check found no report in a stale-list category with a photo over 24 h old that lacks `STALE_EVIDENCE`. The API from this step expects 0040: without it, old codes stay in the data and the flag filter no longer offers them.
 - The citizen form's pin warning uses the same 50 m (`lib/utils/location-mismatch.ts`, tested equal to the API constant); it stays non-blocking.
 - Not changed: the seed scripts (`seed-demo-presentation.ts` and `api/scripts/lib/exif.ts` still copy the old rules and time handling; Phase 8 seed rework).
 - Checks: API unit tests (52 suites / 874 tests), API build, root tsc, ESLint.
