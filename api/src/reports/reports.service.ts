@@ -14,16 +14,79 @@ import { RateLimitService } from '../domain/ratelimit.service';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { officeForCategory } from '../common/utils/office';
 import { haversineMeters } from '../common/utils/distance';
-import type { ReportInput } from '../contracts/schemas';
+import type { ALL_CATEGORIES, ReportInput } from '../contracts/schemas';
 import { TICKET_DISPUTE_REASON_MAX_LENGTH } from '../contracts/schemas';
 import type { CitizenSession } from '../auth/session.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
-// PLAN.md §9: layered limits + flag thresholds, ported verbatim from
-// app/api/reports/route.ts.
-const LOCATION_MISMATCH_THRESHOLD_M = 100;
-const STALE_PHOTO_HOURS = 24;
+// Evidence-integrity flags (manuscript pp. 42–43, Appendix H REPORTS.flags;
+// manuscript revision Phase 3, step 3b). Flags never block a submission.
+// Photo GPS more than this many metres from the pin flags LOCATION_MISMATCH (manuscript pp. 42–43).
+export const LOCATION_MISMATCH_THRESHOLD_M = 50;
+// A capture time more than this many hours before submission flags STALE_EVIDENCE, for the categories below only (manuscript pp. 42–43).
+export const STALE_EVIDENCE_HOURS = 24;
+// The time-sensitive categories the stale check applies to (manuscript pp. 42–43; Lahar always, by group decision), plus their legacy names.
+export const STALE_EVIDENCE_CATEGORIES: readonly (typeof ALL_CATEGORIES)[number][] =
+  [
+    'Localized Flooding',
+    'Rain-Induced Slope Failure/Landslide',
+    'Lahar or Volcanic Debris-Flow Threat',
+    'Fallen Tree or Storm-Related Road Obstruction',
+    // The same four under their LEGACY_CATEGORIES names.
+    'Flooding',
+    'Landslide / Slope Failure',
+    'Lahar / Debris-Flow Threat',
+    'Fallen Tree / Storm-Related Obstruction',
+    'Fallen Tree',
+  ];
+// A study parameter chosen by the group, not a manuscript number (pp. 42–43 say only "implausible future capture time"): a capture time more than this many hours after submission flags TIMESTAMP_ANOMALY.
+export const TIMESTAMP_ANOMALY_TOLERANCE_HOURS = 3;
 const DUPLICATE_HAMMING_THRESHOLD = 10; // out of 64 bits; ponytail: tune if false-positive rate matters later
+
+const HOUR_MS = 60 * 60 * 1000;
+
+// The location and capture-time evidence checks for a new report, in the
+// order they are stored. DUPLICATE_IMAGE and BOUNDARY_FALLBACK are added by
+// submit() itself.
+// - locationMismatchM: pin to photo GPS distance, or null when the photo has
+//   no usable GPS (then there is no location flag at all).
+// - capturedAt: the photo's usable capture time (MediaService.extractExif),
+//   or null when it is missing or unusable: MISSING_METADATA, and no
+//   staleness is inferred.
+// - A capture time more than TIMESTAMP_ANOMALY_TOLERANCE_HOURS after
+//   submission is TIMESTAMP_ANOMALY, and is not trusted for the stale check.
+// - submittedCategory: the category the citizen picked
+//   (reports.submitted_category).
+export function evidenceCheckFlags(input: {
+  locationMismatchM: number | null;
+  capturedAt: Date | null;
+  submittedAt: Date;
+  submittedCategory: string;
+}): string[] {
+  const flags: string[] = [];
+  if (
+    input.locationMismatchM !== null &&
+    input.locationMismatchM > LOCATION_MISMATCH_THRESHOLD_M
+  ) {
+    flags.push('LOCATION_MISMATCH');
+  }
+  if (input.capturedAt === null) {
+    flags.push('MISSING_METADATA');
+  } else {
+    const ageMs = input.submittedAt.getTime() - input.capturedAt.getTime();
+    if (-ageMs > TIMESTAMP_ANOMALY_TOLERANCE_HOURS * HOUR_MS) {
+      flags.push('TIMESTAMP_ANOMALY');
+    } else if (
+      ageMs > STALE_EVIDENCE_HOURS * HOUR_MS &&
+      (STALE_EVIDENCE_CATEGORIES as readonly string[]).includes(
+        input.submittedCategory,
+      )
+    ) {
+      flags.push('STALE_EVIDENCE');
+    }
+  }
+  return flags;
+}
 
 // Deliberately count-agnostic — the actual barangay count is config-driven
 // (MUNICIPALITY.barangayCount) and has changed before (GADM's 33 -> PSGC's
@@ -207,7 +270,6 @@ export class ReportsService {
 
     // Step 5: flag accumulation. Flags never block submission.
     const flags: string[] = [];
-    let locationMismatchM: number | null = null;
 
     if (barangay.viaFallback) {
       flags.push(
@@ -215,26 +277,25 @@ export class ReportsService {
       );
     }
 
-    if (exif.lat === null || exif.lng === null) {
-      flags.push('NO_EXIF');
-    } else {
-      locationMismatchM = haversineMeters(lat, lng, exif.lat, exif.lng);
-      if (locationMismatchM > LOCATION_MISMATCH_THRESHOLD_M) {
-        flags.push('LOCATION_MISMATCH');
-      }
-    }
+    // Still stored whenever the photo has GPS, flagged or not.
+    const locationMismatchM =
+      exif.lat === null || exif.lng === null
+        ? null
+        : haversineMeters(lat, lng, exif.lat, exif.lng);
+    // Submission time for the capture-time checks; created_at (the insert's
+    // now()) is the same moment to within the upload below.
+    flags.push(
+      ...evidenceCheckFlags({
+        locationMismatchM,
+        capturedAt: exif.capturedAt,
+        submittedAt: new Date(),
+        submittedCategory: category,
+      }),
+    );
 
     const exifCapturedAtIso = exif.capturedAt
       ? exif.capturedAt.toISOString()
       : null;
-
-    if (exif.capturedAt) {
-      const ageHours =
-        (Date.now() - exif.capturedAt.getTime()) / (1000 * 60 * 60);
-      if (ageHours > STALE_PHOTO_HOURS) {
-        flags.push('STALE_PHOTO');
-      }
-    }
 
     // O(n) scan over the last 30 days of phashes — fine at prototype
     // volume. Move to a bit-column + SQL bit_count, or an ANN index, if

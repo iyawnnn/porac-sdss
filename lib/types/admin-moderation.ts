@@ -48,5 +48,19 @@ export type ModerationAction = "dismiss" | "quarantine" | "duplicate";
 export type ModerationStatusFilter = "pending" | "quarantined" | "dismissed" | "duplicate" | "all";
 export const MODERATION_STATUSES: ModerationStatusFilter[] = ["pending", "quarantined", "dismissed", "duplicate"];
 
-export type FlagType = "LOCATION_MISMATCH" | "STALE_PHOTO" | "NO_EXIF" | "DUPLICATE_IMAGE" | "BOUNDARY_FALLBACK";
-export const FLAG_TYPES: FlagType[] = ["LOCATION_MISMATCH", "STALE_PHOTO", "NO_EXIF", "DUPLICATE_IMAGE", "BOUNDARY_FALLBACK"];
+// Mirrors api/src/admin/ticket-constants.ts (manuscript revision Phase 3, step 3b).
+export type FlagType =
+  | "LOCATION_MISMATCH"
+  | "STALE_EVIDENCE"
+  | "MISSING_METADATA"
+  | "TIMESTAMP_ANOMALY"
+  | "DUPLICATE_IMAGE"
+  | "BOUNDARY_FALLBACK";
+export const FLAG_TYPES: FlagType[] = [
+  "LOCATION_MISMATCH",
+  "STALE_EVIDENCE",
+  "MISSING_METADATA",
+  "TIMESTAMP_ANOMALY",
+  "DUPLICATE_IMAGE",
+  "BOUNDARY_FALLBACK",
+];

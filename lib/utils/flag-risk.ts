@@ -23,7 +23,9 @@ const FLAG_CATEGORIES: Record<FlagCategoryKey, FlagCategory> = {
 export function getFlagCategory(flag: string): FlagCategory {
   if (flag.startsWith("DUPLICATE_IMAGE:")) return FLAG_CATEGORIES.duplicate;
   if (flag === "LOCATION_MISMATCH" || flag.startsWith("BOUNDARY_FALLBACK:")) return FLAG_CATEGORIES.location;
-  if (flag === "NO_EXIF" || flag === "STALE_PHOTO") return FLAG_CATEGORIES.authenticity;
+  if (flag === "STALE_EVIDENCE" || flag === "MISSING_METADATA" || flag === "TIMESTAMP_ANOMALY") {
+    return FLAG_CATEGORIES.authenticity;
+  }
   return FLAG_CATEGORIES.other;
 }
 

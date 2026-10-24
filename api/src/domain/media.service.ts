@@ -20,6 +20,93 @@ interface RawExif {
   Make?: unknown;
   Model?: unknown;
   DateTimeOriginal?: unknown;
+  OffsetTimeOriginal?: unknown;
+  OffsetTime?: unknown;
+}
+
+// Manuscript revision Phase 3, step 3b: the capture time used by the
+// evidence checks (reports.service.ts). EXIF DateTimeOriginal is the
+// camera's wall-clock time ("YYYY:MM:DD HH:MM:SS") with no zone, so it is
+// read as text and given an offset here, never left to exifr, whose own Date
+// used the server's time zone.
+// Porac's local time (Asia/Manila, UTC+08:00, no daylight saving), used when
+// the photo records no offset of its own.
+const DEFAULT_CAPTURE_OFFSET = '+08:00';
+// Earlier capture years (including the "0000:00:00 00:00:00" placeholder some
+// cameras write) are treated as unusable.
+const MIN_CAPTURE_YEAR = 2000;
+
+export interface CaptureTime {
+  capturedAt: Date;
+  // The offset used, e.g. '+08:00', and where it came from.
+  offset: string;
+  offsetSource: 'OffsetTimeOriginal' | 'OffsetTime' | 'Asia/Manila default';
+}
+
+// '+08:00' / '-05:30' -> minutes east of UTC, or null if malformed.
+function offsetMinutes(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  const match = /^([+-])(\d{2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3]);
+  if (hours > 14 || minutes > 59) return null;
+  return (match[1] === '-' ? -1 : 1) * (hours * 60 + minutes);
+}
+
+// Only DateTimeOriginal is used: there is deliberately no fallback to
+// DateTime, DateTimeDigitized or file dates, which record editing or saving
+// rather than capture. The offset comes from OffsetTimeOriginal, else
+// OffsetTime, else Asia/Manila. Returns null when the capture time is
+// missing or unusable (unparseable, an impossible date, or before 2000). The
+// result never depends on the server's time zone.
+export function parseCaptureTime(
+  dateTimeOriginal: unknown,
+  offsetTimeOriginal: unknown,
+  offsetTime: unknown,
+): CaptureTime | null {
+  if (typeof dateTimeOriginal !== 'string') return null;
+  const match =
+    /^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?$/.exec(
+      dateTimeOriginal.trim(),
+    );
+  if (!match) return null;
+  const [year, month, day, hour, minute, second] = match.slice(1).map(Number);
+  if (year < MIN_CAPTURE_YEAR || hour > 23 || minute > 59 || second > 59) {
+    return null;
+  }
+  const wallClockMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  const check = new Date(wallClockMs);
+  // Rejects month 0/13 and days the month doesn't have (Date.UTC rolls them).
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== month - 1 ||
+    check.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  const fromOriginal = offsetMinutes(offsetTimeOriginal);
+  const fromOffsetTime = offsetMinutes(offsetTime);
+  const [offset, minutes, offsetSource]: [
+    string,
+    number,
+    CaptureTime['offsetSource'],
+  ] =
+    fromOriginal !== null
+      ? [
+          (offsetTimeOriginal as string).trim(),
+          fromOriginal,
+          'OffsetTimeOriginal',
+        ]
+      : fromOffsetTime !== null
+        ? [(offsetTime as string).trim(), fromOffsetTime, 'OffsetTime']
+        : [DEFAULT_CAPTURE_OFFSET, 8 * 60, 'Asia/Manila default'];
+  return {
+    capturedAt: new Date(wallClockMs - minutes * 60 * 1000),
+    offset,
+    offsetSource,
+  };
 }
 
 @Injectable()
@@ -59,16 +146,24 @@ export class MediaService {
 
   async extractExif(buffer: Buffer): Promise<ExifResult> {
     try {
+      // reviveValues: false keeps DateTimeOriginal as the raw EXIF text for
+      // parseCaptureTime (exifr's revived Date depends on the server's time
+      // zone); latitude/longitude are still computed as numbers.
       const d = (await exifr.parse(buffer, {
         gps: true,
         translateValues: false,
+        reviveValues: false,
       })) as RawExif | undefined;
       const lat = typeof d?.latitude === 'number' ? d.latitude : null;
       const lng = typeof d?.longitude === 'number' ? d.longitude : null;
       const make = typeof d?.Make === 'string' ? d.Make : null;
       const model = typeof d?.Model === 'string' ? d.Model : null;
-      const capturedAt =
-        d?.DateTimeOriginal instanceof Date ? d.DateTimeOriginal : null;
+      const capture = parseCaptureTime(
+        d?.DateTimeOriginal,
+        d?.OffsetTimeOriginal,
+        d?.OffsetTime,
+      );
+      const capturedAt = capture?.capturedAt ?? null;
       return {
         lat,
         lng,
@@ -84,6 +179,8 @@ export class MediaService {
                 GPSLatitudeRef: lat >= 0 ? 'N' : 'S',
                 GPSLongitudeRef: lng >= 0 ? 'E' : 'W',
                 DateTimeOriginal: capturedAt ? capturedAt.toISOString() : null,
+                DateTimeOriginalOffset: capture?.offset ?? null,
+                DateTimeOriginalOffsetSource: capture?.offsetSource ?? null,
                 Make: make,
                 Model: model,
               },

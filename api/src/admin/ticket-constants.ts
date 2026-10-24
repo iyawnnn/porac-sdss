@@ -28,20 +28,25 @@ export const NEXT_STATUS: Record<string, TicketStatus> = {
   'In Progress': 'Resolved',
 };
 
-// The 5 real flag prefixes reports.service.ts ever writes (see FLAG
-// generation in submit()). Some carry a `:`-delimited suffix
-// (DUPLICATE_IMAGE:<reportId>, BOUNDARY_FALLBACK:<name>:<distanceM>) — a
-// query filtering "flag type" matches the prefix, not the full string.
+// The 6 flag prefixes reports.service.ts writes (evidenceCheckFlags and
+// submit(); manuscript revision Phase 3, step 3b). Some carry a
+// `:`-delimited suffix (DUPLICATE_IMAGE:<reportId>,
+// BOUNDARY_FALLBACK:<name>:<distanceM>) — a query filtering "flag type"
+// matches the prefix, not the full string. STALE_PHOTO and NO_EXIF were
+// retired by migration 0040; a URL still carrying them is ignored like any
+// unknown flag type.
 export type FlagType =
   | 'LOCATION_MISMATCH'
-  | 'STALE_PHOTO'
-  | 'NO_EXIF'
+  | 'STALE_EVIDENCE'
+  | 'MISSING_METADATA'
+  | 'TIMESTAMP_ANOMALY'
   | 'DUPLICATE_IMAGE'
   | 'BOUNDARY_FALLBACK';
 export const FLAG_TYPES: FlagType[] = [
   'LOCATION_MISMATCH',
-  'STALE_PHOTO',
-  'NO_EXIF',
+  'STALE_EVIDENCE',
+  'MISSING_METADATA',
+  'TIMESTAMP_ANOMALY',
   'DUPLICATE_IMAGE',
   'BOUNDARY_FALLBACK',
 ];
