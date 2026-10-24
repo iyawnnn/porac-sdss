@@ -69,7 +69,7 @@ Behind the scenes the server recomputes everything it will not take on trust: wh
 
 Two situations get their own explanation on that page:
 
-- **Merged into an existing ticket.** Shown only for reports that belong to a ticket with earlier reports (historical automatic merges; from Phase 3, merges confirmed by staff). The page says *"Merged with an existing issue"* and *"Grouped with N other report(s)."* The citizen is told their report joined a group — not that it was rejected or ignored.
+- **Merged into an existing ticket.** Shown only for reports that belong to a ticket with earlier reports (historical automatic merges; since manuscript revision Phase 3, step 3d, merges confirmed by staff). The page says *"Merged with an existing issue"* and *"Grouped with N other report(s)."* The citizen is told their report joined a group — not that it was rejected or ignored. The status shown is always that of the ticket the report belongs to now, so after a merge it is the surviving ticket's status; the regrouping itself sends no notification.
 - **Held for review (quarantined).** If an admin quarantines the report, the citizen sees a deliberately neutral banner: the report *"needs another look before it appears on the public map"*, and explicitly that **this does not affect the ticket's progress**. The admin's internal reasoning for the quarantine is never shown.
 - **Acknowledged by municipal monitoring** (five-role Batch 2). Once Focal Personnel acknowledges the report (§5), the timeline gains its own **"Acknowledged by municipal monitoring"** event, sourced from `report_acknowledgments.acknowledged_at` — a municipal-monitoring signal, not a ticket-status value. **Acknowledged ≠ Under Review**: the report's status line above can still read `Reported` at the same time the timeline shows it acknowledged, and that is correct, not a bug.
 
@@ -121,9 +121,18 @@ Illegal Dumping Affecting Drainage or Road, Overgrown Vegetation Obstructing Roa
 
 - Status, assigned office, Operational Priority badge at the top.
 - **Operational Priority breakdown** — severity, age and barangay demand with their explicit weights and contributions, not just a final number. See [`triage-model.md`](triage-model.md) for what those factors mean and their limits.
-- **Evidence & reports** — every citizen report merged into this ticket, with photos and integrity flags.
+- **Evidence & reports** — every citizen report merged into this ticket, with photos and integrity flags. On a ticket with two or more reports, each report can be **removed** (it gets a ticket of its own, routed as a new report) or **moved** to a related ticket — both with a reason (see Grouping reports below).
+- **Possibly related tickets** — active tickets of the same category nearby, each with a **Merge…** action (see Grouping reports below).
 - **Location** — map, barangay, coordinates.
 - **Work Orders panel** — create and manage the actual field work.
+
+#### Grouping reports: Merge, Remove, Move
+
+The system never groups reports by itself (manuscript revision Phase 1, step 3); it only suggests possibly related tickets. When MEO or MDRRMO staff decide two tickets are the same incident, **Merge…** on the suggestion opens a dialog: choose which ticket continues (the older one by default), give a reason, confirm. The other ticket's reports move to it; the surviving ticket keeps its own location, status and Work Orders, and its report count and Operational Priority update. The merged-away ticket stays as read-only history with a banner — "Merged into Ticket #A on {date} by {name}. Reason: {reason}" — and the survivor shows "Includes reports merged from Ticket #B".
+
+A merge is refused, with the reason in the dialog or the disabled button's tooltip, when the tickets have different categories (correct the category first), different offices (Reassign or Refer first), or the ticket being merged away still has a pending or in-progress Work Order (finish or cancel it first). Staff act only on their own office's tickets.
+
+A report that does not belong on its ticket can be **removed** (it gets a new ticket, routed exactly as a new report would be) or **moved** to a related ticket of the same category and office. Every one of these actions needs a reason and appears in the Activity Log.
 
 ### 2.3 Moving a ticket forward
 
@@ -253,6 +262,7 @@ Focal sits between the citizen's submission and the owning office's operational 
 2. **Initial Screening** — records a recommendation only (continue with the current office / forward / escalate). This never executes anything by itself; it is a note for the record.
 3. **Forward**, only while the ticket is still `Reported` and no Work Order has started — an early custody correction, using the same reassignment mechanism the owning office itself would use (§2.5/§3.4), not a separate path. Once operational work has begun, Focal can no longer move it — that correction becomes the owning office's own decision.
 4. **Escalate** — flags the report for the currently-responsible office's attention. Never changes Operational Priority, status, or office by itself.
+5. **Merge** a possibly related ticket (manuscript revision Phase 3, step 3d), under the Forward rule: only while every ticket involved is still `Reported` with no active Work Order, in either office. The same category and office rules apply as for MEO/MDRRMO staff (§2.2, Grouping reports), so two reports routed to different offices need a Forward first.
 
 ### 5.3 Read-only situational awareness
 
@@ -270,7 +280,7 @@ A flooded road in Barangay Cangatba, during the rainy season.
 
 **1 — Maria reports it.** Standing at the edge of the water, she opens `/report`, photographs the flooded stretch, and the app reads the photo's GPS and confirms it is inside Porac. She picks **Localized Flooding**, marks severity **High**, and submits.
 
-**2 — The system processes it.** The server resolves the point to Cangatba, checks the photo for integrity problems (none — fresh photo, GPS matches the pin), and creates a **new ticket** for her report — even though a neighbour filed a Localized Flooding report nearby 40 minutes earlier. Since manuscript revision Phase 1, step 3 the system never merges reports on its own; from Phase 3 MDRRMO staff will see a "Possibly related to Ticket #…" suggestion and decide whether to merge.
+**2 — The system processes it.** The server resolves the point to Cangatba, checks the photo for integrity problems (none — fresh photo, GPS matches the pin), and creates a **new ticket** for her report — even though a neighbour filed a Localized Flooding report nearby 40 minutes earlier. Since manuscript revision Phase 1, step 3 the system never merges reports on its own; MDRRMO staff see the neighbour's ticket under "Possibly related tickets" and decide whether to merge (§2.2, Grouping reports).
 
 Maria gets a "Report received" notification. Because Localized Flooding routes to MDRRMO, the ticket sits in their queue.
 

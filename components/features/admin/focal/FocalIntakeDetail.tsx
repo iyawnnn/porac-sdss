@@ -108,7 +108,8 @@ export function FocalIntakeDetail({
           <Card>
             <CardContent className="p-4">
               <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Location</p>
-              <div className="h-64 overflow-hidden rounded-lg border border-border">
+              {/* isolate keeps Leaflet's pane z-indexes below dialogs. */}
+              <div className="isolate h-64 overflow-hidden rounded-lg border border-border">
                 <TicketLocationMapLoader barangayGeoJson={null} lat={report.lat} lng={report.lng} />
               </div>
               <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">

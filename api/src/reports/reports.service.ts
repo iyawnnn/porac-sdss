@@ -699,6 +699,7 @@ export class ReportsService {
         ) own ON true
         WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
           AND COALESCE(t.flagged, false) = false
+          AND t.merged_into_ticket_id IS NULL
         ORDER BY t.created_at DESC
       `,
     ]);

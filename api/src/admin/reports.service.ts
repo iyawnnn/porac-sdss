@@ -95,6 +95,9 @@ export class ReportsService {
       { header: 'Report Count', value: (r) => r.member_count },
       { header: 'Created At', value: (r) => new Date(r.created_at).toISOString() },
       { header: 'Updated At', value: (r) => new Date(r.updated_at).toISOString() },
+      // Phase 3, step 3d: set only on merged-away tickets, which appear in a
+      // status=all export.
+      { header: 'Merged into', value: (r) => r.merged_into_ticket_id },
     ]);
   }
 

@@ -93,6 +93,18 @@ export interface TicketDetail {
   // Pure function of category, computed server-side at read time — never
   // stored. False means this category is a referral/coordination concern.
   direct_responsibility: boolean;
+  // Manuscript revision Phase 3, step 3d: set when staff merged this ticket
+  // into another; the ticket is then read-only history.
+  merged_into_ticket_id: number | null;
+}
+
+// Who merged a merged-away ticket into which ticket, when and why (from the
+// ticket_merged audit event; manuscript revision Phase 3, step 3d).
+export interface TicketMergedInto {
+  ticketId: number;
+  mergedAt: string | null;
+  mergedByName: string | null;
+  reason: string | null;
 }
 
 // The third decision-support layer (Batch 3) — human-entered, never a

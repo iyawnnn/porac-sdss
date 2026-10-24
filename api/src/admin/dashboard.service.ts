@@ -111,6 +111,7 @@ export class DashboardService {
       )
       SELECT
         (SELECT COUNT(*) FROM tickets WHERE status IN ${activeStatuses}
+          AND merged_into_ticket_id IS NULL
           AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office))::int AS active_count,
         (SELECT COUNT(*) FROM reports r
           WHERE r.created_at >= date_trunc('month', now())
@@ -137,6 +138,7 @@ export class DashboardService {
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
       WHERE t.status IN ${this.activeStatuses()}
+        AND t.merged_into_ticket_id IS NULL
         AND (${office ?? null}::text IS NULL OR t.assigned_office = ${office ?? null}::office)
       GROUP BY b.id, b.name
       ORDER BY active_count DESC, avg_priority DESC NULLS LAST, b.name ASC
@@ -154,6 +156,7 @@ export class DashboardService {
         SUM(COUNT(*)) OVER ()::int AS active_total
       FROM tickets
       WHERE status IN ${this.activeStatuses()}
+        AND merged_into_ticket_id IS NULL
         AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office)
       GROUP BY category
       ORDER BY active_count DESC, category ASC
@@ -232,6 +235,7 @@ export class DashboardService {
         SELECT t.id, t.created_at
         FROM tickets t
         WHERE (${office ?? null}::text IS NULL OR t.assigned_office = ${office ?? null}::office)
+          AND t.merged_into_ticket_id IS NULL
       ), status_on_date AS (
         SELECT dates.date,
           st.id,
@@ -328,6 +332,7 @@ export class DashboardService {
       SELECT status::text AS label, COUNT(*)::int AS count
       FROM tickets
       WHERE (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office)
+        AND merged_into_ticket_id IS NULL
       GROUP BY status
       ORDER BY CASE status
         WHEN 'Reported' THEN 1
@@ -355,6 +360,7 @@ export class DashboardService {
       LEFT JOIN tickets t
         ON t.assigned_office::text = offices.label
         AND t.status IN ${this.activeStatuses()}
+        AND t.merged_into_ticket_id IS NULL
       GROUP BY offices.label
       ORDER BY CASE offices.label WHEN 'MEO' THEN 1 ELSE 2 END
     `;
@@ -414,6 +420,7 @@ export class DashboardService {
           SELECT t.id, t.created_at
           FROM tickets t
           WHERE (${scope}::text IS NULL OR t.assigned_office = ${scope}::office)
+            AND t.merged_into_ticket_id IS NULL
         ), status_on AS (
           SELECT d.date, s.id,
             COALESCE((

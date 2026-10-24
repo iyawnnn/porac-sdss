@@ -90,6 +90,7 @@ export class BarangayInsightsService {
         (
           SELECT t2.category FROM tickets t2
           WHERE t2.barangay_id = b.id
+            AND t2.merged_into_ticket_id IS NULL
             AND (${office ?? null}::text IS NULL OR t2.assigned_office = ${office ?? null}::office)
           GROUP BY t2.category
           ORDER BY COUNT(*) DESC, t2.category ASC
@@ -97,6 +98,7 @@ export class BarangayInsightsService {
         ) AS top_category
       FROM barangays b
       LEFT JOIN tickets t ON t.barangay_id = b.id
+        AND t.merged_into_ticket_id IS NULL
         AND (${office ?? null}::text IS NULL OR t.assigned_office = ${office ?? null}::office)
       GROUP BY b.id, b.name
       ORDER BY b.name ASC
@@ -118,12 +120,14 @@ export class BarangayInsightsService {
           COUNT(*) FILTER (WHERE status = 'Resolved')::int AS resolved_tickets
         FROM tickets
         WHERE barangay_id = ${barangayId}
+          AND merged_into_ticket_id IS NULL
           AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office)
       `,
       sql<BarangayCategoryRow[]>`
         SELECT category, COUNT(*)::int AS count
         FROM tickets
         WHERE barangay_id = ${barangayId}
+          AND merged_into_ticket_id IS NULL
           AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office)
         GROUP BY category
         ORDER BY count DESC, category ASC
@@ -142,6 +146,7 @@ export class BarangayInsightsService {
           SELECT t.created_at::date AS date, COUNT(*)::int AS ticket_count
           FROM tickets t
           WHERE t.barangay_id = ${barangayId}
+            AND t.merged_into_ticket_id IS NULL
             AND t.created_at >= current_date - (${TREND_DAYS}::int - 1) * interval '1 day'
             AND (${office ?? null}::text IS NULL OR t.assigned_office = ${office ?? null}::office)
           GROUP BY t.created_at::date
@@ -168,6 +173,7 @@ export class BarangayInsightsService {
           t.status, t.priority_index, t.member_count, t.created_at
         FROM tickets t
         WHERE t.barangay_id = ${barangayId}
+          AND t.merged_into_ticket_id IS NULL
           AND (${office ?? null}::text IS NULL OR t.assigned_office = ${office ?? null}::office)
         ORDER BY t.created_at DESC
         LIMIT ${RECENT_TICKETS_LIMIT}

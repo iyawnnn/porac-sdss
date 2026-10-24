@@ -20,9 +20,12 @@ import { OperationalAssessmentDialog } from "@/components/features/admin/tickets
 export function OperationalAssessmentPanel({
   ticketId,
   assessment,
+  readOnly = false,
 }: {
   ticketId: number;
   assessment: OperationalAssessment | null;
+  // A merged-away ticket (manuscript revision Phase 3, step 3d).
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -33,9 +36,11 @@ export function OperationalAssessmentPanel({
           <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Operational Assessment</p>
           <p className="text-[11px] text-ink-400">Human assessment</p>
         </div>
-        <Button onClick={() => setOpen(true)} size="sm" variant="outline">
-          {assessment ? "Edit Assessment" : "Add Assessment"}
-        </Button>
+        {!readOnly && (
+          <Button onClick={() => setOpen(true)} size="sm" variant="outline">
+            {assessment ? "Edit Assessment" : "Add Assessment"}
+          </Button>
+        )}
       </div>
 
       {!assessment ? (

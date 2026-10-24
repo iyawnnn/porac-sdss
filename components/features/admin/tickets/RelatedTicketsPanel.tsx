@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { StatusPill } from "@/components/features/admin/shared/StatusPill";
+import { MergeCandidateButton } from "@/components/features/admin/tickets/grouping/MergeCandidateButton";
 import type { RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
 
 // Suggested related tickets (manuscript pp. 31, 78; manuscript revision
 // Phase 3, step 3c): active tickets of the same category within the
 // category's radius, nearest first. Suggestions only, since distance alone
-// does not establish the same incident; there is no merge action here (step
-// 3d). Staff pages only, never a citizen page. Operational Personnel open a
-// candidate's Ticket Detail; Focal opens its first report in Focal Intake.
+// does not establish the same incident; staff confirm with "Merge…" (step
+// 3d), which the server allows or explains per candidate. Staff pages only,
+// never a citizen page. Operational Personnel open a candidate's Ticket
+// Detail; Focal opens its first report in Focal Intake.
 export function RelatedTicketsPanel({
   related,
   linkTo,
@@ -39,14 +41,19 @@ export function RelatedTicketsPanel({
                   : null;
             const label = `Ticket #${candidate.ticketId} · ${candidate.distanceM} m away`;
             return (
-              <li className="py-2.5 first:pt-0 last:pb-0" key={candidate.ticketId}>
-                {href ? (
-                  <Link className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline" href={href}>
-                    {label}
-                  </Link>
-                ) : (
-                  <span className="text-sm font-medium text-ink-900">{label}</span>
-                )}
+              <li className="py-2.5 first:pt-0 last:pb-0" data-testid={`related-ticket-${candidate.ticketId}`} key={candidate.ticketId}>
+                <div className="flex items-start justify-between gap-2">
+                  {href ? (
+                    <Link className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline" href={href}>
+                      {label}
+                    </Link>
+                  ) : (
+                    <span className="text-sm font-medium text-ink-900">{label}</span>
+                  )}
+                  {related.viewed.mergedIntoTicketId === null && (
+                    <MergeCandidateButton candidate={candidate} viewed={related.viewed} />
+                  )}
+                </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-500">
                   <StatusPill status={candidate.status} />
                   <span>{candidate.assignedOffice}</span>
