@@ -13,6 +13,11 @@ import path from "node:path";
 // without it those accumulate unbounded across repeated local runs until
 // /admin/admins has enough rows to blow past test timeouts (see
 // api/scripts/seed/cleanup-e2e-admins.ts).
+//
+// seed:e2e-grouping-fixtures then inserts the tickets the Merge / Remove /
+// Regroup spec works on (manuscript revision Phase 3, step 3d) directly,
+// without posting a report, and hands their ids to the tests through
+// process.env.E2E_GROUPING_FIXTURES; e2e/global-teardown.ts retires them.
 export default function globalSetup(): void {
   const apiDir = path.resolve(__dirname, "../api");
   const run = (script: string) => execFileSync("pnpm", ["run", script], { cwd: apiDir, stdio: "inherit", shell: true });
@@ -21,6 +26,15 @@ export default function globalSetup(): void {
     run("cleanup:e2e-admins");
     run("seed:e2e-admins");
     run("seed:users");
+    const output = execFileSync("pnpm", ["run", "seed:e2e-grouping-fixtures"], {
+      cwd: apiDir,
+      stdio: ["ignore", "pipe", "inherit"],
+      shell: true,
+      encoding: "utf8",
+    });
+    const line = output.split(/\r?\n/).find((l) => l.startsWith("E2E_GROUPING_FIXTURES="));
+    if (!line) throw new Error(`seed:e2e-grouping-fixtures printed no fixture ids:\n${output}`);
+    process.env.E2E_GROUPING_FIXTURES = line.slice("E2E_GROUPING_FIXTURES=".length);
   } catch (err) {
     throw new Error(
       "[e2e/global-setup] Failed to provision demo accounts before running Playwright. " +
