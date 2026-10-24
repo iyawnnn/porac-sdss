@@ -12,7 +12,9 @@ import type {
   TicketPriorityContext,
   OperationalAssessment,
   TicketMergedInto,
+  TicketCorrectionRow,
 } from "@/lib/types/admin-tickets";
+import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
 import type { RelatedTicketCandidate, RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
@@ -31,6 +33,7 @@ import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersP
 import { OperationalAssessmentPanel } from "@/components/features/admin/tickets/OperationalAssessmentPanel";
 import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
 import { ReportGroupingActions } from "@/components/features/admin/tickets/grouping/ReportGroupingActions";
+import { TicketCorrectionActions } from "@/components/features/admin/tickets/corrections/TicketCorrectionActions";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
 import { HorizontalStatusTracker } from "@/components/features/admin/tickets/HorizontalStatusTracker";
 import { TicketDetailSkeleton } from "@/components/features/admin/tickets/TicketDetailSkeleton";
@@ -53,6 +56,8 @@ interface TicketDetailResponse {
   history: TicketStatusHistoryRow[];
   reassignments: TicketReassignmentRow[];
   referrals: TicketReferralRow[];
+  // Manuscript revision Phase 3, step 3e.
+  corrections: TicketCorrectionRow[];
   operationalAssessment: OperationalAssessment | null;
   // Manuscript revision Phase 3, step 3d.
   mergedInto: TicketMergedInto | null;
@@ -108,11 +113,27 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
     related = null;
   }
 
-  const { ticket, reports, history, reassignments, referrals, operationalAssessment, mergedInto, mergedFrom } = data;
+  const { ticket, reports, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom } = data;
   // A merged-away ticket stays viewable as history, with no actions
   // (manuscript revision Phase 3, step 3d; the API refuses them too).
   const mergedAway = ticket.merged_into_ticket_id !== null;
   const grouping = reportGrouping(ticket, reports.length, related);
+
+  // Category and location correction (manuscript revision Phase 3, step 3e),
+  // only on an active ticket; fetched on its own so a failure only hides
+  // the two buttons.
+  let correction: CorrectionAvailability | null = null;
+  if (!mergedAway && ACTIVE_STATUSES.includes(ticket.status)) {
+    try {
+      correction = await apiGetOptional<CorrectionAvailability>(`/admin/ticket-corrections/${ticketId}`, [401, 403, 404]);
+    } catch {
+      correction = null;
+    }
+  }
+  // The citizens' originals, shown when they differ from the ticket's
+  // current values (staff corrections change only the ticket).
+  const citizenCategories = [...new Set(reports.map((r) => r.submitted_category))].filter((c) => c !== ticket.category);
+  const movedPins = reports.filter((r) => r.pin_distance_m >= 1);
 
   // Only trust a same-origin queue URL forwarded from the ticket list —
   // never redirect off /admin/tickets based on an arbitrary query param.
@@ -155,7 +176,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             </Badge>
           )}
           {/* Old combined drainage ticket (migration 0035, handoff Decision 13);
-              the correction itself arrives in Phase 3. */}
+              a category correction clears it (manuscript revision Phase 3, step 3e). */}
           {ticket.category_review_required && (
             <Badge
               className="border-warning-edge bg-warning-tint text-warning-ink"
@@ -178,6 +199,16 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           )}
           {primaryReport && <> · First reported {new Date(primaryReport.created_at).toLocaleString()}</>}
         </p>
+        {citizenCategories.length > 0 && (
+          <p className="mt-1 text-sm text-ink-700" data-testid="citizen-category">
+            Citizen-reported category: {citizenCategories.join(", ")}
+          </p>
+        )}
+        {correction && (
+          <div className="mt-2">
+            <TicketCorrectionActions afterMove="leave" availability={correction} />
+          </div>
+        )}
         {mergedFrom.length > 0 && (
           <p className="mt-1 text-sm text-ink-700" data-testid="merged-from">
             Includes reports merged from{" "}
@@ -225,9 +256,15 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
               <div className="isolate h-72 overflow-hidden rounded-lg border border-line-100">
                 <TicketLocationMapLoader barangayGeoJson={barangayGeometry} lat={ticket.lat} lng={ticket.lng} />
               </div>
-              <p className="mt-2 text-xs text-ink-500">
+              <p className="mt-2 text-xs text-ink-500" data-testid="ticket-location">
                 {ticket.barangay_name} · {ticket.lat.toFixed(5)}, {ticket.lng.toFixed(5)}
               </p>
+              {movedPins.map((r) => (
+                <p className="mt-1 text-xs text-ink-500" data-testid="citizen-pin" key={r.id}>
+                  Citizen pin{reports.length > 1 ? ` (${r.tracking_reference})` : ""}: {r.pin_lat.toFixed(5)}, {r.pin_lng.toFixed(5)} ·{" "}
+                  {Math.round(r.pin_distance_m)} m from the ticket location
+                </p>
+              ))}
             </CardContent>
           </Card>
 
@@ -314,7 +351,13 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
                   <ScoringTab priorityContext={priorityContext} ticket={ticket} />
                 </TabsContent>
                 <TabsContent className="pt-4" value="timeline">
-                  <TimelineTab createdAt={ticket.created_at} history={history} reassignments={reassignments} referrals={referrals} />
+                  <TimelineTab
+                    corrections={corrections}
+                    createdAt={ticket.created_at}
+                    history={history}
+                    reassignments={reassignments}
+                    referrals={referrals}
+                  />
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -539,16 +582,30 @@ function TimelineTab({
   history,
   reassignments,
   referrals,
+  corrections,
 }: {
   createdAt: string;
   history: TicketStatusHistoryRow[];
   reassignments: TicketReassignmentRow[];
   referrals: TicketReferralRow[];
+  corrections: TicketCorrectionRow[];
 }) {
   const entries: TimelineEntry[] = [
     { key: "created", timestamp: createdAt, description: "Ticket created (Reported)", actor: null },
     ...history.map((h, i) => ({ key: `status-${i}`, timestamp: h.changed_at, description: `Status changed to ${h.status}`, actor: h.admin_name })),
-    ...reassignments.map((r, i) => ({ key: `reassign-${i}`, timestamp: r.reassigned_at, description: `Reassigned from ${r.from_office} to ${r.to_office}`, actor: r.admin_name })),
+    ...reassignments.map((r, i) => ({
+      key: `reassign-${i}`,
+      timestamp: r.reassigned_at,
+      description: `Reassigned from ${r.from_office} to ${r.to_office}${r.reason ? `. Reason: ${r.reason}` : ""}`,
+      actor: r.admin_name,
+    })),
+    // Staff corrections (manuscript revision Phase 3, step 3e).
+    ...corrections.map((c, i) => ({
+      key: `correction-${i}`,
+      timestamp: c.corrected_at,
+      description: `${c.field === "category" ? "Category" : "Location"} corrected: ${c.old_value} → ${c.new_value}${c.reason ? `. Reason: ${c.reason}` : ""}`,
+      actor: c.admin_name,
+    })),
     ...referrals.map((r, i) => ({ key: `referral-${i}`, timestamp: r.referred_at, description: `Referral recorded — ${r.agency}${r.note ? `: ${r.note}` : ""}`, actor: r.admin_name })),
   ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 

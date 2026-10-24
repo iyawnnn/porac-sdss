@@ -1,13 +1,16 @@
 import { sql } from '../db';
 
 // Playwright fixtures for the staff Merge / Remove / Regroup spec
-// (e2e/admin-ticket-grouping.spec.ts; manuscript revision Phase 3, step 3d).
-// The tickets and reports are inserted directly, never through POST
-// /reports, so the spec posts no report: a full run already posts 20, the
-// per-IP hourly limit (docs/testing.md). Every fixture report belongs to
-// citizen1 and its title starts with TITLE_PREFIX. Each scenario sits in its
-// own spot in Jalung, 80 m from the next (four times the 20 m Pothole
-// radius), so it only ever suggests its own pair.
+// (e2e/admin-ticket-grouping.spec.ts; manuscript revision Phase 3, step 3d)
+// and the category / location correction spec
+// (e2e/admin-ticket-corrections.spec.ts; step 3e). The tickets and reports
+// are inserted directly, never through POST /reports, so the specs post no
+// report: a full run already posts 20, the per-IP hourly limit
+// (docs/testing.md). Every fixture report belongs to citizen1 and its title
+// starts with one of TITLE_PREFIXES. Each grouping scenario sits in its own
+// spot in Jalung, 80 m from the next (four times the 20 m Pothole radius),
+// so it only ever suggests its own pair; the correction fixtures sit about
+// 55 m east of those spots, outside every grouping pair's radius.
 //
 // Run by e2e/global-setup.ts (creates the fixtures and prints their ids on
 // one E2E_GROUPING_FIXTURES= line) and e2e/global-teardown.ts (--cleanup).
@@ -19,6 +22,8 @@ import { sql } from '../db';
 // history it is.
 
 const TITLE_PREFIX = 'E2E grouping fixture';
+const CORRECTION_TITLE_PREFIX = 'E2E correction fixture';
+const TITLE_PATTERNS = [`${TITLE_PREFIX}%`, `${CORRECTION_TITLE_PREFIX}%`];
 const CATEGORY = 'Pothole / Road Surface Damage';
 const CITIZEN_EMAIL = 'citizen1@porac.ph';
 const MEO_EMAIL = 'meo@porac.gov.ph';
@@ -31,6 +36,7 @@ const CLEANUP_ACTOR = 'E2E fixture cleanup';
 const BASE = { lat: 15.06, lng: 120.53 };
 const SPOT_STEP_DEG = 80 / 111_320; // 80 m north per scenario
 const PAIR_STEP_DEG = 5 / 111_320; // 5 m north within a scenario
+const CORRECTION_EAST_DEG = 0.0005; // about 55 m east of the grouping spots
 
 type Office = 'MEO' | 'MDRRMO';
 interface Point {
@@ -45,14 +51,19 @@ function spot(index: number, member = 0): Point {
   };
 }
 
+function correctionSpot(index: number, member = 0): Point {
+  const p = spot(index, member);
+  return { lat: p.lat, lng: p.lng + CORRECTION_EAST_DEG };
+}
+
 async function retireLeftovers(): Promise<number> {
   return sql.begin(async (tx) => {
     const tickets = await tx<{ id: number }[]>`
       SELECT t.id FROM tickets t
       WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
         AND t.merged_into_ticket_id IS NULL
-        AND EXISTS (SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title LIKE ${TITLE_PREFIX + '%'})
-        AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title NOT LIKE ${TITLE_PREFIX + '%'})
+        AND EXISTS (SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title LIKE ANY(${TITLE_PATTERNS}::text[]))
+        AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND NOT (r.title LIKE ANY(${TITLE_PATTERNS}::text[])))
       ORDER BY t.id
       FOR UPDATE
     `;
@@ -137,6 +148,7 @@ async function create() {
       at: Point,
       label: string,
       ageDays: number,
+      prefix = TITLE_PREFIX,
     ) => {
       const [row] = await tx<{ id: number }[]>`
         INSERT INTO reports (
@@ -144,7 +156,7 @@ async function create() {
           geom, pin_geom, flags, created_at
         )
         VALUES (
-          ${ticketId}, ${citizen.id}, ${`${TITLE_PREFIX}: ${label}`}, 'Inserted by e2e/global-setup.ts.', 'Medium',
+          ${ticketId}, ${citizen.id}, ${`${prefix}: ${label}`}, 'Inserted by e2e/global-setup.ts.', 'Medium',
           ${IMAGE_URL}, ${CATEGORY},
           ST_SetSRID(ST_MakePoint(${at.lng}, ${at.lat}), 4326),
           ST_SetSRID(ST_MakePoint(${at.lng}, ${at.lat}), 4326),
@@ -218,7 +230,71 @@ async function create() {
       VALUES (${workOrder.id}, 'pending', ${meo.id}, ${meo.name})
     `;
 
+    // Step 3e corrections, all Pothole / Road Surface Damage (MEO) at first.
+    const correctionTicket = async (
+      index: number,
+      label: string,
+      options: { status?: 'Reported' | 'Under Review'; member?: number } = {},
+    ) => {
+      const at = correctionSpot(index, options.member);
+      const ticketId = await ticket(at, { status: options.status, ageDays: 1 });
+      const reportId = await report(
+        ticketId,
+        at,
+        label,
+        1,
+        CORRECTION_TITLE_PREFIX,
+      );
+      return { ticketId, reportId };
+    };
+    // 6. Category within MEO; citizen1's page then shows "You reported".
+    const withinOffice = await correctionTicket(0, 'category within MEO');
+    // 7. Category of MDRRMO: the ticket moves, with a Reassign.
+    const toMdrrmo = await correctionTicket(1, 'category to MDRRMO');
+    // 8. Category of MDRRMO refused: a pending Work Order.
+    const blockedByWorkOrder = await correctionTicket(
+      2,
+      'category blocked by a Work Order',
+    );
+    const [correctionWorkOrder] = await tx<{ id: number }[]>`
+      INSERT INTO work_orders (ticket_id, title, assigned_office, status, created_by_admin_id)
+      VALUES (${blockedByWorkOrder.ticketId}, ${`${CORRECTION_TITLE_PREFIX}: patch the pothole`}, 'MEO', 'pending', ${meo.id})
+      RETURNING id
+    `;
+    await tx`
+      INSERT INTO work_order_status_history (work_order_id, status, admin_id, admin_name)
+      VALUES (${correctionWorkOrder.id}, 'pending', ${meo.id}, ${meo.name})
+    `;
+    // 9. Location: moved into the nearest other barangay, at a point inside
+    //    its polygon.
+    const location = await correctionTicket(3, 'location');
+    const [here] = await tx<{ id: number; name: string }[]>`
+      SELECT b.id, b.name FROM tickets t JOIN barangays b ON b.id = t.barangay_id WHERE t.id = ${location.ticketId}
+    `;
+    const [target] = await tx<{ name: string; lat: number; lng: number }[]>`
+      SELECT name, ST_Y(ST_PointOnSurface(geom)) AS lat, ST_X(ST_PointOnSurface(geom)) AS lng
+      FROM barangays
+      WHERE id <> ${here.id}
+      ORDER BY geom <-> (SELECT geom FROM tickets WHERE id = ${location.ticketId})
+      LIMIT 1
+    `;
+    // 10. Focal: a Reported ticket it may correct, and an Under Review one
+    //     it may not.
+    const focalReported = await correctionTicket(4, 'Focal, Reported');
+    const focalUnderReview = await correctionTicket(4, 'Focal, Under Review', {
+      status: 'Under Review',
+      member: 2,
+    });
+
     return {
+      corrections: {
+        withinOffice,
+        toMdrrmo,
+        blockedByWorkOrder,
+        location: { ...location, fromBarangay: here.name, target },
+        focalReported,
+        focalUnderReview,
+      },
       merge: { olderTicketId, newerTicketId, newerReportId },
       remove: { ticketId: removeTicketId, reportIds: removeReportIds },
       regroup: {

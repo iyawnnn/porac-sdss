@@ -30,6 +30,8 @@ import { FocalIntakeService } from './focal-intake.service';
 import { RelatedTicketsService } from './related-tickets.service';
 import { TicketGroupingController } from './ticket-grouping.controller';
 import { TicketGroupingService } from './ticket-grouping.service';
+import { TicketCorrectionsController } from './ticket-corrections.controller';
+import { TicketCorrectionsService } from './ticket-corrections.service';
 import { OperationalAssessmentService } from './operational-assessment.service';
 
 // Eleven controllers sharing one module — they share nothing else, but
@@ -69,6 +71,7 @@ import { OperationalAssessmentService } from './operational-assessment.service';
     SavedViewsController,
     FocalIntakeController,
     TicketGroupingController,
+    TicketCorrectionsController,
   ],
   providers: [
     TicketsService,
@@ -86,6 +89,7 @@ import { OperationalAssessmentService } from './operational-assessment.service';
     OperationalAssessmentService,
     RelatedTicketsService,
     TicketGroupingService,
+    TicketCorrectionsService,
   ],
 })
 export class AdminModule {}

@@ -3,6 +3,7 @@ import { SearchXIcon } from "lucide-react";
 import { apiGetOptional } from "@/lib/api-client";
 import type { FocalIntakeDetail as FocalIntakeDetailData } from "@/lib/types/admin-focal-intake";
 import type { RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
+import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { FocalIntakeDetail } from "@/components/features/admin/focal/FocalIntakeDetail";
 
@@ -41,5 +42,14 @@ export default async function FocalIntakeDetailPage({
     related = null;
   }
 
-  return <FocalIntakeDetail related={related} report={report} />;
+  // Category and location correction of the report's ticket (manuscript
+  // revision Phase 3, step 3e); a failure only hides the two buttons.
+  let correction: CorrectionAvailability | null = null;
+  try {
+    correction = await apiGetOptional<CorrectionAvailability>(`/admin/ticket-corrections/${report.ticketId}`, [401, 403, 404]);
+  } catch {
+    correction = null;
+  }
+
+  return <FocalIntakeDetail correction={correction} related={related} report={report} />;
 }

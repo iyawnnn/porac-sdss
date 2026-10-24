@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Sql } from 'postgres';
+import type { Sql, TransactionSql } from 'postgres';
 import { PG } from '../db/db.module';
 import { MediaService } from '../domain/media.service';
 import {
@@ -223,6 +223,14 @@ export interface TicketReport {
   created_at: string;
   flags: string[] | null;
   moderation_status: string | null;
+  // The citizen's originals (manuscript revision Phase 3, step 3e): what
+  // they picked and where they pinned it, never changed by a staff
+  // correction; pin_distance_m is the pin's distance from the ticket's
+  // current location.
+  submitted_category: string;
+  pin_lat: number;
+  pin_lng: number;
+  pin_distance_m: number;
 }
 
 export interface TicketStatusHistoryRow {
@@ -236,6 +244,22 @@ export interface TicketReassignmentRow {
   to_office: string;
   admin_name: string | null;
   reassigned_at: string;
+  // The routing_actions reason written in the same transaction, when one
+  // was given (a category correction's; plain Reassign has none until
+  // Phase 5).
+  reason: string | null;
+}
+
+// A staff category or location correction on the Ticket Detail timeline
+// (manuscript revision Phase 3, step 3e), from its audit event: old and new
+// value, reason, who and when.
+export interface TicketCorrectionRow {
+  field: 'category' | 'location';
+  old_value: string;
+  new_value: string;
+  reason: string | null;
+  admin_name: string;
+  corrected_at: string;
 }
 
 // Historical record only — never treated as live "currently pending
@@ -603,18 +627,30 @@ export class TicketsService {
     assertOfficeAccess(admin, ticket.assigned_office as 'MEO' | 'MDRRMO');
 
     const reports = await sql<TicketReport[]>`
-      SELECT id, tracking_reference, title, description, citizen_severity, image_url,
-        exif_captured_at, exif_data, location_mismatch_m, created_at,
-        flags, moderation_status
-      FROM reports WHERE ticket_id = ${id} ORDER BY created_at
+      SELECT r.id, r.tracking_reference, r.title, r.description, r.citizen_severity, r.image_url,
+        r.exif_captured_at, r.exif_data, r.location_mismatch_m, r.created_at,
+        r.flags, r.moderation_status, r.submitted_category,
+        ST_Y(r.pin_geom) AS pin_lat, ST_X(r.pin_geom) AS pin_lng,
+        ST_Distance(r.pin_geom::geography, t.geom::geography) AS pin_distance_m
+      FROM reports r
+      JOIN tickets t ON t.id = r.ticket_id
+      WHERE r.ticket_id = ${id} ORDER BY r.created_at
     `;
     const history = await sql<TicketStatusHistoryRow[]>`
       SELECT status, admin_name, changed_at
       FROM status_history WHERE ticket_id = ${id} ORDER BY changed_at
     `;
     const reassignments = await sql<TicketReassignmentRow[]>`
-      SELECT from_office, to_office, admin_name, reassigned_at
-      FROM office_reassignments WHERE ticket_id = ${id} ORDER BY reassigned_at
+      SELECT o.from_office, o.to_office, o.admin_name, o.reassigned_at,
+        NULLIF(ra.reason, ${ROUTING_REASON_NOT_RECORDED}) AS reason
+      FROM office_reassignments o
+      LEFT JOIN LATERAL (
+        SELECT reason FROM routing_actions
+        WHERE ticket_id = o.ticket_id AND action_type = 'REASSIGN'
+          AND created_at = o.reassigned_at AND to_office = o.to_office
+        LIMIT 1
+      ) ra ON true
+      WHERE o.ticket_id = ${id} ORDER BY o.reassigned_at
     `;
     const referralEvents = await sql<
       {
@@ -633,6 +669,47 @@ export class TicketsService {
       admin_name: e.actor_name,
       referred_at: e.created_at,
     }));
+
+    // Staff corrections (manuscript revision Phase 3, step 3e), for the
+    // timeline: old -> new, reason, who and when.
+    const correctionEvents = await sql<
+      {
+        action_type: 'ticket_category_corrected' | 'ticket_location_corrected';
+        metadata: Record<string, unknown>;
+        actor_name: string;
+        created_at: string;
+      }[]
+    >`
+      SELECT action_type, metadata, actor_name, created_at FROM admin_audit_events
+      WHERE target_type = 'ticket' AND target_id = ${id}
+        AND action_type IN ('ticket_category_corrected', 'ticket_location_corrected')
+      ORDER BY created_at
+    `;
+    const place = (barangay: unknown, lat: unknown, lng: unknown) =>
+      `${String(barangay)} (${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)})`;
+    const corrections: TicketCorrectionRow[] = correctionEvents.map((e) =>
+      e.action_type === 'ticket_category_corrected'
+        ? {
+            field: 'category',
+            old_value: String(e.metadata.oldValue),
+            new_value: String(e.metadata.newValue),
+            reason: (e.metadata.reason as string | undefined) ?? null,
+            admin_name: e.actor_name,
+            corrected_at: e.created_at,
+          }
+        : {
+            field: 'location',
+            old_value: place(
+              e.metadata.oldBarangay,
+              e.metadata.oldLat,
+              e.metadata.oldLng,
+            ),
+            new_value: `${place(e.metadata.newBarangay, e.metadata.newLat, e.metadata.newLng)}, ${Number(e.metadata.distanceM)} m away`,
+            reason: (e.metadata.reason as string | undefined) ?? null,
+            admin_name: e.actor_name,
+            corrected_at: e.created_at,
+          },
+    );
 
     ticket.direct_responsibility = categoryRouting(
       ticket.category,
@@ -674,6 +751,7 @@ export class TicketsService {
       history,
       reassignments,
       referrals,
+      corrections,
       mergedInto,
       mergedFrom,
     };
@@ -907,6 +985,50 @@ export class TicketsService {
     `;
     if (!ticket) throw new NotFoundException('Ticket not found');
 
+    await this.assertCanReassign(
+      ticketId,
+      ticket,
+      admin,
+      toOffice,
+      async () => {
+        const [{ count }] = await sql<{ count: number }[]>`
+          SELECT count(*)::int AS count FROM work_orders
+          WHERE ticket_id = ${ticketId} AND status IN ('pending', 'in_progress')
+        `;
+        return count;
+      },
+    );
+
+    await sql.begin(async (tx) => {
+      await this.writeReassignment(tx, {
+        ticketId,
+        category: ticket.category,
+        fromOffice: ticket.assigned_office,
+        toOffice,
+        admin,
+        reason: null,
+      });
+    });
+
+    return { assignedOffice: toOffice };
+  }
+
+  // Reassign's own preconditions. Also checked by the category correction
+  // (manuscript revision Phase 3, step 3e), which reassigns in its own
+  // transaction when the new category belongs to the other office; it
+  // passes the active Work Order count it already read on the locked row.
+  // activeWorkOrders is only called for Focal.
+  async assertCanReassign(
+    ticketId: number,
+    ticket: {
+      assigned_office: 'MEO' | 'MDRRMO';
+      status: string;
+      merged_into_ticket_id: number | null;
+    },
+    admin: AdminSession,
+    toOffice: 'MEO' | 'MDRRMO',
+    activeWorkOrders: () => Promise<number>,
+  ): Promise<void> {
     if (isFocalPersonnel(admin)) {
       // Focal may only forward a report before operational work has begun
       // — the ticket must still be at its initial Reported state, with no
@@ -918,11 +1040,7 @@ export class TicketsService {
           'This report can no longer be forwarded by Focal — operational review has already started.',
         );
       }
-      const [{ count: activeWorkOrderCount }] = await sql<{ count: number }[]>`
-        SELECT count(*)::int AS count FROM work_orders
-        WHERE ticket_id = ${ticketId} AND status IN ('pending', 'in_progress')
-      `;
-      if (activeWorkOrderCount > 0) {
+      if ((await activeWorkOrders()) > 0) {
         throw new ForbiddenException(
           'This report can no longer be forwarded by Focal — a work order is already active.',
         );
@@ -937,42 +1055,58 @@ export class TicketsService {
         `Ticket is already assigned to ${toOffice}`,
       );
     }
+  }
 
-    await sql.begin(async (tx) => {
-      await tx`UPDATE tickets SET assigned_office = ${toOffice}, updated_at = now() WHERE id = ${ticketId}`;
-      await tx`
-        INSERT INTO office_reassignments (ticket_id, from_office, to_office, admin_id, admin_name)
-        VALUES (${ticketId}, ${ticket.assigned_office}, ${toOffice}, ${admin.adminId}, ${admin.adminName})
-      `;
-      // Appendix H routing_actions (manuscript revision Phase 2, step 2c),
-      // written alongside office_reassignments until the reads move in
-      // Phase 5. Same transaction, so now() equals reassigned_at — the key
-      // migration 0037 uses to skip rows it already has. Reassign has no
-      // reason field yet (Phase 5).
-      await tx`
-        INSERT INTO routing_actions (ticket_id, action_type, from_office, to_office, reason, admin_id, admin_name, created_at)
-        VALUES (
-          ${ticketId}, 'REASSIGN', ${ticket.assigned_office}, ${toOffice}, ${ROUTING_REASON_NOT_RECORDED},
-          ${admin.adminId}, left(${admin.adminName}::text, ${ROUTING_ADMIN_NAME_MAX_LENGTH}::int), now()
-        )
-      `;
-      await this.audit.logInPgTx(tx, {
-        actor: {
-          adminId: admin.adminId,
-          adminName: admin.adminName,
-          email: admin.email,
-          accountType: admin.accountType,
-          office: admin.office,
-        },
-        actionType: 'ticket_reassigned',
-        targetType: 'ticket',
-        targetId: ticketId,
-        targetSummary: `Ticket #${ticketId} (${ticket.category})`,
-        metadata: { from: ticket.assigned_office, to: toOffice },
-      });
+  // The Reassign write: the office change, its office_reassignments and
+  // routing_actions rows and the ticket_reassigned audit event, inside the
+  // caller's transaction. reason is the routing reason; Reassign itself has
+  // no reason field yet (Phase 5), so it passes null and the not-recorded
+  // text is stored. The category correction passes its own reason.
+  async writeReassignment(
+    tx: TransactionSql,
+    params: {
+      ticketId: number;
+      category: string;
+      fromOffice: 'MEO' | 'MDRRMO';
+      toOffice: 'MEO' | 'MDRRMO';
+      admin: AdminSession;
+      reason: string | null;
+    },
+  ): Promise<void> {
+    const { ticketId, fromOffice, toOffice, admin, reason } = params;
+    await tx`UPDATE tickets SET assigned_office = ${toOffice}, updated_at = now() WHERE id = ${ticketId}`;
+    await tx`
+      INSERT INTO office_reassignments (ticket_id, from_office, to_office, admin_id, admin_name)
+      VALUES (${ticketId}, ${fromOffice}, ${toOffice}, ${admin.adminId}, ${admin.adminName})
+    `;
+    // Appendix H routing_actions (manuscript revision Phase 2, step 2c),
+    // written alongside office_reassignments until the reads move in
+    // Phase 5. Same transaction, so now() equals reassigned_at — the key
+    // migration 0037 uses to skip rows it already has.
+    await tx`
+      INSERT INTO routing_actions (ticket_id, action_type, from_office, to_office, reason, admin_id, admin_name, created_at)
+      VALUES (
+        ${ticketId}, 'REASSIGN', ${fromOffice}, ${toOffice}, ${reason ?? ROUTING_REASON_NOT_RECORDED},
+        ${admin.adminId}, left(${admin.adminName}::text, ${ROUTING_ADMIN_NAME_MAX_LENGTH}::int), now()
+      )
+    `;
+    await this.audit.logInPgTx(tx, {
+      actor: {
+        adminId: admin.adminId,
+        adminName: admin.adminName,
+        email: admin.email,
+        accountType: admin.accountType,
+        office: admin.office,
+      },
+      actionType: 'ticket_reassigned',
+      targetType: 'ticket',
+      targetId: ticketId,
+      targetSummary: `Ticket #${ticketId} (${params.category})`,
+      metadata:
+        reason === null
+          ? { from: fromOffice, to: toOffice }
+          : { from: fromOffice, to: toOffice, reason },
     });
-
-    return { assignedOffice: toOffice };
   }
 
   // Documents that a ticket was referred to an external agency (solid waste

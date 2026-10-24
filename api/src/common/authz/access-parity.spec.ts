@@ -26,6 +26,7 @@ import {
   regroupBlock,
   removeBlock,
 } from '../../admin/ticket-grouping.rules';
+import { correctionBlock } from '../../admin/ticket-corrections.rules';
 
 // Manuscript revision Phase 2, step 2e: access must stay EXACTLY the same
 // after every decision moved from admins.role to account_type / office /
@@ -432,6 +433,46 @@ describe('Merge / Remove / Regroup permissions (Phase 3, step 3d)', () => {
         'active Work Order',
         allowed(actor, office, 'Reported', 1),
       ]).toEqual([office, 'active Work Order', false]);
+    }
+  });
+});
+
+// Manuscript revision Phase 3, step 3e: who may correct a ticket's category
+// or location — the same people as Merge / Remove / Regroup.
+describe('category and location correction permissions (Phase 3, step 3e)', () => {
+  const ticket = (
+    office: Office,
+    status = 'Reported',
+    activeWorkOrders = 0,
+  ) => ({
+    id: 1,
+    status,
+    assignedOffice: office,
+    category: 'Pothole / Road Surface Damage',
+    mergedIntoTicketId: null,
+    activeWorkOrders,
+  });
+
+  it.each(COMBINATIONS)('%s', (_label, a) => {
+    const actor = mapped(a);
+    const operational = a.role === 'officer' || a.role === 'supervisor';
+    for (const office of OFFICES) {
+      const own = operational && a.office === office;
+      expect([
+        office,
+        'Reported',
+        correctionBlock(actor, ticket(office)) === null,
+      ]).toEqual([office, 'Reported', own || a.role === 'focal']);
+      expect([
+        office,
+        'In Progress',
+        correctionBlock(actor, ticket(office, 'In Progress')) === null,
+      ]).toEqual([office, 'In Progress', own]);
+      expect([
+        office,
+        'active Work Order',
+        correctionBlock(actor, ticket(office, 'Reported', 1)) === null,
+      ]).toEqual([office, 'active Work Order', own]);
     }
   });
 });

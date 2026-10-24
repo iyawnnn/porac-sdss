@@ -53,6 +53,14 @@ export interface MyReportDetail {
   // report. See ReportTimeline.tsx's "acknowledged" event kind.
   acknowledged_at: string | null;
   is_merged: boolean;
+  // Manuscript revision Phase 3, step 3e: the category the citizen picked
+  // (category above is the ticket's current one, which staff may have
+  // corrected), and the ticket's current location only when staff
+  // corrected it (null otherwise, so another citizen's pin on a shared
+  // ticket is never sent).
+  submitted_category: string;
+  corrected_lat: number | null;
+  corrected_lng: number | null;
 }
 
 export interface StatusHistoryStep {

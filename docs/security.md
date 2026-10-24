@@ -82,7 +82,7 @@ Optional (`api/src/auth/oauth/`). Omitting the Google env vars disables the opti
 | `SystemAdminGuard` | Admin management and the activity log — System Administrator only |
 | `OperationalStaffGuard` | Every operational controller (Tickets, Work Orders, Dashboard, Map, Moderation, Reports) — operational Personnel only (`PERSONNEL`, not Focal); rejects both Focal Personnel and the System Administrator |
 | `FocalGuard` | The Focal Intake surface (`admin/intake/*`) — Focal Personnel only (`PERSONNEL` with `is_focal`); rejects operational Personnel and the System Administrator alike |
-| `PersonnelGuard` | The staff Merge / Remove / Regroup actions (`admin/ticket-grouping/*`, manuscript revision Phase 3, step 3d) — operational Personnel **and** Focal Personnel; rejects the System Administrator. Per-ticket rules stay in `api/src/admin/ticket-grouping.rules.ts`: operational Personnel only on their own office's tickets, Focal only while every ticket involved is `Reported` with no active Work Order |
+| `PersonnelGuard` | The staff Merge / Remove / Regroup actions (`admin/ticket-grouping/*`, manuscript revision Phase 3, step 3d) and category / location correction (`admin/ticket-corrections/*`, step 3e) — operational Personnel **and** Focal Personnel; rejects the System Administrator. Per-ticket rules stay in `api/src/admin/ticket-grouping.rules.ts` and `ticket-corrections.rules.ts`: operational Personnel only on their own office's tickets, Focal only while every ticket involved is `Reported` with no active Work Order |
 | `CronSecretGuard` | All six `/cron/*` routes, via a shared bearer secret |
 | `RecentReauthGuard` | Step-up-sensitive citizen actions (§4.3) |
 | `OAuthRateLimitGuard` | OAuth start/callback, 10/min per IP |

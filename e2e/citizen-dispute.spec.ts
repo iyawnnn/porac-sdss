@@ -131,8 +131,11 @@ test.describe("Citizen resolution feedback", () => {
     // Admin side: Ticket Queue disputed filter and Ticket Detail dispute info.
     // Disputed tickets are Resolved, which the default "Active / Open"
     // status filter excludes — switch to "All statuses" first so the
-    // disputed-only toggle has something to show.
-    await adminPage.goto("/admin/tickets?status=all");
+    // disputed-only toggle has something to show. Newest first: the shared
+    // database keeps every earlier run's disputed tickets, and a freshly
+    // resolved one has a low Operational Priority, so in the default order
+    // it drops off the first page once more than a page of them exist.
+    await adminPage.goto("/admin/tickets?status=all&sort=newest");
     await adminPage.waitForLoadState("networkidle");
     // The disputed toggle moved into the queue's Filters popover, and row
     // links became "Open ticket N", in the queue rebuild (de4b9f6).

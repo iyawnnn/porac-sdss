@@ -6,7 +6,7 @@ export default defineConfig({
   // Provisions demo admin/citizen accounts before any test runs — see
   // e2e/global-setup.ts. Idempotent, so safe on the shared dev database.
   globalSetup: "./e2e/global-setup.ts",
-  // Retires the Merge / Remove / Regroup fixtures global setup inserted.
+  // Retires the Merge / Remove / Regroup and correction fixtures global setup inserted.
   globalTeardown: "./e2e/global-teardown.ts",
   use: { baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000", headless: true },
   webServer: {

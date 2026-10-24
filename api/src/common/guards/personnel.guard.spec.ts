@@ -2,6 +2,7 @@ import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import type { AdminSession } from '../../auth/session.service';
 import { TicketGroupingController } from '../../admin/ticket-grouping.controller';
+import { TicketCorrectionsController } from '../../admin/ticket-corrections.controller';
 import { AdminSessionGuard } from './admin-session.guard';
 import { PersonnelGuard } from './personnel.guard';
 
@@ -52,6 +53,14 @@ describe('PersonnelGuard', () => {
   it('guards TicketGroupingController with AdminSessionGuard + PersonnelGuard', () => {
     const guards =
       (Reflect.getMetadata(GUARDS_METADATA, TicketGroupingController) as
+        unknown[] | undefined) ?? [];
+    expect(guards).toEqual([AdminSessionGuard, PersonnelGuard]);
+  });
+
+  // Manuscript revision Phase 3, step 3e: corrections, the same people.
+  it('guards TicketCorrectionsController with AdminSessionGuard + PersonnelGuard', () => {
+    const guards =
+      (Reflect.getMetadata(GUARDS_METADATA, TicketCorrectionsController) as
         unknown[] | undefined) ?? [];
     expect(guards).toEqual([AdminSessionGuard, PersonnelGuard]);
   });

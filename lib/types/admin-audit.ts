@@ -13,6 +13,9 @@ export type AdminAuditActionType =
   | "ticket_merged"
   | "report_removed_from_ticket"
   | "report_regrouped"
+  // Manuscript revision Phase 3, step 3e: staff corrections.
+  | "ticket_category_corrected"
+  | "ticket_location_corrected"
   | "report_moderated"
   | "work_order_created"
   | "work_order_updated"

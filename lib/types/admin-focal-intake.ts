@@ -38,6 +38,13 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
   lng: number;
   linkedTicketReference: string;
   activity: IntakeActivityRow[];
+  // Manuscript revision Phase 3, step 3e: lat/lng above are the citizen's
+  // pin; these are the ticket's current location and the category the
+  // citizen picked (category is the ticket's current one). Staff
+  // corrections change only the ticket.
+  ticketLat: number;
+  ticketLng: number;
+  submittedCategory: string;
 }
 
 // Batch 4's Focal-safe read-only map source (GET /admin/intake/geo) — a

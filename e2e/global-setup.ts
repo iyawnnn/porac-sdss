@@ -15,8 +15,8 @@ import path from "node:path";
 // api/scripts/seed/cleanup-e2e-admins.ts).
 //
 // seed:e2e-grouping-fixtures then inserts the tickets the Merge / Remove /
-// Regroup spec works on (manuscript revision Phase 3, step 3d) directly,
-// without posting a report, and hands their ids to the tests through
+// Regroup and category / location correction specs work on (manuscript
+// revision Phase 3, steps 3d and 3e) directly, without posting a report, and hands their ids to the tests through
 // process.env.E2E_GROUPING_FIXTURES; e2e/global-teardown.ts retires them.
 export default function globalSetup(): void {
   const apiDir = path.resolve(__dirname, "../api");
