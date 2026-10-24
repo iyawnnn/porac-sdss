@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SearchXIcon } from "lucide-react";
 import { apiGetOptional } from "@/lib/api-client";
 import type { FocalIntakeDetail as FocalIntakeDetailData } from "@/lib/types/admin-focal-intake";
+import type { RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { FocalIntakeDetail } from "@/components/features/admin/focal/FocalIntakeDetail";
 
@@ -30,5 +31,15 @@ export default async function FocalIntakeDetailPage({
     );
   }
 
-  return <FocalIntakeDetail report={report} />;
+  // Suggested related tickets for this report's ticket (manuscript revision
+  // Phase 3, step 3c), fetched on their own so a failure only affects that
+  // panel.
+  let related: RelatedTicketCandidates | null = null;
+  try {
+    related = await apiGetOptional<RelatedTicketCandidates>(`/admin/intake/${reportId}/related-candidates`, [401, 404]);
+  } catch {
+    related = null;
+  }
+
+  return <FocalIntakeDetail related={related} report={report} />;
 }

@@ -16,6 +16,7 @@ import {
   FocalIntakeService,
   type ScreeningRecommendation,
 } from './focal-intake.service';
+import { RelatedTicketsService } from './related-tickets.service';
 
 // Focal's dedicated municipality-wide intake surface — never the
 // operational Ticket Queue adapted to skip office scoping (see
@@ -26,7 +27,10 @@ import {
 @UseGuards(AdminSessionGuard, FocalGuard)
 @Controller('admin/intake')
 export class FocalIntakeController {
-  constructor(private readonly intake: FocalIntakeService) {}
+  constructor(
+    private readonly intake: FocalIntakeService,
+    private readonly related: RelatedTicketsService,
+  ) {}
 
   @Get()
   list() {
@@ -47,6 +51,18 @@ export class FocalIntakeController {
     const detail = await this.intake.getIntakeDetail(reportId);
     if (!detail) throw new NotFoundException('Report not found.');
     return detail;
+  }
+
+  // Suggested related tickets for this report's ticket, both offices
+  // (manuscript revision Phase 3, step 3c). Read-only; same 404 as above.
+  @Get(':reportId/related-candidates')
+  async relatedCandidates(
+    @Param('reportId', ParseIntPipe) reportId: number,
+    @CurrentAdmin() admin: AdminSession,
+  ) {
+    const related = await this.related.forReport(reportId, admin);
+    if (!related) throw new NotFoundException('Report not found.');
+    return related;
   }
 
   @Post(':reportId/acknowledge')

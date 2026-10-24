@@ -12,6 +12,8 @@ import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import type { FocalIntakeDetail as FocalIntakeDetailData, ScreeningRecommendation } from "@/lib/types/admin-focal-intake";
+import type { RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
+import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
 import { AcknowledgeDialog } from "@/components/features/admin/focal/dialogs/AcknowledgeDialog";
 import { InitialScreeningDialog } from "@/components/features/admin/focal/dialogs/InitialScreeningDialog";
 import { ForwardEscalateDialog } from "@/components/features/admin/focal/dialogs/ForwardEscalateDialog";
@@ -32,7 +34,13 @@ type DialogKey = "acknowledge" | "screening" | "forward" | "escalate" | null;
 // page comes from the FocalIntakeDetail prop, always refreshed via
 // router.refresh() after a mutation (never local optimistic state) so the
 // UI can never contradict server truth.
-export function FocalIntakeDetail({ report }: { report: FocalIntakeDetailData }) {
+export function FocalIntakeDetail({
+  report,
+  related,
+}: {
+  report: FocalIntakeDetailData;
+  related: RelatedTicketCandidates | null;
+}) {
   const router = useRouter();
   const [openDialog, setOpenDialog] = useState<DialogKey>(null);
 
@@ -107,6 +115,12 @@ export function FocalIntakeDetail({ report }: { report: FocalIntakeDetailData })
                 <span className="inline-flex items-center gap-1"><MapPinIcon aria-hidden="true" className="size-3.5" />{report.barangayName}</span>
                 <span>{report.lat.toFixed(5)}, {report.lng.toFixed(5)}</span>
               </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <RelatedTicketsPanel linkTo="focal-intake" related={related} />
             </CardContent>
           </Card>
 
