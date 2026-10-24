@@ -38,7 +38,11 @@ interface Call {
   values: unknown[];
 }
 
-function candidateRow(id: number, distance: number) {
+function candidateRow(
+  id: number,
+  distance: number,
+  extra: Record<string, unknown> = {},
+) {
   return {
     id,
     category: 'Pothole / Road Surface Damage',
@@ -47,6 +51,9 @@ function candidateRow(id: number, distance: number) {
     barangay_name: 'Pio',
     distance_m: distance,
     member_count: 1,
+    created_at: '2026-09-30T00:00:00.000Z',
+    active_work_orders: 0,
+    ...extra,
     first_report_id: id * 10,
     tracking_reference: `PRC-2026-${String(id).padStart(6, '0')}`,
     reported_at: '2026-10-01T00:00:00.000Z',
@@ -56,7 +63,12 @@ function candidateRow(id: number, distance: number) {
 // First query: the viewed ticket (or the report's ticket); second: the
 // candidates.
 function fakeSql(
-  viewed: { id: number; category: string; assigned_office: string } | null,
+  viewed:
+    | ({ id: number; category: string; assigned_office: string } & Record<
+        string,
+        unknown
+      >)
+    | null,
   candidates: unknown[] = [],
 ) {
   const calls: Call[] = [];
@@ -72,7 +84,12 @@ function fakeSql(
 const POTHOLE = {
   id: 7,
   category: 'Pothole / Road Surface Damage',
+  status: 'Reported',
   assigned_office: 'MEO',
+  merged_into_ticket_id: null,
+  created_at: '2026-09-29T00:00:00.000Z',
+  report_count: 2,
+  active_work_orders: 0,
 };
 
 describe('RelatedTicketsService.forTicket (Ticket Detail)', () => {
@@ -184,12 +201,71 @@ describe('RelatedTicketsService.forTicket (Ticket Detail)', () => {
       barangayName: 'Pio',
       distanceM: 12,
       memberCount: 1,
+      createdAt: '2026-09-30T00:00:00.000Z',
       reportedAt: '2026-10-01T00:00:00.000Z',
       trackingReference: 'PRC-2026-000021',
       firstReportId: 210,
+      blockedReasons: {
+        mergeIntoViewed: null,
+        mergeViewedInto: null,
+        moveReportHere: null,
+      },
     });
+    // Work Orders are only counted (for the blocked reasons), never read.
     expect(calls[1].text).not.toMatch(
-      /citizen|title|description|image_url|flags|exif|notes|work_orders|operational_assessments|priority/,
+      /citizen|title|description|image_url|flags|exif|notes|assigned_admin|operational_assessments|priority/,
+    );
+  });
+});
+
+// Manuscript revision Phase 3, step 3d: which Merge / Move actions the panel
+// offers, from the same rules the actions enforce (ticket-grouping.rules.ts).
+describe('RelatedTicketsService blocked reasons', () => {
+  it('blocks merging a candidate with an active Work Order away, but not merging into it', async () => {
+    const { sql } = fakeSql(POTHOLE, [
+      candidateRow(21, 12, { active_work_orders: 1 }),
+    ]);
+    const result = await new RelatedTicketsService(sql).forTicket(7, MEO);
+    expect(result?.candidates[0].blockedReasons).toEqual({
+      mergeIntoViewed:
+        'Ticket #21 has an active Work Order. Finish or cancel its Work Orders first.',
+      mergeViewedInto: null,
+      moveReportHere: null,
+    });
+  });
+
+  it('tells Focal why a candidate in another office or past Reported is blocked', async () => {
+    const { sql } = fakeSql(POTHOLE, [
+      candidateRow(21, 12, { assigned_office: 'MDRRMO' }),
+      candidateRow(22, 14, { status: 'Under Review' }),
+    ]);
+    const result = await new RelatedTicketsService(sql).forReport(55, FOCAL);
+    const [otherOffice, underReview] = result!.candidates;
+    expect(otherOffice.blockedReasons.mergeIntoViewed).toBe(
+      'Ticket #7 and Ticket #21 are assigned to different offices. Reassign or Refer first so both tickets have the same office.',
+    );
+    expect(underReview.blockedReasons.mergeViewedInto).toBe(
+      'Focal Personnel can only merge tickets or move reports while they are still Reported; Ticket #22 is Under Review.',
+    );
+  });
+
+  it('offers no Move or Remove from a ticket with a single report', async () => {
+    const { sql } = fakeSql({ ...POTHOLE, report_count: 1 }, [
+      candidateRow(21, 12),
+    ]);
+    const result = await new RelatedTicketsService(sql).forTicket(7, MEO);
+    expect(result?.viewed).toEqual({
+      ticketId: 7,
+      createdAt: '2026-09-29T00:00:00.000Z',
+      reportCount: 1,
+      mergedIntoTicketId: null,
+      blockedReasons: {
+        removeReport:
+          'Ticket #7 has only this report, so there is nothing to remove it from.',
+      },
+    });
+    expect(result?.candidates[0].blockedReasons.moveReportHere).toBe(
+      'Ticket #7 would have no reports left. Merge the tickets instead.',
     );
   });
 });

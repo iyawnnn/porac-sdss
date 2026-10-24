@@ -39,7 +39,11 @@ export type AdminAuditActionType =
   | 'report_screened'
   | 'report_escalated'
   | 'operational_assessment_created'
-  | 'operational_assessment_updated';
+  | 'operational_assessment_updated'
+  // Manuscript revision Phase 3, step 3d (TicketGroupingService).
+  | 'ticket_merged'
+  | 'report_removed_from_ticket'
+  | 'report_regrouped';
 
 export type AdminAuditTargetType = 'admin' | 'ticket' | 'report' | 'work_order';
 
@@ -124,6 +128,9 @@ const ACTION_TYPES: AdminAuditActionType[] = [
   'report_escalated',
   'operational_assessment_created',
   'operational_assessment_updated',
+  'ticket_merged',
+  'report_removed_from_ticket',
+  'report_regrouped',
 ];
 const TARGET_TYPES: AdminAuditTargetType[] = ['admin', 'ticket', 'report', 'work_order'];
 

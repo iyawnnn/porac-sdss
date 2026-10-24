@@ -21,6 +21,11 @@ import {
   isSystemAdmin,
   resolveOfficeScope,
 } from './admin-scope';
+import {
+  mergeBlock,
+  regroupBlock,
+  removeBlock,
+} from '../../admin/ticket-grouping.rules';
 
 // Manuscript revision Phase 2, step 2e: access must stay EXACTLY the same
 // after every decision moved from admins.role to account_type / office /
@@ -366,5 +371,67 @@ describe('access parity: account_type / office / is_focal vs the old role logic'
         );
       }
     });
+  });
+});
+
+// Manuscript revision Phase 3, step 3d: who may Merge / Remove / Regroup, for
+// every account that exists today. Operational Personnel (the old officer
+// and supervisor): their own office's tickets only. Focal: any office, while
+// every ticket involved is Reported with no active Work Order (Decision 10).
+// The System Administrator: never.
+describe('Merge / Remove / Regroup permissions (Phase 3, step 3d)', () => {
+  const ticket = (
+    id: number,
+    office: Office,
+    status = 'Reported',
+    activeWorkOrders = 0,
+  ) => ({
+    id,
+    status,
+    assignedOffice: office,
+    category: 'Pothole / Road Surface Damage',
+    mergedIntoTicketId: null,
+    activeWorkOrders,
+  });
+  const allowed = (
+    actor: ReturnType<typeof mapped>,
+    office: Office,
+    status = 'Reported',
+    wo = 0,
+  ) =>
+    mergeBlock(
+      actor,
+      ticket(1, office, status),
+      ticket(2, office, status, wo),
+    ) === null &&
+    regroupBlock(
+      actor,
+      ticket(1, office, status, wo),
+      ticket(2, office, status),
+      2,
+    ) === null &&
+    removeBlock(actor, ticket(1, office, status, wo), 2) === null;
+
+  it.each(COMBINATIONS)('%s', (_label, a) => {
+    const actor = mapped(a);
+    for (const office of OFFICES) {
+      const operational = a.role === 'officer' || a.role === 'supervisor';
+      expect([office, 'Reported', allowed(actor, office)]).toEqual([
+        office,
+        'Reported',
+        operational ? a.office === office : a.role === 'focal',
+      ]);
+      expect([
+        office,
+        'Under Review',
+        allowed(actor, office, 'Under Review'),
+      ]).toEqual([office, 'Under Review', operational && a.office === office]);
+      // Nobody may merge away a ticket with an active Work Order.
+      expect([
+        office,
+        'active Work Order',
+        allowed(actor, office, 'Reported', 1),
+      ]).toEqual([office, 'active Work Order', false]);
+    }
   });
 });
