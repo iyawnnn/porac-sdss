@@ -18,6 +18,21 @@ export interface BarangayMatch {
 export class BarangayService {
   constructor(@Inject(PG) private readonly pg: Sql) {}
 
+  // Strict: only a point inside a barangay polygon, with no boundary
+  // fallback. Staff location corrections (manuscript revision Phase 3, step
+  // 3e) use this; citizen submissions use findBarangayForPoint below.
+  async findContainingBarangay(
+    lat: number,
+    lng: number,
+  ): Promise<{ id: number; name: string } | null> {
+    const [exact] = await this.pg<{ id: number; name: string }[]>`
+      SELECT id, name FROM barangays
+      WHERE ST_Contains(geom, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326))
+      LIMIT 1
+    `;
+    return exact ?? null;
+  }
+
   async findBarangayForPoint(
     lat: number,
     lng: number,
@@ -25,9 +40,7 @@ export class BarangayService {
     const sql = this.pg;
     const point = sql`ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)`;
 
-    const [exact] = await sql<{ id: number; name: string }[]>`
-      SELECT id, name FROM barangays WHERE ST_Contains(geom, ${point}) LIMIT 1
-    `;
+    const exact = await this.findContainingBarangay(lat, lng);
     if (exact) return { ...exact, viaFallback: false };
 
     // The barangay polygons have known small edge gaps (e.g. the

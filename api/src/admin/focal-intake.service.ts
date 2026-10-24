@@ -141,6 +141,13 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
   lng: number;
   linkedTicketReference: string;
   activity: IntakeActivityRow[];
+  // Manuscript revision Phase 3, step 3e: lat/lng above are the citizen's
+  // pin; these are the ticket's current location and the category the
+  // citizen picked (category is the ticket's current one). Staff
+  // corrections change only the ticket.
+  ticketLat: number;
+  ticketLng: number;
+  submittedCategory: string;
 }
 
 function mapRow(row: RawIntakeRow): FocalIntakeRow {
@@ -253,6 +260,9 @@ export class FocalIntakeService {
         description: string | null;
         lat: number;
         lng: number;
+        ticket_lat: number;
+        ticket_lng: number;
+        submitted_category: string;
       })[]
     >`
       SELECT
@@ -260,6 +270,7 @@ export class FocalIntakeService {
         t.assigned_office, t.member_count, b.name AS barangay_name,
         r.citizen_severity, r.created_at AS submitted_at, r.flags,
         r.description, ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng,
+        ST_Y(t.geom) AS ticket_lat, ST_X(t.geom) AS ticket_lng, r.submitted_category,
         t.priority_index AS operational_priority,
         ra.acknowledged_at, ra.acknowledged_by_name,
         latest.action_type AS latest_action_type
@@ -287,6 +298,9 @@ export class FocalIntakeService {
       lng: row.lng,
       linkedTicketReference: `Ticket #${row.ticket_id}`,
       activity,
+      ticketLat: row.ticket_lat,
+      ticketLng: row.ticket_lng,
+      submittedCategory: row.submitted_category,
     };
   }
 

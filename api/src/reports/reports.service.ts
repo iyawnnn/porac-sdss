@@ -176,6 +176,14 @@ export interface MyReportDetail {
   // 'acknowledged' event kind.
   acknowledged_at: string | null;
   is_merged: boolean;
+  // Manuscript revision Phase 3, step 3e: the category the citizen picked
+  // (category above is the ticket's current one, which staff may have
+  // corrected), and the ticket's current location only when staff
+  // corrected it (null otherwise, so another citizen's pin on a shared
+  // ticket is never sent).
+  submitted_category: string;
+  corrected_lat: number | null;
+  corrected_lng: number | null;
 }
 
 export interface DisputeResult {
@@ -512,12 +520,21 @@ export class ReportsService {
         t.assigned_office, t.member_count, r.moderation_status, r.moderated_at, t.resolution_notes,
         t.resolution_image_url, t.disputed_at, t.resolution_confirmed_at,
         ra.acknowledged_at,
-        r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id) AS is_merged
+        r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id) AS is_merged,
+        r.submitted_category,
+        CASE WHEN lc.corrected THEN ST_Y(t.geom) END AS corrected_lat,
+        CASE WHEN lc.corrected THEN ST_X(t.geom) END AS corrected_lng
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
       JOIN citizens c ON c.id = r.citizen_id
       LEFT JOIN report_acknowledgments ra ON ra.report_id = r.id
+      LEFT JOIN LATERAL (
+        SELECT true AS corrected FROM admin_audit_events e
+        WHERE e.target_type = 'ticket' AND e.target_id = t.id
+          AND e.action_type = 'ticket_location_corrected'
+        LIMIT 1
+      ) lc ON true
       WHERE r.id = ${reportId} AND r.citizen_id = ${citizenId}
     `;
 
