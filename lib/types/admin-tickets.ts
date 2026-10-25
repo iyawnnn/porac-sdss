@@ -5,6 +5,7 @@
 // erased at compile time, so keeping them here costs nothing and avoids
 // updating every import site to a new path).
 import type { PriorityBreakdown } from "@/lib/utils/scoring";
+import type { SeverityScreeningStatus } from "./admin-focal-intake";
 
 export interface AdminTicketRow {
   id: number;
@@ -152,6 +153,10 @@ export interface TicketReport {
   pin_lat: number;
   pin_lng: number;
   pin_distance_m: number;
+  // Focal's severity screening (manuscript revision Phase 3, step 3f),
+  // read-only on Ticket Detail; never in any citizen type.
+  severity_screening_status: SeverityScreeningStatus;
+  severity_screening_remarks: string | null;
 }
 
 export interface TicketStatusHistoryRow {

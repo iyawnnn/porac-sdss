@@ -31,6 +31,7 @@ const ACTION_LABELS: Record<AdminAuditActionType, string> = {
   ticket_category_corrected: "Ticket category corrected",
   ticket_location_corrected: "Ticket location corrected",
   report_moderated: "Report moderated",
+  report_severity_screened: "Report severity screened",
   work_order_created: "Work order created",
   work_order_updated: "Work order updated",
   work_order_status_changed: "Work order status changed",

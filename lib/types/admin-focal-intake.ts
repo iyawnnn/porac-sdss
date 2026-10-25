@@ -2,7 +2,19 @@
 // AdminTicketRow/PaginatedTickets (the operational Ticket Queue's own
 // shape). Mirrors api/src/admin/focal-intake.service.ts's response DTOs.
 export type IntakeState = "New" | "Acknowledged" | "Screened" | "Forwarded" | "Escalated";
-export type ScreeningRecommendation = "continue" | "forward" | "escalate";
+// Appendix H REPORTS severity_screening_status (manuscript Table 2;
+// manuscript revision Phase 3, step 3f). Mirrors api/src/db/schema.ts.
+export type SeverityScreeningStatus = "NOT_REVIEWED" | "NO_CONCERN_NOTED" | "REQUIRES_OPERATIONAL_VALIDATION";
+export type SeverityScreeningOutcome = Exclude<SeverityScreeningStatus, "NOT_REVIEWED">;
+
+export interface SeverityScreening {
+  status: SeverityScreeningStatus;
+  remarks: string | null;
+  screenedByName: string | null;
+  screenedAt: string | null;
+  // null while Focal may screen; else why not (the API's own 409 message).
+  blockedReason: string | null;
+}
 
 export interface FocalIntakeRow {
   reportId: number;
@@ -23,6 +35,9 @@ export interface FocalIntakeRow {
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
   intakeState: IntakeState;
+  // Not yet screened, on an active, not merged-away ticket; acknowledgment
+  // plays no part (manuscript revision Phase 3, step 3f).
+  needsScreening: boolean;
 }
 
 export interface IntakeActivityRow {
@@ -45,6 +60,8 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
   ticketLat: number;
   ticketLng: number;
   submittedCategory: string;
+  // Focal severity screening (manuscript revision Phase 3, step 3f).
+  severityScreening: SeverityScreening;
 }
 
 // Batch 4's Focal-safe read-only map source (GET /admin/intake/geo) — a

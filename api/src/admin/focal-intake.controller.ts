@@ -12,10 +12,7 @@ import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { FocalGuard } from '../common/guards/focal.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
-import {
-  FocalIntakeService,
-  type ScreeningRecommendation,
-} from './focal-intake.service';
+import { FocalIntakeService } from './focal-intake.service';
 import { RelatedTicketsService } from './related-tickets.service';
 
 // Focal's dedicated municipality-wide intake surface — never the
@@ -74,17 +71,17 @@ export class FocalIntakeController {
     return this.intake.acknowledge(reportId, admin, remarks);
   }
 
-  @Post(':reportId/screen')
-  async screen(
+  // Focal severity screening (manuscript revision Phase 3, step 3f). It
+  // replaced POST :reportId/screen, the old general screening action,
+  // which is gone. The service validates status and remarks.
+  @Post(':reportId/severity-screening')
+  async screenSeverity(
     @Param('reportId', ParseIntPipe) reportId: number,
     @CurrentAdmin() admin: AdminSession,
-    @Body('remarks') remarks: string | undefined,
-    @Body('recommendedHandling') recommendedHandling: ScreeningRecommendation,
+    @Body('status') status: unknown,
+    @Body('remarks') remarks: unknown,
   ) {
-    return this.intake.screen(reportId, admin, {
-      remarks,
-      recommendedHandling,
-    });
+    return this.intake.screenSeverity(reportId, admin, { status, remarks });
   }
 
   @Post(':reportId/forward')

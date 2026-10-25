@@ -1,9 +1,11 @@
 import { sql } from '../db';
 
 // Playwright fixtures for the staff Merge / Remove / Regroup spec
-// (e2e/admin-ticket-grouping.spec.ts; manuscript revision Phase 3, step 3d)
-// and the category / location correction spec
-// (e2e/admin-ticket-corrections.spec.ts; step 3e). The tickets and reports
+// (e2e/admin-ticket-grouping.spec.ts; manuscript revision Phase 3, step 3d),
+// the category / location correction spec
+// (e2e/admin-ticket-corrections.spec.ts; step 3e) and the Focal severity
+// screening spec (e2e/admin-severity-screening.spec.ts; step 3f). The
+// tickets and reports
 // are inserted directly, never through POST /reports, so the specs post no
 // report: a full run already posts 20, the per-IP hourly limit
 // (docs/testing.md). Every fixture report belongs to citizen1 and its title
@@ -27,6 +29,7 @@ const TITLE_PATTERNS = [`${TITLE_PREFIX}%`, `${CORRECTION_TITLE_PREFIX}%`];
 const CATEGORY = 'Pothole / Road Surface Damage';
 const CITIZEN_EMAIL = 'citizen1@porac.ph';
 const MEO_EMAIL = 'meo@porac.gov.ph';
+const FOCAL_EMAIL = 'focal@porac.gov.ph';
 const IMAGE_URL = '/uploads/reports/01_poblacion.jpg';
 const CLEANUP_ACTOR = 'E2E fixture cleanup';
 
@@ -98,9 +101,12 @@ async function create() {
   const [meo] = await sql<{ id: number; name: string }[]>`
     SELECT id, first_name || ' ' || last_name AS name FROM admins WHERE email = ${MEO_EMAIL}
   `;
-  if (!citizen || !meo)
+  const [focal] = await sql<{ id: number; name: string }[]>`
+    SELECT id, first_name || ' ' || last_name AS name FROM admins WHERE email = ${FOCAL_EMAIL}
+  `;
+  if (!citizen || !meo || !focal)
     throw new Error(
-      'citizen1 or the MEO demo admin is missing; run seed:users and seed:e2e-admins first.',
+      'citizen1, the MEO or the Focal demo admin is missing; run seed:users and seed:e2e-admins first.',
     );
 
   return sql.begin(async (tx) => {
@@ -286,6 +292,23 @@ async function create() {
       member: 2,
     });
 
+    // Step 3f severity screening (e2e/admin-severity-screening.spec.ts): an
+    // active MEO ticket whose report carries one old general 'screened'
+    // intake action. Severity screening replaced that action, so the report
+    // still starts NOT_REVIEWED and its intake state is not Screened. 40 m
+    // north of the Focal Reported fixture (30 m from the Under Review one),
+    // outside the 20 m Pothole radius of both.
+    const screening = await correctionTicket(4, 'severity screening', {
+      member: 8,
+    });
+    await tx`
+      INSERT INTO report_intake_actions (report_id, action_type, actor_admin_id, actor_name, remarks)
+      VALUES (
+        ${screening.reportId}, 'screened', ${focal.id}, ${focal.name},
+        ${`${CORRECTION_TITLE_PREFIX}: old general screening`}
+      )
+    `;
+
     return {
       corrections: {
         withinOffice,
@@ -295,6 +318,7 @@ async function create() {
         focalReported,
         focalUnderReview,
       },
+      screening,
       merge: { olderTicketId, newerTicketId, newerReportId },
       remove: { ticketId: removeTicketId, reportIds: removeReportIds },
       regroup: {
