@@ -211,7 +211,7 @@ A full Playwright run posts roughly 17 real reports (and creates a similar numbe
 
 ### 6.1 `admin_audit_events`
 
-An append-only trail of administrative actions: account create / role change / deactivate / reactivate, ticket status changes and reassignments, report moderation, work-order create / update / status change, admin login/failed-login (`admin_login` / `admin_login_failed`), and — five-role Batches 2/3 — Focal's `report_acknowledged` / `report_screened` / `report_escalated` and `operational_assessment_created` / `operational_assessment_updated`. (`report_forwarded` is deliberately absent: Forward reuses `reassignOffice`, which already logs `ticket_reassigned`; a second event for the same action would be redundant — see `FocalIntakeService.forward`.)
+An append-only trail of administrative actions: account create / role change / deactivate / reactivate, ticket status changes and reassignments, report moderation, work-order create / update / status change, admin login/failed-login (`admin_login` / `admin_login_failed`), and — five-role Batches 2/3 — Focal's `report_acknowledged` / `report_screened` / `report_escalated` and `operational_assessment_created` / `operational_assessment_updated`. Since manuscript revision Phase 3, step 3f, Focal severity screening writes `report_severity_screened` (metadata `{ oldStatus, newStatus, remarks }`), and `report_screened` (the old general screening action) is history only. (`report_forwarded` is deliberately absent: Forward reuses `reassignOffice`, which already logs `ticket_reassigned`; a second event for the same action would be redundant — see `FocalIntakeService.forward`.)
 
 Three properties that matter:
 

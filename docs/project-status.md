@@ -78,6 +78,14 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 3, step 3f — Focal severity screening (Appendix H REPORTS; Table 2) — **completed (code + unit tests; migration 0041 tested on PGlite, not yet run on a real database; e2e written, not yet run)**
+
+- **Schema** (`0041_severity_screening.sql`, `pnpm --prefix api migrate:severity-screening`): `reports.severity_screening_status` (`NOT_REVIEWED` default / `NO_CONCERN_NOTED` / `REQUIRES_OPERATIONAL_VALIDATION`), `severity_screening_remarks`, `severity_screened_by_admin_id` (FK `admins`), `severity_screened_at`, and the CHECK `reports_severity_screening_consistency_check`. No backfill.
+- **Group decision:** severity screening **replaces** the old general Initial Screening action. Its endpoint (`POST /admin/intake/:id/screen`), button and dialog are gone. Old `report_intake_actions` `'screened'` rows stay as history, and those reports start `NOT_REVIEWED`.
+- **API:** `POST /admin/intake/:reportId/severity-screening` (Focal only). Optional remarks (trimmed, ≤ 1000 characters). Allowed while the ticket is active and not merged away. Re-screening overwrites; every screening writes a `report_severity_screened` audit event `{ oldStatus, newStatus, remarks }`. "Screened" in the intake state now means a screening exists; the later of a forward/escalation and a screening decides the state. Screening never changes the citizen's severity, the ticket's severity or Operational Priority.
+- **UI:** a Severity screening card on Focal Intake detail; a read-only "Focal screening: …" line per report on Ticket Detail; an Activity Log label. Citizens never see it.
+- **Tested:** unit tests (Focal-only, ticket-active rule, values written, re-screening, audit, unchanged severity/priority, intake state, no screening in citizen responses). PGlite, outside the repo: the real script ran twice, changing 0 rows each time, and the CHECK, enum, NOT NULL and FK rejected inconsistent rows (23 checks). New e2e spec `e2e/admin-severity-screening.spec.ts` on a new `seed:e2e-grouping-fixtures` fixture (no report submissions), **not run yet**: migration 0041 must first run on the test copy.
+
 ### Manuscript revision Phase 3, step 3e — staff category and location correction — **completed (code + unit tests + e2e; no database change)**
 
 - **API** (`TicketCorrectionsService`, `GET /admin/ticket-corrections/:id` and `POST …/:id/{category,location}`, `AdminSessionGuard` + `PersonnelGuard`; manuscript pp. 42–45, Tables 2–4). Ticket only: `reports.submitted_category` and the report's `pin_geom`/`geom`/`exif_geom` are never written. Reason required (1–1000 characters), ticket locked `FOR UPDATE`, one audit event each (`ticket_category_corrected`, `ticket_location_corrected`), no notification.
