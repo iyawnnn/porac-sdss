@@ -56,6 +56,20 @@ export const routingActionTypeEnum = pgEnum('routing_action_type', [
   'REASSIGN',
   'REFER',
 ]);
+// Appendix H REPORTS severity_screening_status (manuscript Table 2;
+// manuscript revision Phase 3, step 3f, migration 0041). See
+// reports.severityScreeningStatus below.
+export const SEVERITY_SCREENING_STATUSES = [
+  'NOT_REVIEWED',
+  'NO_CONCERN_NOTED',
+  'REQUIRES_OPERATIONAL_VALIDATION',
+] as const;
+export type SeverityScreeningStatus =
+  (typeof SEVERITY_SCREENING_STATUSES)[number];
+export const severityScreeningStatusEnum = pgEnum(
+  'severity_screening_status',
+  SEVERITY_SCREENING_STATUSES,
+);
 // History / sync mirror only since manuscript revision Phase 2, step 2e
 // (migration 0039): admins.role and admin_audit_events.actor_role keep this
 // type until both are dropped in Phase 8, and NOTHING may read either for
@@ -359,6 +373,28 @@ export const reports = pgTable('reports', {
   moderationNote: text('moderation_note'),
   moderatedAt: timestamp('moderated_at', { withTimezone: true }),
   moderatedBy: text('moderated_by'),
+  // Appendix H REPORTS severity screening (manuscript Table 2; manuscript
+  // revision Phase 3, step 3f, migration 0041): Focal Personnel's advisory
+  // note on whether the citizen's severity needs operational validation.
+  // Written only by FocalIntakeService.screenSeverity; re-screening
+  // overwrites these four. Screening NEVER changes citizenSeverity, the
+  // ticket's severity or Operational Priority, and citizens never see it.
+  // The CHECK reports_severity_screening_consistency_check: NOT_REVIEWED has
+  // no screener and no time, any other status has both. Replaces the old
+  // report_intake_actions 'screened' action (kept as history).
+  severityScreeningStatus: severityScreeningStatusEnum(
+    'severity_screening_status',
+  )
+    .notNull()
+    .default('NOT_REVIEWED'),
+  severityScreeningRemarks: text('severity_screening_remarks'),
+  // A real FK, as Appendix H defines it (like routing_actions.admin_id).
+  severityScreenedByAdminId: integer(
+    'severity_screened_by_admin_id',
+  ).references(() => admins.id),
+  severityScreenedAt: timestamp('severity_screened_at', {
+    withTimezone: true,
+  }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -494,11 +530,15 @@ export const acknowledgments = pgTable('acknowledgments', {
     .defaultNow(),
 });
 
-// Append-only Focal intake activity trail — screened/forwarded/escalated.
+// Append-only Focal intake activity trail — forwarded/escalated. 'screened'
+// rows (the old general screening action) are history only since manuscript
+// revision Phase 3, step 3f: never written again and no longer read for the
+// intake state, which takes "Screened" from reports.severityScreeningStatus.
 // Deliberately NOT a mutable "intake status" column: the citizen-/admin-
 // facing "New | Acknowledged | Screened | Forwarded | Escalated" display
-// state is always DERIVED at query time from this table plus
-// report_acknowledgments (see FocalIntakeService.deriveIntakeState), never
+// state is always DERIVED at query time from this table,
+// report_acknowledgments and the report's severity screening (see
+// FocalIntakeService.deriveIntakeState), never
 // persisted as its own state machine — this is what keeps these concepts
 // from ever becoming a second TicketStatus. action_type is plain text
 // (validated against a TS union in the service layer, not a pg enum) for
