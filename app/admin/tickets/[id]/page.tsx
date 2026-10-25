@@ -18,6 +18,7 @@ import type { CorrectionAvailability } from "@/lib/types/admin-ticket-correction
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
 import type { RelatedTicketCandidate, RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
+import { SEVERITY_SCREENING_LABEL } from "@/lib/utils/ui/severity-screening";
 import { StatusPill } from "@/components/features/admin/shared/StatusPill";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
 import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
@@ -481,6 +482,15 @@ function ReportCard({ report, actions }: { report: TicketReport; actions?: React
         ))}
       </div>
       {metaParts.length > 0 && <p className="mt-1.5 text-xs text-ink-400">{metaParts.join(" · ")}</p>}
+      {/* Manuscript revision Phase 3, step 3f: Focal's severity screening,
+          read-only here. Advisory: the severity badge above is still the
+          citizen's own. */}
+      {report.severity_screening_status !== "NOT_REVIEWED" && (
+        <p className="mt-1.5 text-xs text-ink-500" data-testid={`report-screening-${report.id}`}>
+          Focal screening: {SEVERITY_SCREENING_LABEL[report.severity_screening_status]}
+          {report.severity_screening_remarks ? ` — “${report.severity_screening_remarks}”` : ""}
+        </p>
+      )}
       {actions}
     </div>
   );

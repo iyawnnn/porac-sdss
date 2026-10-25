@@ -17,6 +17,8 @@ export type AdminAuditActionType =
   | "ticket_category_corrected"
   | "ticket_location_corrected"
   | "report_moderated"
+  // Manuscript revision Phase 3, step 3f: Focal severity screening.
+  | "report_severity_screened"
   | "work_order_created"
   | "work_order_updated"
   | "work_order_status_changed"

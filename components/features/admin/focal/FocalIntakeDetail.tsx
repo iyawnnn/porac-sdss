@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { ArrowLeftIcon, MapPinIcon, ShieldAlertIcon, ShieldCheckIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -11,25 +10,27 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
-import type { FocalIntakeDetail as FocalIntakeDetailData, ScreeningRecommendation } from "@/lib/types/admin-focal-intake";
+import type { FocalIntakeDetail as FocalIntakeDetailData } from "@/lib/types/admin-focal-intake";
 import type { RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
 import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import { distanceMeters } from "@/lib/utils/distance";
 import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
 import { TicketCorrectionActions } from "@/components/features/admin/tickets/corrections/TicketCorrectionActions";
 import { AcknowledgeDialog } from "@/components/features/admin/focal/dialogs/AcknowledgeDialog";
-import { InitialScreeningDialog } from "@/components/features/admin/focal/dialogs/InitialScreeningDialog";
 import { ForwardEscalateDialog } from "@/components/features/admin/focal/dialogs/ForwardEscalateDialog";
+import { SeverityScreeningCard } from "@/components/features/admin/focal/SeverityScreeningCard";
 
 const TicketLocationMapLoader = dynamic(() => import("@/components/features/admin/tickets/TicketLocationMapLoader"), { ssr: false });
 
 const ACTION_LABEL: Record<string, string> = {
+  // History only: the old general screening action, replaced by severity
+  // screening in manuscript revision Phase 3, step 3f.
   screened: "Initial screening completed",
   forwarded: "Forwarded to another office",
   escalated: "Escalated for priority attention",
 };
 
-type DialogKey = "acknowledge" | "screening" | "forward" | "escalate" | null;
+type DialogKey = "acknowledge" | "forward" | "escalate" | null;
 
 // Central Monitoring / Focal Personnel intake detail — a separate concept
 // from the MEO/MDRRMO operational Ticket Detail (see
@@ -46,7 +47,6 @@ export function FocalIntakeDetail({
   related: RelatedTicketCandidates | null;
   correction: CorrectionAvailability | null;
 }) {
-  const router = useRouter();
   const [openDialog, setOpenDialog] = useState<DialogKey>(null);
   // The map shows the ticket's current location; the citizen's pin is
   // listed when a staff correction moved the ticket away from it
@@ -54,17 +54,6 @@ export function FocalIntakeDetail({
   const pinDistance = Math.round(
     distanceMeters({ lat: report.lat, lng: report.lng }, { lat: report.ticketLat, lng: report.ticketLng }),
   );
-
-  function handleScreened(outcome: ScreeningRecommendation) {
-    if (outcome === "forward") {
-      setOpenDialog("forward");
-    } else if (outcome === "escalate") {
-      setOpenDialog("escalate");
-    } else {
-      setOpenDialog(null);
-    }
-    router.refresh();
-  }
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -90,14 +79,13 @@ export function FocalIntakeDetail({
         </p>
       </div>
 
-      {/* Focal's four intake actions only — no Advance Status/Resolve/
-          Reject/Create Work Order affordances. */}
+      {/* Focal's intake actions only — no Advance Status/Resolve/Reject/
+          Create Work Order affordances. Severity screening (the Severity
+          screening card) replaced the old Initial Screening button in
+          manuscript revision Phase 3, step 3f. */}
       <div className="flex flex-wrap items-center gap-2">
         <Button disabled={!!report.acknowledgedAt} onClick={() => setOpenDialog("acknowledge")}>
           {report.acknowledgedAt ? "Acknowledged" : "Acknowledge Report"}
-        </Button>
-        <Button disabled={!report.acknowledgedAt} onClick={() => setOpenDialog("screening")} variant="outline">
-          Initial Screening
         </Button>
         <Button onClick={() => setOpenDialog("forward")} variant="outline">Forward</Button>
         <Button onClick={() => setOpenDialog("escalate")} variant="outline">Escalate</Button>
@@ -180,6 +168,8 @@ export function FocalIntakeDetail({
             </CardContent>
           </Card>
 
+          <SeverityScreeningCard key={`${report.severityScreening.status}-${report.severityScreening.screenedAt}`} report={report} />
+
           <Card>
             <CardContent className="p-4">
               <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Intake Status</p>
@@ -231,7 +221,6 @@ export function FocalIntakeDetail({
       </div>
 
       <AcknowledgeDialog onOpenChange={(o) => setOpenDialog(o ? "acknowledge" : null)} open={openDialog === "acknowledge"} report={report} />
-      <InitialScreeningDialog onOpenChange={(o) => setOpenDialog(o ? "screening" : null)} onScreened={handleScreened} open={openDialog === "screening"} report={report} />
       <ForwardEscalateDialog
         key={`forward-${report.routedOffice}`}
         mode="forward"
