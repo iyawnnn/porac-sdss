@@ -32,6 +32,7 @@ import { categoryRouting } from '../common/utils/office';
 import {
   ROUTING_ADMIN_NAME_MAX_LENGTH,
   ROUTING_REASON_NOT_RECORDED,
+  type SeverityScreeningStatus,
 } from '../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EMAIL_SERVICE, type EmailService } from '../citizens/email.service';
@@ -231,6 +232,10 @@ export interface TicketReport {
   pin_lat: number;
   pin_lng: number;
   pin_distance_m: number;
+  // Focal's severity screening (manuscript revision Phase 3, step 3f),
+  // read-only here; never part of any citizen response.
+  severity_screening_status: SeverityScreeningStatus;
+  severity_screening_remarks: string | null;
 }
 
 export interface TicketStatusHistoryRow {
@@ -631,7 +636,8 @@ export class TicketsService {
         r.exif_captured_at, r.exif_data, r.location_mismatch_m, r.created_at,
         r.flags, r.moderation_status, r.submitted_category,
         ST_Y(r.pin_geom) AS pin_lat, ST_X(r.pin_geom) AS pin_lng,
-        ST_Distance(r.pin_geom::geography, t.geom::geography) AS pin_distance_m
+        ST_Distance(r.pin_geom::geography, t.geom::geography) AS pin_distance_m,
+        r.severity_screening_status, r.severity_screening_remarks
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       WHERE r.ticket_id = ${id} ORDER BY r.created_at

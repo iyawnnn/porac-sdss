@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -8,6 +9,8 @@ import {
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
 import type { AdminSession } from '../auth/session.service';
+import type { SeverityScreeningStatus } from '../db/schema';
+import { isFocalPersonnel } from '../common/authz/admin-scope';
 import { AdminAuditService } from './admin-audit.service';
 import { TicketsService } from './tickets.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -16,37 +19,121 @@ import { NotificationsService } from '../notifications/notifications.service';
 // a separate concept from the operational Ticket Queue (see
 // api/src/admin/tickets.service.ts). Reads reports (not tickets) joined
 // through to their ticket for routing/status/scoring context, and writes to
-// report_acknowledgments/report_intake_actions only — never tickets.status.
+// report_acknowledgments/report_intake_actions and the report's own
+// severity screening fields only — never tickets.status.
 
 export type IntakeState =
   'New' | 'Acknowledged' | 'Screened' | 'Forwarded' | 'Escalated';
+// 'screened' is history only since manuscript revision Phase 3, step 3f:
+// old rows are kept, never written again, and never read for the intake
+// state (severity screening replaced the general screening action).
 export type IntakeActionType = 'screened' | 'forwarded' | 'escalated';
 export const INTAKE_ACTION_TYPES: IntakeActionType[] = [
   'screened',
   'forwarded',
   'escalated',
 ];
-export type ScreeningRecommendation = 'continue' | 'forward' | 'escalate';
-export const SCREENING_RECOMMENDATIONS: ScreeningRecommendation[] = [
-  'continue',
-  'forward',
-  'escalate',
-];
+
+// Focal severity screening (Appendix H REPORTS severity_screening_*,
+// manuscript Table 2; manuscript revision Phase 3, step 3f). The two
+// outcomes Focal can record; NOT_REVIEWED is only the starting value, never
+// something a screening sets back.
+export const SEVERITY_SCREENING_OUTCOMES = [
+  'NO_CONCERN_NOTED',
+  'REQUIRES_OPERATIONAL_VALIDATION',
+] as const;
+export type SeverityScreeningOutcome =
+  (typeof SEVERITY_SCREENING_OUTCOMES)[number];
+export const SEVERITY_SCREENING_REMARKS_MAX = 1000;
+
+const ACTIVE_STATUSES = new Set(['Reported', 'Under Review', 'In Progress']);
+
+export function validateSeverityScreening(input: {
+  status: unknown;
+  remarks: unknown;
+}): { status: SeverityScreeningOutcome; remarks: string | null } {
+  if (
+    !SEVERITY_SCREENING_OUTCOMES.includes(
+      input.status as SeverityScreeningOutcome,
+    )
+  ) {
+    throw new BadRequestException(
+      'status must be NO_CONCERN_NOTED or REQUIRES_OPERATIONAL_VALIDATION.',
+    );
+  }
+  if (
+    input.remarks !== undefined &&
+    input.remarks !== null &&
+    typeof input.remarks !== 'string'
+  ) {
+    throw new BadRequestException('remarks must be text.');
+  }
+  const remarks = (input.remarks ?? '').trim();
+  if (remarks.length > SEVERITY_SCREENING_REMARKS_MAX) {
+    throw new BadRequestException(
+      `remarks must be at most ${SEVERITY_SCREENING_REMARKS_MAX} characters.`,
+    );
+  }
+  return {
+    status: input.status as SeverityScreeningOutcome,
+    remarks: remarks || null,
+  };
+}
+
+// Screening is allowed while the report's ticket is active and not merged
+// away. Pure, so the action (409) and the detail's disabled form use the
+// same rule and message.
+export function severityScreeningBlock(ticket: {
+  id: number;
+  status: string;
+  mergedIntoTicketId: number | null;
+}): string | null {
+  if (ticket.mergedIntoTicketId !== null) {
+    return `Ticket #${ticket.id} was merged into Ticket #${ticket.mergedIntoTicketId} and is read-only.`;
+  }
+  if (!ACTIVE_STATUSES.has(ticket.status)) {
+    return `Ticket #${ticket.id} is ${ticket.status}; a report can only be screened while its ticket is active.`;
+  }
+  return null;
+}
 
 // Presentation-only derivation, never persisted — this is exactly what
 // keeps "New/Acknowledged/Screened/Forwarded/Escalated" from becoming a
 // second TicketStatus (see schema.ts's reportIntakeActions docblock).
-// Ordering: the latest intake action (if any) always wins over a bare
-// acknowledgment, since screening/forwarding/escalating all imply the
-// report was acknowledged along the way even if that row is somehow
-// missing; escalated/forwarded outrank screened as more specific outcomes.
+// The latest of the intake events wins over a bare acknowledgment, since
+// screening/forwarding/escalating all imply the report was acknowledged
+// along the way even if that row is somehow missing. The events are the
+// latest forwarded/escalated intake action and, since manuscript revision
+// Phase 3, step 3f, the severity screening (Screened means a status other
+// than NOT_REVIEWED); an old 'screened' intake action counts for nothing.
+// When both exist, the later one wins (the action on a tie).
 export function deriveIntakeState(input: {
   acknowledgedAt: string | Date | null;
   latestActionType: string | null;
+  latestActionAt?: string | Date | null;
+  severityScreeningStatus?: SeverityScreeningStatus | null;
+  severityScreenedAt?: string | Date | null;
 }): IntakeState {
-  if (input.latestActionType === 'escalated') return 'Escalated';
-  if (input.latestActionType === 'forwarded') return 'Forwarded';
-  if (input.latestActionType === 'screened') return 'Screened';
+  const action =
+    input.latestActionType === 'escalated'
+      ? 'Escalated'
+      : input.latestActionType === 'forwarded'
+        ? 'Forwarded'
+        : null;
+  const screened =
+    !!input.severityScreeningStatus &&
+    input.severityScreeningStatus !== 'NOT_REVIEWED';
+  if (action && screened) {
+    const actionAt = input.latestActionAt
+      ? new Date(input.latestActionAt).getTime()
+      : 0;
+    const screenedAt = input.severityScreenedAt
+      ? new Date(input.severityScreenedAt).getTime()
+      : 0;
+    return screenedAt > actionAt ? 'Screened' : action;
+  }
+  if (action) return action;
+  if (screened) return 'Screened';
   if (input.acknowledgedAt) return 'Acknowledged';
   return 'New';
 }
@@ -76,6 +163,9 @@ interface RawIntakeRow {
   acknowledged_at: string | null;
   acknowledged_by_name: string | null;
   latest_action_type: string | null;
+  latest_action_at: string | null;
+  severity_screening_status: SeverityScreeningStatus;
+  severity_screened_at: string | null;
 }
 
 export interface FocalIntakeRow {
@@ -112,6 +202,9 @@ interface RawIntakeGeoRow {
   operational_priority: number | null;
   acknowledged_at: string | null;
   latest_action_type: string | null;
+  latest_action_at: string | null;
+  severity_screening_status: SeverityScreeningStatus;
+  severity_screened_at: string | null;
   lat: number;
   lng: number;
 }
@@ -148,6 +241,33 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
   ticketLat: number;
   ticketLng: number;
   submittedCategory: string;
+  // Manuscript revision Phase 3, step 3f: the report's current severity
+  // screening (Focal-only; citizens never see it). blockedReason is null
+  // while Focal may screen, else why not (the same rule as the action).
+  severityScreening: {
+    status: SeverityScreeningStatus;
+    remarks: string | null;
+    screenedByName: string | null;
+    screenedAt: string | null;
+    blockedReason: string | null;
+  };
+}
+
+// The intake-state inputs every Focal query selects (deriveIntakeState).
+function intakeStateOf(row: {
+  acknowledged_at: string | null;
+  latest_action_type: string | null;
+  latest_action_at: string | null;
+  severity_screening_status: SeverityScreeningStatus;
+  severity_screened_at: string | null;
+}): IntakeState {
+  return deriveIntakeState({
+    acknowledgedAt: row.acknowledged_at,
+    latestActionType: row.latest_action_type,
+    latestActionAt: row.latest_action_at,
+    severityScreeningStatus: row.severity_screening_status,
+    severityScreenedAt: row.severity_screened_at,
+  });
 }
 
 function mapRow(row: RawIntakeRow): FocalIntakeRow {
@@ -167,10 +287,7 @@ function mapRow(row: RawIntakeRow): FocalIntakeRow {
     operationalPriority: row.operational_priority,
     acknowledgedAt: row.acknowledged_at,
     acknowledgedByName: row.acknowledged_by_name,
-    intakeState: deriveIntakeState({
-      acknowledgedAt: row.acknowledged_at,
-      latestActionType: row.latest_action_type,
-    }),
+    intakeState: intakeStateOf(row),
   };
 }
 
@@ -197,14 +314,16 @@ export class FocalIntakeService {
         r.citizen_severity, r.created_at AS submitted_at, r.flags,
         t.priority_index AS operational_priority,
         ra.acknowledged_at, ra.acknowledged_by_name,
-        latest.action_type AS latest_action_type
+        latest.action_type AS latest_action_type, latest.created_at AS latest_action_at,
+        r.severity_screening_status, r.severity_screened_at
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
       LEFT JOIN report_acknowledgments ra ON ra.report_id = r.id
       LEFT JOIN LATERAL (
-        SELECT action_type FROM report_intake_actions
-        WHERE report_id = r.id ORDER BY created_at DESC LIMIT 1
+        SELECT action_type, created_at FROM report_intake_actions
+        WHERE report_id = r.id AND action_type IN ('forwarded', 'escalated')
+        ORDER BY created_at DESC LIMIT 1
       ) latest ON true
       ORDER BY r.created_at DESC
     `;
@@ -226,14 +345,16 @@ export class FocalIntakeService {
         r.id AS report_id, r.tracking_reference, t.category, b.name AS barangay_name,
         t.assigned_office, t.priority_index AS operational_priority,
         ra.acknowledged_at, latest.action_type AS latest_action_type,
+        latest.created_at AS latest_action_at, r.severity_screening_status, r.severity_screened_at,
         ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
       LEFT JOIN report_acknowledgments ra ON ra.report_id = r.id
       LEFT JOIN LATERAL (
-        SELECT action_type FROM report_intake_actions
-        WHERE report_id = r.id ORDER BY created_at DESC LIMIT 1
+        SELECT action_type, created_at FROM report_intake_actions
+        WHERE report_id = r.id AND action_type IN ('forwarded', 'escalated')
+        ORDER BY created_at DESC LIMIT 1
       ) latest ON true
       ORDER BY r.created_at DESC
     `;
@@ -246,10 +367,7 @@ export class FocalIntakeService {
       operationalPriority: row.operational_priority,
       lat: row.lat,
       lng: row.lng,
-      intakeState: deriveIntakeState({
-        acknowledgedAt: row.acknowledged_at,
-        latestActionType: row.latest_action_type,
-      }),
+      intakeState: intakeStateOf(row),
     }));
   }
 
@@ -263,24 +381,31 @@ export class FocalIntakeService {
         ticket_lat: number;
         ticket_lng: number;
         submitted_category: string;
+        merged_into_ticket_id: number | null;
+        severity_screening_remarks: string | null;
+        severity_screened_by_name: string | null;
       })[]
     >`
       SELECT
         r.id AS report_id, r.tracking_reference, t.id AS ticket_id, t.category, t.status AS ticket_status,
-        t.assigned_office, t.member_count, b.name AS barangay_name,
+        t.assigned_office, t.member_count, b.name AS barangay_name, t.merged_into_ticket_id,
         r.citizen_severity, r.created_at AS submitted_at, r.flags,
         r.description, ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng,
         ST_Y(t.geom) AS ticket_lat, ST_X(t.geom) AS ticket_lng, r.submitted_category,
         t.priority_index AS operational_priority,
         ra.acknowledged_at, ra.acknowledged_by_name,
-        latest.action_type AS latest_action_type
+        latest.action_type AS latest_action_type, latest.created_at AS latest_action_at,
+        r.severity_screening_status, r.severity_screening_remarks, r.severity_screened_at,
+        (sa.first_name || ' ' || sa.last_name) AS severity_screened_by_name
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
       LEFT JOIN report_acknowledgments ra ON ra.report_id = r.id
+      LEFT JOIN admins sa ON sa.id = r.severity_screened_by_admin_id
       LEFT JOIN LATERAL (
-        SELECT action_type FROM report_intake_actions
-        WHERE report_id = r.id ORDER BY created_at DESC LIMIT 1
+        SELECT action_type, created_at FROM report_intake_actions
+        WHERE report_id = r.id AND action_type IN ('forwarded', 'escalated')
+        ORDER BY created_at DESC LIMIT 1
       ) latest ON true
       WHERE r.id = ${reportId}
     `;
@@ -301,6 +426,17 @@ export class FocalIntakeService {
       ticketLat: row.ticket_lat,
       ticketLng: row.ticket_lng,
       submittedCategory: row.submitted_category,
+      severityScreening: {
+        status: row.severity_screening_status,
+        remarks: row.severity_screening_remarks,
+        screenedByName: row.severity_screened_by_name,
+        screenedAt: row.severity_screened_at,
+        blockedReason: severityScreeningBlock({
+          id: row.ticket_id,
+          status: row.ticket_status,
+          mergedIntoTicketId: row.merged_into_ticket_id ?? null,
+        }),
+      },
     };
   }
 
@@ -377,30 +513,61 @@ export class FocalIntakeService {
     return this.getIntakeDetail(reportId);
   }
 
-  // Records only the recommendation — never executes Forward/Escalate
-  // itself. Those remain the authoritative, separately-called endpoints
-  // (Step 13 of the Batch 2 design: "screening recommendation ≠ executed
-  // Forward/Escalate action").
-  async screen(
+  // Focal severity screening (manuscript revision Phase 3, step 3f;
+  // Appendix H REPORTS severity_screening_*, Table 2). Replaces the old
+  // general screening action, which wrote report_intake_actions
+  // 'screened' rows (kept as history, never written again). Sets the four
+  // fields on the report; re-screening overwrites them, and every screening
+  // writes one report_severity_screened audit event. Advisory only: it
+  // never writes citizen_severity or the ticket, and never recalculates
+  // Operational Priority (the ticket's severity is the MAX citizen_severity
+  // of its reports, so it can't change either). FocalGuard already limits
+  // the route to Focal Personnel; the check here keeps the rule with the
+  // write. The report row is locked so the audit's oldStatus is the value
+  // this screening replaced.
+  async screenSeverity(
     reportId: number,
     admin: AdminSession,
-    input: { remarks?: string; recommendedHandling: ScreeningRecommendation },
+    input: { status: unknown; remarks: unknown },
   ): Promise<FocalIntakeDetail | null> {
-    if (!SCREENING_RECOMMENDATIONS.includes(input.recommendedHandling)) {
-      throw new BadRequestException(
-        'recommendedHandling must be continue, forward, or escalate.',
-      );
+    if (!isFocalPersonnel(admin)) {
+      throw new ForbiddenException('Focal Intake access required.');
     }
+    const { status, remarks } = validateSeverityScreening(input);
     const sql = this.pg;
     await sql.begin(async (tx) => {
-      const [report] = await tx<{ id: number; title: string }[]>`
-        SELECT id, title FROM reports WHERE id = ${reportId}
+      const [report] = await tx<
+        {
+          id: number;
+          title: string;
+          severity_screening_status: SeverityScreeningStatus;
+          ticket_id: number;
+          ticket_status: string;
+          merged_into_ticket_id: number | null;
+        }[]
+      >`
+        SELECT r.id, r.title, r.severity_screening_status,
+          t.id AS ticket_id, t.status AS ticket_status, t.merged_into_ticket_id
+        FROM reports r
+        JOIN tickets t ON t.id = r.ticket_id
+        WHERE r.id = ${reportId}
+        FOR UPDATE OF r
       `;
       if (!report) throw new NotFoundException('Report not found.');
+      const blocked = severityScreeningBlock({
+        id: report.ticket_id,
+        status: report.ticket_status,
+        mergedIntoTicketId: report.merged_into_ticket_id,
+      });
+      if (blocked) throw new ConflictException(blocked);
 
       await tx`
-        INSERT INTO report_intake_actions (report_id, action_type, actor_admin_id, actor_name, remarks)
-        VALUES (${reportId}, 'screened', ${admin.adminId}, ${admin.adminName}, ${input.remarks?.trim() || null})
+        UPDATE reports SET
+          severity_screening_status = ${status},
+          severity_screening_remarks = ${remarks},
+          severity_screened_by_admin_id = ${admin.adminId},
+          severity_screened_at = now()
+        WHERE id = ${reportId}
       `;
 
       await this.audit.logInPgTx(tx, {
@@ -411,11 +578,15 @@ export class FocalIntakeService {
           accountType: admin.accountType,
           office: admin.office,
         },
-        actionType: 'report_screened',
+        actionType: 'report_severity_screened',
         targetType: 'report',
         targetId: reportId,
         targetSummary: `${report.title} (Report #${reportId})`,
-        metadata: { recommendedHandling: input.recommendedHandling },
+        metadata: {
+          oldStatus: report.severity_screening_status,
+          newStatus: status,
+          remarks,
+        },
       });
     });
 

@@ -1,12 +1,21 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
+  type ExecutionContext,
 } from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { FocalIntakeService, deriveIntakeState } from './focal-intake.service';
+import {
+  FocalIntakeService,
+  SEVERITY_SCREENING_REMARKS_MAX,
+  deriveIntakeState,
+  severityScreeningBlock,
+  validateSeverityScreening,
+} from './focal-intake.service';
+import { FocalGuard } from '../common/guards/focal.guard';
 import type { TicketsService } from './tickets.service';
 import type { NotificationsService } from './../notifications/notifications.service';
 import type { AdminAuditService } from './admin-audit.service';
@@ -37,13 +46,81 @@ describe('deriveIntakeState', () => {
     ).toBe('Acknowledged');
   });
 
-  it('is Screened when the latest intake action is screened', () => {
+  // Manuscript revision Phase 3, step 3f: Screened comes from the report's
+  // severity screening; an old 'screened' intake action counts for nothing.
+  it('is Screened once the severity screening is anything but NOT_REVIEWED', () => {
+    for (const status of [
+      'NO_CONCERN_NOTED',
+      'REQUIRES_OPERATIONAL_VALIDATION',
+    ] as const) {
+      expect(
+        deriveIntakeState({
+          acknowledgedAt: '2026-01-01T00:00:00Z',
+          latestActionType: null,
+          severityScreeningStatus: status,
+          severityScreenedAt: '2026-01-02T00:00:00Z',
+        }),
+      ).toBe('Screened');
+    }
+    // Screening needs no acknowledgment first.
+    expect(
+      deriveIntakeState({
+        acknowledgedAt: null,
+        latestActionType: null,
+        severityScreeningStatus: 'NO_CONCERN_NOTED',
+        severityScreenedAt: '2026-01-02T00:00:00Z',
+      }),
+    ).toBe('Screened');
+  });
+
+  it('is not Screened while the severity screening is NOT_REVIEWED, even with an old screened intake action', () => {
     expect(
       deriveIntakeState({
         acknowledgedAt: '2026-01-01T00:00:00Z',
         latestActionType: 'screened',
+        latestActionAt: '2026-01-02T00:00:00Z',
+        severityScreeningStatus: 'NOT_REVIEWED',
+        severityScreenedAt: null,
+      }),
+    ).toBe('Acknowledged');
+    expect(
+      deriveIntakeState({
+        acknowledgedAt: null,
+        latestActionType: 'screened',
+        severityScreeningStatus: 'NOT_REVIEWED',
+      }),
+    ).toBe('New');
+  });
+
+  it('takes the later of a forward/escalation and the severity screening (the action on a tie)', () => {
+    const base = {
+      acknowledgedAt: '2026-01-01T00:00:00Z',
+      severityScreeningStatus: 'REQUIRES_OPERATIONAL_VALIDATION' as const,
+    };
+    expect(
+      deriveIntakeState({
+        ...base,
+        latestActionType: 'forwarded',
+        latestActionAt: '2026-01-02T00:00:00Z',
+        severityScreenedAt: '2026-01-03T00:00:00Z',
       }),
     ).toBe('Screened');
+    expect(
+      deriveIntakeState({
+        ...base,
+        latestActionType: 'escalated',
+        latestActionAt: '2026-01-03T00:00:00Z',
+        severityScreenedAt: '2026-01-02T00:00:00Z',
+      }),
+    ).toBe('Escalated');
+    expect(
+      deriveIntakeState({
+        ...base,
+        latestActionType: 'forwarded',
+        latestActionAt: '2026-01-02T00:00:00Z',
+        severityScreenedAt: '2026-01-02T00:00:00Z',
+      }),
+    ).toBe('Forwarded');
   });
 
   it('is Forwarded when the latest intake action is forwarded, outranking a stale screened state', () => {
@@ -264,61 +341,482 @@ describe('FocalIntakeService.acknowledge', () => {
   });
 });
 
-describe('FocalIntakeService.screen', () => {
+// Manuscript revision Phase 3, step 3f: Focal severity screening (Appendix
+// H REPORTS severity_screening_*, Table 2). A small stateful fake: one
+// report on one ticket, each query matched by its text. An UPDATE reports
+// applies its `column = ${value}` assignments (and `= now()`) to the report,
+// so the reads before and after show exactly what a screening changed.
+// Every write is recorded.
+function makeScreeningService(
+  options: {
+    ticketStatus?: string;
+    mergedIntoTicketId?: number | null;
+    missing?: boolean;
+  } = {},
+) {
+  const report: Record<string, unknown> = {
+    id: 1,
+    title: 'Pothole',
+    citizen_severity: 'High',
+    severity_screening_status: 'NOT_REVIEWED',
+    severity_screening_remarks: null,
+    severity_screened_by_admin_id: null,
+    severity_screened_at: null,
+  };
+  const ticket = {
+    id: 100,
+    status: options.ticketStatus ?? 'Reported',
+    merged_into_ticket_id: options.mergedIntoTicketId ?? null,
+    priority_index: 70,
+  };
+  const writes: { text: string; values: unknown[] }[] = [];
+  const detailRow = () => ({
+    report_id: 1,
+    tracking_reference: 'PRC-2026-000001',
+    ticket_id: ticket.id,
+    category: 'Pothole / Road Surface Damage',
+    ticket_status: ticket.status,
+    assigned_office: 'MEO',
+    member_count: 1,
+    barangay_name: 'Mitla Proper',
+    merged_into_ticket_id: ticket.merged_into_ticket_id,
+    citizen_severity: report.citizen_severity,
+    submitted_at: '2026-01-01T00:00:00Z',
+    flags: [],
+    description: 'A pothole',
+    lat: 15.0,
+    lng: 120.5,
+    ticket_lat: 15.0,
+    ticket_lng: 120.5,
+    submitted_category: 'Pothole / Road Surface Damage',
+    operational_priority: ticket.priority_index,
+    acknowledged_at: null,
+    acknowledged_by_name: null,
+    latest_action_type: null,
+    latest_action_at: null,
+    severity_screening_status: report.severity_screening_status,
+    severity_screening_remarks: report.severity_screening_remarks,
+    severity_screened_at: report.severity_screened_at,
+    severity_screened_by_name:
+      report.severity_screened_by_admin_id === FOCAL.adminId
+        ? FOCAL.adminName
+        : null,
+  });
+  const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+    const text = strings.join('?');
+    let rows: unknown[] = [];
+    if (/^\s*(UPDATE|INSERT|DELETE)\b/.test(text)) {
+      writes.push({ text, values });
+      if (/^\s*UPDATE reports SET/.test(text)) {
+        strings.slice(0, -1).forEach((part, i) => {
+          const column = /(\w+)\s*=\s*$/.exec(part)?.[1];
+          if (column) report[column] = values[i];
+        });
+        for (const [, column] of text.matchAll(/(\w+)\s*=\s*now\(\)/g)) {
+          report[column] = new Date().toISOString();
+        }
+      }
+    } else if (/FOR UPDATE OF r/.test(text)) {
+      rows = options.missing
+        ? []
+        : [
+            {
+              id: report.id,
+              title: report.title,
+              severity_screening_status: report.severity_screening_status,
+              ticket_id: ticket.id,
+              ticket_status: ticket.status,
+              merged_into_ticket_id: ticket.merged_into_ticket_id,
+            },
+          ];
+    } else if (/^\s*SELECT action_type AS "actionType"/.test(text)) {
+      rows = []; // intake activity
+    } else if (/FROM reports r/.test(text)) {
+      rows = options.missing ? [] : [detailRow()];
+    }
+    return Promise.resolve(rows);
+  }) as unknown as Sql;
+  (
+    sql as unknown as {
+      begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
+    }
+  ).begin = (cb) => cb(sql);
+  const logInPgTx = jest.fn().mockResolvedValue(undefined);
+  const service = new FocalIntakeService(
+    sql,
+    {} as TicketsService,
+    { createInTx: jest.fn() } as unknown as NotificationsService,
+    { logInPgTx } as unknown as AdminAuditService,
+  );
+  return { service, report, ticket, writes, logInPgTx };
+}
+
+const MEO: AdminSession = {
+  adminId: 20,
+  email: 'meo@example.com',
+  adminName: 'Mario Reyes',
+  office: 'MEO',
+  accountType: 'PERSONNEL',
+  isFocal: false,
+};
+const MDRRMO: AdminSession = { ...MEO, adminId: 21, office: 'MDRRMO' };
+const SYSTEM_ADMIN: AdminSession = {
+  ...MEO,
+  adminId: 22,
+  office: null,
+  accountType: 'SYSTEM_ADMIN',
+};
+
+describe('FocalIntakeService.screenSeverity (Phase 3, step 3f)', () => {
+  it('is Focal-only: MEO, MDRRMO and the System Administrator get 403 and nothing is read or written', async () => {
+    for (const admin of [MEO, MDRRMO, SYSTEM_ADMIN]) {
+      const { service, writes, logInPgTx, report } = makeScreeningService();
+      await expect(
+        service.screenSeverity(1, admin, {
+          status: 'NO_CONCERN_NOTED',
+          remarks: undefined,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(writes).toHaveLength(0);
+      expect(logInPgTx).not.toHaveBeenCalled();
+      expect(report.severity_screening_status).toBe('NOT_REVIEWED');
+    }
+  });
+
+  it('the route sits behind FocalGuard, which rejects MEO, MDRRMO and the System Administrator with 403', () => {
+    const allows = (adminSession: AdminSession) => {
+      const ctx = {
+        switchToHttp: () => ({ getRequest: () => ({ adminSession }) }),
+      } as unknown as ExecutionContext;
+      try {
+        return new FocalGuard().canActivate(ctx);
+      } catch (err) {
+        return err instanceof ForbiddenException ? 403 : err;
+      }
+    };
+    expect(allows(FOCAL)).toBe(true);
+    expect(allows(MEO)).toBe(403);
+    expect(allows(MDRRMO)).toBe(403);
+    expect(allows(SYSTEM_ADMIN)).toBe(403);
+
+    const controller = readFileSync(
+      join(__dirname, 'focal-intake.controller.ts'),
+      'utf8',
+    );
+    expect(controller).toContain('@UseGuards(AdminSessionGuard, FocalGuard)');
+    expect(controller).toContain("@Post(':reportId/severity-screening')");
+  });
+
+  it('the old general screen action is gone and the service never writes a screened intake action', () => {
+    const controller = readFileSync(
+      join(__dirname, 'focal-intake.controller.ts'),
+      'utf8',
+    );
+    const service = readFileSync(
+      join(__dirname, 'focal-intake.service.ts'),
+      'utf8',
+    );
+    expect(controller).not.toContain("@Post(':reportId/screen')");
+    expect(service).not.toMatch(/async screen\(/);
+    expect(service).not.toMatch(/VALUES \([^)]*'screened'/);
+    expect(service).not.toContain("actionType: 'report_screened'");
+  });
+
+  it.each([
+    [
+      'NOT_REVIEWED',
+      'status must be NO_CONCERN_NOTED or REQUIRES_OPERATIONAL_VALIDATION.',
+    ],
+    [
+      'continue',
+      'status must be NO_CONCERN_NOTED or REQUIRES_OPERATIONAL_VALIDATION.',
+    ],
+    [
+      undefined,
+      'status must be NO_CONCERN_NOTED or REQUIRES_OPERATIONAL_VALIDATION.',
+    ],
+  ])(
+    'rejects status %p with a 400 before touching the database',
+    async (status, message) => {
+      const { service, writes } = makeScreeningService();
+      const attempt = service.screenSeverity(1, FOCAL, {
+        status,
+        remarks: undefined,
+      });
+      await expect(attempt).rejects.toThrow(BadRequestException);
+      await expect(attempt).rejects.toThrow(message);
+      expect(writes).toHaveLength(0);
+    },
+  );
+
+  it('trims remarks, stores empty remarks as NULL and rejects more than 1000 characters or non-text', () => {
+    expect(
+      validateSeverityScreening({
+        status: 'NO_CONCERN_NOTED',
+        remarks: '  ok  ',
+      }),
+    ).toEqual({ status: 'NO_CONCERN_NOTED', remarks: 'ok' });
+    expect(
+      validateSeverityScreening({ status: 'NO_CONCERN_NOTED', remarks: '   ' })
+        .remarks,
+    ).toBeNull();
+    expect(
+      validateSeverityScreening({
+        status: 'NO_CONCERN_NOTED',
+        remarks: undefined,
+      }).remarks,
+    ).toBeNull();
+    expect(
+      validateSeverityScreening({
+        status: 'REQUIRES_OPERATIONAL_VALIDATION',
+        remarks: ` ${'x'.repeat(SEVERITY_SCREENING_REMARKS_MAX)} `,
+      }).remarks,
+    ).toHaveLength(1000);
+    expect(() =>
+      validateSeverityScreening({
+        status: 'NO_CONCERN_NOTED',
+        remarks: 'x'.repeat(1001),
+      }),
+    ).toThrow('remarks must be at most 1000 characters.');
+    expect(() =>
+      validateSeverityScreening({ status: 'NO_CONCERN_NOTED', remarks: 42 }),
+    ).toThrow(BadRequestException);
+  });
+
   it('404s when the report does not exist', async () => {
-    const { service } = makeService([[]]);
+    const { service, writes } = makeScreeningService({ missing: true });
     await expect(
-      service.screen(1, FOCAL, { recommendedHandling: 'continue' }),
+      service.screenSeverity(9, FOCAL, {
+        status: 'NO_CONCERN_NOTED',
+        remarks: undefined,
+      }),
     ).rejects.toThrow(NotFoundException);
+    expect(writes).toHaveLength(0);
   });
 
-  it('rejects an invalid recommendedHandling value before touching the database', async () => {
-    const { service, sql } = makeService([]);
+  it.each(['Resolved', 'Rejected'])(
+    'refuses with a 409 while the ticket is %s, writing nothing',
+    async (status) => {
+      const { service, writes, logInPgTx } = makeScreeningService({
+        ticketStatus: status,
+      });
+      const attempt = service.screenSeverity(1, FOCAL, {
+        status: 'NO_CONCERN_NOTED',
+        remarks: undefined,
+      });
+      await expect(attempt).rejects.toThrow(ConflictException);
+      await expect(attempt).rejects.toThrow(
+        `Ticket #100 is ${status}; a report can only be screened while its ticket is active.`,
+      );
+      expect(writes).toHaveLength(0);
+      expect(logInPgTx).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses with a 409 when the ticket was merged away', async () => {
+    const { service, writes } = makeScreeningService({
+      mergedIntoTicketId: 200,
+    });
     await expect(
-      service.screen(1, FOCAL, { recommendedHandling: 'invalid' as never }),
-    ).rejects.toThrow(BadRequestException);
-    expect(sql).toBeDefined(); // sanity: service constructed, just never queried
+      service.screenSeverity(1, FOCAL, {
+        status: 'NO_CONCERN_NOTED',
+        remarks: undefined,
+      }),
+    ).rejects.toThrow(
+      'Ticket #100 was merged into Ticket #200 and is read-only.',
+    );
+    expect(writes).toHaveLength(0);
   });
 
-  it('appends a screened intake action and logs the recommendation in audit metadata, never mutating ticket status', async () => {
-    const { service, logInPgTx } = makeService([
-      [{ id: 1, title: 'Pothole' }], // report lookup
-      [{}], // INSERT report_intake_actions
-      [
-        {
-          report_id: 1,
-          ticket_id: 100,
-          category: 'Pothole',
-          ticket_status: 'Reported',
-          assigned_office: 'MEO',
-          member_count: 1,
-          barangay_name: 'Mitla Proper',
-          citizen_severity: 'Medium',
-          submitted_at: '2026-01-01T00:00:00Z',
-          flags: [],
-          description: 'A pothole',
-          lat: 15.0,
-          lng: 120.5,
-          operational_priority: 50,
-          acknowledged_at: '2026-01-02T00:00:00Z',
-          acknowledged_by_name: 'Diana Torres',
-          latest_action_type: 'screened',
-        },
-      ],
-      [],
+  it.each(['Reported', 'Under Review', 'In Progress'])(
+    'is allowed while the ticket is %s',
+    async (status) => {
+      const { service, report } = makeScreeningService({
+        ticketStatus: status,
+      });
+      await service.screenSeverity(1, FOCAL, {
+        status: 'NO_CONCERN_NOTED',
+        remarks: undefined,
+      });
+      expect(report.severity_screening_status).toBe('NO_CONCERN_NOTED');
+    },
+  );
+
+  it('writes the four fields (by = the Focal actor, at = now()) and returns the screening on the detail', async () => {
+    const { service, report, writes } = makeScreeningService();
+    const detail = await service.screenSeverity(1, FOCAL, {
+      status: 'REQUIRES_OPERATIONAL_VALIDATION',
+      remarks: '  Photo shows a much smaller hole.  ',
+    });
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0].text).toMatch(/^\s*UPDATE reports SET/);
+    expect(writes[0].text).toContain('severity_screened_at = now()');
+    expect(writes[0].values).toEqual([
+      'REQUIRES_OPERATIONAL_VALIDATION',
+      'Photo shows a much smaller hole.',
+      FOCAL.adminId,
+      1,
     ]);
+    expect(report).toMatchObject({
+      severity_screening_status: 'REQUIRES_OPERATIONAL_VALIDATION',
+      severity_screening_remarks: 'Photo shows a much smaller hole.',
+      severity_screened_by_admin_id: FOCAL.adminId,
+    });
+    expect(report.severity_screened_at).toEqual(expect.any(String));
+    expect(detail?.severityScreening).toEqual({
+      status: 'REQUIRES_OPERATIONAL_VALIDATION',
+      remarks: 'Photo shows a much smaller hole.',
+      screenedByName: 'Diana Torres',
+      screenedAt: report.severity_screened_at,
+      blockedReason: null,
+    });
+    expect(detail?.intakeState).toBe('Screened');
+  });
 
-    const result = await service.screen(1, FOCAL, {
-      recommendedHandling: 'continue',
-      remarks: 'ok',
+  it('re-screening overwrites the current values, remarks included', async () => {
+    const { service, report, logInPgTx } = makeScreeningService();
+    await service.screenSeverity(1, FOCAL, {
+      status: 'REQUIRES_OPERATIONAL_VALIDATION',
+      remarks: 'Check on site.',
+    });
+    const detail = await service.screenSeverity(1, FOCAL, {
+      status: 'NO_CONCERN_NOTED',
+      remarks: undefined,
+    });
+    expect(report.severity_screening_status).toBe('NO_CONCERN_NOTED');
+    expect(report.severity_screening_remarks).toBeNull();
+    expect(detail?.severityScreening.status).toBe('NO_CONCERN_NOTED');
+    expect(detail?.severityScreening.remarks).toBeNull();
+    expect(logInPgTx).toHaveBeenCalledTimes(2);
+    expect(logInPgTx.mock.calls[1][1].metadata).toEqual({
+      oldStatus: 'REQUIRES_OPERATIONAL_VALIDATION',
+      newStatus: 'NO_CONCERN_NOTED',
+      remarks: null,
+    });
+  });
+
+  it('every screening writes one report_severity_screened audit event on the report, in the transaction', async () => {
+    const { service, logInPgTx } = makeScreeningService();
+    await service.screenSeverity(1, FOCAL, {
+      status: 'REQUIRES_OPERATIONAL_VALIDATION',
+      remarks: ' Check on site. ',
+    });
+    expect(logInPgTx).toHaveBeenCalledTimes(1);
+    expect(logInPgTx.mock.calls[0][1]).toEqual({
+      actor: {
+        adminId: FOCAL.adminId,
+        adminName: FOCAL.adminName,
+        email: FOCAL.email,
+        accountType: 'PERSONNEL',
+        office: 'MDRRMO',
+      },
+      actionType: 'report_severity_screened',
+      targetType: 'report',
+      targetId: 1,
+      targetSummary: 'Pothole (Report #1)',
+      metadata: {
+        oldStatus: 'NOT_REVIEWED',
+        newStatus: 'REQUIRES_OPERATIONAL_VALIDATION',
+        remarks: 'Check on site.',
+      },
+    });
+  });
+
+  it("never changes the citizen's severity, the ticket's severity or Operational Priority", async () => {
+    const { service, writes } = makeScreeningService();
+    const severityRank = (s: string) =>
+      ({ Low: 1, Medium: 2, High: 3, Critical: 4 })[s];
+    const before = await service.getIntakeDetail(1);
+
+    const after = await service.screenSeverity(1, FOCAL, {
+      status: 'REQUIRES_OPERATIONAL_VALIDATION',
+      remarks: 'Looks less severe than reported.',
     });
 
-    expect(logInPgTx.mock.calls[0][1]).toMatchObject({
-      actionType: 'report_screened',
-      metadata: { recommendedHandling: 'continue' },
+    // The citizen's severity, and the ticket's (MAX citizen_severity of its
+    // reports, here one).
+    expect(after?.citizenSeverity).toBe('High');
+    expect(after?.citizenSeverity).toBe(before?.citizenSeverity);
+    expect(severityRank(after!.citizenSeverity)).toBe(
+      severityRank(before!.citizenSeverity),
+    );
+    expect(after?.operationalPriority).toBe(70);
+    expect(after?.operationalPriority).toBe(before?.operationalPriority);
+    // The only write is the report's four screening columns.
+    expect(writes).toHaveLength(1);
+    const assigned = [...writes[0].text.matchAll(/(\w+)\s*=\s*(\?|now\(\))/g)]
+      .map((m) => m[1])
+      .filter((column) => column !== 'id');
+    expect(assigned).toEqual([
+      'severity_screening_status',
+      'severity_screening_remarks',
+      'severity_screened_by_admin_id',
+      'severity_screened_at',
+    ]);
+    expect(writes[0].text).not.toMatch(
+      /citizen_severity|priority_index|tickets/,
+    );
+    // No Operational Priority recalculation is wired into this service.
+    const source = readFileSync(
+      join(__dirname, 'focal-intake.service.ts'),
+      'utf8',
+    );
+    expect(source).not.toContain('OperationalPriorityService');
+    expect(source).not.toMatch(/SET[^`]*citizen_severity/);
+  });
+
+  it("the detail says why screening is blocked on a closed ticket, with the action's own message", async () => {
+    const { service } = makeScreeningService({ ticketStatus: 'Resolved' });
+    const detail = await service.getIntakeDetail(1);
+    expect(detail?.severityScreening).toMatchObject({
+      status: 'NOT_REVIEWED',
+      remarks: null,
+      screenedByName: null,
+      screenedAt: null,
+      blockedReason:
+        'Ticket #100 is Resolved; a report can only be screened while its ticket is active.',
     });
-    expect(result?.ticketStatus).toBe('Reported');
-    expect(result?.intakeState).toBe('Screened');
+    expect(detail?.intakeState).toBe('New');
+  });
+
+  it('severityScreeningBlock: active and not merged away', () => {
+    expect(
+      severityScreeningBlock({
+        id: 5,
+        status: 'In Progress',
+        mergedIntoTicketId: null,
+      }),
+    ).toBeNull();
+    expect(
+      severityScreeningBlock({
+        id: 5,
+        status: 'Reported',
+        mergedIntoTicketId: 6,
+      }),
+    ).toBe('Ticket #5 was merged into Ticket #6 and is read-only.');
+  });
+
+  it('the intake list, map and detail queries ignore old screened intake actions and read the screening columns', () => {
+    const source = readFileSync(
+      join(__dirname, 'focal-intake.service.ts'),
+      'utf8',
+    );
+    expect(
+      source.match(
+        /WHERE report_id = r\.id AND action_type IN \('forwarded', 'escalated'\)/g,
+      ),
+    ).toHaveLength(3);
+    for (const method of ['listIntake', 'listIntakeGeo', 'getIntakeDetail']) {
+      const start = source.indexOf(`async ${method}(`);
+      const select = source.slice(
+        start,
+        source.indexOf('FROM reports r', start),
+      );
+      expect(select).toContain('r.severity_screening_status');
+      expect(select).toContain('r.severity_screened_at');
+      expect(select).toContain('latest.created_at AS latest_action_at');
+    }
   });
 });
 

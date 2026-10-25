@@ -39,7 +39,12 @@ export type AdminAuditActionType =
   // plus the report_intake_actions 'forwarded' row; a third audit event for
   // the same action would be redundant. See FocalIntakeService.forward.
   | 'report_acknowledged'
+  // History only since manuscript revision Phase 3, step 3f: the old
+  // general screening action, never written again.
   | 'report_screened'
+  // Focal severity screening (step 3f), metadata { oldStatus, newStatus,
+  // remarks }.
+  | 'report_severity_screened'
   | 'report_escalated'
   | 'operational_assessment_created'
   | 'operational_assessment_updated'
@@ -130,6 +135,7 @@ const ACTION_TYPES: AdminAuditActionType[] = [
   'work_order_cancelled',
   'report_acknowledged',
   'report_screened',
+  'report_severity_screened',
   'report_escalated',
   'operational_assessment_created',
   'operational_assessment_updated',

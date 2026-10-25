@@ -1006,3 +1006,35 @@ describe('0040_evidence_flags matches the submit() rules', () => {
     },
   );
 });
+
+// Manuscript revision Phase 3, step 3f: Focal's severity screening is
+// staff-only. No citizen query selects a screening column, and neither the
+// citizen API nor its response types name one, so no citizen response can
+// carry the status, remarks, screener or time.
+describe('citizen responses carry no severity screening (Phase 3, step 3f)', () => {
+  const SCREENING = /severity_screen|severityScreen|screening/i;
+  const read = (...path: string[]) =>
+    readFileSync(join(__dirname, ...path), 'utf8');
+
+  it('reports.service.ts and reports.controller.ts never mention a screening field', () => {
+    expect(read('reports.service.ts')).not.toMatch(SCREENING);
+    expect(read('reports.controller.ts')).not.toMatch(SCREENING);
+  });
+
+  it('the citizen report types (lib/types/citizens-reports.ts) have no screening field', () => {
+    expect(
+      read('..', '..', '..', 'lib', 'types', 'citizens-reports.ts'),
+    ).not.toMatch(SCREENING);
+  });
+
+  it.each(['getMyReports', 'getMyReportDetail', 'getPublicHazardMapData'])(
+    '%s selects explicit columns only, never r.* or reports.*',
+    (name) => {
+      const source = read('reports.service.ts');
+      const start = source.indexOf(`async ${name}(`);
+      const body = source.slice(start, source.indexOf('\n  async ', start + 1));
+      expect(body).toMatch(/SELECT/);
+      expect(body).not.toMatch(/\br\.\*|\breports\.\*|SELECT \*/);
+    },
+  );
+});
