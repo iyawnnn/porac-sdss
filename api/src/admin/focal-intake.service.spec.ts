@@ -12,6 +12,7 @@ import {
   FocalIntakeService,
   SEVERITY_SCREENING_REMARKS_MAX,
   deriveIntakeState,
+  needsSeverityScreening,
   severityScreeningBlock,
   validateSeverityScreening,
 } from './focal-intake.service';
@@ -1178,5 +1179,142 @@ describe('ticket-level acknowledgments dual-write (Phase 2, step 2d)', () => {
       broken.service.acknowledge(1, FOCAL, undefined),
     ).rejects.toThrow('connection lost');
     expect(broken.inserts('acknowledgments')).toHaveLength(0);
+  });
+});
+
+// Manuscript revision Phase 3, step 3f fix-up: the Focal dashboard's "Needs
+// Screening" counts every NOT_REVIEWED report on an active, not merged-away
+// ticket, acknowledged or not (acknowledgment and screening are parallel).
+describe('Needs Screening count (Phase 3, step 3f)', () => {
+  const row = (
+    reportId: number,
+    overrides: Partial<{
+      ticket_status: string;
+      merged_into_ticket_id: number | null;
+      acknowledged_at: string | null;
+      severity_screening_status: string;
+      severity_screened_at: string | null;
+    }> = {},
+  ) => ({
+    report_id: reportId,
+    tracking_reference: `PRC-2026-${String(reportId).padStart(6, '0')}`,
+    ticket_id: 100 + reportId,
+    category: 'Pothole / Road Surface Damage',
+    ticket_status: 'Reported',
+    assigned_office: 'MEO',
+    member_count: 1,
+    barangay_name: 'Mitla Proper',
+    merged_into_ticket_id: null,
+    citizen_severity: 'Medium',
+    submitted_at: '2026-01-01T00:00:00Z',
+    flags: [],
+    operational_priority: 50,
+    acknowledged_at: null,
+    acknowledged_by_name: null,
+    latest_action_type: null,
+    latest_action_at: null,
+    severity_screening_status: 'NOT_REVIEWED',
+    severity_screened_at: null,
+    ...overrides,
+  });
+
+  it('counts acknowledged and unacknowledged unreviewed reports, never screened or closed-ticket ones', async () => {
+    const { service } = makeService([
+      [
+        row(1, { acknowledged_at: '2026-01-02T00:00:00Z' }), // acknowledged, unreviewed
+        row(2, { ticket_status: 'Under Review' }), // unacknowledged, unreviewed
+        row(3, { ticket_status: 'In Progress' }), // unacknowledged, unreviewed
+        row(4, {
+          severity_screening_status: 'REQUIRES_OPERATIONAL_VALIDATION',
+          severity_screened_at: '2026-01-03T00:00:00Z',
+        }),
+        row(5, {
+          acknowledged_at: '2026-01-02T00:00:00Z',
+          severity_screening_status: 'NO_CONCERN_NOTED',
+          severity_screened_at: '2026-01-03T00:00:00Z',
+        }),
+        row(6, { ticket_status: 'Resolved' }),
+        row(7, {
+          ticket_status: 'Rejected',
+          acknowledged_at: '2026-01-02T00:00:00Z',
+        }),
+        row(8, { ticket_status: 'Under Review', merged_into_ticket_id: 101 }),
+      ],
+    ]);
+
+    const rows = await service.listIntake();
+
+    expect(rows.filter((r) => r.needsScreening).map((r) => r.reportId)).toEqual(
+      [1, 2, 3],
+    );
+    // Acknowledgment plays no part: the acknowledged one is Acknowledged, the
+    // others New, and all three need screening.
+    expect(rows.slice(0, 3).map((r) => r.intakeState)).toEqual([
+      'Acknowledged',
+      'New',
+      'New',
+    ]);
+  });
+
+  it('needsSeverityScreening follows the same active / merged-away rule as the screening action', () => {
+    const base = {
+      ticketId: 5,
+      ticketStatus: 'Reported',
+      mergedIntoTicketId: null,
+      severityScreeningStatus: 'NOT_REVIEWED' as const,
+    };
+    expect(needsSeverityScreening(base)).toBe(true);
+    for (const ticketStatus of ['Under Review', 'In Progress']) {
+      expect(needsSeverityScreening({ ...base, ticketStatus })).toBe(true);
+    }
+    for (const ticketStatus of ['Resolved', 'Rejected']) {
+      expect(needsSeverityScreening({ ...base, ticketStatus })).toBe(false);
+    }
+    expect(needsSeverityScreening({ ...base, mergedIntoTicketId: 6 })).toBe(
+      false,
+    );
+    expect(
+      needsSeverityScreening({
+        ...base,
+        severityScreeningStatus: 'NO_CONCERN_NOTED',
+      }),
+    ).toBe(false);
+    expect(
+      needsSeverityScreening({
+        ...base,
+        severityScreeningStatus: 'REQUIRES_OPERATIONAL_VALIDATION',
+      }),
+    ).toBe(false);
+  });
+
+  it('the intake list selects the merged-away column it needs, and the dashboard counts needsScreening', () => {
+    const source = readFileSync(
+      join(__dirname, 'focal-intake.service.ts'),
+      'utf8',
+    );
+    const start = source.indexOf('async listIntake(');
+    expect(
+      source.slice(start, source.indexOf('FROM reports r', start)),
+    ).toContain('t.merged_into_ticket_id');
+    const dashboard = readFileSync(
+      join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        'components',
+        'features',
+        'admin',
+        'focal',
+        'FocalDashboard.tsx',
+      ),
+      'utf8',
+    );
+    expect(dashboard).toContain(
+      'reports.filter((r) => r.needsScreening).length',
+    );
+    expect(dashboard).not.toMatch(
+      /needsScreening = reports\.filter\(\(r\) => r\.intakeState === "Acknowledged"\)/,
+    );
   });
 });

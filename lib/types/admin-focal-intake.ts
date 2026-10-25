@@ -35,6 +35,9 @@ export interface FocalIntakeRow {
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
   intakeState: IntakeState;
+  // Not yet screened, on an active, not merged-away ticket; acknowledgment
+  // plays no part (manuscript revision Phase 3, step 3f).
+  needsScreening: boolean;
 }
 
 export interface IntakeActivityRow {

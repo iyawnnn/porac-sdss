@@ -30,7 +30,10 @@ export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
   const reports = [...rows].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
   const newReports = reports.length;
   const unacknowledged = reports.filter((r) => r.intakeState === "New").length;
-  const needsScreening = reports.filter((r) => r.intakeState === "Acknowledged").length;
+  // Every unscreened report on an active ticket, acknowledged or not:
+  // acknowledgment and screening are parallel (manuscript revision Phase 3,
+  // step 3f).
+  const needsScreening = reports.filter((r) => r.needsScreening).length;
   const forwardedOrEscalated = reports.filter((r) => r.intakeState === "Forwarded" || r.intakeState === "Escalated").length;
 
   return (

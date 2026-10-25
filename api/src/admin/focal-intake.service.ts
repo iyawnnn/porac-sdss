@@ -97,6 +97,26 @@ export function severityScreeningBlock(ticket: {
   return null;
 }
 
+// The Focal dashboard's "Needs Screening": a report not yet screened
+// (NOT_REVIEWED) that can still be screened (its ticket active and not
+// merged away). Acknowledgment plays no part: per the manuscript the two
+// are parallel and neither is a prerequisite of the other.
+export function needsSeverityScreening(report: {
+  ticketId: number;
+  ticketStatus: string;
+  mergedIntoTicketId: number | null;
+  severityScreeningStatus: SeverityScreeningStatus;
+}): boolean {
+  return (
+    report.severityScreeningStatus === 'NOT_REVIEWED' &&
+    severityScreeningBlock({
+      id: report.ticketId,
+      status: report.ticketStatus,
+      mergedIntoTicketId: report.mergedIntoTicketId,
+    }) === null
+  );
+}
+
 // Presentation-only derivation, never persisted — this is exactly what
 // keeps "New/Acknowledged/Screened/Forwarded/Escalated" from becoming a
 // second TicketStatus (see schema.ts's reportIntakeActions docblock).
@@ -166,6 +186,7 @@ interface RawIntakeRow {
   latest_action_at: string | null;
   severity_screening_status: SeverityScreeningStatus;
   severity_screened_at: string | null;
+  merged_into_ticket_id: number | null;
 }
 
 export interface FocalIntakeRow {
@@ -191,6 +212,9 @@ export interface FocalIntakeRow {
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
   intakeState: IntakeState;
+  // The Focal dashboard's "Needs Screening" (manuscript revision Phase 3,
+  // step 3f): see needsSeverityScreening.
+  needsScreening: boolean;
 }
 
 interface RawIntakeGeoRow {
@@ -288,6 +312,12 @@ function mapRow(row: RawIntakeRow): FocalIntakeRow {
     acknowledgedAt: row.acknowledged_at,
     acknowledgedByName: row.acknowledged_by_name,
     intakeState: intakeStateOf(row),
+    needsScreening: needsSeverityScreening({
+      ticketId: row.ticket_id,
+      ticketStatus: row.ticket_status,
+      mergedIntoTicketId: row.merged_into_ticket_id ?? null,
+      severityScreeningStatus: row.severity_screening_status,
+    }),
   };
 }
 
@@ -310,7 +340,7 @@ export class FocalIntakeService {
     const rows = await sql<RawIntakeRow[]>`
       SELECT
         r.id AS report_id, r.tracking_reference, t.id AS ticket_id, t.category, t.status AS ticket_status,
-        t.assigned_office, t.member_count, b.name AS barangay_name,
+        t.assigned_office, t.member_count, b.name AS barangay_name, t.merged_into_ticket_id,
         r.citizen_severity, r.created_at AS submitted_at, r.flags,
         t.priority_index AS operational_priority,
         ra.acknowledged_at, ra.acknowledged_by_name,
@@ -381,7 +411,6 @@ export class FocalIntakeService {
         ticket_lat: number;
         ticket_lng: number;
         submitted_category: string;
-        merged_into_ticket_id: number | null;
         severity_screening_remarks: string | null;
         severity_screened_by_name: string | null;
       })[]
