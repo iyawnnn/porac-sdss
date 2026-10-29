@@ -26,7 +26,10 @@ async function printCheck(label: string, checks: string[]) {
   console.log(`${label}:`, summary);
   if (summary.hazard_information_table) {
     const [details] = await sql.unsafe(checks[1]);
-    console.log(`${label} (hazard_information):`, JSON.stringify(details, null, 2));
+    console.log(
+      `${label} (hazard_information):`,
+      JSON.stringify(details, null, 2),
+    );
   }
 }
 
