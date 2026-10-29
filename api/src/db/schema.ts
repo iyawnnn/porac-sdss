@@ -32,6 +32,11 @@ import {
 //   rate_limit_events  (drizzle/0003_ratelimit.sql, 0005_ratelimit_citizen.sql)
 //                       — id, ip, geom geometry(Point, 4326), created_at,
 //                       citizen_id -> citizens.id
+//   hazard_information (drizzle/0043_hazard_information.sql) — id, ticket_id
+//                       -> tickets.id, hazard_context_type, lookup_status
+//                       (the two enums below), susceptibility_code,
+//                       susceptibility_label, query_geom geometry(Point,
+//                       4326), failure_reason, looked_up_at, superseded_at
 //   barangays_gadm_old (docs/migration-log-gadm-to-psgc.md) — rollback/
 //                       reference only, never queried by app code
 
@@ -77,6 +82,26 @@ export type ResolutionFeedbackType = (typeof RESOLUTION_FEEDBACK_TYPES)[number];
 export const resolutionFeedbackTypeEnum = pgEnum(
   'resolution_feedback_type',
   RESOLUTION_FEEDBACK_TYPES,
+);
+// Appendix H HAZARD_INFORMATION (manuscript revision Phase 4, step 4b,
+// migration 0043). The table has a geometry column (query_geom), so it is
+// raw-PG only and listed in the comment block above; only its enums live
+// here. Advisory DENR-MGB susceptibility, never a score.
+export const HAZARD_CONTEXT_TYPES = ['FLOOD', 'RAIN_INDUCED_LANDSLIDE'] as const;
+export type HazardContextType = (typeof HAZARD_CONTEXT_TYPES)[number];
+export const hazardContextTypeEnum = pgEnum(
+  'hazard_context_type',
+  HAZARD_CONTEXT_TYPES,
+);
+export const HAZARD_LOOKUP_STATUSES = [
+  'CLASSIFIED',
+  'NO_CLASSIFICATION',
+  'TEMPORARILY_UNAVAILABLE',
+] as const;
+export type HazardLookupStatus = (typeof HAZARD_LOOKUP_STATUSES)[number];
+export const hazardLookupStatusEnum = pgEnum(
+  'hazard_lookup_status',
+  HAZARD_LOOKUP_STATUSES,
 );
 // History / sync mirror only since manuscript revision Phase 2, step 2e
 // (migration 0039): admins.role and admin_audit_events.actor_role keep this
