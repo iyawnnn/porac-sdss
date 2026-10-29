@@ -221,6 +221,14 @@ function HighestPriorityActionsTable({ tickets }: { tickets: AdminTicketRow[] | 
                     <TableCell className="max-w-56 py-2.5 pl-4">
                       <Link className="block truncate font-medium hover:text-primary hover:underline" href={detailHref} title={ticket.title ?? undefined}>{ticket.title ?? `Ticket #${ticket.id}`}</Link>
                       <div className="text-xs text-muted-foreground">Ticket <span className="font-mono">#{ticket.id}</span></div>
+                      {/* Advisory DENR-MGB Hazard Information (manuscript
+                          revision Phase 4, step 4b), where Hazard Urgency used
+                          to rank this card; covered categories only. */}
+                      {ticket.hazard_applicability && ticket.hazard_applicability !== "not_applicable" && (
+                        <div className="truncate text-xs text-muted-foreground" data-testid={`dashboard-hazard-${ticket.id}`} title={`Hazard Information (advisory): ${ticket.hazard_summary}`}>
+                          {ticket.hazard_summary}
+                        </div>
+                      )}
                     </TableCell>
                     {/* Barangay over office in one cell, mirroring the Ticket
                         cell's primary-over-secondary idiom. Office is a bare

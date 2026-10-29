@@ -87,13 +87,15 @@ describe('ReportsService.ticketsCsv', () => {
         id: 42,
         status: 'Reported',
         assigned_office: 'MEO',
-        category: 'Pothole',
+        category: 'Localized Flooding',
         barangay_name: 'Poblacion',
         priority_index: 64,
         member_count: 3,
         created_at: '2026-01-05T00:00:00.000Z',
         updated_at: '2026-01-06T00:00:00.000Z',
         merged_into_ticket_id: null,
+        // Manuscript revision Phase 4, step 4b.
+        hazard_summary: 'Flood: MF (Moderate Susceptibility to Flooding)',
       },
       // A merged-away ticket (manuscript revision Phase 3, step 3d), as a
       // status=all export lists it.
@@ -108,6 +110,7 @@ describe('ReportsService.ticketsCsv', () => {
         created_at: '2026-01-07T00:00:00.000Z',
         updated_at: '2026-01-08T00:00:00.000Z',
         merged_into_ticket_id: 42,
+        hazard_summary: 'Not applicable',
       },
     ]);
     const { service } = makeService({ getTicketsForExport });
@@ -116,13 +119,13 @@ describe('ReportsService.ticketsCsv', () => {
 
     const [header, row, mergedRow] = csv.trim().split('\r\n');
     expect(header).toBe(
-      'Ticket ID,Status,Assigned Office,Operational Priority,Category,Barangay,Report Count,Created At,Updated At,Merged into',
+      'Ticket ID,Status,Assigned Office,Operational Priority,Category,Hazard Information,Barangay,Report Count,Created At,Updated At,Merged into',
     );
     expect(row).toBe(
-      '42,Reported,MEO,64,Pothole,Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z,',
+      '42,Reported,MEO,64,Localized Flooding,Flood: MF (Moderate Susceptibility to Flooding),Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z,',
     );
     expect(mergedRow).toBe(
-      '43,Reported,MEO,40,Pothole,Poblacion,1,2026-01-07T00:00:00.000Z,2026-01-08T00:00:00.000Z,42',
+      '43,Reported,MEO,40,Pothole,Not applicable,Poblacion,1,2026-01-07T00:00:00.000Z,2026-01-08T00:00:00.000Z,42',
     );
   });
 
