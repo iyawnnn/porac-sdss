@@ -273,7 +273,7 @@ Photo-level duplicate detection (`DUPLICATE_IMAGE`, perceptual hash) is a separa
 priority_index = round(1 + 99 × (0.5 × severity + 0.25 × min(age / 7 days, 1) + 0.25 × barangay demand)), clamped to 1–100
 ```
 
-- **Severity** — the highest citizen severity among the ticket's reports (Low 0.25 / Medium 0.5 / High 0.75 / Critical 1).
+- **Severity** — the **median** Severity Factor of the ticket's member reports (Low 0.25 / Medium 0.5 / High 0.75 / Critical 1; for an even count the mean of the two middle factors), used exactly; one report gives its own factor (manuscript pp. 73–74, Phase 4 step 4a). Each report keeps its own severity; Ticket Detail's Scoring tab shows "Ticket severity = median of N reports" and every report's severity, staff only.
 - **Age** — saturates at 7 days.
 - **Barangay demand** — the barangay's active-ticket count, normalized against the busiest barangay.
 

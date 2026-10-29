@@ -50,7 +50,7 @@ The manuscript states that the system produces no "risk, urgency, severity, or n
 
 | Input | Source | Per-ticket? | Notes |
 |---|---|---|---|
-| **Citizen severity** | `MAX(citizen_severity)` across the ticket's reports | **Yes** | Tickets carrying several reports (from the pre-step-3 automatic merge) take the **highest** severity. |
+| **Citizen severity** | The **median** Severity Factor of the ticket's member reports (`ticketSeverity`, `api/src/common/utils/severity.ts`) | **Yes** | Manuscript pp. 73–74 (Phase 4, step 4a; it was `MAX` before). Member reports = every report linked to the ticket (`reports.ticket_id`): a removed or regrouped report has moved, a merged-away ticket's reports have moved to its survivor, and moderation (dismissed / quarantined / duplicate) does not remove a report. For an even count the mean of the two middle factors, so the factor can fall between levels (0.375 / 0.625 / 0.875); it is used exactly. |
 | **Ticket age** | `tickets.created_at` | **Yes** | Saturates at 7 days. |
 | **Barangay demand** | Count of active tickets in the same barangay, normalized against the busiest barangay | **Yes** | Relative to the current active set. |
 | **Category** | `tickets.category` | Yes | **Not a scoring input.** Determines office routing (`office.ts`) only. |
@@ -59,7 +59,7 @@ The manuscript states that the system produces no "risk, urgency, severity, or n
 
 | Missing | Behavior | Assessment |
 |---|---|---|
-| **Citizen severity** | `COALESCE(severity_rank, 1)` → treated as `Low`. | Reasonable default. |
+| **Citizen severity** | A ticket with no linked report (not reachable through the app) counts as `Low`; an unknown value counts as `Low`. | Reasonable default, unchanged from the MAX rule. |
 | **`created_at` unparseable** | `ageFactor` falls back to 0. | Defensive; should never happen for a real row. |
 | **No active tickets at all** | `maxActiveBarangayCount` is 0, so `spatialFactor` falls back to 0 rather than dividing by zero. | Correct. |
 
@@ -68,7 +68,8 @@ The manuscript states that the system produces no "risk, urgency, severity, or n
 ## 4. The formula, exactly as implemented — `api/src/common/utils/scoring.ts`
 
 ```
-severityFactor = { Low: 0.25, Medium: 0.5, High: 0.75, Critical: 1.0 }
+severityFactor = median over the ticket's member reports of { Low: 0.25, Medium: 0.5, High: 0.75, Critical: 1.0 }
+                 (even count: mean of the two middle factors; one report: its own factor)
 ageFactor      = clamp01( (now − createdAt) / 7 days )
 spatialFactor  = clamp01( activeBarangayCount / maxActiveBarangayCount )
 
@@ -76,7 +77,7 @@ weighted      = 0.50·severityFactor + 0.25·ageFactor + 0.25·spatialFactor
 priorityIndex = clamp( 1, 100, round(1 + weighted × 99) )
 ```
 
-All three factors are clamped. Age saturates at 7 days — the manuscript uses 7 days only as this age cap, never as an escalation rule (the 7-day escalation job was removed in manuscript revision Phase 1, step 2). Barangay demand is normalized against the busiest barangay in the current active set, so it is **relative and moves as the queue changes**, not an absolute measure.
+The median is taken in `api/src/common/utils/severity.ts` (`ticketSeverity`, Phase 4 step 4a) and passed to `computePriorityBreakdown` as `severityFactor`, so it is exact even between two levels. The label shown beside it is derived: the nearest level, and exactly halfway (0.375 / 0.625 / 0.875) rounds **up**. All three factors are clamped. Age saturates at 7 days — the manuscript uses 7 days only as this age cap, never as an escalation rule (the 7-day escalation job was removed in manuscript revision Phase 1, step 2). Barangay demand is normalized against the busiest barangay in the current active set, so it is **relative and moves as the queue changes**, not an absolute measure.
 
 `computePriorityBreakdown` also returns each factor multiplied by its weight (`severityContribution`, `ageContribution`, `spatialContribution`), which is what the Ticket Detail "Operational Priority" card shows.
 
@@ -109,7 +110,7 @@ All three factors are clamped. Age saturates at 7 days — the manuscript uses 7
 
 ### What recalculates
 
-`OperationalPriorityService.recalculateActiveTickets` (`api/src/domain/operational-priority.service.ts`) writes only `priority_index`, using the §4 formula. The seed scripts use `api/scripts/lib/recompute.ts`'s `recalculateActivePriority`, which mirrors it.
+`OperationalPriorityService.recalculateActiveTickets` (`api/src/domain/operational-priority.service.ts`) writes only `priority_index`, using the §4 formula. The seed scripts use `api/scripts/lib/recompute.ts`'s `recalculateActivePriority`, which runs that same service. `recalculateTickets(tx, ids)` is the same calculation limited to given tickets inside a caller's transaction. `pnpm --prefix api recalc:median-severity` (`api/scripts/recalculate-median-severity.ts`, dry run unless `--apply`) recalculated every active ticket once when the median rule arrived.
 
 **Only tickets with status `Reported`, `Under Review`, or `In Progress` are updated.** `Resolved` and `Rejected` tickets keep whatever value they last held — their priority is effectively frozen at closure.
 
@@ -119,6 +120,7 @@ All three factors are clamped. Age saturates at 7 days — the manuscript uses 7
 |---|---|
 | **On demand** | `GET /admin/dashboard`, `/admin/tickets`, `/admin/tickets/:id`, `/admin/tickets/geo` — an admin loading these pages triggers a recalculation |
 | **After citizen submission** | `ReportsService.submit`, post-commit (outside the submission transaction) |
+| **Merge / remove / regroup / location correction** | The changed tickets inside the action's own transaction (`recalculateTickets`: the survivor; the old and new ticket; both tickets; the corrected ticket), then every active ticket after the commit (Phase 4, step 4a). A category correction changes no membership and recalculates nothing. |
 | **Daily cron** | `POST /cron/recompute-priority` (returns `{ operationalPriorityUpdated }`), called by `.github/workflows/cron.yml` at 18:00 UTC (02:00 Manila), behind `CronSecretGuard` |
 
 The cron job is a safety net for periods with no admin activity, so age keeps advancing — see `docs/deployment-readiness.md` §6.
@@ -148,7 +150,7 @@ Engineering assessment only — no academic rewriting.
 ### Partially aligned — state carefully
 
 - **"MCDA-style multi-criteria scoring."** Defensible in structure — weighted, normalized criteria — but the weights are **fixed constants that have never been elicited from stakeholders or validated** (`PLAN.md` §15 Q4, still open). No AHP, no pairwise comparison, no sensitivity analysis exists. Describe it as *a weighted linear model with provisional weights*, not as a validated MCDA instrument.
-- **Severity aggregation.** Severity is the `MAX` across a ticket's reports. A median rule is planned for a later phase; until then a single "Critical" report on a multi-report ticket dominates.
+- **Severity aggregation.** Since Phase 4, step 4a the ticket's Severity Factor is the median of its member reports (manuscript pp. 73–74): Low + High + Critical → 0.75, Medium + Critical → 0.75, one report → its own factor. A single Critical no longer dominates; it stays visible on Ticket Detail. The displayed label is derived (nearest level, halfway rounds up) and never stored; there is no ticket severity column.
 
 ### Not implemented
 
@@ -160,7 +162,7 @@ Engineering assessment only — no academic rewriting.
 
 ## 9. QA checklist — verifying a ticket's score by hand
 
-1. **Read the inputs.** From the database you need the ticket's `created_at`, its reports' `citizen_severity` (take the highest), and the active-ticket counts per barangay (`status IN ('Reported', 'Under Review', 'In Progress')`).
+1. **Read the inputs.** From the database you need the ticket's `created_at`, its reports' `citizen_severity` (take the median factor; for an even count the mean of the two middle ones), and the active-ticket counts per barangay (`status IN ('Reported', 'Under Review', 'In Progress')`).
 2. **Compute by hand** using §4. Barangay demand is this ticket's barangay count divided by the busiest barangay's count.
 3. **Cross-check the stored value.** `GET /admin/tickets/:id` returns `priority_index`; its `priority-context` endpoint returns the breakdown, and each contribution should equal its factor × weight.
 4. **Cross-check the surfaces.** The same ticket must show the same number and band on the Ticket Queue, Ticket Detail, admin map popup and Focal Intake. They all read the same stored column.
@@ -171,7 +173,7 @@ Engineering assessment only — no academic rewriting.
 - `spatialFactor` shifts as other tickets open and close.
 - Resolved and rejected tickets are not recalculated at all (§7).
 
-**Automated coverage today:** `api/src/common/utils/scoring.spec.ts` (range, weights and directional response to severity/age/demand), `api/src/domain/operational-priority.service.spec.ts` (only active tickets, only `priority_index` written) and `lib/utils/scoring.test.ts` (the frontend copy, run with Node's test runner).
+**Automated coverage today:** `api/src/common/utils/severity.spec.ts` (the median rule, labels and ties), `api/src/common/utils/scoring.spec.ts` (range, weights, directional response to severity/age/demand, the exact median factor), `api/src/domain/operational-priority.service.spec.ts` (only active tickets, only `priority_index` written) and `lib/utils/scoring.test.ts` (the frontend copy, run with Node's test runner).
 
 ---
 
@@ -217,7 +219,7 @@ The scoring model is part of the project's research contribution. Changing it ca
 **Requires a product/research decision before changing, not just a code review:**
 
 - Any weight change (`PLAN.md` §15 Q4 is still open)
-- Changing the severity aggregation (`MAX` → median is planned)
+- Changing the severity aggregation (median since Phase 4, step 4a, per the manuscript)
 - Turning the display band (§5) into a stored or counted threshold
 
 ---
