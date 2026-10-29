@@ -314,9 +314,16 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
     expect(getMyReportDetail).toMatch(isMergedPattern);
   });
 
-  it("getMyReportDetail exposes disputed_at and resolution_confirmed_at so the UI can hide the feedback prompt once already resolved-feedback'd", () => {
-    expect(getMyReportDetail).toContain('t.disputed_at');
-    expect(getMyReportDetail).toContain('t.resolution_confirmed_at');
+  // Manuscript revision Phase 3, step 3g: only the citizen's OWN answer (the
+  // join is on the report's own citizen), never the ticket-level flag
+  // another citizen's answer may have set.
+  it("getMyReportDetail returns only this citizen's own resolution feedback, not the ticket-level flags", () => {
+    expect(getMyReportDetail).toMatch(
+      /LEFT JOIN resolution_feedback rf ON rf\.ticket_id = r\.ticket_id AND rf\.citizen_id = r\.citizen_id/,
+    );
+    expect(getMyReportDetail).toContain('AS my_feedback');
+    expect(getMyReportDetail).not.toContain('t.disputed_at');
+    expect(getMyReportDetail).not.toContain('t.resolution_confirmed_at');
   });
 
   // Batch 2 (Focal intake): the citizen timeline needs to know whether/when
@@ -344,65 +351,46 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
   });
 });
 
-// Same rationale as the blocks above (no DB test harness) — the citizen
-// resolution-feedback/dispute loop (CLAUDE.md: a workflow signal layered on
-// top of Resolved, never a scoring input) is asserted on source text: the
-// ownership+existence clause, the resolved-only and duplicate-dispute
-// guards, the race-safe UPDATE, and the notification wiring.
-describe('disputeReport (citizen resolution-feedback loop)', () => {
+// Per-citizen resolution feedback (manuscript revision Phase 3, step 3g):
+// the rules themselves are tested by behavior in resolution-feedback.spec.ts.
+// These source-text checks keep the wiring that test's stand-in can't see:
+// the ownership clause both routes share, the reason limit's named
+// constant, and no scoring column or status change anywhere on the path.
+describe('resolution feedback wiring (citizen resolution-feedback loop)', () => {
   const reportsServiceSource = readFileSync(
     join(__dirname, 'reports.service.ts'),
     'utf8',
   );
 
+  // Up to the next method, comment lines dropped (a neighbouring method's
+  // doc comment falls inside the slice).
   function methodBody(name: string): string {
     const start = reportsServiceSource.indexOf(`async ${name}(`);
     if (start === -1)
       throw new Error(`method ${name} not found in reports.service.ts`);
-    const nextMethodMarkers = ['\n  async ', '\n}'];
-    const ends = nextMethodMarkers
+    const ends = ['\n  async ', '\n}']
       .map((marker) => reportsServiceSource.indexOf(marker, start + 1))
       .filter((i) => i !== -1);
-    const end = Math.min(...ends);
-    return reportsServiceSource.slice(start, end);
+    return reportsServiceSource
+      .slice(start, Math.min(...ends))
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n');
   }
 
   const disputeReport = methodBody('disputeReport');
+  const confirmResolution = methodBody('confirmResolution');
+  const ticketOfMyReport = methodBody('ticketOfMyReport');
+  const answerResolution = methodBody('answerResolution');
 
-  it('scopes to the requesting citizen only (ownership + existence in one clause)', () => {
-    expect(disputeReport).toMatch(
+  it('both routes check report ownership in one clause, then answer for its ticket', () => {
+    expect(ticketOfMyReport).toMatch(
       /WHERE r\.id = \$\{reportId\} AND r\.citizen_id = \$\{citizenId\}/,
     );
-  });
-
-  it('only allows disputes on resolved tickets', () => {
-    expect(disputeReport).toMatch(/row\.status !== 'Resolved'/);
-    expect(disputeReport).toContain('Only resolved tickets can be disputed.');
-  });
-
-  it('rejects a duplicate active dispute both before and via the race-safe UPDATE guard', () => {
-    expect(disputeReport).toMatch(/if \(row\.disputed_at\)/);
-    expect(disputeReport).toMatch(
-      /WHERE id = \$\{row\.ticket_id\} AND disputed_at IS NULL/,
-    );
-  });
-
-  it('never touches urgency_score, priority_score, priority_index, or urgency_band', () => {
-    for (const column of [
-      'urgency_score',
-      'priority_score',
-      'priority_index',
-      'urgency_band',
-    ]) {
-      expect(disputeReport).not.toContain(column);
+    for (const body of [disputeReport, confirmResolution]) {
+      expect(body).toMatch(/this\.ticketOfMyReport\(citizenId, reportId\)/);
+      expect(body).toMatch(/this\.answerResolution\(/);
     }
-  });
-
-  it('does not roll ticket.status back — only sets disputed_at/dispute_reason', () => {
-    expect(disputeReport).toMatch(
-      /SET disputed_at = now\(\), dispute_reason = \$\{trimmedReason\}/,
-    );
-    expect(disputeReport).not.toMatch(/SET\s+status\s*=/);
   });
 
   it('rejects a reason over TICKET_DISPUTE_REASON_MAX_LENGTH via the named constant, not a bare literal', () => {
@@ -415,80 +403,31 @@ describe('disputeReport (citizen resolution-feedback loop)', () => {
     expect(disputeReport).not.toMatch(/trimmedReason\.length > 1000/);
   });
 
-  it('creates an office-targeted admin notification linking to the admin ticket detail, inside the same transaction', () => {
-    expect(disputeReport).toMatch(/this\.notifications\.createInTx\(tx,/);
-    expect(disputeReport).toMatch(
-      /recipientType: 'admin',[\s\S]*?recipientOffice: row\.assigned_office,[\s\S]*?type: 'ticket_disputed'/,
-    );
-    expect(disputeReport).toMatch(
-      /href: `\/admin\/tickets\/\$\{row\.ticket_id\}`/,
-    );
-  });
-});
-
-// Same rationale as the block above — the positive-path resolution
-// confirmation (CLAUDE.md: a workflow signal layered on top of Resolved,
-// never a scoring input) mirrors disputeReport's ownership/resolved-only/
-// race-safe-UPDATE shape, plus its own already-disputed and
-// already-confirmed guards.
-describe('confirmResolution (citizen resolution-feedback loop, positive path)', () => {
-  const reportsServiceSource = readFileSync(
-    join(__dirname, 'reports.service.ts'),
-    'utf8',
-  );
-
-  function methodBody(name: string): string {
-    const start = reportsServiceSource.indexOf(`async ${name}(`);
-    if (start === -1)
-      throw new Error(`method ${name} not found in reports.service.ts`);
-    const nextMethodMarkers = ['\n  async ', '\n}'];
-    const ends = nextMethodMarkers
-      .map((marker) => reportsServiceSource.indexOf(marker, start + 1))
-      .filter((i) => i !== -1);
-    const end = Math.min(...ends);
-    return reportsServiceSource.slice(start, end);
-  }
-
-  const confirmResolution = methodBody('confirmResolution');
-
-  it('scopes to the requesting citizen only (ownership + existence in one clause)', () => {
-    expect(confirmResolution).toMatch(
-      /WHERE r\.id = \$\{reportId\} AND r\.citizen_id = \$\{citizenId\}/,
-    );
-  });
-
-  it('only allows confirmation on resolved tickets', () => {
-    expect(confirmResolution).toMatch(/row\.status !== 'Resolved'/);
-    expect(confirmResolution).toContain(
-      'Only resolved tickets can be confirmed.',
-    );
-  });
-
-  it('rejects confirmation when the ticket is already disputed', () => {
-    expect(confirmResolution).toMatch(/if \(row\.disputed_at\)/);
-  });
-
-  it('rejects a duplicate confirmation both before and via the race-safe UPDATE guard', () => {
-    expect(confirmResolution).toMatch(/if \(row\.resolution_confirmed_at\)/);
-    expect(confirmResolution).toMatch(
-      /WHERE id = \$\{row\.ticket_id\} AND resolution_confirmed_at IS NULL AND disputed_at IS NULL/,
-    );
-  });
-
-  it('never touches urgency_score, priority_score, priority_index, or urgency_band', () => {
-    for (const column of [
-      'urgency_score',
-      'priority_score',
-      'priority_index',
-      'urgency_band',
-    ]) {
-      expect(confirmResolution).not.toContain(column);
+  it('never touches urgency_score, priority_score, priority_index, urgency_band or the status', () => {
+    for (const body of [disputeReport, confirmResolution, answerResolution]) {
+      expect(body).not.toMatch(
+        /urgency_score|priority_score|priority_index|urgency_band/,
+      );
+      expect(body).not.toMatch(/SET\s+status\s*=/);
     }
   });
 
-  it('does not roll ticket.status back — only sets resolution_confirmed_at', () => {
-    expect(confirmResolution).toMatch(/SET resolution_confirmed_at = now\(\)/);
-    expect(confirmResolution).not.toMatch(/SET\s+status\s*=/);
+  it('the dispute notification links to the admin ticket detail, inside the same transaction', () => {
+    expect(answerResolution).toMatch(/this\.notifications\.createInTx\(tx,/);
+    expect(answerResolution).toMatch(
+      /recipientType: 'admin',[\s\S]*?recipientOffice: ticket\.assigned_office,[\s\S]*?type: 'ticket_disputed'/,
+    );
+    expect(answerResolution).toMatch(
+      /href: `\/admin\/tickets\/\$\{ticket\.ticket_id\}`/,
+    );
+  });
+
+  it("the dispute notification carries no citizen id", () => {
+    const notification = answerResolution.slice(
+      answerResolution.indexOf('createInTx('),
+      answerResolution.indexOf('});', answerResolution.indexOf('createInTx(')),
+    );
+    expect(notification).not.toMatch(/citizenId|citizen_id|recipientId/);
   });
 });
 
