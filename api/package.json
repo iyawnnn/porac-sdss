@@ -59,6 +59,7 @@
     "migrate:evidence-flags": "tsx --env-file=.env scripts/migrations/migrate-evidence-flags.ts",
     "migrate:severity-screening": "tsx --env-file=.env scripts/migrations/migrate-severity-screening.ts",
     "migrate:resolution-feedback": "tsx --env-file=.env scripts/migrations/migrate-resolution-feedback.ts",
+    "recalc:median-severity": "tsx --env-file=.env scripts/recalculate-median-severity.ts",
     "import:barangays": "tsx --env-file=.env scripts/seed/import-barangays.ts",
     "import:city-boundary": "tsx --env-file=.env scripts/seed/import-city-boundary.ts",
     "seed:dem": "tsx --env-file=.env scripts/seed/seed-dem.ts",
