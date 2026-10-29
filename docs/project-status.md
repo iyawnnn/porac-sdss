@@ -78,6 +78,16 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 3, step 3g — per-citizen resolution feedback (Appendix H RESOLUTION_FEEDBACK) — **completed (code + unit tests; migration 0042 tested on PGlite and run on the phase2-test copy, production still to do; e2e written, not yet run)**
+
+- **Schema** (`0042_resolution_feedback.sql`, `pnpm --prefix api migrate:resolution-feedback`): `resolution_feedback` (`ticket_id` FK tickets, `citizen_id` FK citizens, `feedback_type` `CONFIRMED` | `DISPUTED`, `reason`, `created_at`), `UNIQUE (ticket_id, citizen_id)`, CHECKs `resolution_feedback_disputed_reason_check` / `resolution_feedback_confirmed_reason_check`, indexes on `ticket_id` and `citizen_id`. **Answers are one-time and locked.**
+- **Backfill:** old feedback did not record which citizen gave it, so it was attributed to the ticket's earliest reporter (report `created_at`, then `id`), with the original timestamp and reason. A ticket with both a confirmation and a dispute (none exist in the data) would be attributed as one `DISPUTED` row. Merged-away tickets and tickets with no report are skipped and counted. PGlite, outside the repo: 34 checks passed (the real script run twice, 0 rows the second time; attribution; skips; constraints; the guard). phase2-test copy: 35 rows, second run 0.
+- **API:** the routes keep their URLs (`POST /reports/mine/:id/confirm-resolution`, `…/dispute`). Report ownership is a 404 as before; the ticket is followed to its survivor (never a merged-away id); a citizen with no report on it gets 403; only `Resolved` (400); a dispute needs a reason (400); a second answer by the same citizen is **409** and changes nothing. One citizen's answer never blocks another's. Every dispute notifies the assigned office (same transaction); no status or priority change, no audit event, no citizen id in the notification. **Dual-write until Phase 8:** the first dispute sets `tickets.disputed_at`/`dispute_reason`, later ones leave them; a confirmation sets `resolution_confirmed_at` only while both are empty. The Disputed filter, tab count, badge and red card still read the ticket flag.
+- **Responses:** the citizen report detail returns `my_feedback` (own type, reason, time) instead of the ticket-level timestamps — never other citizens' answers or counts. Staff Ticket Detail returns `citizenFeedback` (counts plus each answer's type, reason and time; no reporter identity).
+- **UI:** the citizen's Resolution Feedback card shows their own locked answer or the controls, independent of other reporters; the own dispute reason is still not rendered back. Ticket Detail gains a "Citizen feedback" card ("N confirmed, M disputed" and the answers).
+- **Tested:** unit tests (new `resolution-feedback.spec.ts`: independent answers, 409, 403, 404, 400s, merged-in reporter, merged-away id to survivor, dispute after another's confirmation, dual-write; Ticket Detail summary; old ticket-level source-text checks replaced). API suite 61 suites / 1147 tests. New e2e `e2e/citizen-resolution-feedback.spec.ts` on a new `seed:e2e-grouping-fixtures` Resolved ticket with reports by citizen1 and citizen2 (no report submissions); not run yet.
+- **Production:** run migration 0042 before deploying this API. Until then report submission is unaffected but resolution feedback and the citizen report and staff Ticket Detail reads fail, since they read `resolution_feedback`.
+
 ### Manuscript revision Phase 3, step 3f — Focal severity screening (Appendix H REPORTS; Table 2) — **completed (code + unit tests + e2e; migration 0041 tested on PGlite and run on the phase2-test copy, production still to do)**
 
 - **Schema** (`0041_severity_screening.sql`, `pnpm --prefix api migrate:severity-screening`): `reports.severity_screening_status` (`NOT_REVIEWED` default / `NO_CONCERN_NOTED` / `REQUIRES_OPERATIONAL_VALIDATION`), `severity_screening_remarks`, `severity_screened_by_admin_id` (FK `admins`), `severity_screened_at`, and the CHECK `reports_severity_screening_consistency_check`. No backfill.
@@ -612,6 +622,8 @@ A full notifications page backing the existing bell — `/admin/notifications`, 
 - No schema change, no new backend service — `NotificationCenterWorkspace` (`components/features/admin/notifications/`) is the only new surface of substance.
 
 ### Citizen Resolution Feedback / Dispute Loop — **completed**
+
+*Since manuscript revision Phase 3, step 3g each reporter answers once for themselves (`resolution_feedback`); the ticket-level columns below are a mirror until Phase 8. See the step 3g entry above.*
 
 Closes the one-way finality gap where a citizen had no way to say a `Resolved` ticket wasn't actually fixed. A citizen can "Confirm Fixed" or "Report Still Not Fixed" on a resolved report, both persisted; the latter notifies the assigned office and surfaces on the existing Ticket Queue/Ticket Detail — no new sidebar item, no new admin page.
 
