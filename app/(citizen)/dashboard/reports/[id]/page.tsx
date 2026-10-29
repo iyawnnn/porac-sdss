@@ -331,8 +331,7 @@ export default async function MyReportDetailPage({
               <CaseClosureSummary report={report} />
               <ResolutionFeedback
                 reportId={report.id}
-                disputedAt={report.disputed_at}
-                resolutionConfirmedAt={report.resolution_confirmed_at}
+                myFeedback={report.my_feedback}
               />
             </>
           )}

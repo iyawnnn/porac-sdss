@@ -22,6 +22,13 @@ export interface MyReportRow {
   is_merged: boolean;
 }
 
+// The citizen's own one-time, locked answer on a resolved ticket.
+export interface MyResolutionFeedback {
+  feedback_type: "CONFIRMED" | "DISPUTED";
+  reason: string | null;
+  created_at: string;
+}
+
 export interface MyReportDetail {
   id: number;
   ticket_id: number;
@@ -46,8 +53,9 @@ export interface MyReportDetail {
   moderated_at: string | null;
   resolution_notes: string | null;
   resolution_image_url: string | null;
-  disputed_at: string | null;
-  resolution_confirmed_at: string | null;
+  // This citizen's own resolution feedback (manuscript revision Phase 3,
+  // step 3g), null until they answer. Never another citizen's answer.
+  my_feedback: MyResolutionFeedback | null;
   // Sourced directly from report_acknowledgments.acknowledged_at — null
   // means Focal (Central Monitoring) has not yet acknowledged this specific
   // report. See ReportTimeline.tsx's "acknowledged" event kind.

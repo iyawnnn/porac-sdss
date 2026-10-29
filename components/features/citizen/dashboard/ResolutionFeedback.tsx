@@ -2,44 +2,69 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import type { MyResolutionFeedback } from "@/lib/types/citizens-reports";
+
+// The citizen's own one-time answer on a resolved ticket (manuscript revision
+// Phase 3, step 3g). Only their own answer is ever shown: once given it is
+// locked, and another reporter's answer on the same ticket never changes
+// what this citizen sees or can do. The dispute reason stays with the
+// office (it is not repeated here).
 
 export default function ResolutionFeedback({
   reportId,
-  disputedAt,
-  resolutionConfirmedAt,
+  myFeedback,
 }: {
   reportId: number;
-  disputedAt: string | null;
-  resolutionConfirmedAt: string | null;
+  myFeedback: MyResolutionFeedback | null;
 }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [disputed, setDisputed] = useState(!!disputedAt);
-  const [confirmed, setConfirmed] = useState(!!resolutionConfirmedAt);
+  // The answer just given, or the one the server sent (also after the
+  // refresh a 409 triggers).
+  const [given, setGiven] = useState<MyResolutionFeedback | null>(null);
+  const answer = given ?? myFeedback;
+  const answeredOn = answer
+    ? new Date(answer.created_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
+    : null;
 
-  if (disputed) {
+  if (answer?.feedback_type === "DISPUTED") {
     return (
-      <div className="rounded-xl border border-line-200 bg-surface p-5">
+      <div className="rounded-xl border border-line-200 bg-surface p-5" data-testid="resolution-feedback-locked">
         <h2 className="text-[16px] font-semibold text-ink-900">Resolution Feedback</h2>
         <p className="mt-2 text-[13px] leading-[18px] text-ink-500">
           You reported that this issue isn&apos;t actually fixed. The assigned office has been notified.
         </p>
+        <p className="mt-1 text-[12px] text-ink-400">Answered {answeredOn}. Your answer can&apos;t be changed.</p>
       </div>
     );
   }
 
-  if (confirmed) {
+  if (answer?.feedback_type === "CONFIRMED") {
     return (
-      <div className="rounded-xl border border-line-200 bg-surface p-5">
+      <div className="rounded-xl border border-line-200 bg-surface p-5" data-testid="resolution-feedback-locked">
         <h2 className="text-[16px] font-semibold text-ink-900">Resolution Feedback</h2>
         <p className="mt-2 text-[13px] leading-[18px] text-status-resolved-ink">
           Thanks for confirming — glad this got fixed.
         </p>
+        <p className="mt-1 text-[12px] text-ink-400">Answered {answeredOn}. Your answer can&apos;t be changed.</p>
       </div>
     );
+  }
+
+  // 409: this citizen already answered (another tab, say). The refresh
+  // brings in their locked answer.
+  async function handleResult(res: Response) {
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setGiven(data.feedback);
+      router.refresh();
+    } else {
+      setError(data.message ?? "Couldn't submit your feedback. Please try again.");
+      if (res.status === 409) router.refresh();
+    }
   }
 
   async function submitConfirm() {
@@ -48,13 +73,7 @@ export default function ResolutionFeedback({
     const res = await fetch(`/api/reports/mine/${reportId}/confirm-resolution`, {
       method: "POST",
     });
-    if (res.ok) {
-      setConfirmed(true);
-      router.refresh();
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setError(data.message ?? "Couldn't submit your feedback. Please try again.");
-    }
+    await handleResult(res);
     setBusy(false);
   }
 
@@ -71,13 +90,7 @@ export default function ResolutionFeedback({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reason }),
     });
-    if (res.ok) {
-      setDisputed(true);
-      router.refresh();
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setError(data.message ?? "Couldn't submit your feedback. Please try again.");
-    }
+    await handleResult(res);
     setBusy(false);
   }
 
