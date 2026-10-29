@@ -14,6 +14,7 @@ import type {
   TicketMergedInto,
   TicketCorrectionRow,
   TicketCitizenFeedback,
+  TicketSeverity,
 } from "@/lib/types/admin-tickets";
 import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
@@ -56,6 +57,8 @@ const RESOLUTION_OUTCOME_LABEL: Record<NonNullable<TicketDetail["resolution_outc
 interface TicketDetailResponse {
   ticket: TicketDetail;
   reports: TicketReport[];
+  // Manuscript revision Phase 4, step 4a.
+  severity: TicketSeverity;
   history: TicketStatusHistoryRow[];
   reassignments: TicketReassignmentRow[];
   referrals: TicketReferralRow[];
@@ -118,7 +121,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
     related = null;
   }
 
-  const { ticket, reports, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback } = data;
+  const { ticket, reports, severity, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback } = data;
   // A merged-away ticket stays viewable as history, with no actions
   // (manuscript revision Phase 3, step 3d; the API refuses them too).
   const mergedAway = ticket.merged_into_ticket_id !== null;
@@ -359,7 +362,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
                   <TabsTrigger value="timeline">Timeline</TabsTrigger>
                 </TabsList>
                 <TabsContent className="pt-4" value="scoring">
-                  <ScoringTab priorityContext={priorityContext} ticket={ticket} />
+                  <ScoringTab priorityContext={priorityContext} reports={reports} severity={severity} ticket={ticket} />
                 </TabsContent>
                 <TabsContent className="pt-4" value="timeline">
                   <TimelineTab
@@ -545,9 +548,13 @@ function BeforeAfterCard({
 function ScoringTab({
   ticket,
   priorityContext,
+  reports,
+  severity,
 }: {
   ticket: TicketDetail;
   priorityContext: TicketPriorityContext | null;
+  reports: TicketReport[];
+  severity: TicketSeverity;
 }) {
   return (
     <div>
@@ -585,6 +592,29 @@ function ScoringTab({
             ))}
           </tbody>
         </table>
+      )}
+      {/* Manuscript revision Phase 4, step 4a: how the ticket severity comes
+          from its member reports, each keeping its citizen's own severity
+          (a Critical report that does not decide the median stays listed). */}
+      {severity.memberCount > 0 && (
+        <div className="mt-4" data-testid="ticket-severity">
+          <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Ticket severity</p>
+          <p className="mt-1 text-sm text-ink-900" data-testid="ticket-severity-summary">
+            Ticket severity = median of {severity.memberCount} {severity.memberCount === 1 ? "report" : "reports"}:{" "}
+            {severity.label} <span className="font-mono tabular-nums text-ink-500">({severity.factor.toFixed(3)})</span>
+          </p>
+          <ul className="mt-2 flex flex-col gap-1 text-xs text-ink-700">
+            {reports.map((report) => (
+              <li className="flex justify-between gap-2" data-testid={`ticket-severity-report-${report.id}`} key={report.id}>
+                <span className="font-mono">{report.tracking_reference}</span>
+                <span>{report.citizen_severity}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-[11px] text-ink-400">
+            Each report keeps the severity its citizen chose. The label is the nearest level; halfway rounds up.
+          </p>
+        </div>
       )}
     </div>
   );
