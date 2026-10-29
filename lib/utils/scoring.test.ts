@@ -26,3 +26,10 @@ test("Priority Index respects severity, age, and barangay density", () => {
   assert.ok(score({ createdAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), activeBarangayCount: 1, maxActiveBarangayCount: 4 }) > baseline);
   assert.ok(score({ activeBarangayCount: 4, maxActiveBarangayCount: 4 }) > baseline);
 });
+// Manuscript revision Phase 4, step 4a: the ticket's median Severity Factor
+// is passed as an exact number (mirrors api/src/common/utils/scoring.ts).
+test("Priority Index uses an exact median severityFactor when given", () => {
+  assert.equal(score({ severity: "High", severityFactor: 0.625 }), 32);
+  assert.equal(score({ severity: "High" }), 38);
+  assert.equal(score({ severity: "High", severityFactor: 0.75 }), 38);
+});

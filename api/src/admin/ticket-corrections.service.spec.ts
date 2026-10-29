@@ -123,6 +123,11 @@ function setup(options: {
   const recalculateActiveTickets = jest.fn(() =>
     Promise.resolve({ updated: 0 }),
   );
+  // Manuscript revision Phase 4, step 4a: recorded in order with the SQL.
+  const recalculateTickets = jest.fn((tx: unknown, ids: number[]) => {
+    calls.push({ text: 'RECALCULATE TICKETS', values: ids, inTx: tx !== sql });
+    return Promise.resolve({ updated: ids.length });
+  });
   const findContainingBarangay = jest.fn(() =>
     Promise.resolve(
       options.barangay === undefined
@@ -144,7 +149,10 @@ function setup(options: {
     sql,
     tickets,
     { findContainingBarangay } as unknown as BarangayService,
-    { recalculateActiveTickets } as unknown as OperationalPriorityService,
+    {
+      recalculateActiveTickets,
+      recalculateTickets,
+    } as unknown as OperationalPriorityService,
     audit,
   );
   const writes = () =>
@@ -156,6 +164,7 @@ function setup(options: {
     writes,
     auditInputs,
     recalculateActiveTickets,
+    recalculateTickets,
     findContainingBarangay,
   };
 }
@@ -205,7 +214,9 @@ describe('TicketCorrectionsService.correctCategory', () => {
         },
       },
     ]);
+    // A category correction changes no membership, so no severity either.
     expect(t.recalculateActiveTickets).not.toHaveBeenCalled();
+    expect(t.recalculateTickets).not.toHaveBeenCalled();
   });
 
   it('to the other office: reassigns in the same transaction, with the reason on the routing row', async () => {
@@ -440,6 +451,25 @@ describe('TicketCorrectionsService.correctLocation', () => {
         },
       }),
     ]);
+    expect(t.recalculateActiveTickets).toHaveBeenCalledTimes(1);
+  });
+
+  // Manuscript revision Phase 4, step 4a.
+  it('recalculates the ticket in the transaction, after the location write, and every ticket after the commit', async () => {
+    const t = setup({});
+    await t.service.correctLocation(7, body, MEO);
+    const update = t.calls.findIndex((c) =>
+      /UPDATE tickets SET\s+geom =/.test(c.text),
+    );
+    const recalc = t.calls.findIndex((c) => c.text === 'RECALCULATE TICKETS');
+    expect(t.recalculateTickets).toHaveBeenCalledTimes(1);
+    expect(t.calls[recalc]).toEqual({
+      text: 'RECALCULATE TICKETS',
+      values: [7],
+      inTx: true,
+    });
+    expect(update).toBeGreaterThan(-1);
+    expect(update).toBeLessThan(recalc);
     expect(t.recalculateActiveTickets).toHaveBeenCalledTimes(1);
   });
 

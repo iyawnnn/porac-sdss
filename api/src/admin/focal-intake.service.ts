@@ -549,10 +549,10 @@ export class FocalIntakeService {
   // fields on the report; re-screening overwrites them, and every screening
   // writes one report_severity_screened audit event. Advisory only: it
   // never writes citizen_severity or the ticket, and never recalculates
-  // Operational Priority (the ticket's severity is the MAX citizen_severity
-  // of its reports, so it can't change either). FocalGuard already limits
-  // the route to Focal Personnel; the check here keeps the rule with the
-  // write. The report row is locked so the audit's oldStatus is the value
+  // Operational Priority (the ticket's severity is the median of its
+  // reports' citizen_severity, so it can't change either). FocalGuard
+  // already limits the route to Focal Personnel; the check here keeps the
+  // rule with the write. The report row is locked so the audit's oldStatus is the value
   // this screening replaced.
   async screenSeverity(
     reportId: number,

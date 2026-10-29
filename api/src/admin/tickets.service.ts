@@ -12,9 +12,9 @@ import { PG } from '../db/db.module';
 import { MediaService } from '../domain/media.service';
 import {
   computePriorityBreakdown,
-  severityFromRank,
   type PriorityBreakdown,
 } from '../common/utils/scoring';
+import { ticketSeverity, type TicketSeverity } from '../common/utils/severity';
 import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
@@ -784,9 +784,17 @@ export class TicketsService {
       responses: feedbackResponses,
     };
 
+    // The ticket's severity: the median of its member reports' severities
+    // (manuscript revision Phase 4, step 4a). Each report keeps its own
+    // citizen_severity in reports above.
+    const severity: TicketSeverity = ticketSeverity(
+      reports.map((r) => r.citizen_severity),
+    );
+
     return {
       ticket,
       reports,
+      severity,
       history,
       reassignments,
       referrals,
@@ -810,7 +818,7 @@ export class TicketsService {
       {
         barangay_id: number;
         created_at: string;
-        severity_rank: number;
+        member_severities: string[];
         active_barangay_count: number;
         max_active_barangay_count: number;
         assigned_office: 'MEO' | 'MDRRMO';
@@ -825,10 +833,9 @@ export class TicketsService {
       )
       SELECT t.barangay_id, t.created_at, t.assigned_office,
         COALESCE((
-          SELECT MAX(CASE citizen_severity
-            WHEN 'Critical' THEN 4 WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 ELSE 1 END)
+          SELECT array_agg(citizen_severity ORDER BY created_at, id)
           FROM reports WHERE ticket_id = t.id
-        ), 1)::int AS severity_rank,
+        ), ARRAY[]::text[]) AS member_severities,
         COALESCE(d.active_barangay_count, 0) AS active_barangay_count,
         COALESCE((SELECT MAX(active_barangay_count) FROM barangay_density), 0) AS max_active_barangay_count
       FROM tickets t
@@ -838,8 +845,13 @@ export class TicketsService {
     if (!row) return null;
     assertOfficeAccess(admin, row.assigned_office);
 
+    // The median of the member reports (manuscript revision Phase 4, step
+    // 4a), the same common/utils/severity.ts rule OperationalPriorityService
+    // writes priority_index with.
+    const severity = ticketSeverity(row.member_severities);
     const breakdown = computePriorityBreakdown({
-      severity: severityFromRank(row.severity_rank),
+      severity: severity.label,
+      severityFactor: severity.factor,
       createdAt: row.created_at,
       activeBarangayCount: row.active_barangay_count,
       maxActiveBarangayCount: row.max_active_barangay_count,

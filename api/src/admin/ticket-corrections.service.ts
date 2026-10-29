@@ -246,6 +246,10 @@ export class TicketCorrectionsService {
           updated_at = now()
         WHERE id = ${ticketId}
       `;
+      // Its barangay demand moved: recalculate it in this transaction
+      // (manuscript revision Phase 4, step 4a); every other ticket follows
+      // after the commit.
+      await this.operationalPriority.recalculateTickets(tx, [ticketId]);
       const rounded = Math.round(distanceM);
       await this.audit.logInPgTx(tx, {
         actor: actorOf(admin),

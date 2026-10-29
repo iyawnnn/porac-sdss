@@ -1,8 +1,4 @@
-import {
-  computePriorityBreakdown,
-  computePriorityIndex,
-  severityFromRank,
-} from './scoring';
+import { computePriorityBreakdown, computePriorityIndex } from './scoring';
 
 const now = new Date('2026-07-28T00:00:00.000Z');
 
@@ -137,12 +133,24 @@ describe('computePriorityBreakdown (Operational Priority formula)', () => {
   });
 });
 
-describe('severityFromRank', () => {
-  it('maps the SQL MAX rank back to a severity label', () => {
-    expect(severityFromRank(4)).toBe('Critical');
-    expect(severityFromRank(3)).toBe('High');
-    expect(severityFromRank(2)).toBe('Medium');
-    expect(severityFromRank(1)).toBe('Low');
-    expect(severityFromRank(0)).toBe('Low');
+// Manuscript revision Phase 4, step 4a: the ticket's median Severity Factor
+// (common/utils/severity.ts) is passed as an exact number.
+describe('computePriorityBreakdown with an exact severityFactor', () => {
+  it("uses the given factor instead of the label's own", () => {
+    // Medium + High: median 0.625 (label High).
+    // 0.5 * 0.625 = 0.3125 -> round(1 + 0.3125 * 99) = 32
+    const median = breakdown({ severity: 'High', severityFactor: 0.625 });
+    expect(median.severityFactor).toBe(0.625);
+    expect(median.severityContribution).toBeCloseTo(0.3125, 10);
+    expect(median.priorityIndex).toBe(32);
+    expect(median.severity).toBe('High');
+    // The label alone would give 0.75 -> round(38.125) = 38.
+    expect(breakdown({ severity: 'High' }).priorityIndex).toBe(38);
+  });
+
+  it('matches the label factor when the median is a whole level', () => {
+    expect(
+      breakdown({ severity: 'High', severityFactor: 0.75 }).priorityIndex,
+    ).toBe(breakdown({ severity: 'High' }).priorityIndex);
   });
 });
