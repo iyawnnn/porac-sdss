@@ -90,12 +90,18 @@ async function signupCitizen(page: Page, label: string): Promise<{ email: string
 // per-test DB isolation), same reasoning as admin-work-orders.spec.ts's
 // sharedMeoTicketId and this file's own resolvedFixture below.
 let sharedReadOnlyTicketId: number;
+// Its title ends in a millisecond timestamp, so searching the queue by it
+// matches this ticket alone. Searching by the numeric id also substring-
+// matches every older E2E title whose timestamp contains those digits (16
+// tickets for id 240), which can push this newer, lower-priority ticket off
+// page 1.
+let sharedReadOnlyTitle: string;
 
 test.beforeAll(async ({ browser }) => {
   const citizenContext = await browser.newContext();
   const citizenPage = await citizenContext.newPage();
   await signupCitizen(citizenPage, "shared-readonly");
-  ({ ticketId: sharedReadOnlyTicketId } = await createThrowawayReport(citizenPage, `shared-readonly-${Date.now()}`));
+  ({ ticketId: sharedReadOnlyTicketId, title: sharedReadOnlyTitle } = await createThrowawayReport(citizenPage, `shared-readonly-${Date.now()}`));
   await citizenContext.close();
 });
 
@@ -283,11 +289,12 @@ test("clicking a ticket from the queue opens its detail page and back link retur
   const ticketId = sharedReadOnlyTicketId;
 
   await loginAs(page, E2E_MEO_ADMIN);
-  // Search-filtered to this disposable ticket specifically — the queue's
-  // default order isn't stable across a full-suite run (other specs create,
-  // resolve, and reassign tickets), so "first row" isn't guaranteed to be
-  // this ticket even though it always exists.
-  await page.goto(`/admin/tickets?status=all&search=${ticketId}`);
+  // Search-filtered to this disposable ticket specifically (by its unique
+  // title, see sharedReadOnlyTitle) — the queue's default order isn't
+  // stable across a full-suite run (other specs create, resolve, and
+  // reassign tickets), so "first row" isn't guaranteed to be this ticket
+  // even though it always exists.
+  await page.goto(`/admin/tickets?status=all&search=${encodeURIComponent(sharedReadOnlyTitle)}`);
   await page.waitForLoadState("networkidle");
 
   // Search can substring-match other tickets' titles/barangays too, so more
@@ -698,10 +705,11 @@ test("mobile viewport renders the ticket queue card list, not the desktop table,
 
   await page.setViewportSize({ width: 390, height: 844 });
   await loginAs(page, E2E_MEO_ADMIN);
-  // Search-filtered to this disposable ticket — guarantees exactly one
-  // matching card instead of depending on however many tickets happen to
-  // exist citywide at this point in a full-suite run.
-  await page.goto(`/admin/tickets?status=all&search=${ticketId}`);
+  // Search-filtered to this disposable ticket by its unique title (see
+  // sharedReadOnlyTitle) — guarantees exactly one matching card instead of
+  // depending on however many tickets happen to exist citywide at this
+  // point in a full-suite run.
+  await page.goto(`/admin/tickets?status=all&search=${encodeURIComponent(sharedReadOnlyTitle)}`);
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByRole("heading", { name: "Ticket Queue" })).toBeVisible();
