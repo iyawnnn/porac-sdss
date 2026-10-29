@@ -18,7 +18,7 @@ The manuscript's decision support has three components. Only one of them is a co
 |---|---|---|
 | **Operational Priority** (`priority_index`) | System-computed administrative queue order — how soon staff should act | **Live** — this document |
 | **Operational Assessment** (`operational_assessments`) | Human-entered: observed conditions, safety implications, recommended action | Live (five-role Batch 3). No score, level or band |
-| **Hazard Information** | DENR-MGB flood / rain-induced-landslide susceptibility for the ticket's location — advisory context only | Not built yet (Phase 4). Never a score |
+| **Hazard Information** (`hazard_information`) | DENR-MGB flood / rain-induced-landslide susceptibility for the ticket's location — advisory context only, in the source's own terms | Live (Phase 4, step 4b; `docs/database.md`). Never a score and never an input to `priority_index` |
 
 The manuscript states that the system produces no "risk, urgency, severity, or numerical hazard score." The former **Hazard Urgency** score (elevation + rainfall + cluster) was retired in manuscript revision Phase 1 — see §12.
 
@@ -156,7 +156,7 @@ Engineering assessment only — no academic rewriting.
 
 - **Admin-configurable weights** — `PLAN.md` §15 Q4, still open. Weights are hardcoded.
 - **Human-confirmed grouping** — returns in Phase 3; the system will suggest possibly related tickets within 20 / 50 / 100 m and only staff confirm a merge.
-- **Hazard Information** — Phase 4 (DENR-MGB susceptibility lookups, plus a rainfall-context record that reuses `OPENWEATHERMAP_API_KEY`).
+- **Rainfall context** — Phase 4 (a rainfall-context record that reuses `OPENWEATHERMAP_API_KEY`). The DENR-MGB susceptibility lookups (Hazard Information) shipped in step 4b; neither is ever a score.
 
 ---
 
