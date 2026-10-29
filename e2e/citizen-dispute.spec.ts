@@ -151,7 +151,10 @@ test.describe("Citizen resolution feedback", () => {
     await adminPage.goto(`/admin/tickets/${ticketId}`);
     await expect(adminPage.getByText(/^Disputed /).first()).toBeVisible();
     await expect(adminPage.getByText("Citizen reports issue not fixed")).toBeVisible();
-    await expect(adminPage.getByText("The pothole is still there.")).toBeVisible();
+    // The reason shows twice since step 3g: on the dispute card (the
+    // ticket-level flag) and in the Citizen feedback card's answer list.
+    await expect(adminPage.getByText("The pothole is still there.")).toHaveCount(2);
+    await expect(adminPage.getByTestId("citizen-feedback").getByText("The pothole is still there.")).toBeVisible();
 
     await adminContext.close();
   });
