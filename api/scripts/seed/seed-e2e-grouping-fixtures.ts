@@ -6,7 +6,10 @@ import { sql } from '../db';
 // (e2e/admin-ticket-corrections.spec.ts; step 3e), the Focal severity
 // screening spec (e2e/admin-severity-screening.spec.ts; step 3f) and the
 // per-citizen resolution feedback spec
-// (e2e/citizen-resolution-feedback.spec.ts; step 3g). The tickets and reports
+// (e2e/citizen-resolution-feedback.spec.ts; step 3g), and the DENR-MGB
+// Hazard Information spec (e2e/admin-hazard-information.spec.ts; Phase 4,
+// step 4b), whose hazard_information rows are inserted here too, so that
+// spec never calls the live service. The tickets and reports
 // are inserted directly, never through POST /reports, so the specs post no
 // report: a full run already posts 20, the per-IP hourly limit
 // (docs/testing.md). Every fixture report belongs to citizen1 (the step 3g
@@ -30,10 +33,12 @@ import { sql } from '../db';
 const TITLE_PREFIX = 'E2E grouping fixture';
 const CORRECTION_TITLE_PREFIX = 'E2E correction fixture';
 const FEEDBACK_TITLE_PREFIX = 'E2E feedback fixture';
+const HAZARD_TITLE_PREFIX = 'E2E hazard fixture';
 const TITLE_PATTERNS = [
   `${TITLE_PREFIX}%`,
   `${CORRECTION_TITLE_PREFIX}%`,
   `${FEEDBACK_TITLE_PREFIX}%`,
+  `${HAZARD_TITLE_PREFIX}%`,
 ];
 const CATEGORY = 'Pothole / Road Surface Damage';
 const CITIZEN_EMAIL = 'citizen1@porac.ph';
@@ -50,6 +55,10 @@ const BASE = { lat: 15.06, lng: 120.53 };
 const SPOT_STEP_DEG = 80 / 111_320; // 80 m north per scenario
 const PAIR_STEP_DEG = 5 / 111_320; // 5 m north within a scenario
 const CORRECTION_EAST_DEG = 0.0005; // about 55 m east of the grouping spots
+// Hazard Information fixtures: 160 m apart, starting 160 m west of the
+// grouping spots, so no two are within the 100 m flood / landslide radius
+// of each other or of any other fixture.
+const HAZARD_WEST_STEP_DEG = 0.0015;
 
 type Office = 'MEO' | 'MDRRMO';
 interface Point {
@@ -137,6 +146,7 @@ async function create() {
         initialOffice?: Office;
         status?: 'Reported' | 'Under Review' | 'Resolved';
         ageDays: number;
+        category?: string;
       },
     ) => {
       const [barangay] = await tx<{ id: number }[]>`
@@ -155,7 +165,7 @@ async function create() {
           category, barangay_id, member_count, assigned_office, initial_assigned_office, status, geom, created_at, updated_at
         )
         VALUES (
-          ${CATEGORY}, ${barangay.id}, 0, ${office}, ${options.initialOffice ?? office}, ${status},
+          ${options.category ?? CATEGORY}, ${barangay.id}, 0, ${office}, ${options.initialOffice ?? office}, ${status},
           ST_SetSRID(ST_MakePoint(${at.lng}, ${at.lat}), 4326),
           now() - make_interval(days => ${options.ageDays}), now() - make_interval(days => ${options.ageDays})
         )
@@ -176,6 +186,7 @@ async function create() {
       ageDays: number,
       prefix = TITLE_PREFIX,
       citizenId = citizen.id,
+      category = CATEGORY,
     ) => {
       const [row] = await tx<{ id: number }[]>`
         INSERT INTO reports (
@@ -184,7 +195,7 @@ async function create() {
         )
         VALUES (
           ${ticketId}, ${citizenId}, ${`${prefix}: ${label}`}, 'Inserted by e2e/global-setup.ts.', 'Medium',
-          ${IMAGE_URL}, ${CATEGORY},
+          ${IMAGE_URL}, ${category},
           ST_SetSRID(ST_MakePoint(${at.lng}, ${at.lat}), 4326),
           ST_SetSRID(ST_MakePoint(${at.lng}, ${at.lat}), 4326),
           ARRAY[]::text[], now() - make_interval(days => ${ageDays})
@@ -364,7 +375,136 @@ async function create() {
       ),
     };
 
+    // Phase 4, step 4b: DENR-MGB Hazard Information
+    // (e2e/admin-hazard-information.spec.ts). Active MDRRMO tickets, one per
+    // panel state, with their hazard_information rows inserted directly at
+    // the ticket's location, so Ticket Detail shows each state without a
+    // live lookup. The spec never clicks Retry.
+    const hazardTicket = async (
+      index: number,
+      category: string,
+      label: string,
+    ) => {
+      const at = {
+        lat: BASE.lat,
+        lng: BASE.lng - (index + 1) * HAZARD_WEST_STEP_DEG,
+      };
+      const ticketId = await ticket(at, {
+        office: 'MDRRMO',
+        ageDays: 1,
+        category,
+      });
+      await report(
+        ticketId,
+        at,
+        label,
+        1,
+        HAZARD_TITLE_PREFIX,
+        citizen.id,
+        category,
+      );
+      return ticketId;
+    };
+    const hazardRow = async (
+      ticketId: number,
+      row: {
+        context: 'FLOOD' | 'RAIN_INDUCED_LANDSLIDE';
+        status: 'CLASSIFIED' | 'NO_CLASSIFICATION' | 'TEMPORARILY_UNAVAILABLE';
+        code?: string;
+        label?: string;
+        failureReason?: string;
+        // Hours ago; a superseded row is replaced an hour later.
+        hoursAgo: number;
+        superseded?: boolean;
+      },
+    ) => {
+      await tx`
+        INSERT INTO hazard_information (
+          ticket_id, hazard_context_type, lookup_status, susceptibility_code,
+          susceptibility_label, query_geom, failure_reason, looked_up_at, superseded_at
+        )
+        VALUES (
+          ${ticketId}, ${row.context}, ${row.status}, ${row.code ?? null},
+          ${row.label ?? null}, (SELECT geom FROM tickets WHERE id = ${ticketId}),
+          ${row.failureReason ?? null}, now() - make_interval(hours => ${row.hoursAgo}),
+          ${row.superseded ? tx`now() - make_interval(hours => ${row.hoursAgo - 1})` : null}
+        )
+      `;
+    };
+    // 1. Flood, CLASSIFIED (MF), with an earlier NO_CLASSIFICATION result as
+    //    history.
+    const hazardClassified = await hazardTicket(
+      0,
+      'Localized Flooding',
+      'flood, classified',
+    );
+    await hazardRow(hazardClassified, {
+      context: 'FLOOD',
+      status: 'NO_CLASSIFICATION',
+      hoursAgo: 5,
+      superseded: true,
+    });
+    await hazardRow(hazardClassified, {
+      context: 'FLOOD',
+      status: 'CLASSIFIED',
+      code: 'MF',
+      label: 'Moderate Susceptibility to Flooding',
+      hoursAgo: 4,
+    });
+    // 2. Landslide, NO_CLASSIFICATION.
+    const hazardNoClassification = await hazardTicket(
+      1,
+      'Rain-Induced Slope Failure/Landslide',
+      'landslide, no classification',
+    );
+    await hazardRow(hazardNoClassification, {
+      context: 'RAIN_INDUCED_LANDSLIDE',
+      status: 'NO_CLASSIFICATION',
+      hoursAgo: 3,
+    });
+    // 3. Flood, TEMPORARILY_UNAVAILABLE just now (under 10 minutes old, so
+    //    opening it starts no background retry), with the Retry button.
+    const hazardUnavailable = await hazardTicket(
+      2,
+      'Localized Flooding',
+      'flood, unavailable',
+    );
+    await hazardRow(hazardUnavailable, {
+      context: 'FLOOD',
+      status: 'TEMPORARILY_UNAVAILABLE',
+      failureReason: 'Timed out after 8 s',
+      hoursAgo: 0,
+    });
+    // 4. Landslide with no row: "Not yet checked". (The API for an e2e run
+    //    starts with HAZARD_INFORMATION_LOOKUPS=disabled, so opening it
+    //    starts no live lookup; docs/testing.md.)
+    const hazardNotChecked = await hazardTicket(
+      3,
+      'Rain-Induced Slope Failure/Landslide',
+      'landslide, not yet checked',
+    );
+    // 5. Lahar: no automated classification. 6. Another category: not
+    //    applicable.
+    const hazardLahar = await hazardTicket(
+      4,
+      'Lahar or Volcanic Debris-Flow Threat',
+      'lahar',
+    );
+    const hazardNotApplicable = await hazardTicket(
+      5,
+      'Fallen Tree or Storm-Related Road Obstruction',
+      'not applicable',
+    );
+
     return {
+      hazard: {
+        classifiedTicketId: hazardClassified,
+        noClassificationTicketId: hazardNoClassification,
+        unavailableTicketId: hazardUnavailable,
+        notCheckedTicketId: hazardNotChecked,
+        laharTicketId: hazardLahar,
+        notApplicableTicketId: hazardNotApplicable,
+      },
       feedback,
       corrections: {
         withinOffice,
