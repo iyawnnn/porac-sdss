@@ -789,7 +789,8 @@ test("resolving a ticket through the admin UI records notes, photo, and updates 
   // the report's PRC tracking reference.
   await expect(headerRow.getByText("Outcome: Municipal action completed", { exact: true })).toBeVisible();
   expect(trackingReference).toMatch(/^PRC-\d{4}-\d{6,}$/);
-  await expect(page.getByText(trackingReference, { exact: true })).toBeVisible();
+  // On the report card; since step 4a the Ticket severity list repeats it.
+  await expect(page.getByTestId(`report-card-${reportId}`).getByText(trackingReference, { exact: true })).toBeVisible();
 });
 
 test("the citizen's Case Closure Summary reflects a ticket resolved through the admin UI", async ({ page }) => {
