@@ -214,6 +214,16 @@ export interface TicketReferralRow {
   referred_at: string;
 }
 
+// The ticket's severity: the median of its member reports' severities
+// (manuscript pp. 73–74; manuscript revision Phase 4, step 4a). factor is
+// the exact Severity Factor Operational Priority uses; label is derived from
+// it (nearest level, ties round up). Mirrors api/src/common/utils/severity.ts.
+export interface TicketSeverity {
+  factor: number;
+  label: "Low" | "Medium" | "High" | "Critical";
+  memberCount: number;
+}
+
 export interface TicketPriorityContext {
   breakdown: PriorityBreakdown;
 }

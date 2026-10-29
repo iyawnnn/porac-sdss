@@ -735,8 +735,8 @@ describe('FocalIntakeService.screenSeverity (Phase 3, step 3f)', () => {
       remarks: 'Looks less severe than reported.',
     });
 
-    // The citizen's severity, and the ticket's (MAX citizen_severity of its
-    // reports, here one).
+    // The citizen's severity, and the ticket's (the median of its reports'
+    // citizen_severity, here one).
     expect(after?.citizenSeverity).toBe('High');
     expect(after?.citizenSeverity).toBe(before?.citizenSeverity);
     expect(severityRank(after!.citizenSeverity)).toBe(

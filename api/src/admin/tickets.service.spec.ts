@@ -329,6 +329,53 @@ describe('cross-office access to single-resource ticket endpoints', () => {
     }
   });
 
+  // Manuscript revision Phase 4, step 4a: the ticket's severity is the
+  // median of its member reports; each report keeps its own.
+  it('returns the ticket severity as the median of its reports, each report keeping its own', async () => {
+    const reports = [
+      { id: 1, citizen_severity: 'Low' },
+      { id: 2, citizen_severity: 'Critical' },
+      { id: 3, citizen_severity: 'High' },
+    ];
+    const service = makeService([
+      [{ id: 8, assigned_office: 'MEO', merged_into_ticket_id: null }], // ticket lookup
+      reports,
+    ]);
+    const detail = await service.getTicketDetail(8, MEO_OFFICER);
+    expect(detail?.severity).toEqual({
+      factor: 0.75,
+      label: 'High',
+      memberCount: 3,
+    });
+    expect(detail?.reports.map((r) => r.citizen_severity)).toEqual([
+      'Low',
+      'Critical',
+      'High',
+    ]);
+  });
+
+  it('the priority breakdown uses the exact median factor (Medium + High -> 0.625)', async () => {
+    const service = makeService([
+      [
+        {
+          barangay_id: 1,
+          created_at: new Date().toISOString(),
+          assigned_office: 'MEO',
+          member_severities: ['High', 'Medium'],
+          active_barangay_count: 0,
+          max_active_barangay_count: 0,
+        },
+      ],
+    ]);
+    const context = await service.getTicketPriorityContext(8, MEO_OFFICER);
+    expect(context?.breakdown).toMatchObject({
+      severity: 'High',
+      severityFactor: 0.625,
+      severityContribution: 0.3125,
+      priorityIndex: 32,
+    });
+  });
+
   it('a ticket nobody answered has an empty citizen feedback summary', async () => {
     const service = makeService([
       [{ id: 6, assigned_office: 'MEO', merged_into_ticket_id: null }],

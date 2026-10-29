@@ -7,13 +7,6 @@ const SEVERITY_FACTORS: Record<CitizenSeverity, number> = {
   Critical: 1,
 };
 
-export function severityFromRank(rank: number): CitizenSeverity {
-  if (rank >= 4) return "Critical";
-  if (rank === 3) return "High";
-  if (rank === 2) return "Medium";
-  return "Low";
-}
-
 function clamp01(n: number): number {
   return Math.min(Math.max(n, 0), 1);
 }
@@ -32,14 +25,19 @@ export interface PriorityBreakdown {
   priorityIndex: number;
 }
 
+// Mirrors api/src/common/utils/scoring.ts: severityFactor, when given, is the
+// ticket's exact median Severity Factor (manuscript revision Phase 4, step
+// 4a) and replaces the label's own factor.
 export function computePriorityBreakdown({
   severity,
+  severityFactor: severityFactorInput,
   createdAt,
   activeBarangayCount,
   maxActiveBarangayCount,
   now = new Date(),
 }: {
   severity: CitizenSeverity;
+  severityFactor?: number;
   createdAt: Date | string;
   activeBarangayCount: number;
   maxActiveBarangayCount: number;
@@ -50,7 +48,7 @@ export function computePriorityBreakdown({
     ? clamp01((now.getTime() - createdAtMs) / (7 * 24 * 60 * 60 * 1000))
     : 0;
   const spatialFactor = maxActiveBarangayCount > 0 ? clamp01(activeBarangayCount / maxActiveBarangayCount) : 0;
-  const severityFactor = SEVERITY_FACTORS[severity];
+  const severityFactor = severityFactorInput ?? SEVERITY_FACTORS[severity];
 
   const severityContribution = severityFactor * 0.5;
   const ageContribution = ageFactor * 0.25;

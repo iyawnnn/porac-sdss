@@ -120,6 +120,10 @@ test.describe.serial("Staff Merge / Remove / Regroup of related reports", () => 
     await page.goto(`/admin/tickets/${toTicketId}`);
     await settleAdminPage(page, page.getByTestId(`report-card-${reportIds[1]}`));
     await expect(page.getByText("Evidence & reports (2)", { exact: true })).toBeVisible();
+    // The ticket severity follows the new membership (manuscript revision
+    // Phase 4, step 4a): both fixture reports are Medium.
+    await expect(page.getByTestId("ticket-severity-summary")).toHaveText("Ticket severity = median of 2 reports: Medium (0.500)");
+    await expect(page.getByTestId(`ticket-severity-report-${reportIds[1]}`)).toContainText("Medium");
   });
 
   test("Focal sees why two tickets of different offices can't be merged", async ({ page }) => {

@@ -126,6 +126,9 @@ export class TicketGroupingService {
         WHERE id = ${mergedId}
       `;
       await this.refreshMembership(tx, survivorId);
+      // Severity (the median of the members) and priority change with the
+      // membership, in this transaction (manuscript revision Phase 4, 4a).
+      await this.operationalPriority.recalculateTickets(tx, [survivorId]);
 
       const movedReportIds = moved.map((r) => r.id).sort((a, b) => a - b);
       await this.audit.logInPgTx(tx, {
@@ -201,6 +204,7 @@ export class TicketGroupingService {
       await tx`UPDATE reports SET ticket_id = ${ticket.id} WHERE id = ${reportId}`;
       await this.refreshMembership(tx, ticket.id);
       await this.refreshMembership(tx, fromId);
+      await this.operationalPriority.recalculateTickets(tx, [fromId, ticket.id]);
 
       await this.audit.logInPgTx(tx, {
         actor: actorOf(admin),
@@ -251,6 +255,7 @@ export class TicketGroupingService {
       await tx`UPDATE reports SET ticket_id = ${toId} WHERE id = ${reportId}`;
       await this.refreshMembership(tx, toId);
       await this.refreshMembership(tx, fromId);
+      await this.operationalPriority.recalculateTickets(tx, [fromId, toId]);
 
       await this.audit.logInPgTx(tx, {
         actor: actorOf(admin),

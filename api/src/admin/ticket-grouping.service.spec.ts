@@ -143,6 +143,13 @@ function setup(options: {
   const recalculateActiveTickets = jest.fn(() =>
     Promise.resolve({ updated: 0 }),
   );
+  // Manuscript revision Phase 4, step 4a: the changed tickets' severity
+  // and priority, recorded in order with the SQL so a test can see it ran
+  // inside the transaction, after the membership writes.
+  const recalculateTickets = jest.fn((tx: unknown, ids: number[]) => {
+    calls.push({ text: 'RECALCULATE TICKETS', values: ids, inTx: tx !== sql });
+    return Promise.resolve({ updated: ids.length });
+  });
   const findBarangayForPoint = jest.fn(() =>
     Promise.resolve(
       options.barangay === undefined
@@ -153,7 +160,10 @@ function setup(options: {
   const service = new TicketGroupingService(
     sql,
     { findBarangayForPoint } as unknown as BarangayService,
-    { recalculateActiveTickets } as unknown as OperationalPriorityService,
+    {
+      recalculateActiveTickets,
+      recalculateTickets,
+    } as unknown as OperationalPriorityService,
     { logInPgTx } as unknown as AdminAuditService,
   );
   const writes = () =>
@@ -175,8 +185,27 @@ function setup(options: {
     locks,
     logInPgTx,
     recalculateActiveTickets,
+    recalculateTickets,
     findBarangayForPoint,
   };
+}
+
+// The recalculation of the changed tickets: once, inside the transaction,
+// after the last membership write (manuscript revision Phase 4, step 4a).
+function expectRecalculatedInTx(t: ReturnType<typeof setup>, ids: number[]) {
+  expect(t.recalculateTickets).toHaveBeenCalledTimes(1);
+  const index = t.calls.findIndex((c) => c.text === 'RECALCULATE TICKETS');
+  expect(t.calls[index]).toEqual({
+    text: 'RECALCULATE TICKETS',
+    values: ids,
+    inTx: true,
+  });
+  const lastMembershipWrite = t.calls.reduce(
+    (last, c, i) => (c.text.includes('member_count =') ? i : last),
+    -1,
+  );
+  expect(lastMembershipWrite).toBeGreaterThan(-1);
+  expect(lastMembershipWrite).toBeLessThan(index);
 }
 
 describe('TicketGroupingService.merge', () => {
@@ -239,9 +268,10 @@ describe('TicketGroupingService.merge', () => {
     }
   });
 
-  it('recalculates Operational Priority once, after the transaction', async () => {
+  it('recalculates the survivor severity and priority in the transaction, then every ticket after it', async () => {
     const t = setup({ tickets: [pothole(3), pothole(5)] });
     await t.service.merge(body, MEO);
+    expectRecalculatedInTx(t, [5]);
     expect(t.recalculateActiveTickets).toHaveBeenCalledTimes(1);
     expect(t.calls.every((c) => c.inTx || !/UPDATE|INSERT/.test(c.text))).toBe(
       true,
@@ -283,6 +313,7 @@ describe('TicketGroupingService.merge', () => {
     );
     expect(t.writes()).toEqual([]);
     expect(t.logInPgTx).not.toHaveBeenCalled();
+    expect(t.recalculateTickets).not.toHaveBeenCalled();
     expect(t.recalculateActiveTickets).not.toHaveBeenCalled();
   });
 
@@ -390,6 +421,8 @@ describe('TicketGroupingService.removeReport', () => {
         reason: 'A different drain, 40 m away.',
       },
     });
+    // Both tickets' membership changed: the old one and the new one.
+    expectRecalculatedInTx(t, [7, 500]);
     expect(t.recalculateActiveTickets).toHaveBeenCalledTimes(1);
   });
 
@@ -472,6 +505,7 @@ describe('TicketGroupingService.regroupReport', () => {
         reason: 'Belongs with the other report.',
       },
     });
+    expectRecalculatedInTx(t, [7, 3]);
     expect(t.recalculateActiveTickets).toHaveBeenCalledTimes(1);
   });
 

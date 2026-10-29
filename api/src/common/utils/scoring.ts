@@ -1,18 +1,6 @@
-export type CitizenSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
+import { type CitizenSeverity, SEVERITY_FACTORS } from './severity';
 
-const SEVERITY_FACTORS: Record<CitizenSeverity, number> = {
-  Low: 0.25,
-  Medium: 0.5,
-  High: 0.75,
-  Critical: 1,
-};
-
-export function severityFromRank(rank: number): CitizenSeverity {
-  if (rank >= 4) return 'Critical';
-  if (rank === 3) return 'High';
-  if (rank === 2) return 'Medium';
-  return 'Low';
-}
+export type { CitizenSeverity };
 
 function clamp01(n: number): number {
   return Math.min(Math.max(n, 0), 1);
@@ -32,14 +20,20 @@ export interface PriorityBreakdown {
   priorityIndex: number;
 }
 
+// severity is the ticket's severity label; severityFactor, when given, is
+// its exact numeric Severity Factor (the median of the member reports,
+// common/utils/severity.ts, which can fall between two labels) and is used
+// in place of the label's factor. Without it the label's own factor is used.
 export function computePriorityBreakdown({
   severity,
+  severityFactor: severityFactorInput,
   createdAt,
   activeBarangayCount,
   maxActiveBarangayCount,
   now = new Date(),
 }: {
   severity: CitizenSeverity;
+  severityFactor?: number;
   createdAt: Date | string;
   activeBarangayCount: number;
   maxActiveBarangayCount: number;
@@ -53,7 +47,7 @@ export function computePriorityBreakdown({
     maxActiveBarangayCount > 0
       ? clamp01(activeBarangayCount / maxActiveBarangayCount)
       : 0;
-  const severityFactor = SEVERITY_FACTORS[severity];
+  const severityFactor = severityFactorInput ?? SEVERITY_FACTORS[severity];
 
   const severityContribution = severityFactor * 0.5;
   const ageContribution = ageFactor * 0.25;
