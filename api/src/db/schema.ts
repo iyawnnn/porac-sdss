@@ -70,6 +70,14 @@ export const severityScreeningStatusEnum = pgEnum(
   'severity_screening_status',
   SEVERITY_SCREENING_STATUSES,
 );
+// Appendix H RESOLUTION_FEEDBACK feedback_type (manuscript revision Phase 3,
+// step 3g, migration 0042). See resolutionFeedback below.
+export const RESOLUTION_FEEDBACK_TYPES = ['CONFIRMED', 'DISPUTED'] as const;
+export type ResolutionFeedbackType = (typeof RESOLUTION_FEEDBACK_TYPES)[number];
+export const resolutionFeedbackTypeEnum = pgEnum(
+  'resolution_feedback_type',
+  RESOLUTION_FEEDBACK_TYPES,
+);
 // History / sync mirror only since manuscript revision Phase 2, step 2e
 // (migration 0039): admins.role and admin_audit_events.actor_role keep this
 // type until both are dropped in Phase 8, and NOTHING may read either for
@@ -526,6 +534,33 @@ export const acknowledgments = pgTable('acknowledgments', {
     .references(() => admins.id),
   remarks: text('remarks'),
   acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Appendix H RESOLUTION_FEEDBACK (manuscript revision Phase 3, step 3g,
+// migration 0042): one answer per citizen per ticket — a citizen with a
+// report on a Resolved ticket confirms it was fixed or disputes it. Answers
+// are one-time and locked: UNIQUE resolution_feedback_ticket_citizen_unique
+// (ticket_id, citizen_id), so one citizen's answer never blocks another's.
+// CHECKs resolution_feedback_disputed_reason_check (DISPUTED needs a
+// non-empty reason) and resolution_feedback_confirmed_reason_check
+// (CONFIRMED has reason NULL); indexes on ticket_id and citizen_id. Never a
+// scoring input and never a status change. Old feedback did not record which
+// citizen gave it, so 0042 attributed it to the ticket's earliest reporter.
+// The old ticket-level tickets.disputedAt/disputeReason/
+// resolutionConfirmedAt stay until Phase 8.
+export const resolutionFeedback = pgTable('resolution_feedback', {
+  id: serial('id').primaryKey(),
+  ticketId: integer('ticket_id')
+    .notNull()
+    .references(() => tickets.id),
+  citizenId: integer('citizen_id')
+    .notNull()
+    .references(() => citizens.id),
+  feedbackType: resolutionFeedbackTypeEnum('feedback_type').notNull(),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
