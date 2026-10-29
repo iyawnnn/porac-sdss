@@ -3,13 +3,15 @@ import { sql } from '../db';
 // Playwright fixtures for the staff Merge / Remove / Regroup spec
 // (e2e/admin-ticket-grouping.spec.ts; manuscript revision Phase 3, step 3d),
 // the category / location correction spec
-// (e2e/admin-ticket-corrections.spec.ts; step 3e) and the Focal severity
-// screening spec (e2e/admin-severity-screening.spec.ts; step 3f). The
-// tickets and reports
+// (e2e/admin-ticket-corrections.spec.ts; step 3e), the Focal severity
+// screening spec (e2e/admin-severity-screening.spec.ts; step 3f) and the
+// per-citizen resolution feedback spec
+// (e2e/citizen-resolution-feedback.spec.ts; step 3g). The tickets and reports
 // are inserted directly, never through POST /reports, so the specs post no
 // report: a full run already posts 20, the per-IP hourly limit
-// (docs/testing.md). Every fixture report belongs to citizen1 and its title
-// starts with one of TITLE_PREFIXES. Each grouping scenario sits in its own
+// (docs/testing.md). Every fixture report belongs to citizen1 (the step 3g
+// ticket also has one by citizen2) and its title starts with one of
+// TITLE_PATTERNS' prefixes. Each grouping scenario sits in its own
 // spot in Jalung, 80 m from the next (four times the 20 m Pothole radius),
 // so it only ever suggests its own pair; the correction fixtures sit about
 // 55 m east of those spots, outside every grouping pair's radius.
@@ -17,17 +19,25 @@ import { sql } from '../db';
 // Run by e2e/global-setup.ts (creates the fixtures and prints their ids on
 // one E2E_GROUPING_FIXTURES= line) and e2e/global-teardown.ts (--cleanup).
 // Both first retire whatever an earlier run left active: every active ticket
-// that is not merged away and whose reports are all fixture reports is set
-// to Rejected, with a status_history row, after its active Work Orders are
-// cancelled, with a work_order_status_history row. Nothing is deleted and no
+// (or Resolved step 3g feedback ticket) that is not merged away and whose
+// reports are all fixture reports is set to Rejected, with a status_history
+// row, after its active Work Orders are cancelled, with a
+// work_order_status_history row. Its resolution_feedback rows stay as they
+// are. Nothing is deleted and no
 // history is rewritten; a merged-away fixture ticket stays as the read-only
 // history it is.
 
 const TITLE_PREFIX = 'E2E grouping fixture';
 const CORRECTION_TITLE_PREFIX = 'E2E correction fixture';
-const TITLE_PATTERNS = [`${TITLE_PREFIX}%`, `${CORRECTION_TITLE_PREFIX}%`];
+const FEEDBACK_TITLE_PREFIX = 'E2E feedback fixture';
+const TITLE_PATTERNS = [
+  `${TITLE_PREFIX}%`,
+  `${CORRECTION_TITLE_PREFIX}%`,
+  `${FEEDBACK_TITLE_PREFIX}%`,
+];
 const CATEGORY = 'Pothole / Road Surface Damage';
 const CITIZEN_EMAIL = 'citizen1@porac.ph';
+const SECOND_CITIZEN_EMAIL = 'citizen2@porac.ph';
 const MEO_EMAIL = 'meo@porac.gov.ph';
 const FOCAL_EMAIL = 'focal@porac.gov.ph';
 const IMAGE_URL = '/uploads/reports/01_poblacion.jpg';
@@ -63,7 +73,13 @@ async function retireLeftovers(): Promise<number> {
   return sql.begin(async (tx) => {
     const tickets = await tx<{ id: number }[]>`
       SELECT t.id FROM tickets t
-      WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
+      WHERE (
+          t.status IN ('Reported', 'Under Review', 'In Progress')
+          OR (
+            t.status = 'Resolved'
+            AND EXISTS (SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title LIKE ${`${FEEDBACK_TITLE_PREFIX}%`})
+          )
+        )
         AND t.merged_into_ticket_id IS NULL
         AND EXISTS (SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title LIKE ANY(${TITLE_PATTERNS}::text[]))
         AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND NOT (r.title LIKE ANY(${TITLE_PATTERNS}::text[])))
@@ -83,7 +99,8 @@ async function retireLeftovers(): Promise<number> {
         VALUES (${wo.id}, 'cancelled', NULL, ${CLEANUP_ACTOR})
       `;
     }
-    await tx`UPDATE tickets SET status = 'Rejected', updated_at = now() WHERE id = ANY(${ids})`;
+    // resolution_outcome is set only on a Resolved ticket (the step 3g one).
+    await tx`UPDATE tickets SET status = 'Rejected', resolution_outcome = NULL, updated_at = now() WHERE id = ANY(${ids})`;
     for (const id of ids) {
       await tx`
         INSERT INTO status_history (ticket_id, status, admin_id, admin_name)
@@ -98,15 +115,18 @@ async function create() {
   const [citizen] = await sql<
     { id: number }[]
   >`SELECT id FROM citizens WHERE email = ${CITIZEN_EMAIL}`;
+  const [secondCitizen] = await sql<
+    { id: number }[]
+  >`SELECT id FROM citizens WHERE email = ${SECOND_CITIZEN_EMAIL}`;
   const [meo] = await sql<{ id: number; name: string }[]>`
     SELECT id, first_name || ' ' || last_name AS name FROM admins WHERE email = ${MEO_EMAIL}
   `;
   const [focal] = await sql<{ id: number; name: string }[]>`
     SELECT id, first_name || ' ' || last_name AS name FROM admins WHERE email = ${FOCAL_EMAIL}
   `;
-  if (!citizen || !meo || !focal)
+  if (!citizen || !secondCitizen || !meo || !focal)
     throw new Error(
-      'citizen1, the MEO or the Focal demo admin is missing; run seed:users and seed:e2e-admins first.',
+      'citizen1, citizen2, the MEO or the Focal demo admin is missing; run seed:users and seed:e2e-admins first.',
     );
 
   return sql.begin(async (tx) => {
@@ -115,7 +135,7 @@ async function create() {
       options: {
         office?: Office;
         initialOffice?: Office;
-        status?: 'Reported' | 'Under Review';
+        status?: 'Reported' | 'Under Review' | 'Resolved';
         ageDays: number;
       },
     ) => {
@@ -155,6 +175,7 @@ async function create() {
       label: string,
       ageDays: number,
       prefix = TITLE_PREFIX,
+      citizenId = citizen.id,
     ) => {
       const [row] = await tx<{ id: number }[]>`
         INSERT INTO reports (
@@ -162,7 +183,7 @@ async function create() {
           geom, pin_geom, flags, created_at
         )
         VALUES (
-          ${ticketId}, ${citizen.id}, ${`${prefix}: ${label}`}, 'Inserted by e2e/global-setup.ts.', 'Medium',
+          ${ticketId}, ${citizenId}, ${`${prefix}: ${label}`}, 'Inserted by e2e/global-setup.ts.', 'Medium',
           ${IMAGE_URL}, ${CATEGORY},
           ST_SetSRID(ST_MakePoint(${at.lng}, ${at.lat}), 4326),
           ST_SetSRID(ST_MakePoint(${at.lng}, ${at.lat}), 4326),
@@ -309,7 +330,42 @@ async function create() {
       )
     `;
 
+    // Step 3g per-citizen resolution feedback
+    // (e2e/citizen-resolution-feedback.spec.ts): a Resolved MEO ticket with
+    // one report by citizen1 and one by citizen2, and no answer yet. 60 m
+    // north of the severity screening fixture; a Resolved ticket is never
+    // suggested as related, so it touches no grouping pair.
+    const feedbackAt = correctionSpot(4, 20);
+    const feedbackTicketId = await ticket(feedbackAt, {
+      status: 'Resolved',
+      ageDays: 3,
+    });
+    await tx`
+      UPDATE tickets SET resolution_outcome = 'MUNICIPAL_ACTION_COMPLETED',
+        resolution_notes = ${`${FEEDBACK_TITLE_PREFIX}: pothole patched`}
+      WHERE id = ${feedbackTicketId}
+    `;
+    const feedback = {
+      ticketId: feedbackTicketId,
+      citizenAReportId: await report(
+        feedbackTicketId,
+        feedbackAt,
+        'citizen A',
+        3,
+        FEEDBACK_TITLE_PREFIX,
+      ),
+      citizenBReportId: await report(
+        feedbackTicketId,
+        feedbackAt,
+        'citizen B',
+        3,
+        FEEDBACK_TITLE_PREFIX,
+        secondCitizen.id,
+      ),
+    };
+
     return {
+      feedback,
       corrections: {
         withinOffice,
         toMdrrmo,
