@@ -17,6 +17,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
+import { HazardInformationService } from '../domain/hazard-information.service';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -61,6 +62,7 @@ export class TicketsController {
     private readonly operationalPriority: OperationalPriorityService,
     private readonly assessments: OperationalAssessmentService,
     private readonly related: RelatedTicketsService,
+    private readonly hazardInformation: HazardInformationService,
   ) {}
 
   @Get()
@@ -117,7 +119,26 @@ export class TicketsController {
     // check needed here since getTicketDetail above already enforced
     // assertOfficeAccess for this exact ticket/admin pair.
     const operationalAssessment = await this.assessments.getForTicket(id);
-    return { ...detail, operationalAssessment };
+    // DENR-MGB Hazard Information (manuscript revision Phase 4, step 4b),
+    // advisory and staff-only, same access as above. When the ticket has no
+    // usable result (not yet checked, or temporarily unavailable for over 10
+    // minutes) a background lookup starts here and is not awaited.
+    const hazardInformation = await this.hazardInformation.forTicketDetail(
+      detail.ticket,
+    );
+    return { ...detail, operationalAssessment, hazardInformation };
+  }
+
+  // Staff Retry for Hazard Information: same 403/404 as Ticket Detail, 409
+  // for a merged-away or closed ticket or a category without a lookup, 429
+  // within 60 s of the ticket's last attempt. Waits for the lookup (at most
+  // 8 s) and returns the new state.
+  @Post(':id/hazard-information/retry')
+  async retryHazardInformation(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+  ) {
+    return this.hazardInformation.retry(id, admin);
   }
 
   @Post(':id/assessment')

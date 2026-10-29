@@ -24,6 +24,10 @@ export interface AdminTicketRow {
   // Old combined drainage ticket awaiting category correction (migration
   // 0035, handoff Decision 13).
   category_review_required: boolean;
+  // Manuscript revision Phase 4, step 4b: advisory DENR-MGB Hazard
+  // Information, one line in the source's terms (never a score).
+  hazard_applicability: HazardApplicability;
+  hazard_summary: string;
 }
 
 export interface PaginatedTickets {
@@ -226,6 +230,35 @@ export interface TicketSeverity {
 
 export interface TicketPriorityContext {
   breakdown: PriorityBreakdown;
+}
+
+// DENR-MGB Hazard Information (manuscript pp. 71–72, Appendix H
+// HAZARD_INFORMATION; manuscript revision Phase 4, step 4b), staff only.
+// Advisory: the source's own susceptibility code and wording, never a score.
+// Mirrors api/src/domain/hazard-information.service.ts.
+export type HazardContextType = "FLOOD" | "RAIN_INDUCED_LANDSLIDE";
+export type HazardLookupStatus = "CLASSIFIED" | "NO_CLASSIFICATION" | "TEMPORARILY_UNAVAILABLE";
+export type HazardApplicability = "applicable" | "not_applicable" | "no_automated_classification";
+
+export interface HazardInformationRow {
+  id: number;
+  hazard_context_type: HazardContextType;
+  lookup_status: HazardLookupStatus;
+  susceptibility_code: string | null;
+  susceptibility_label: string | null;
+  failure_reason: string | null;
+  looked_up_at: string;
+  superseded_at: string | null;
+}
+
+export interface HazardInformationView {
+  applicability: HazardApplicability;
+  contextType: HazardContextType | null;
+  layerName: string | null;
+  sourceName: string | null;
+  // Null = not yet checked (for the ticket's present category and location).
+  current: HazardInformationRow | null;
+  history: HazardInformationRow[];
 }
 
 // Formerly defined in app/api/admin/tickets/geo/route.ts (deleted Phase 9)
