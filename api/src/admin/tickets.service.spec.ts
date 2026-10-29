@@ -283,6 +283,64 @@ describe('cross-office access to single-resource ticket endpoints', () => {
     ]);
   });
 
+  // Manuscript revision Phase 3, step 3g: every citizen's answer, counted,
+  // with type, reason and time only (Ticket Detail shows no reporter
+  // identity, so the answers carry none).
+  it('returns the citizen feedback summary: confirmed and disputed counts plus every answer', async () => {
+    const responses = [
+      {
+        feedback_type: 'CONFIRMED',
+        reason: null,
+        created_at: '2026-10-01T00:00:00.000Z',
+      },
+      {
+        feedback_type: 'DISPUTED',
+        reason: 'Still there',
+        created_at: '2026-10-02T00:00:00.000Z',
+      },
+      {
+        feedback_type: 'CONFIRMED',
+        reason: null,
+        created_at: '2026-10-03T00:00:00.000Z',
+      },
+    ];
+    const service = makeService([
+      [{ id: 5, assigned_office: 'MEO', merged_into_ticket_id: null }], // ticket lookup
+      [], // reports
+      [], // status_history
+      [], // office_reassignments
+      [], // referral audit events
+      [], // correction audit events
+      [], // tickets merged into this one
+      responses, // resolution_feedback
+    ]);
+    const detail = await service.getTicketDetail(5, MEO_OFFICER);
+    expect(detail?.citizenFeedback).toEqual({
+      confirmed: 2,
+      disputed: 1,
+      responses,
+    });
+    for (const response of detail!.citizenFeedback.responses) {
+      expect(Object.keys(response).sort()).toEqual([
+        'created_at',
+        'feedback_type',
+        'reason',
+      ]);
+    }
+  });
+
+  it('a ticket nobody answered has an empty citizen feedback summary', async () => {
+    const service = makeService([
+      [{ id: 6, assigned_office: 'MEO', merged_into_ticket_id: null }],
+    ]);
+    const detail = await service.getTicketDetail(6, MEO_OFFICER);
+    expect(detail?.citizenFeedback).toEqual({
+      confirmed: 0,
+      disputed: 0,
+      responses: [],
+    });
+  });
+
   it("rejects a status advance on another office's ticket", async () => {
     const service = makeService([
       [{ status: 'Reported', assigned_office: 'MDRRMO' }], // ticket lookup

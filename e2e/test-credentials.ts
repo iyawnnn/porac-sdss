@@ -41,3 +41,6 @@ export const E2E_FOCAL_ADMIN = E2E_ADMIN_ACCOUNTS[3];
 // (ON CONFLICT upsert) — listed here only so specs share one constant instead of
 // re-typing the email/password pair.
 export const E2E_CITIZEN_ACCOUNT = { email: "citizen1@porac.ph", password: DEMO_PASSWORD };
+// A second reporter on the same ticket (per-citizen resolution feedback,
+// manuscript revision Phase 3, step 3g).
+export const E2E_SECOND_CITIZEN_ACCOUNT = { email: "citizen2@porac.ph", password: DEMO_PASSWORD };

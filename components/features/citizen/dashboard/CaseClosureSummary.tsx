@@ -3,13 +3,13 @@ import { ReportImage } from "@/components/features/citizen/dashboard/ReportImage
 
 // Citizen-safe summary of how this report was closed — deliberately reads
 // only fields already present on MyReportDetail (resolution_notes/
-// resolution_image_url/ticket_updated_at/disputed_at/resolution_confirmed_at),
+// resolution_image_url/ticket_updated_at/my_feedback, the citizen's own answer),
 // the same "no admin notes, no scoring internals" rule ReportTimeline
 // follows. Distinct from ResolutionFeedback below it: this is a read-only
 // recap of the outcome, not the confirm/dispute action itself.
-function feedbackStateLine(report: Pick<MyReportDetail, "disputed_at" | "resolution_confirmed_at">): string | null {
-  if (report.disputed_at) return "You reported that this issue isn't actually fixed.";
-  if (report.resolution_confirmed_at) return "You confirmed this issue was fixed.";
+function feedbackStateLine(report: Pick<MyReportDetail, "my_feedback">): string | null {
+  if (report.my_feedback?.feedback_type === "DISPUTED") return "You reported that this issue isn't actually fixed.";
+  if (report.my_feedback?.feedback_type === "CONFIRMED") return "You confirmed this issue was fixed.";
   return null;
 }
 
@@ -18,7 +18,7 @@ export default function CaseClosureSummary({
 }: {
   report: Pick<
     MyReportDetail,
-    "resolution_notes" | "resolution_image_url" | "ticket_updated_at" | "disputed_at" | "resolution_confirmed_at"
+    "resolution_notes" | "resolution_image_url" | "ticket_updated_at" | "my_feedback"
   >;
 }) {
   const resolvedDate = new Date(report.ticket_updated_at);

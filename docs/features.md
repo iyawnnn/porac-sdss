@@ -79,10 +79,10 @@ Once the ticket reaches `Resolved`, the report detail page shows two distinct ca
 
 - **Case Closure Summary** (read-only) — resolved date, the staff's completion notes, the staff's resolution photo, and a one-line recap of the citizen's own feedback once given.
 - **Resolution Feedback** (action) — **Confirm Fixed** or **Report Still Not Fixed**.
-  - *Confirm Fixed* persists (`resolution_confirmed_at`) and survives reload. No office notification — a confirmation isn't actionable.
+  - *Confirm Fixed* persists (a `resolution_feedback` row) and survives reload. No office notification — a confirmation isn't actionable.
   - *Report Still Not Fixed* asks "What's still wrong?", persists the reason, notifies the assigned office, and surfaces on the admin Ticket Queue and Ticket Detail.
 
-A dispute never rolls the ticket status backwards and never feeds any score. Only one outstanding dispute per ticket. The citizen's own dispute *reason* is admin-facing; the citizen sees only their feedback state. Covered by `e2e/citizen-dispute.spec.ts`.
+Since manuscript revision Phase 3, step 3g (Appendix H RESOLUTION_FEEDBACK) **every reporter on the ticket answers for themselves, once**: the answer is locked ("Your answer can't be changed", a second attempt is a 409), and one citizen's answer never blocks or shows to another — each citizen sees only their own answer, never other answers or counts. A citizen whose report was merged into the ticket can answer too. A dispute never rolls the ticket status backwards and never feeds any score; every dispute notifies the office, and the first one sets the ticket's Disputed flag. The citizen's own dispute *reason* is admin-facing; the citizen sees only their feedback state. Covered by `e2e/citizen-dispute.spec.ts` and `e2e/citizen-resolution-feedback.spec.ts`.
 
 ### 2.5 Map and notifications
 
@@ -143,7 +143,8 @@ Covered by `e2e/admin-tickets.spec.ts` (~21 tests) and `api/src/admin/tickets-qu
 - **Merged-away ticket** — a ticket merged into another stays viewable as read-only history: a banner "Merged into Ticket #A on {date} by {name}. Reason: {reason}" linking to the survivor, no status, assignment, referral, reject, Work Order or assessment controls (its Work Orders and assessment stay listed), and no related panel. The survivor's header reads "Includes reports merged from Ticket #B".
 - **Location** — map, barangay, coordinates (the elevation line was removed in manuscript revision Phase 1, step 7a).
 - **Work Orders panel** — create and manage work orders inline (§3.4).
-- **Dispute section** — renders only when disputed, showing the date and the citizen's reason.
+- **Dispute section** — renders only when disputed, showing the date and the first disputing citizen's reason (the ticket-level flag).
+- **Citizen feedback** (manuscript revision Phase 3, step 3g) — on a Resolved ticket (or one with answers): "N confirmed, M disputed" and each reporter's answer with its time and, for a dispute, its reason. No reporter identity.
 
 ### 3.4 Work Orders (`/admin/work-orders` and the Ticket Detail panel)
 

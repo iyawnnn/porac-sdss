@@ -243,6 +243,7 @@ Work-order fields — **especially `notes`** — moderation notes, and citizen d
 - The work-order CSV export **excludes `notes` at the query level**, not by filtering after selection.
 - `e2e/admin-work-orders.spec.ts` creates a work order with a sentinel note and asserts it never appears anywhere on the citizen's report page.
 - `e2e/citizen-dispute.spec.ts` asserts the citizen's own dispute reason is not rendered back to them, and that no `work_order` / `moderation_note` text leaks onto the page.
+- Per-citizen resolution feedback (manuscript revision Phase 3, step 3g): the citizen report detail carries only that citizen's own `resolution_feedback` row (`my_feedback`: type, their own reason, time — the reason is returned to its author but not rendered), never another citizen's answer, reason or any count, and no longer the ticket-level `disputed_at`/`resolution_confirmed_at`. Staff Ticket Detail lists every answer without reporter identity. `e2e/citizen-resolution-feedback.spec.ts` checks both.
 
 ### 7.2 Citizens see only their own reports
 

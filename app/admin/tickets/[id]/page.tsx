@@ -13,6 +13,7 @@ import type {
   OperationalAssessment,
   TicketMergedInto,
   TicketCorrectionRow,
+  TicketCitizenFeedback,
 } from "@/lib/types/admin-tickets";
 import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
@@ -33,6 +34,7 @@ import { RejectTicketPanel } from "@/components/features/admin/tickets/RejectTic
 import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersPanel";
 import { OperationalAssessmentPanel } from "@/components/features/admin/tickets/OperationalAssessmentPanel";
 import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
+import { CitizenFeedbackCard } from "@/components/features/admin/tickets/CitizenFeedbackCard";
 import { ReportGroupingActions } from "@/components/features/admin/tickets/grouping/ReportGroupingActions";
 import { TicketCorrectionActions } from "@/components/features/admin/tickets/corrections/TicketCorrectionActions";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
@@ -63,6 +65,8 @@ interface TicketDetailResponse {
   // Manuscript revision Phase 3, step 3d.
   mergedInto: TicketMergedInto | null;
   mergedFrom: number[];
+  // Manuscript revision Phase 3, step 3g.
+  citizenFeedback: TicketCitizenFeedback;
 }
 
 // Per-report Remove / Move on a multi-report active ticket (manuscript
@@ -114,7 +118,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
     related = null;
   }
 
-  const { ticket, reports, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom } = data;
+  const { ticket, reports, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback } = data;
   // A merged-away ticket stays viewable as history, with no actions
   // (manuscript revision Phase 3, step 3d; the API refuses them too).
   const mergedAway = ticket.merged_into_ticket_id !== null;
@@ -293,6 +297,12 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
                 {ticket.dispute_reason && <p className="mt-2 text-sm text-red-900">{ticket.dispute_reason}</p>}
               </CardContent>
             </Card>
+          )}
+
+          {/* Every reporter's own answer (manuscript revision Phase 3, step 3g);
+              the dispute card above still reads the ticket-level flag. */}
+          {(ticket.status === "Resolved" || citizenFeedback.responses.length > 0) && (
+            <CitizenFeedbackCard feedback={citizenFeedback} />
           )}
         </div>
 

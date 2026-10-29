@@ -32,6 +32,7 @@ import { categoryRouting } from '../common/utils/office';
 import {
   ROUTING_ADMIN_NAME_MAX_LENGTH,
   ROUTING_REASON_NOT_RECORDED,
+  type ResolutionFeedbackType,
   type SeverityScreeningStatus,
 } from '../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -207,6 +208,23 @@ export interface TicketDetail {
   merged_into_ticket_id: number | null;
   created_at: string;
   updated_at: string;
+}
+
+// Citizen resolution feedback on Ticket Detail (Appendix H
+// RESOLUTION_FEEDBACK; manuscript revision Phase 3, step 3g): how many
+// reporters confirmed or disputed the resolution, and each answer with its
+// reason and time. No citizen name, id or contact: Ticket Detail shows no
+// reporter identity, so neither does this.
+export interface TicketCitizenFeedbackResponse {
+  feedback_type: ResolutionFeedbackType;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface TicketCitizenFeedback {
+  confirmed: number;
+  disputed: number;
+  responses: TicketCitizenFeedbackResponse[];
 }
 
 export interface TicketReport {
@@ -751,6 +769,21 @@ export class TicketsService {
       `
     ).map((row) => row.id);
 
+    // Every citizen answer on this ticket, oldest first. Answers are only
+    // ever written against a survivor, so a merged-away ticket has none.
+    const feedbackResponses = await sql<TicketCitizenFeedbackResponse[]>`
+      SELECT feedback_type, reason, created_at FROM resolution_feedback
+      WHERE ticket_id = ${id} ORDER BY created_at, id
+    `;
+    const citizenFeedback: TicketCitizenFeedback = {
+      confirmed: feedbackResponses.filter(
+        (f) => f.feedback_type === 'CONFIRMED',
+      ).length,
+      disputed: feedbackResponses.filter((f) => f.feedback_type === 'DISPUTED')
+        .length,
+      responses: feedbackResponses,
+    };
+
     return {
       ticket,
       reports,
@@ -760,6 +793,7 @@ export class TicketsService {
       corrections,
       mergedInto,
       mergedFrom,
+      citizenFeedback,
     };
   }
 

@@ -108,6 +108,22 @@ export interface TicketMergedInto {
   reason: string | null;
 }
 
+// Every reporter's answer on a resolved ticket (Appendix H
+// RESOLUTION_FEEDBACK; manuscript revision Phase 3, step 3g), counted, with
+// type, reason and time only — no reporter identity, as Ticket Detail shows
+// none.
+export interface TicketCitizenFeedbackResponse {
+  feedback_type: "CONFIRMED" | "DISPUTED";
+  reason: string | null;
+  created_at: string;
+}
+
+export interface TicketCitizenFeedback {
+  confirmed: number;
+  disputed: number;
+  responses: TicketCitizenFeedbackResponse[];
+}
+
 // The third decision-support layer (Batch 3) — human-entered, never a
 // score/level/band. Mirrors api/src/admin/operational-assessment.service.ts's
 // OperationalAssessmentRow (already camelCase from that service's own

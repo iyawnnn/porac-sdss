@@ -83,7 +83,7 @@ Once the ticket reaches **Resolved**, the report page gains two cards:
   - **Confirm Fixed** — recorded permanently and survives reload. No office notification, because a confirmation needs no action.
   - **Report Still Not Fixed** — asks "What's still wrong?", records the reason, **notifies the assigned office**, and marks the ticket as disputed in the admin queue.
 
-Only one outstanding dispute per ticket. A dispute never moves the status backwards and never changes any score — it is a flag for staff attention, not a re-opening.
+Each citizen who reported the issue answers once, for themselves, and the answer is then locked; another reporter's answer never blocks theirs and is never shown to them (manuscript revision Phase 3, step 3g). A dispute never moves the status backwards and never changes any score — it is a flag for staff attention, not a re-opening. Staff see every answer on Ticket Detail's Citizen feedback card ("N confirmed, M disputed").
 
 ### 1.5 Notifications and the map
 
