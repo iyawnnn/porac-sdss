@@ -58,6 +58,7 @@ Production-specific concerns, beyond simply setting the values:
 | `NODE_ENV=production` | Gates the `secure` flag on session cookies. Without it, cookies are issued without `Secure` over HTTPS. |
 | OAuth (`GOOGLE_*`, `OAUTH_STATE_SECRET`) | Optional. If enabled, the redirect URI must be registered with Google for the production domain. Omit all of them to disable Google login entirely. |
 | `TARGET_*` | Municipality config. Porac defaults are correct; only change to target a different LGU, and set identically in both env files. |
+| `HAZARD_INFORMATION_LOOKUPS` | `enabled` (default) in production. The API makes outbound HTTPS calls to `controlmap.mgb.gov.ph` (DENR-MGB ArcGIS) for Hazard Information (manuscript revision Phase 4, step 4b); that coverage was only tested from a laptop browser, so **check it from the deployed backend (Railway) before relying on it** — e.g. open a flood ticket and confirm a `CLASSIFIED` or `NO_CLASSIFICATION` result rather than `TEMPORARILY_UNAVAILABLE`. `disabled` is for Playwright runs only. |
 
 **Never commit any of these.** Both `.env.example` files document the shape without real values, and should stay that way.
 

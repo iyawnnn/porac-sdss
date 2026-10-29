@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 import type { Sql, TransactionSql } from 'postgres';
 import {
   LOCATION_MISMATCH_THRESHOLD_M,
@@ -14,6 +14,7 @@ import type { BarangayService } from '../domain/barangay.service';
 import type { MediaService } from '../domain/media.service';
 import type { RateLimitService } from '../domain/ratelimit.service';
 import type { OperationalPriorityService } from '../domain/operational-priority.service';
+import type { HazardInformationService } from '../domain/hazard-information.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 
 describe('OUTSIDE_MUNICIPALITY_MESSAGE', () => {
@@ -709,6 +710,7 @@ describe('new notifications name the report by its tracking reference', () => {
       {} as RateLimitService,
       {} as OperationalPriorityService,
       { createInTx } as unknown as NotificationsService,
+      {} as HazardInformationService,
     );
     // The only query notifyFocalIntake runs: the active Focal accounts.
     const tx = (() => ({
@@ -974,6 +976,63 @@ describe('citizen responses carry no severity screening (Phase 3, step 3f)', () 
       const body = source.slice(start, source.indexOf('\n  async ', start + 1));
       expect(body).toMatch(/SELECT/);
       expect(body).not.toMatch(/\br\.\*|\breports\.\*|SELECT \*/);
+    },
+  );
+});
+
+// Manuscript revision Phase 4, step 4b: DENR-MGB Hazard Information. The
+// lookup is fired after the submission commits and never awaited, so a slow
+// or failed source can't delay or fail a submission (the service's own
+// never-throws and timeout behavior is pinned in
+// hazard-information.service.spec.ts). Source-text assertions, same
+// rationale as the blocks above.
+describe('submit() and Hazard Information (Phase 4, step 4b)', () => {
+  const reportsServiceSource = readFileSync(
+    join(__dirname, 'reports.service.ts'),
+    'utf8',
+  );
+  const submitBody = reportsServiceSource.slice(
+    reportsServiceSource.indexOf('  async submit('),
+    reportsServiceSource.indexOf('  private async notifyFocalIntake('),
+  );
+
+  it('fires the lookup for the new ticket after the transaction, not awaited', () => {
+    const transactionEnd = submitBody.indexOf('// Step 8: post-commit');
+    const trigger = submitBody.indexOf(
+      'this.hazardInformation.triggerForNewTicket(result.ticketId, category);',
+    );
+    expect(transactionEnd).toBeGreaterThan(-1);
+    expect(trigger).toBeGreaterThan(transactionEnd);
+    expect(submitBody).not.toMatch(/await\s+this\.hazardInformation/);
+    expect(submitBody.match(/this\.hazardInformation\./g) ?? []).toHaveLength(
+      1,
+    );
+  });
+
+  it('writes no hazard_information row itself', () => {
+    expect(submitBody).not.toMatch(/hazard_information/);
+  });
+});
+
+// Citizens never get Hazard Information: no citizen-facing service or
+// controller reads the table or calls the service for data.
+describe('citizen endpoints never include Hazard Information (Phase 4, step 4b)', () => {
+  const sources = [
+    join(__dirname, 'reports.service.ts'),
+    join(__dirname, 'reports.controller.ts'),
+    join(__dirname, '..', 'citizens', 'account.service.ts'),
+    join(__dirname, '..', 'citizens', 'account.controller.ts'),
+  ].map((file) => [basename(file), readFileSync(file, 'utf8')]);
+
+  // reports.service.ts holds the service only to fire the lookup for a new
+  // ticket (pinned above); it never reads a result.
+  it.each(sources)(
+    '%s never reads hazard_information or a hazard view',
+    (_name, text) => {
+      expect(text).not.toMatch(/hazard_information/);
+      expect(text).not.toMatch(
+        /getForTicket|forTicketDetail|HazardInformationView|\.retry\(/,
+      );
     },
   );
 });

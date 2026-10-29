@@ -12,6 +12,13 @@ const envSchema = z
     // Unread since manuscript revision Phase 1, step 7a; kept for Phase 4 rainfall context.
     OPENWEATHERMAP_API_KEY: z.string().min(1),
     CRON_SECRET: z.string().min(16),
+    // DENR-MGB Hazard Information lookups (manuscript revision Phase 4, step
+    // 4b). 'disabled' makes every lookup a no-op that writes nothing — for a
+    // Playwright run, which must never call the live service. Stored rows
+    // are still shown.
+    HAZARD_INFORMATION_LOOKUPS: z
+      .enum(['enabled', 'disabled'])
+      .default('enabled'),
     PORT: z.coerce.number().default(3001),
     NODE_ENV: z
       .enum(['development', 'production', 'test'])

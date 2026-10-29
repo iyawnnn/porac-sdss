@@ -15,6 +15,12 @@ import {
   type PriorityBreakdown,
 } from '../common/utils/scoring';
 import { ticketSeverity, type TicketSeverity } from '../common/utils/severity';
+import {
+  type CurrentHazardRow,
+  type HazardApplicability,
+  hazardContextForCategory,
+  hazardSummary,
+} from '../common/utils/hazard-information';
 import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
@@ -111,6 +117,12 @@ export interface AdminTicketRow {
   created_at: string;
   disputed_at: string | null;
   category_review_required: boolean;
+  // DENR-MGB Hazard Information (manuscript revision Phase 4, step 4b),
+  // advisory: whether the category has a lookup, and one line of the
+  // current result in the source's terms ("Flood: MF (Moderate
+  // Susceptibility to Flooding)", "Not applicable", ...). Never a score.
+  hazard_applicability: HazardApplicability;
+  hazard_summary: string;
 }
 
 export interface PaginatedTickets {
@@ -138,6 +150,39 @@ export interface AdminTicketExportRow {
   // Set on a ticket merged into another (manuscript revision Phase 3, step
   // 3d). Such rows appear only in a status=all export.
   merged_into_ticket_id: number | null;
+  // Same line as AdminTicketRow.hazard_summary (Phase 4, step 4b).
+  hazard_summary: string;
+}
+
+// The ticket's current Hazard Information row, when it is for the ticket's
+// present location (a location correction whose new lookup hasn't finished
+// leaves the old row current until it does). hazardSummary also ignores a
+// row for another context type. Shared by the list and export queries.
+function hazardCurrentColumn(sql: Sql) {
+  return sql`(
+    SELECT json_build_object(
+      'hazard_context_type', h.hazard_context_type,
+      'lookup_status', h.lookup_status,
+      'susceptibility_code', h.susceptibility_code,
+      'susceptibility_label', h.susceptibility_label
+    )
+    FROM hazard_information h
+    WHERE h.ticket_id = t.id AND h.superseded_at IS NULL
+      AND ST_Equals(h.query_geom, t.geom)
+    ORDER BY h.looked_up_at DESC, h.id DESC
+    LIMIT 1
+  ) AS hazard_current`;
+}
+
+function withHazardSummary<
+  T extends { category: string; hazard_current: CurrentHazardRow | null },
+>(row: T) {
+  const { hazard_current: current, ...rest } = row;
+  return {
+    ...rest,
+    hazard_applicability: hazardContextForCategory(row.category).applicability,
+    hazard_summary: hazardSummary(row.category, current),
+  };
 }
 
 export interface AdminTicketGeoRow {
@@ -448,13 +493,19 @@ export class TicketsService {
     // COUNT(*) OVER() rides along with the page query so the WHERE clause
     // (filters + search) can't drift between a separate count query and the
     // row query.
-    const rows = await sql<(AdminTicketRow & { total_count: number })[]>`
+    const rows = await sql<
+      (Omit<AdminTicketRow, 'hazard_applicability' | 'hazard_summary'> & {
+        hazard_current: CurrentHazardRow | null;
+        total_count: number;
+      })[]
+    >`
       SELECT t.id, t.category,
         (SELECT r.title FROM reports r WHERE r.ticket_id = t.id ORDER BY r.created_at ASC, r.id ASC LIMIT 1) AS title,
         t.barangay_id, b.name AS barangay_name, t.member_count,
         t.priority_index,
         t.assigned_office, t.status, t.created_at, t.disputed_at,
         t.category_review_required,
+        ${hazardCurrentColumn(sql)},
         COUNT(*) OVER ()::int AS total_count
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
@@ -482,7 +533,7 @@ export class TicketsService {
     const total = rows[0]?.total_count ?? 0;
 
     return {
-      tickets: rows,
+      tickets: rows.map(withHazardSummary),
       total,
       page,
       limit,
@@ -574,10 +625,15 @@ export class TicketsService {
     // what resolveOfficeScope allows this admin to see.
     const ids = filters.ids?.length ? filters.ids : null;
 
-    return sql<AdminTicketExportRow[]>`
+    const rows = await sql<
+      (Omit<AdminTicketExportRow, 'hazard_summary'> & {
+        hazard_current: CurrentHazardRow | null;
+      })[]
+    >`
       SELECT t.id, t.status, t.assigned_office, t.category, b.name AS barangay_name,
         t.priority_index, t.member_count, t.created_at, t.updated_at,
-        t.merged_into_ticket_id
+        t.merged_into_ticket_id,
+        ${hazardCurrentColumn(sql)}
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
       WHERE (${filters.office ?? null}::text IS NULL OR t.assigned_office = ${filters.office ?? null}::office)
@@ -602,6 +658,7 @@ export class TicketsService {
       ORDER BY t.created_at DESC
       LIMIT 5000
     `;
+    return rows.map(withHazardSummary);
   }
 
   async getTicketsGeo(

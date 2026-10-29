@@ -15,6 +15,7 @@ import { officeForCategory } from '../common/utils/office';
 import { CATEGORIES } from '../contracts/schemas';
 import { BarangayService } from '../domain/barangay.service';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
+import { HazardInformationService } from '../domain/hazard-information.service';
 import { AdminAuditService, type AdminAuditActor } from './admin-audit.service';
 import { TicketsService } from './tickets.service';
 import {
@@ -45,6 +46,9 @@ import {
 // - A location must be inside a Porac barangay polygon, with no boundary
 //   fallback (unlike a citizen submission); the barangay follows the point
 //   and Operational Priority is recalculated after commit.
+// - Either correction re-evaluates the ticket's DENR-MGB Hazard Information
+//   after the commit (manuscript revision Phase 4, step 4b), fired and not
+//   awaited; the previous result stays as history.
 
 interface LockedTicket {
   id: number;
@@ -106,6 +110,7 @@ export class TicketCorrectionsService {
     private readonly barangays: BarangayService,
     private readonly operationalPriority: OperationalPriorityService,
     private readonly audit: AdminAuditService,
+    private readonly hazardInformation: HazardInformationService,
   ) {}
 
   // For the Correct category / Correct location buttons and dialogs. An
@@ -153,7 +158,7 @@ export class TicketCorrectionsService {
     const category = validateCorrectionCategory(body.category);
     const reason = validateGroupingReason(body.reason);
 
-    return this.pg.begin(async (tx) => {
+    const result = await this.pg.begin(async (tx) => {
       const ticket = await this.lockTicket(tx, ticketId);
       const facts = await this.facts(tx, ticket);
       const block = categoryCorrectionBlock(admin, facts, category);
@@ -204,6 +209,11 @@ export class TicketCorrectionsService {
       }
       return { ticketId, category, assignedOffice: toOffice, officeChanged };
     });
+
+    // A category without a lookup (Lahar, any other) only supersedes the
+    // current result.
+    this.hazardInformation.trigger(ticketId);
+    return result;
   }
 
   async correctLocation(
@@ -278,6 +288,7 @@ export class TicketCorrectionsService {
       };
     });
 
+    this.hazardInformation.trigger(ticketId);
     // Barangay demand moved with the ticket.
     await this.operationalPriority.recalculateActiveTickets();
     return result;

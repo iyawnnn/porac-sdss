@@ -15,6 +15,7 @@ import type {
   TicketCorrectionRow,
   TicketCitizenFeedback,
   TicketSeverity,
+  HazardInformationView,
 } from "@/lib/types/admin-tickets";
 import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
@@ -36,6 +37,7 @@ import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersP
 import { OperationalAssessmentPanel } from "@/components/features/admin/tickets/OperationalAssessmentPanel";
 import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
 import { CitizenFeedbackCard } from "@/components/features/admin/tickets/CitizenFeedbackCard";
+import { HazardInformationCard } from "@/components/features/admin/tickets/HazardInformationCard";
 import { ReportGroupingActions } from "@/components/features/admin/tickets/grouping/ReportGroupingActions";
 import { TicketCorrectionActions } from "@/components/features/admin/tickets/corrections/TicketCorrectionActions";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
@@ -70,6 +72,8 @@ interface TicketDetailResponse {
   mergedFrom: number[];
   // Manuscript revision Phase 3, step 3g.
   citizenFeedback: TicketCitizenFeedback;
+  // Manuscript revision Phase 4, step 4b.
+  hazardInformation: HazardInformationView;
 }
 
 // Per-report Remove / Move on a multi-report active ticket (manuscript
@@ -121,7 +125,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
     related = null;
   }
 
-  const { ticket, reports, severity, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback } = data;
+  const { ticket, reports, severity, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback, hazardInformation } = data;
   // A merged-away ticket stays viewable as history, with no actions
   // (manuscript revision Phase 3, step 3d; the API refuses them too).
   const mergedAway = ticket.merged_into_ticket_id !== null;
@@ -347,6 +351,14 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
               <WorkOrdersPanel initialWorkOrders={workOrders} office={ticket.assigned_office as "MEO" | "MDRRMO"} readOnly={mergedAway} ticketId={ticket.id} />
             </CardContent>
           </Card>
+
+          {/* Advisory DENR-MGB susceptibility (manuscript revision Phase 4,
+              step 4b), next to the assessment staff record from it. */}
+          <HazardInformationCard
+            canRetry={!mergedAway && ACTIVE_STATUSES.includes(ticket.status)}
+            hazard={hazardInformation}
+            ticketId={ticket.id}
+          />
 
           <Card>
             <CardContent className="p-4">

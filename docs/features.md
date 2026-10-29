@@ -315,7 +315,7 @@ Four distinct concepts that are easy to conflate. The authoritative definitions 
 | **Operational Assessment** | Staff input | MEO/MDRRMO's human assessment of a ticket. No score, level or band. |
 | **Dispute** | Citizen action | A workflow signal on a resolved ticket. Not a score, not a status. |
 
-Hazard Urgency was retired in manuscript revision Phase 1; Hazard Information (DENR-MGB susceptibility, advisory only) arrives in Phase 4.
+Hazard Urgency was retired in manuscript revision Phase 1. **Hazard Information** (Phase 4, step 4b) is the DENR-MGB flood / rain-induced-landslide susceptibility at a Localized Flooding or Rain-Induced Slope Failure/Landslide ticket's location, in the source's own terms and advisory only: Ticket Detail's Hazard Information panel (with Retry for a temporarily unavailable result; `HazardInformationService`, `GET /admin/tickets/:id`), a summary line on the Ticket Queue and the dashboard's Highest Priority Actions, and a tickets CSV column. Lahar shows "No automated classification in this version"; other categories "Not applicable". Staff only, never a score (`docs/database.md` `hazard_information`).
 
 ### 5.2 Office scoping
 

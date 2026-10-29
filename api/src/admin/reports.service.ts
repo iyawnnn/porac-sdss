@@ -91,6 +91,10 @@ export class ReportsService {
       // Low/Medium/High word the queue shows next to it is a display band.
       { header: 'Operational Priority', value: (r) => r.priority_index },
       { header: 'Category', value: (r) => r.category },
+      // DENR-MGB susceptibility in the source's own terms, advisory, never a
+      // score (manuscript revision Phase 4, step 4b), e.g. "Flood: MF
+      // (Moderate Susceptibility to Flooding)" or "Not applicable".
+      { header: 'Hazard Information', value: (r) => r.hazard_summary },
       { header: 'Barangay', value: (r) => r.barangay_name },
       { header: 'Report Count', value: (r) => r.member_count },
       { header: 'Created At', value: (r) => new Date(r.created_at).toISOString() },

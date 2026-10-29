@@ -98,6 +98,18 @@ export function QueueRow({
           {ticket.category_review_required && <span className={CATEGORY_REVIEW_BADGE_CLASS}>Category review</span>}
         </div>
         <div className="font-mono text-[11px] text-muted-foreground">#{ticket.id}</div>
+        {/* Advisory DENR-MGB Hazard Information (manuscript revision Phase 4,
+            step 4b), only for the categories it covers (and Lahar's "no
+            automated classification"). The source's own terms, never a score. */}
+        {ticket.hazard_applicability && ticket.hazard_applicability !== "not_applicable" && (
+          <div
+            className="truncate text-[11px] text-muted-foreground"
+            data-testid={`queue-hazard-${ticket.id}`}
+            title={`Hazard Information (advisory): ${ticket.hazard_summary}`}
+          >
+            {ticket.hazard_summary}
+          </div>
+        )}
       </div>
 
       {show("category") && (

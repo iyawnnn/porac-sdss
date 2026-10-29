@@ -523,3 +523,74 @@ describe('Ticket Detail and admin map read no Hazard Urgency', () => {
     expect(contextBody).not.toMatch(/rain1hMm|weather/);
   });
 });
+
+// Manuscript revision Phase 4, step 4b: the queue and the CSV export carry
+// one advisory Hazard Information line per ticket, from the ticket's current
+// row at its present location.
+describe('Hazard Information on queue and export rows', () => {
+  const rows = [
+    {
+      id: 1,
+      category: 'Localized Flooding',
+      hazard_current: {
+        hazard_context_type: 'FLOOD',
+        lookup_status: 'NO_CLASSIFICATION',
+        susceptibility_code: null,
+        susceptibility_label: null,
+      },
+      total_count: 3,
+    },
+    {
+      id: 2,
+      category: 'Rain-Induced Slope Failure/Landslide',
+      hazard_current: null,
+      total_count: 3,
+    },
+    {
+      id: 3,
+      category: 'Streetlight Out',
+      hazard_current: null,
+      total_count: 3,
+    },
+  ];
+  const sql = (() => ({
+    then(resolve: (v: unknown) => void) {
+      void Promise.resolve(rows).then(resolve);
+    },
+  })) as unknown as Sql;
+
+  it('the queue rows carry the applicability and the summary line, not the raw row', async () => {
+    const result = await buildService(sql).getTicketsForAdmin({});
+    expect(
+      result.tickets.map((t) => [t.hazard_applicability, t.hazard_summary]),
+    ).toEqual([
+      ['applicable', 'Flood: No DENR-MGB classification at this location'],
+      ['applicable', 'Rain-induced landslide: Not yet checked'],
+      ['not_applicable', 'Not applicable'],
+    ]);
+    expect(result.tickets[0]).not.toHaveProperty('hazard_current');
+  });
+
+  it('the export rows carry the same line', async () => {
+    const result = await buildService(sql).getTicketsForExport({});
+    expect(result.map((r) => r.hazard_summary)).toEqual([
+      'Flood: No DENR-MGB classification at this location',
+      'Rain-induced landslide: Not yet checked',
+      'Not applicable',
+    ]);
+  });
+
+  it('reads only the current row at the ticket location, in both queries', () => {
+    const column = ticketsServiceSource.slice(
+      ticketsServiceSource.indexOf('function hazardCurrentColumn('),
+      ticketsServiceSource.indexOf('function withHazardSummary<'),
+    );
+    expect(column).toContain(
+      'WHERE h.ticket_id = t.id AND h.superseded_at IS NULL',
+    );
+    expect(column).toContain('AND ST_Equals(h.query_geom, t.geom)');
+    expect(
+      ticketsServiceSource.match(/\$\{hazardCurrentColumn\(sql\)\}/g),
+    ).toHaveLength(2);
+  });
+});

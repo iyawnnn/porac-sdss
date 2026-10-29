@@ -15,6 +15,7 @@ import { ROUTING_ADMIN_NAME_MAX_LENGTH } from '../db/schema';
 import type { BarangayService } from '../domain/barangay.service';
 import type { MediaService } from '../domain/media.service';
 import type { OperationalPriorityService } from '../domain/operational-priority.service';
+import type { HazardInformationService } from '../domain/hazard-information.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type {
   AdminAuditService,
@@ -110,9 +111,11 @@ function setup(options: {
       calls.push({ text, values, inTx });
       return Promise.resolve(answer(text));
     });
-  const begin = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
-    fn(tag(true)),
-  );
+  const begin = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+    const result = await fn(tag(true));
+    committed = true;
+    return result;
+  });
   const sql = Object.assign(tag(false), { begin }) as unknown as Sql;
 
   const logInPgTx = jest.fn<
@@ -127,6 +130,16 @@ function setup(options: {
   const recalculateTickets = jest.fn((tx: unknown, ids: number[]) => {
     calls.push({ text: 'RECALCULATE TICKETS', values: ids, inTx: tx !== sql });
     return Promise.resolve({ updated: ids.length });
+  });
+  // Manuscript revision Phase 4, step 4b: recorded in order with the SQL,
+  // and whether the transaction had committed (begin had returned).
+  let committed = false;
+  const hazardTrigger = jest.fn((ticketId: number) => {
+    calls.push({
+      text: 'HAZARD TRIGGER',
+      values: [ticketId, committed],
+      inTx: false,
+    });
   });
   const findContainingBarangay = jest.fn(() =>
     Promise.resolve(
@@ -154,6 +167,7 @@ function setup(options: {
       recalculateTickets,
     } as unknown as OperationalPriorityService,
     audit,
+    { trigger: hazardTrigger } as unknown as HazardInformationService,
   );
   const writes = () =>
     calls.filter((c) => /^\s*(UPDATE|INSERT|DELETE)/.test(c.text));
@@ -166,6 +180,7 @@ function setup(options: {
     recalculateActiveTickets,
     recalculateTickets,
     findContainingBarangay,
+    hazardTrigger,
   };
 }
 
@@ -407,6 +422,50 @@ describe('TicketCorrectionsService.correctCategory', () => {
   });
 });
 
+// Manuscript revision Phase 4, step 4b. The lookup itself (superseding,
+// a category without a lookup inserting nothing) is pinned in
+// hazard-information.service.spec.ts.
+describe('TicketCorrectionsService.correctCategory and Hazard Information', () => {
+  it('re-evaluates Hazard Information once, after the commit', async () => {
+    const t = setup({});
+    await t.service.correctCategory(
+      7,
+      { category: 'Localized Flooding', reason: 'Standing water.' },
+      MEO,
+    );
+    expect(t.hazardTrigger).toHaveBeenCalledTimes(1);
+    const trigger = t.calls.find((c) => c.text === 'HAZARD TRIGGER');
+    expect(trigger?.values).toEqual([7, true]);
+  });
+
+  it('re-evaluates for a category without a lookup too (the service only supersedes)', async () => {
+    const t = setup({
+      ticket: pothole({
+        category: 'Localized Flooding',
+        assigned_office: 'MDRRMO',
+      }),
+    });
+    await t.service.correctCategory(
+      7,
+      { category: 'Lahar or Volcanic Debris-Flow Threat', reason: 'Lahar.' },
+      { ...MEO, office: 'MDRRMO' },
+    );
+    expect(t.hazardTrigger).toHaveBeenCalledWith(7);
+  });
+
+  it('does not re-evaluate when the correction is refused', async () => {
+    const t = setup({ activeWorkOrders: 1 });
+    await expect(
+      t.service.correctCategory(
+        7,
+        { category: 'Localized Flooding', reason: 'Standing water.' },
+        MEO,
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(t.hazardTrigger).not.toHaveBeenCalled();
+  });
+});
+
 describe('TicketCorrectionsService.correctLocation', () => {
   const body = {
     lat: 15.0712,
@@ -471,6 +530,24 @@ describe('TicketCorrectionsService.correctLocation', () => {
     expect(update).toBeGreaterThan(-1);
     expect(update).toBeLessThan(recalc);
     expect(t.recalculateActiveTickets).toHaveBeenCalledTimes(1);
+  });
+
+  // Manuscript revision Phase 4, step 4b.
+  it('re-evaluates Hazard Information once, after the commit, without awaiting it', async () => {
+    const t = setup({});
+    await t.service.correctLocation(7, body, MEO);
+    expect(t.hazardTrigger).toHaveBeenCalledTimes(1);
+    const trigger = t.calls.findIndex((c) => c.text === 'HAZARD TRIGGER');
+    expect(t.calls[trigger].values).toEqual([7, true]);
+    expect(t.calls.slice(trigger + 1).some((c) => c.inTx)).toBe(false);
+  });
+
+  it('does not re-evaluate Hazard Information when the correction is refused', async () => {
+    const t = setup({ distanceM: 0.4 });
+    await expect(t.service.correctLocation(7, body, MEO)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(t.hazardTrigger).not.toHaveBeenCalled();
   });
 
   it('rejects a point outside every Porac barangay polygon (no boundary fallback), before the transaction', async () => {

@@ -14,6 +14,7 @@ import { BarangayService } from '../domain/barangay.service';
 import { MediaService } from '../domain/media.service';
 import { RateLimitService } from '../domain/ratelimit.service';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
+import { HazardInformationService } from '../domain/hazard-information.service';
 import { officeForCategory } from '../common/utils/office';
 import { haversineMeters } from '../common/utils/distance';
 import type { ALL_CATEGORIES, ReportInput } from '../contracts/schemas';
@@ -240,6 +241,7 @@ export class ReportsService {
     private readonly rateLimit: RateLimitService,
     private readonly operationalPriority: OperationalPriorityService,
     private readonly notifications: NotificationsService,
+    private readonly hazardInformation: HazardInformationService,
   ) {}
 
   async submit(
@@ -445,6 +447,11 @@ export class ReportsService {
     // here must never hold the submission transaction's row locks open.
     // (The Hazard Urgency recompute that also ran here was removed in
     // manuscript revision Phase 1, step 7a.)
+    //
+    // The DENR-MGB Hazard Information lookup (manuscript revision Phase 4,
+    // step 4b) is fired and not awaited: a slow or failed source never
+    // delays or fails the submission. Applicable categories only.
+    this.hazardInformation.triggerForNewTicket(result.ticketId, category);
     await this.operationalPriority.recalculateActiveTickets();
 
     return {

@@ -10,6 +10,7 @@ import type { BarangayService } from '../domain/barangay.service';
 import type { MediaService } from '../domain/media.service';
 import type { RateLimitService } from '../domain/ratelimit.service';
 import type { OperationalPriorityService } from '../domain/operational-priority.service';
+import type { HazardInformationService } from '../domain/hazard-information.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 
 // Per-citizen resolution feedback (Appendix H RESOLUTION_FEEDBACK;
@@ -278,6 +279,7 @@ function makeService(state: State) {
     {} as RateLimitService,
     {} as OperationalPriorityService,
     notifications as unknown as NotificationsService,
+    {} as HazardInformationService,
   );
 }
 
