@@ -4,6 +4,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
@@ -324,6 +325,13 @@ export class RainfallContextService {
         }
       }
 
+      // Timestamps go to raw SQL as ISO strings with ::timestamptz casts,
+      // never as Date objects: DbModule's drizzle(pg) replaces the shared
+      // client's timestamp serializers with pass-throughs, so a Date
+      // parameter throws ERR_INVALID_ARG_TYPE (see tickets.service.ts's
+      // dateFrom/dateTo).
+      const fetchedAtIso = fetchedAt.toISOString();
+
       return await this.pg.begin(async (tx) => {
         // The ticket may have changed while the provider answered.
         const [now] = await tx<
@@ -371,8 +379,8 @@ export class RainfallContextService {
               fetched_at, query_geom, failure_reason
             )
             VALUES (
-              ${ticketId}, 'CURRENT', ${result.rainfallMm}, ${RAINFALL_PROVIDER}, ${result.observationAt},
-              ${fetchedAt}, ST_SetSRID(ST_MakePoint(${ticket.lng}, ${ticket.lat}), 4326), NULL
+              ${ticketId}, 'CURRENT', ${result.rainfallMm}, ${RAINFALL_PROVIDER}, ${result.observationAt.toISOString()}::timestamptz,
+              ${fetchedAtIso}::timestamptz, ST_SetSRID(ST_MakePoint(${ticket.lng}, ${ticket.lat}), 4326), NULL
             )
           `;
           return {
@@ -432,7 +440,7 @@ export class RainfallContextService {
           )
           VALUES (
             ${ticketId}, 'UNAVAILABLE', NULL, ${RAINFALL_PROVIDER}, NULL,
-            ${fetchedAt}, ST_SetSRID(ST_MakePoint(${ticket.lng}, ${ticket.lat}), 4326), ${failureReason}
+            ${fetchedAtIso}::timestamptz, ST_SetSRID(ST_MakePoint(${ticket.lng}, ${ticket.lat}), 4326), ${failureReason}
           )
         `;
         return {
@@ -609,7 +617,16 @@ export class RainfallContextService {
     }
     this.lastManualRefresh.set(ticketId, Date.now());
 
-    await this.refresh(ticketId, 'manual');
+    const outcome = await this.refresh(ticketId, 'manual');
+    // The row could not be written (the error is already logged as a
+    // warning). Staff asked for this refresh, so say so instead of
+    // answering 200 with the old state. The Ticket Detail trigger stays
+    // silent.
+    if (outcome.outcome === 'skipped' && outcome.reason === 'error') {
+      throw new InternalServerErrorException(
+        `Rainfall could not be recorded for Ticket #${ticketId}. Try again later.`,
+      );
+    }
     return this.getForTicket(await this.ticketFacts(ticketId));
   }
 
