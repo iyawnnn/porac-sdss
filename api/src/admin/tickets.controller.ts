@@ -157,7 +157,8 @@ export class TicketsController {
 
   // Staff Refresh for the rainfall context: same 403/404 as Ticket Detail,
   // 409 for a merged-away or closed ticket or a category without rainfall
-  // context, 429 within 60 s of the ticket's last check. Waits for the call
+  // context, 429 within 60 s of the ticket's last check, 500 "Rainfall could
+  // not be recorded" when the row could not be written. Waits for the call
   // (at most 5 s) and returns the new state.
   @Post(':id/rainfall-context/refresh')
   async refreshRainfallContext(
