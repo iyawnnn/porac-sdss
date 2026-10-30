@@ -9,7 +9,9 @@ import { sql } from '../db';
 // (e2e/citizen-resolution-feedback.spec.ts; step 3g), and the DENR-MGB
 // Hazard Information spec (e2e/admin-hazard-information.spec.ts; Phase 4,
 // step 4b), whose hazard_information rows are inserted here too, so that
-// spec never calls the live service. The tickets and reports
+// spec never calls the live service, and the rainfall context spec
+// (e2e/admin-rainfall-context.spec.ts; step 4c), whose rainfall_context rows
+// are inserted on the same tickets for the same reason. The tickets and reports
 // are inserted directly, never through POST /reports, so the specs post no
 // report: a full run already posts 20, the per-IP hourly limit
 // (docs/testing.md). Every fixture report belongs to citizen1 (the step 3g
@@ -144,7 +146,7 @@ async function create() {
       options: {
         office?: Office;
         initialOffice?: Office;
-        status?: 'Reported' | 'Under Review' | 'Resolved';
+        status?: 'Reported' | 'Under Review' | 'Resolved' | 'Rejected';
         ageDays: number;
         category?: string;
       },
@@ -384,6 +386,7 @@ async function create() {
       index: number,
       category: string,
       label: string,
+      status?: 'Rejected',
     ) => {
       const at = {
         lat: BASE.lat,
@@ -393,6 +396,7 @@ async function create() {
         office: 'MDRRMO',
         ageDays: 1,
         category,
+        status,
       });
       await report(
         ticketId,
@@ -496,6 +500,82 @@ async function create() {
       'not applicable',
     );
 
+    // Phase 4, step 4c: rainfall context (e2e/admin-rainfall-context.spec.ts)
+    // on the same tickets, one per panel state, inserted directly at the
+    // ticket's location so Ticket Detail shows each state without a live
+    // call. The API for an e2e run starts with RAINFALL_LOOKUPS=disabled, so
+    // opening a ticket whose reading is over 10 minutes old (or missing)
+    // writes nothing either (docs/testing.md). The spec never clicks Refresh.
+    const rainfallRow = async (
+      ticketId: number,
+      row: {
+        status: 'CURRENT' | 'STALE' | 'UNAVAILABLE';
+        // 0 is a real reading: passed through with ??, never ||.
+        mm: number | null;
+        failureReason?: string;
+        // Minutes ago it was fetched (and observed 5 minutes earlier); a
+        // superseded row is replaced 30 minutes later.
+        minutesAgo: number;
+        superseded?: boolean;
+      },
+    ) => {
+      await tx`
+        INSERT INTO rainfall_context (
+          ticket_id, status, rainfall_mm, source_provider, observation_at,
+          fetched_at, query_geom, failure_reason, superseded_at
+        )
+        VALUES (
+          ${ticketId}, ${row.status}, ${row.mm ?? null}, 'OpenWeatherMap',
+          ${row.status === 'UNAVAILABLE' ? null : tx`now() - make_interval(mins => ${row.minutesAgo + 5})`},
+          now() - make_interval(mins => ${row.minutesAgo}),
+          (SELECT geom FROM tickets WHERE id = ${ticketId}), ${row.failureReason ?? null},
+          ${row.superseded ? tx`now() - make_interval(mins => ${row.minutesAgo - 30})` : null}
+        )
+      `;
+    };
+    // a. Flood: CURRENT 0 mm fetched just now, with an earlier 4.5 mm
+    //    reading as history.
+    await rainfallRow(hazardClassified, {
+      status: 'CURRENT',
+      mm: 4.5,
+      minutesAgo: 120,
+      superseded: true,
+    });
+    await rainfallRow(hazardClassified, {
+      status: 'CURRENT',
+      mm: 0,
+      minutesAgo: 0,
+    });
+    // b. Landslide: STALE, last known 3.2 mm, a refresh that timed out.
+    await rainfallRow(hazardNoClassification, {
+      status: 'STALE',
+      mm: 3.2,
+      failureReason: 'Timed out after 5 s',
+      minutesAgo: 90,
+    });
+    // c. Flood: UNAVAILABLE (no earlier value), tried just now.
+    await rainfallRow(hazardUnavailable, {
+      status: 'UNAVAILABLE',
+      mm: null,
+      failureReason: 'HTTP 503',
+      minutesAgo: 0,
+    });
+    // d. The landslide ticket with no Hazard Information has no rainfall
+    //    either: "Not yet fetched". Lahar and Fallen Tree: "Not applicable".
+    // e. A Rejected flood ticket with its stored 12.5 mm: shown as
+    //    historical, never refreshed. Already closed, so nothing retires it.
+    const rainfallClosed = await hazardTicket(
+      6,
+      'Localized Flooding',
+      'flood, closed',
+      'Rejected',
+    );
+    await rainfallRow(rainfallClosed, {
+      status: 'CURRENT',
+      mm: 12.5,
+      minutesAgo: 600,
+    });
+
     return {
       hazard: {
         classifiedTicketId: hazardClassified,
@@ -504,6 +584,15 @@ async function create() {
         notCheckedTicketId: hazardNotChecked,
         laharTicketId: hazardLahar,
         notApplicableTicketId: hazardNotApplicable,
+      },
+      rainfall: {
+        currentZeroTicketId: hazardClassified,
+        staleTicketId: hazardNoClassification,
+        unavailableTicketId: hazardUnavailable,
+        notFetchedTicketId: hazardNotChecked,
+        laharTicketId: hazardLahar,
+        notApplicableTicketId: hazardNotApplicable,
+        closedTicketId: rainfallClosed,
       },
       feedback,
       corrections: {

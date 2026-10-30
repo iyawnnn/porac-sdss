@@ -16,6 +16,7 @@ import type {
   TicketCitizenFeedback,
   TicketSeverity,
   HazardInformationView,
+  RainfallContextView,
 } from "@/lib/types/admin-tickets";
 import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
@@ -38,6 +39,7 @@ import { OperationalAssessmentPanel } from "@/components/features/admin/tickets/
 import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
 import { CitizenFeedbackCard } from "@/components/features/admin/tickets/CitizenFeedbackCard";
 import { HazardInformationCard } from "@/components/features/admin/tickets/HazardInformationCard";
+import { RainfallContextCard } from "@/components/features/admin/tickets/RainfallContextCard";
 import { ReportGroupingActions } from "@/components/features/admin/tickets/grouping/ReportGroupingActions";
 import { TicketCorrectionActions } from "@/components/features/admin/tickets/corrections/TicketCorrectionActions";
 import TicketLocationMapLoader from "@/components/features/admin/tickets/TicketLocationMapLoader";
@@ -74,6 +76,8 @@ interface TicketDetailResponse {
   citizenFeedback: TicketCitizenFeedback;
   // Manuscript revision Phase 4, step 4b.
   hazardInformation: HazardInformationView;
+  // Manuscript revision Phase 4, step 4c.
+  rainfallContext: RainfallContextView;
 }
 
 // Per-report Remove / Move on a multi-report active ticket (manuscript
@@ -125,7 +129,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
     related = null;
   }
 
-  const { ticket, reports, severity, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback, hazardInformation } = data;
+  const { ticket, reports, severity, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback, hazardInformation, rainfallContext } = data;
   // A merged-away ticket stays viewable as history, with no actions
   // (manuscript revision Phase 3, step 3d; the API refuses them too).
   const mergedAway = ticket.merged_into_ticket_id !== null;
@@ -359,6 +363,10 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             hazard={hazardInformation}
             ticketId={ticket.id}
           />
+
+          {/* Advisory current rainfall (manuscript revision Phase 4, step
+              4c), kept apart from Hazard Information. */}
+          <RainfallContextCard rainfall={rainfallContext} ticketId={ticket.id} />
 
           <Card>
             <CardContent className="p-4">

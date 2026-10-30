@@ -9,7 +9,8 @@ const envSchema = z
     DATABASE_URL: z.string().url(),
     JWT_SECRET: z.string().min(32),
     CLOUDINARY_URL: z.string().startsWith('cloudinary://'),
-    // Unread since manuscript revision Phase 1, step 7a; kept for Phase 4 rainfall context.
+    // OpenWeatherMap Current Weather, read by RainfallContextService
+    // (manuscript revision Phase 4, step 4c). Never logged or stored.
     OPENWEATHERMAP_API_KEY: z.string().min(1),
     CRON_SECRET: z.string().min(16),
     // DENR-MGB Hazard Information lookups (manuscript revision Phase 4, step
@@ -19,6 +20,10 @@ const envSchema = z
     HAZARD_INFORMATION_LOOKUPS: z
       .enum(['enabled', 'disabled'])
       .default('enabled'),
+    // Rainfall context lookups (manuscript revision Phase 4, step 4c), the
+    // same switch for OpenWeatherMap: 'disabled' makes every refresh a no-op
+    // that writes nothing. Stored rows are still shown.
+    RAINFALL_LOOKUPS: z.enum(['enabled', 'disabled']).default('enabled'),
     PORT: z.coerce.number().default(3001),
     NODE_ENV: z
       .enum(['development', 'production', 'test'])

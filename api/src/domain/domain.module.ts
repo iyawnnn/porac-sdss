@@ -4,6 +4,7 @@ import { OperationalPriorityService } from './operational-priority.service';
 import { MediaService } from './media.service';
 import { RateLimitService } from './ratelimit.service';
 import { HazardInformationService } from './hazard-information.service';
+import { RainfallContextService } from './rainfall-context.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 // No controllers — feature modules (auth, reports, admin, cron) import
@@ -19,6 +20,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     MediaService,
     RateLimitService,
     HazardInformationService,
+    RainfallContextService,
   ],
   exports: [
     BarangayService,
@@ -26,6 +28,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     MediaService,
     RateLimitService,
     HazardInformationService,
+    RainfallContextService,
   ],
 })
 export class DomainModule {}

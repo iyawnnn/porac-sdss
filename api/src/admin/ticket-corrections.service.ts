@@ -16,6 +16,7 @@ import { CATEGORIES } from '../contracts/schemas';
 import { BarangayService } from '../domain/barangay.service';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { HazardInformationService } from '../domain/hazard-information.service';
+import { RainfallContextService } from '../domain/rainfall-context.service';
 import { AdminAuditService, type AdminAuditActor } from './admin-audit.service';
 import { TicketsService } from './tickets.service';
 import {
@@ -48,7 +49,10 @@ import {
 //   and Operational Priority is recalculated after commit.
 // - Either correction re-evaluates the ticket's DENR-MGB Hazard Information
 //   after the commit (manuscript revision Phase 4, step 4b), fired and not
-//   awaited; the previous result stays as history.
+//   awaited; the previous result stays as history. It re-evaluates the
+//   rainfall context the same way (Phase 4, step 4c): the current row is
+//   superseded and kept as history, and a category without rainfall context
+//   gets no new row.
 
 interface LockedTicket {
   id: number;
@@ -111,6 +115,7 @@ export class TicketCorrectionsService {
     private readonly operationalPriority: OperationalPriorityService,
     private readonly audit: AdminAuditService,
     private readonly hazardInformation: HazardInformationService,
+    private readonly rainfallContext: RainfallContextService,
   ) {}
 
   // For the Correct category / Correct location buttons and dialogs. An
@@ -211,8 +216,9 @@ export class TicketCorrectionsService {
     });
 
     // A category without a lookup (Lahar, any other) only supersedes the
-    // current result.
+    // current result. Rainfall context the same.
     this.hazardInformation.trigger(ticketId);
+    this.rainfallContext.triggerForCorrection(ticketId);
     return result;
   }
 
@@ -289,6 +295,7 @@ export class TicketCorrectionsService {
     });
 
     this.hazardInformation.trigger(ticketId);
+    this.rainfallContext.triggerForCorrection(ticketId);
     // Barangay demand moved with the ticket.
     await this.operationalPriority.recalculateActiveTickets();
     return result;

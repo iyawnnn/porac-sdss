@@ -156,7 +156,6 @@ Engineering assessment only — no academic rewriting.
 
 - **Admin-configurable weights** — `PLAN.md` §15 Q4, still open. Weights are hardcoded.
 - **Human-confirmed grouping** — returns in Phase 3; the system will suggest possibly related tickets within 20 / 50 / 100 m and only staff confirm a merge.
-- **Rainfall context** — Phase 4 (a rainfall-context record that reuses `OPENWEATHERMAP_API_KEY`). The DENR-MGB susceptibility lookups (Hazard Information) shipped in step 4b; neither is ever a score.
 
 ---
 
