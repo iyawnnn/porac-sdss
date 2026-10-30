@@ -4,6 +4,7 @@ import {
   ConflictException,
   ForbiddenException,
   HttpException,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
@@ -83,6 +84,8 @@ function setup(
     rows?: unknown[];
     latestFetchedAt?: string | null;
     failSql?: boolean;
+    // Only rainfall_context INSERTs fail (the write after a good fetch).
+    failInserts?: boolean;
     hangSql?: boolean;
     lookups?: 'enabled' | 'disabled';
   } = {},
@@ -96,6 +99,9 @@ function setup(
   const setTicket = (t: Ticket) => (current = t);
   const answer = (text: string): unknown => {
     if (options.failSql) throw new Error('connection refused');
+    if (options.failInserts && text.includes('INSERT INTO rainfall_context')) {
+      throw new Error('insert failed');
+    }
     const t = ticket();
     if (text.includes('UPDATE rainfall_context SET superseded_at')) {
       return Object.assign([], { count: options.current ? 1 : 0 });
@@ -133,6 +139,16 @@ function setup(
       const text = strings.join('?');
       calls.push({ text, values, inTx });
       if (options.hangSql) return new Promise(() => undefined);
+      // Like the API's real client: DbModule's drizzle(pg) makes the
+      // timestamp serializers pass values through, so a Date parameter
+      // throws instead of being sent (the production bug fixed after 4c).
+      if (values.some((v) => v instanceof Date)) {
+        return Promise.reject(
+          new TypeError(
+            'The "string" argument must be of type string or an instance of Buffer or ArrayBuffer. Received an instance of Date',
+          ),
+        );
+      }
       try {
         return Promise.resolve(answer(text));
       } catch (err) {
@@ -325,8 +341,11 @@ describe('RainfallContextService.refresh: writes', () => {
       120.54,
       15.08,
     ]);
-    expect(observedAt).toEqual(new Date(DT * 1000));
-    expect(fetchedAt).toBeInstanceOf(Date);
+    // ISO strings cast to timestamptz, never Date objects.
+    expect(observedAt).toBe(new Date(DT * 1000).toISOString());
+    expect(typeof fetchedAt).toBe('string');
+    expect(new Date(fetchedAt as string).toISOString()).toBe(fetchedAt);
+    expect(writes[1].text).toMatch(/\?::timestamptz,\s+\?::timestamptz,/);
     // The ticket row is locked for the write.
     expect(
       t.calls.find((c) => c.text.includes('AS same_location') && c.inTx)?.text,
@@ -398,15 +417,68 @@ describe('RainfallContextService.refresh: writes', () => {
       status: 'UNAVAILABLE',
     });
     const insert = t.inserts()[0];
-    expect(insert.text).toMatch(/'UNAVAILABLE', NULL, \?, NULL,/);
+    expect(insert.text).toMatch(
+      /'UNAVAILABLE', NULL, \?, NULL,\s+\?::timestamptz,/,
+    );
     expect(insert.values).toEqual([
       7,
       'OpenWeatherMap',
-      expect.any(Date),
+      expect.any(String),
       120.54,
       15.08,
       'HTTP 500',
     ]);
+  });
+
+  // The production bug after 4c: Date parameters reached the
+  // Drizzle-wrapped client and every write threw. The fake client rejects
+  // a Date exactly like it, so each write path must pass only strings,
+  // numbers and nulls.
+  it.each([
+    ['CURRENT (fresh fetch)', () => raining(2), null],
+    ['CURRENT 0 mm', () => dry(), null],
+    ['UNAVAILABLE', () => jsonResponse('down', 500), null],
+    [
+      'STALE in place',
+      () => jsonResponse('down', 500),
+      {
+        id: 31,
+        rainfall_mm: 0,
+        fetched_at: '2026-10-30 04:00:00+00',
+        same_location: true,
+      },
+    ],
+  ])(
+    '%s: no write passes a Date parameter',
+    async (_label, response, current) => {
+      fetchMock.mockResolvedValue(response());
+      const t = setup({ current });
+      await expect(t.service.refresh(7, 'detail')).resolves.toMatchObject({
+        outcome: 'recorded',
+      });
+      for (const w of t.writes()) {
+        for (const v of w.values) {
+          expect(v instanceof Date).toBe(false);
+          expect(['string', 'number'].includes(typeof v) || v === null).toBe(
+            true,
+          );
+        }
+      }
+    },
+  );
+
+  it('a cached reading is written with ISO strings too', async () => {
+    fetchMock.mockResolvedValue(raining(1));
+    const t = setup();
+    await t.service.refresh(7, 'detail');
+    t.setTicket(flood({ id: 8 }));
+    await expect(t.service.refresh(8, 'detail')).resolves.toEqual({
+      outcome: 'recorded',
+      status: 'CURRENT',
+      fromCache: true,
+    });
+    const second = t.inserts()[1];
+    expect(second.values.filter((v) => v instanceof Date)).toEqual([]);
   });
 
   it('failure after an earlier UNAVAILABLE: supersede it and insert a new UNAVAILABLE', async () => {
@@ -1059,6 +1131,21 @@ describe('RainfallContextService.getForTicket', () => {
 });
 
 describe('RainfallContextService.forTicketDetail', () => {
+  it('a recording failure in the background refresh stays silent for the page, with a warning logged', async () => {
+    fetchMock.mockResolvedValue(raining(1));
+    const t = setup({ failInserts: true });
+    const refresh = jest.spyOn(t.service, 'refresh');
+    await expect(t.service.forTicketDetail(flood())).resolves.toMatchObject({
+      applicability: 'applicable',
+      current: null,
+    });
+    // The background refresh resolves (never rejects) with the error outcome.
+    await expect(
+      refresh.mock.results[0].value as Promise<unknown>,
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'error' });
+    expect(warned()).toContain('Rainfall for ticket #7 not recorded');
+  });
+
   it('starts a background refresh when due and returns without waiting for it', async () => {
     fetchMock.mockImplementation(() => new Promise(() => undefined));
     const t = setup();
@@ -1183,6 +1270,30 @@ describe('RainfallContextService.manualRefresh', () => {
       new ConflictException(message),
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('500 "Rainfall could not be recorded" when the row cannot be written', async () => {
+    fetchMock.mockResolvedValue(raining(1));
+    const t = setup({ failInserts: true });
+    const err = await t.service
+      .manualRefresh(7, MDRRMO)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(InternalServerErrorException);
+    expect((err as HttpException).getStatus()).toBe(500);
+    expect((err as HttpException).message).toBe(
+      'Rainfall could not be recorded for Ticket #7. Try again later.',
+    );
+    expect(warned()).toContain('Rainfall for ticket #7 not recorded');
+  });
+
+  it('a recording failure still counts against the 60 s throttle', async () => {
+    fetchMock.mockResolvedValue(raining(1));
+    const t = setup({ failInserts: true });
+    await t.service.manualRefresh(7, MDRRMO).catch(() => undefined);
+    await expect(t.service.manualRefresh(7, MDRRMO)).rejects.toMatchObject({
+      status: 429,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('RAINFALL_LOOKUPS=disabled: returns the stored state, writes nothing', async () => {
