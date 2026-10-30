@@ -423,7 +423,7 @@ describe('resolution feedback wiring (citizen resolution-feedback loop)', () => 
     );
   });
 
-  it("the dispute notification carries no citizen id", () => {
+  it('the dispute notification carries no citizen id', () => {
     const notification = answerResolution.slice(
       answerResolution.indexOf('createInTx('),
       answerResolution.indexOf('});', answerResolution.indexOf('createInTx(')),
@@ -1033,6 +1033,27 @@ describe('citizen endpoints never include Hazard Information (Phase 4, step 4b)'
       expect(text).not.toMatch(
         /getForTicket|forTicketDetail|HazardInformationView|\.retry\(/,
       );
+    },
+  );
+});
+
+// Manuscript revision Phase 4, step 4c: rainfall context. Submission has no
+// rainfall trigger at all (only Ticket Detail, corrections and the staff
+// Refresh refresh it), so a failed or hung weather call can never delay or
+// fail a submission; and citizens never get rainfall from any endpoint.
+describe('rainfall context stays out of submission and citizen endpoints (Phase 4, step 4c)', () => {
+  const sources = [
+    join(__dirname, 'reports.service.ts'),
+    join(__dirname, 'reports.controller.ts'),
+    join(__dirname, '..', 'citizens', 'account.service.ts'),
+    join(__dirname, '..', 'citizens', 'account.controller.ts'),
+  ].map((file) => [basename(file), readFileSync(file, 'utf8')]);
+
+  it.each(sources)(
+    '%s never reads rainfall_context or calls the rainfall service',
+    (_name, text) => {
+      expect(text).not.toMatch(/rainfall_context|RainfallContext/);
+      expect(text).not.toMatch(/rainfall/i);
     },
   );
 });

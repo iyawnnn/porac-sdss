@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
@@ -16,6 +17,7 @@ import type { BarangayService } from '../domain/barangay.service';
 import type { MediaService } from '../domain/media.service';
 import type { OperationalPriorityService } from '../domain/operational-priority.service';
 import type { HazardInformationService } from '../domain/hazard-information.service';
+import { RainfallContextService } from '../domain/rainfall-context.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type {
   AdminAuditService,
@@ -91,6 +93,8 @@ function setup(options: {
   activeWorkOrders?: number;
   distanceM?: number;
   barangay?: { id: number; name: string } | null;
+  // A real RainfallContextService instead of the recording stub.
+  rainfall?: RainfallContextService;
 }) {
   const calls: Call[] = [];
   const answer = (text: string): unknown[] => {
@@ -141,6 +145,14 @@ function setup(options: {
       inTx: false,
     });
   });
+  // Manuscript revision Phase 4, step 4c: the same for rainfall context.
+  const rainfallTrigger = jest.fn((ticketId: number) => {
+    calls.push({
+      text: 'RAINFALL TRIGGER',
+      values: [ticketId, committed],
+      inTx: false,
+    });
+  });
   const findContainingBarangay = jest.fn(() =>
     Promise.resolve(
       options.barangay === undefined
@@ -168,6 +180,10 @@ function setup(options: {
     } as unknown as OperationalPriorityService,
     audit,
     { trigger: hazardTrigger } as unknown as HazardInformationService,
+    options.rainfall ??
+      ({
+        triggerForCorrection: rainfallTrigger,
+      } as unknown as RainfallContextService),
   );
   const writes = () =>
     calls.filter((c) => /^\s*(UPDATE|INSERT|DELETE)/.test(c.text));
@@ -181,6 +197,7 @@ function setup(options: {
     recalculateTickets,
     findContainingBarangay,
     hazardTrigger,
+    rainfallTrigger,
   };
 }
 
@@ -463,6 +480,147 @@ describe('TicketCorrectionsService.correctCategory and Hazard Information', () =
       ),
     ).rejects.toThrow(ConflictException);
     expect(t.hazardTrigger).not.toHaveBeenCalled();
+  });
+});
+
+// Manuscript revision Phase 4, step 4c. The refresh itself (superseding, a
+// category without rainfall context inserting nothing) is pinned in
+// rainfall-context.service.spec.ts.
+describe('TicketCorrectionsService and rainfall context', () => {
+  const locationBody = {
+    lat: 15.0712,
+    lng: 120.5703,
+    reason: 'Pin on the wrong side.',
+  };
+
+  it('a category correction re-evaluates rainfall context once, after the commit', async () => {
+    const t = setup({});
+    await t.service.correctCategory(
+      7,
+      { category: 'Localized Flooding', reason: 'Standing water.' },
+      MEO,
+    );
+    expect(t.rainfallTrigger).toHaveBeenCalledTimes(1);
+    const trigger = t.calls.find((c) => c.text === 'RAINFALL TRIGGER');
+    expect(trigger?.values).toEqual([7, true]);
+  });
+
+  it('a category correction to one without rainfall context still triggers (the service only supersedes)', async () => {
+    const t = setup({
+      ticket: pothole({
+        category: 'Localized Flooding',
+        assigned_office: 'MDRRMO',
+      }),
+    });
+    await t.service.correctCategory(
+      7,
+      { category: 'Lahar or Volcanic Debris-Flow Threat', reason: 'Lahar.' },
+      { ...MEO, office: 'MDRRMO' },
+    );
+    expect(t.rainfallTrigger).toHaveBeenCalledWith(7);
+  });
+
+  it('a location correction re-evaluates once, after the commit, without awaiting it', async () => {
+    const t = setup({});
+    await t.service.correctLocation(7, locationBody, MEO);
+    expect(t.rainfallTrigger).toHaveBeenCalledTimes(1);
+    const trigger = t.calls.findIndex((c) => c.text === 'RAINFALL TRIGGER');
+    expect(t.calls[trigger].values).toEqual([7, true]);
+    expect(t.calls.slice(trigger + 1).some((c) => c.inTx)).toBe(false);
+  });
+
+  it('a refused correction triggers nothing', async () => {
+    const category = setup({ activeWorkOrders: 1 });
+    await expect(
+      category.service.correctCategory(
+        7,
+        { category: 'Localized Flooding', reason: 'Standing water.' },
+        MEO,
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(category.rainfallTrigger).not.toHaveBeenCalled();
+    const location = setup({ distanceM: 0.4 });
+    await expect(
+      location.service.correctLocation(7, locationBody, MEO),
+    ).rejects.toThrow(BadRequestException);
+    expect(location.rainfallTrigger).not.toHaveBeenCalled();
+  });
+
+  // The real service behind both corrections, with the weather call
+  // hanging or failing: the correction still succeeds at once.
+  describe('with the weather call hanging or failing', () => {
+    let fetchMock: jest.SpyInstance;
+    const realRainfall = () => {
+      const facts = {
+        category: 'Localized Flooding',
+        status: 'Reported',
+        merged_into_ticket_id: null,
+      };
+      const writes: string[] = [];
+      const tag = jest.fn((strings: TemplateStringsArray) => {
+        const text = strings.join('?');
+        if (/^\s*(UPDATE|INSERT)/.test(text)) writes.push(text);
+        if (text.includes('ST_Y(geom)')) {
+          return Promise.resolve([{ ...facts, lat: 15.08, lng: 120.54 }]);
+        }
+        if (text.includes('FOR UPDATE')) {
+          return Promise.resolve([{ ...facts, same_location: true }]);
+        }
+        return Promise.resolve(Object.assign([], { count: 0 }));
+      });
+      const sql = Object.assign(tag, {
+        begin: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn(tag),
+        ),
+      }) as unknown as Sql;
+      const config = {
+        get: (key: string) =>
+          key === 'OPENWEATHERMAP_API_KEY' ? 'test-key' : 'enabled',
+      } as unknown as ConfigService<Env, true>;
+      return { service: new RainfallContextService(sql, config), writes };
+    };
+    let warn: jest.SpyInstance;
+    beforeEach(() => {
+      fetchMock = jest.spyOn(global, 'fetch');
+      // The failure is logged as a warning; keep the test output quiet.
+      warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+    });
+    afterEach(() => {
+      fetchMock.mockRestore();
+      warn.mockRestore();
+    });
+
+    it('hanging: both corrections resolve while the call is still pending', async () => {
+      fetchMock.mockImplementation(() => new Promise(() => undefined));
+      const rainfall = realRainfall();
+      const t = setup({ rainfall: rainfall.service });
+      await expect(
+        t.service.correctLocation(7, locationBody, MEO),
+      ).resolves.toMatchObject({ ticketId: 7 });
+      await expect(
+        setup({ rainfall: rainfall.service }).service.correctCategory(
+          7,
+          { category: 'Localized Flooding', reason: 'Standing water.' },
+          MEO,
+        ),
+      ).resolves.toMatchObject({ ticketId: 7 });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(rainfall.writes).toEqual([]);
+    });
+
+    it('failing: the correction resolves, and rainfall is recorded as UNAVAILABLE afterwards', async () => {
+      fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+      const rainfall = realRainfall();
+      const t = setup({ rainfall: rainfall.service });
+      await expect(
+        t.service.correctLocation(7, locationBody, MEO),
+      ).resolves.toMatchObject({ ticketId: 7 });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(rainfall.writes.some((w) => /'UNAVAILABLE'/.test(w))).toBe(true);
+    });
   });
 });
 
