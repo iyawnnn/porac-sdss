@@ -18,6 +18,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { HazardInformationService } from '../domain/hazard-information.service';
+import { RainfallContextService } from '../domain/rainfall-context.service';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -63,6 +64,7 @@ export class TicketsController {
     private readonly assessments: OperationalAssessmentService,
     private readonly related: RelatedTicketsService,
     private readonly hazardInformation: HazardInformationService,
+    private readonly rainfallContext: RainfallContextService,
   ) {}
 
   @Get()
@@ -126,7 +128,19 @@ export class TicketsController {
     const hazardInformation = await this.hazardInformation.forTicketDetail(
       detail.ticket,
     );
-    return { ...detail, operationalAssessment, hazardInformation };
+    // Rainfall context (manuscript revision Phase 4, step 4c), advisory and
+    // staff-only, same access as above. When an active applicable ticket
+    // has no reading or one over 10 minutes old, a background refresh
+    // starts here and is not awaited.
+    const rainfallContext = await this.rainfallContext.forTicketDetail(
+      detail.ticket,
+    );
+    return {
+      ...detail,
+      operationalAssessment,
+      hazardInformation,
+      rainfallContext,
+    };
   }
 
   // Staff Retry for Hazard Information: same 403/404 as Ticket Detail, 409
@@ -139,6 +153,18 @@ export class TicketsController {
     @CurrentAdmin() admin: AdminSession,
   ) {
     return this.hazardInformation.retry(id, admin);
+  }
+
+  // Staff Refresh for the rainfall context: same 403/404 as Ticket Detail,
+  // 409 for a merged-away or closed ticket or a category without rainfall
+  // context, 429 within 60 s of the ticket's last check. Waits for the call
+  // (at most 5 s) and returns the new state.
+  @Post(':id/rainfall-context/refresh')
+  async refreshRainfallContext(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+  ) {
+    return this.rainfallContext.manualRefresh(id, admin);
   }
 
   @Post(':id/assessment')

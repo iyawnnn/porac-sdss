@@ -261,6 +261,35 @@ export interface HazardInformationView {
   history: HazardInformationRow[];
 }
 
+// Per-ticket rainfall context (manuscript p. 72, Appendix H
+// RAINFALL_CONTEXT; manuscript revision Phase 4, step 4c), staff only.
+// Advisory current rainfall, never a score. Mirrors
+// api/src/domain/rainfall-context.service.ts.
+export type RainfallContextStatus = "CURRENT" | "STALE" | "UNAVAILABLE";
+export type RainfallApplicability = "applicable" | "not_applicable" | "closed_historical";
+
+export interface RainfallContextRow {
+  id: number;
+  status: RainfallContextStatus;
+  // 0 is a real reading ("0 mm"); null only for UNAVAILABLE. Compare with
+  // null, never by truthiness.
+  rainfall_mm: number | null;
+  source_provider: string;
+  observation_at: string | null;
+  fetched_at: string;
+  failure_reason: string | null;
+  superseded_at: string | null;
+}
+
+export interface RainfallContextView {
+  applicability: RainfallApplicability;
+  // "Rainfall (last hour)".
+  valueLabel: string;
+  // Null = not yet fetched (for the ticket's present location).
+  current: RainfallContextRow | null;
+  history: RainfallContextRow[];
+}
+
 // Formerly defined in app/api/admin/tickets/geo/route.ts (deleted Phase 9)
 // — GET /admin/tickets/geo's response shape, consumed by the client-side
 // map components that poll it directly.
