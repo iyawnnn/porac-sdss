@@ -37,6 +37,11 @@ import {
 //                       (the two enums below), susceptibility_code,
 //                       susceptibility_label, query_geom geometry(Point,
 //                       4326), failure_reason, looked_up_at, superseded_at
+//   rainfall_context   (drizzle/0044_rainfall_context.sql) — id, ticket_id
+//                       -> tickets.id, status (the enum below), rainfall_mm,
+//                       source_provider, observation_at, fetched_at,
+//                       query_geom geometry(Point, 4326), failure_reason,
+//                       superseded_at
 //   barangays_gadm_old (docs/migration-log-gadm-to-psgc.md) — rollback/
 //                       reference only, never queried by app code
 
@@ -102,6 +107,20 @@ export type HazardLookupStatus = (typeof HAZARD_LOOKUP_STATUSES)[number];
 export const hazardLookupStatusEnum = pgEnum(
   'hazard_lookup_status',
   HAZARD_LOOKUP_STATUSES,
+);
+// Appendix H RAINFALL_CONTEXT (manuscript revision Phase 4, step 4c,
+// migration 0044). The table has a geometry column (query_geom), so it is
+// raw-PG only and listed in the comment block above; only its enum lives
+// here. Advisory current rainfall, never a score.
+export const RAINFALL_CONTEXT_STATUSES = [
+  'CURRENT',
+  'STALE',
+  'UNAVAILABLE',
+] as const;
+export type RainfallContextStatus = (typeof RAINFALL_CONTEXT_STATUSES)[number];
+export const rainfallContextStatusEnum = pgEnum(
+  'rainfall_context_status',
+  RAINFALL_CONTEXT_STATUSES,
 );
 // History / sync mirror only since manuscript revision Phase 2, step 2e
 // (migration 0039): admins.role and admin_audit_events.actor_role keep this
