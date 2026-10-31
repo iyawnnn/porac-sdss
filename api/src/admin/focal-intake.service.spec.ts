@@ -821,36 +821,64 @@ describe('FocalIntakeService.screenSeverity (Phase 3, step 3f)', () => {
   });
 });
 
-describe('FocalIntakeService.forward', () => {
-  it('delegates the office change to TicketsService.reassignOffice — never duplicates reassignment logic', async () => {
-    const { service, reassignOffice } = makeService([
-      [{ id: 1, ticket_id: 100 }], // report lookup
-      [{}], // INSERT report_intake_actions
-      [
-        {
-          report_id: 1,
-          ticket_id: 100,
-          category: 'Pothole',
-          ticket_status: 'Reported',
-          assigned_office: 'MDRRMO',
-          member_count: 1,
-          barangay_name: 'Mitla Proper',
-          citizen_severity: 'Medium',
-          submitted_at: '2026-01-01T00:00:00Z',
-          flags: [],
-          description: 'A pothole',
-          lat: 15.0,
-          lng: 120.5,
-          operational_priority: 50,
-          acknowledged_at: null,
-          acknowledged_by_name: null,
-          latest_action_type: 'forwarded',
-        },
-      ],
-      [],
-    ]);
+// Manuscript revision Phase 5, step 5a: Focal routes with Reassign and Refer
+// only. Forward and Escalate are gone; their old report_intake_actions rows
+// stay readable as history.
+const DETAIL_ROW = {
+  report_id: 1,
+  tracking_reference: 'PRC-2026-000001',
+  ticket_id: 100,
+  category: 'Pothole',
+  ticket_status: 'Reported',
+  assigned_office: 'MDRRMO',
+  member_count: 1,
+  barangay_name: 'Mitla Proper',
+  merged_into_ticket_id: null,
+  citizen_severity: 'Medium',
+  submitted_at: '2026-01-01T00:00:00Z',
+  flags: [],
+  description: 'A pothole',
+  lat: 15.0,
+  lng: 120.5,
+  ticket_lat: 15.0,
+  ticket_lng: 120.5,
+  submitted_category: 'Pothole',
+  operational_priority: 50,
+  acknowledged_at: null,
+  acknowledged_by_name: null,
+  latest_action_type: null,
+  latest_action_at: null,
+  severity_screening_status: 'NOT_REVIEWED',
+  severity_screening_remarks: null,
+  severity_screened_at: null,
+  severity_screened_by_name: null,
+  active_work_orders: 0,
+};
 
-    await service.forward(1, FOCAL, 'MDRRMO', 'Better suited to MDRRMO');
+describe('FocalIntakeService.reassign and refer (Phase 5, step 5a)', () => {
+  function makeRoutingService(rows: unknown[][]) {
+    const made = makeService(rows);
+    const logReferral = jest.fn().mockResolvedValue(undefined);
+    (
+      made.service as unknown as { tickets: { logReferral: jest.Mock } }
+    ).tickets.logReferral = logReferral;
+    return { ...made, logReferral };
+  }
+
+  it("Reassign hands the report's ticket, the office and the reason to TicketsService.reassignOffice", async () => {
+    const { service, reassignOffice, logInPgTx, createInTx } =
+      makeRoutingService([
+        [{ ticket_id: 100 }], // report -> ticket
+        [DETAIL_ROW], // detail
+        [], // activity
+      ]);
+
+    const detail = await service.reassign(
+      1,
+      FOCAL,
+      'MDRRMO',
+      'Better suited to MDRRMO',
+    );
 
     expect(reassignOffice).toHaveBeenCalledWith(
       100,
@@ -858,96 +886,130 @@ describe('FocalIntakeService.forward', () => {
       'MDRRMO',
       'Better suited to MDRRMO',
     );
+    expect(detail?.ticketId).toBe(100);
+    // Nothing of its own: no intake action, audit event or notification.
+    expect(logInPgTx).not.toHaveBeenCalled();
+    expect(createInTx).not.toHaveBeenCalled();
   });
 
-  it('rejects with no reason provided, before touching reassignOffice', async () => {
-    const { service, reassignOffice } = makeService([
-      [{ id: 1, ticket_id: 100 }],
-    ]);
-    await expect(service.forward(1, FOCAL, 'MDRRMO', '   ')).rejects.toThrow(
-      BadRequestException,
-    );
-    expect(reassignOffice).not.toHaveBeenCalled();
-  });
-
-  it('404s when the report does not exist', async () => {
-    const { service, reassignOffice } = makeService([[]]);
-    await expect(service.forward(1, FOCAL, 'MDRRMO', 'reason')).rejects.toThrow(
-      NotFoundException,
-    );
-    expect(reassignOffice).not.toHaveBeenCalled();
-  });
-});
-
-describe('FocalIntakeService.escalate', () => {
-  it('requires a reason', async () => {
-    const { service } = makeService([]);
-    await expect(service.escalate(1, FOCAL, '')).rejects.toThrow(
-      BadRequestException,
-    );
-  });
-
-  it('notifies the CURRENTLY responsible office, logs the action, and leaves ticket status/office untouched', async () => {
-    const { service, logInPgTx, createInTx } = makeService([
-      [
-        {
-          id: 1,
-          title: 'Pothole',
-          ticket_id: 100,
-          tracking_reference: 'PRC-2026-000001',
-        },
-      ], // report lookup
-      [{ assigned_office: 'MEO' }], // ticket office lookup
-      [{}], // INSERT report_intake_actions
-      [
-        {
-          report_id: 1,
-          ticket_id: 100,
-          category: 'Pothole',
-          ticket_status: 'Reported',
-          assigned_office: 'MEO',
-          member_count: 1,
-          barangay_name: 'Mitla Proper',
-          citizen_severity: 'Critical',
-          submitted_at: '2026-01-01T00:00:00Z',
-          flags: [],
-          description: 'A pothole',
-          lat: 15.0,
-          lng: 120.5,
-          operational_priority: 90,
-          acknowledged_at: null,
-          acknowledged_by_name: null,
-          latest_action_type: 'escalated',
-        },
-      ],
+  it("Refer hands the report's ticket, the agency and the reason to TicketsService.logReferral", async () => {
+    const { service, logReferral, reassignOffice } = makeRoutingService([
+      [{ ticket_id: 100 }],
+      [DETAIL_ROW],
       [],
     ]);
 
-    const result = await service.escalate(1, FOCAL, 'Needs urgent attention');
+    await service.refer(1, FOCAL, 'DPWH', 'National road');
 
-    expect(logInPgTx.mock.calls[0][1].actionType).toBe('report_escalated');
-    expect(createInTx.mock.calls[0][1]).toMatchObject({
-      recipientType: 'admin',
-      recipientOffice: 'MEO',
-      type: 'report_escalated',
-      href: '/admin/tickets/100',
-    });
-    // Named by its tracking reference since the Phase 2, step 2b follow-up.
-    const [, escalated] = createInTx.mock.calls[0] as [
-      unknown,
-      { message: string },
-    ];
-    expect(escalated.message).toBe(
-      'Pothole (Report PRC-2026-000001) was escalated by Focal: Needs urgent attention',
+    expect(logReferral).toHaveBeenCalledWith(
+      100,
+      FOCAL,
+      'DPWH',
+      'National road',
     );
-    expect(result?.ticketStatus).toBe('Reported');
-    expect(result?.routedOffice).toBe('MEO');
-    // No score field is ever written by escalate — the Operational Priority
-    // on the returned detail is read straight off the ticket, unchanged.
-    // (Hazard Urgency left the Focal responses in manuscript revision
-    // Phase 1, step 6b.)
-    expect(result?.operationalPriority).toBe(90);
-    expect(result).not.toHaveProperty('hazardUrgency');
+    expect(reassignOffice).not.toHaveBeenCalled();
+  });
+
+  it('a refusal from TicketsService (Focal after Reported) reaches the caller unchanged', async () => {
+    const { service, reassignOffice } = makeRoutingService([
+      [{ ticket_id: 100 }],
+    ]);
+    reassignOffice.mockRejectedValueOnce(
+      new ForbiddenException(
+        'Focal Personnel can only reassign or refer a ticket while it is still Reported; Ticket #100 is Under Review. The responsible office handles routing from here.',
+      ),
+    );
+    await expect(service.reassign(1, FOCAL, 'MEO', 'Reason')).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('404s when the report does not exist, before touching TicketsService', async () => {
+    const { service, reassignOffice, logReferral } = makeRoutingService([
+      [],
+      [],
+    ]);
+    await expect(
+      service.reassign(1, FOCAL, 'MDRRMO', 'reason'),
+    ).rejects.toThrow(NotFoundException);
+    await expect(service.refer(1, FOCAL, 'DPWH', 'reason')).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(reassignOffice).not.toHaveBeenCalled();
+    expect(logReferral).not.toHaveBeenCalled();
+  });
+
+  it("the detail says whether Focal may route, with the routing rule's own message", async () => {
+    const allowed = makeRoutingService([[DETAIL_ROW], []]);
+    expect((await allowed.service.getIntakeDetail(1))?.routing).toEqual({
+      blockedReason: null,
+    });
+
+    const underReview = makeRoutingService([
+      [{ ...DETAIL_ROW, ticket_status: 'Under Review' }],
+      [],
+    ]);
+    expect(
+      (await underReview.service.getIntakeDetail(1))?.routing.blockedReason,
+    ).toBe(
+      'Focal Personnel can only reassign or refer a ticket while it is still Reported; Ticket #100 is Under Review. The responsible office handles routing from here.',
+    );
+
+    const withWorkOrder = makeRoutingService([
+      [{ ...DETAIL_ROW, active_work_orders: 1 }],
+      [],
+    ]);
+    expect(
+      (await withWorkOrder.service.getIntakeDetail(1))?.routing.blockedReason,
+    ).toBe(
+      'Focal Personnel can only reassign or refer a ticket before work starts; Ticket #100 has an active Work Order. The responsible office handles routing from here.',
+    );
+
+    const mergedAway = makeRoutingService([
+      [{ ...DETAIL_ROW, merged_into_ticket_id: 99 }],
+      [],
+    ]);
+    expect(
+      (await mergedAway.service.getIntakeDetail(1))?.routing.blockedReason,
+    ).toBe('Ticket #100 was merged into Ticket #99 and is read-only.');
+  });
+
+  it('Forward and Escalate are gone: no service method, no route, no intake-action write', () => {
+    const proto = FocalIntakeService.prototype as unknown as Record<
+      string,
+      unknown
+    >;
+    expect(proto.forward).toBeUndefined();
+    expect(proto.escalate).toBeUndefined();
+    const controller = readFileSync(
+      join(__dirname, 'focal-intake.controller.ts'),
+      'utf8',
+    );
+    expect(controller).not.toContain("':reportId/forward'");
+    expect(controller).not.toContain("':reportId/escalate'");
+    expect(controller).toContain("@Post(':reportId/reassign')");
+    expect(controller).toContain("@Post(':reportId/refer')");
+    const source = readFileSync(
+      join(__dirname, 'focal-intake.service.ts'),
+      'utf8',
+    );
+    expect(source).not.toContain('INSERT INTO report_intake_actions');
+    expect(source).not.toContain("'report_escalated'");
+  });
+
+  it('old forwarded / escalated rows still show as history in the intake state', () => {
+    expect(
+      deriveIntakeState({
+        acknowledgedAt: null,
+        latestActionType: 'forwarded',
+      }),
+    ).toBe('Forwarded');
+    expect(
+      deriveIntakeState({
+        acknowledgedAt: null,
+        latestActionType: 'escalated',
+      }),
+    ).toBe('Escalated');
   });
 });
 

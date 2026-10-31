@@ -14,6 +14,7 @@ import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { FocalIntakeService } from './focal-intake.service';
 import { RelatedTicketsService } from './related-tickets.service';
+import { validateReassignOffice } from './ticket-routing.rules';
 
 // Focal's dedicated municipality-wide intake surface — never the
 // operational Ticket Queue adapted to skip office scoping (see
@@ -84,22 +85,33 @@ export class FocalIntakeController {
     return this.intake.screenSeverity(reportId, admin, { status, remarks });
   }
 
-  @Post(':reportId/forward')
-  async forward(
+  // Focal Reassign and Refer of the report's ticket (manuscript revision
+  // Phase 5, step 5a), which replaced POST :reportId/forward and
+  // :reportId/escalate — both gone. Same rule and status codes as the
+  // operational /admin/tickets/:id/reassign|refer; for Focal, 403 once the
+  // ticket has left Reported or has an active Work Order.
+  @Post(':reportId/reassign')
+  async reassign(
     @Param('reportId', ParseIntPipe) reportId: number,
     @CurrentAdmin() admin: AdminSession,
-    @Body('toOffice') toOffice: 'MEO' | 'MDRRMO',
-    @Body('reason') reason: string,
+    @Body('toOffice') toOffice: unknown,
+    @Body('reason') reason: unknown,
   ) {
-    return this.intake.forward(reportId, admin, toOffice, reason);
+    return this.intake.reassign(
+      reportId,
+      admin,
+      validateReassignOffice(toOffice),
+      reason,
+    );
   }
 
-  @Post(':reportId/escalate')
-  async escalate(
+  @Post(':reportId/refer')
+  async refer(
     @Param('reportId', ParseIntPipe) reportId: number,
     @CurrentAdmin() admin: AdminSession,
-    @Body('reason') reason: string,
+    @Body('agency') agency: unknown,
+    @Body('reason') reason: unknown,
   ) {
-    return this.intake.escalate(reportId, admin, reason);
+    return this.intake.refer(reportId, admin, agency, reason);
   }
 }
