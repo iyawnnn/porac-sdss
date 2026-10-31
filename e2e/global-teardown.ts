@@ -2,8 +2,9 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 // Runs once after the whole Playwright suite: retires the Merge / Remove /
-// Regroup, correction, screening and resolution feedback fixtures
-// e2e/global-setup.ts inserted (manuscript revision Phase 3, steps 3d–3g) by
+// Regroup, correction, screening, resolution feedback and routing fixtures
+// e2e/global-setup.ts inserted (manuscript revision Phase 3, steps 3d–3g;
+// Phase 5, step 5a) by
 // rejecting every fixture ticket still active (or the Resolved feedback
 // ticket) and cancelling its active Work Orders. Nothing is deleted. global-setup does the same
 // first, so a run whose teardown never ran is cleaned up by the next one.

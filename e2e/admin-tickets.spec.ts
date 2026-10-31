@@ -324,7 +324,9 @@ test("Ticket Detail shows status, office, Operational Priority, evidence, and lo
 
   // Status tracker + assigned office.
   await expect(page.getByText(/^#\d+ ·/)).toBeVisible();
-  await expect(page.getByLabel("Assigned office", { exact: true })).toBeVisible();
+  // Since manuscript revision Phase 5, step 5a the Assignment card shows the
+  // responsible office, with Reassign as a dialog behind a button.
+  await expect(page.getByText(/^Responsible office: (MEO|MDRRMO)$/)).toBeVisible();
 
   // Operational Priority (header badge + scoring tab). Hazard Urgency was
   // retired from this page in manuscript revision Phase 1, step 5 — no
@@ -420,13 +422,17 @@ test("MEO admin can reassign a ticket's office through the UI, and office scopin
     await page.goto(`/admin/tickets/${ticketId}`);
     await expect(page.getByText(/· MEO ·/)).toBeVisible();
 
-    await page.getByLabel("Assigned office", { exact: true }).click();
-    await page.getByRole("option", { name: "MDRRMO", exact: true }).click();
+    // Reassign is a dialog with a required reason since manuscript revision
+    // Phase 5, step 5a.
+    await page.getByRole("button", { name: "Reassign", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Reason (required)").fill("E2E: reassignment through the UI.");
     const reassigned = page.waitForResponse(
       (r) => r.url().includes(`/api/admin/tickets/${ticketId}/reassign`) && r.request().method() === "POST",
     );
-    await page.getByRole("button", { name: "Reassign" }).click();
+    await dialog.getByRole("button", { name: "Reassign to MDRRMO" }).click();
     expect((await reassigned).ok()).toBe(true);
+    await expect(dialog.getByRole("heading", { name: `Ticket #${ticketId} reassigned to MDRRMO` })).toBeVisible();
 
     // Once the ticket is MDRRMO's, the MEO session can no longer open it
     // (assertOfficeAccess — the lock-out itself is covered by the
@@ -451,7 +457,7 @@ test("MEO admin can reassign a ticket's office through the UI, and office scopin
     const mdrrmoHeaders = { ...sessionCookieHeader(await mdrrmoContext.cookies()), "content-type": "application/json" };
     const restoreRes = await request.post(`/api/admin/tickets/${ticketId}/reassign`, {
       headers: mdrrmoHeaders,
-      data: { toOffice: "MEO" },
+      data: { toOffice: "MEO", reason: "E2E cleanup: restoring the original office." },
     });
     expect(restoreRes.ok()).toBe(true);
     await mdrrmoContext.close();
@@ -505,7 +511,10 @@ test.describe.serial("MEO-initiated reassignment security", () => {
     await loginAs(page, E2E_MEO_ADMIN);
     const headers = { ...sessionCookieHeader(await page.context().cookies()), "content-type": "application/json" };
 
-    const res = await request.post(`/api/admin/tickets/${ticketId}/reassign`, { headers, data: { toOffice: "MDRRMO" } });
+    const res = await request.post(`/api/admin/tickets/${ticketId}/reassign`, {
+      headers,
+      data: { toOffice: "MDRRMO", reason: "E2E: reassignment security check." },
+    });
     expect(res.ok()).toBe(true);
     expect((await res.json()).assignedOffice).toBe("MDRRMO");
   });
@@ -528,7 +537,10 @@ test.describe.serial("MEO-initiated reassignment security", () => {
 
     // Attempted direction doesn't matter — assertOfficeAccess rejects on the
     // ticket's current office (MDRRMO) before the target office is considered.
-    const res = await request.post(`/api/admin/tickets/${ticketId}/reassign`, { headers, data: { toOffice: "MEO" } });
+    const res = await request.post(`/api/admin/tickets/${ticketId}/reassign`, {
+      headers,
+      data: { toOffice: "MEO", reason: "E2E: not this office's ticket." },
+    });
     expect(res.status()).toBe(403);
   });
 
@@ -550,6 +562,7 @@ test.describe.serial("MEO-initiated reassignment security", () => {
     );
     expect(reassignment).toBeTruthy();
     expect(reassignment.admin_name).toBe(`${E2E_MEO_ADMIN.firstName} ${E2E_MEO_ADMIN.lastName}`);
+    expect(reassignment.reason).toBe("E2E: reassignment security check.");
 
     await page.context().clearCookies();
     await loginAs(page, E2E_MEO_ADMIN);
@@ -567,7 +580,7 @@ test.describe.serial("MEO-initiated reassignment security", () => {
     const event = audit.events.find((e: { target_id: number }) => e.target_id === ticketId);
     expect(event).toBeTruthy();
     expect(event.actor_admin_id).toBe(meoAdmin.id);
-    expect(event.metadata).toMatchObject({ from: "MEO", to: "MDRRMO" });
+    expect(event.metadata).toMatchObject({ from: "MEO", to: "MDRRMO", reason: "E2E: reassignment security check." });
   });
 });
 
@@ -889,7 +902,7 @@ test.describe.serial("Referral tickets and their related-ticket suggestions", ()
     await context.close();
   });
 
-  test("a Referral-classified ticket shows the badge and Log Referral action; a Direct-responsibility ticket shows neither; alone in its area, it has no related suggestions", async ({ page, browser }) => {
+  test("a Referral-classified ticket shows the badge and Refer action; a Direct-responsibility ticket shows neither; alone in its area, it has no related suggestions", async ({ page, browser }) => {
     const citizenContext = await browser.newContext();
     const citizenPage = await citizenContext.newPage();
     await signupCitizen(citizenPage, "referral");
@@ -899,7 +912,7 @@ test.describe.serial("Referral tickets and their related-ticket suggestions", ()
     await loginAs(page, E2E_MEO_ADMIN);
     await page.goto(`/admin/tickets/${referral.ticketId}`);
     await expect(page.getByText("Referral — coordinate externally", { exact: true })).toBeVisible();
-    await expect(page.getByLabel("Referral agency", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Refer", exact: true })).toBeVisible();
     await expect(page.getByText("Possibly related tickets", { exact: true })).toBeVisible();
     await expect(page.getByText("Suggested by distance and category only. Staff confirm whether reports are related.")).toBeVisible();
     await expect(page.getByText("No active tickets of the same category within 50 m.", { exact: true })).toBeVisible();
@@ -907,7 +920,7 @@ test.describe.serial("Referral tickets and their related-ticket suggestions", ()
     // A Direct-responsibility ticket (Pothole) shows neither.
     await page.goto(`/admin/tickets/${sharedReadOnlyTicketId}`);
     await expect(page.getByText("Referral — coordinate externally", { exact: true })).toHaveCount(0);
-    await expect(page.getByLabel("Referral agency", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Refer", exact: true })).toHaveCount(0);
   });
 
   test("logging a referral persists and appears in the ticket timeline", async ({ page, browser }) => {
@@ -923,14 +936,18 @@ test.describe.serial("Referral tickets and their related-ticket suggestions", ()
     await loginAs(page, E2E_MEO_ADMIN);
     await page.goto(`/admin/tickets/${nearby.ticketId}`);
 
-    await page.getByLabel("Referral agency", { exact: true }).click();
+    // Refer is a dialog with a required reason since manuscript revision
+    // Phase 5, step 5a.
+    await page.getByRole("button", { name: "Refer", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("combobox", { name: "Referral agency" }).click();
     await page.getByRole("option", { name: "MENRO", exact: true }).click();
-    await page.getByLabel("Referral note", { exact: true }).fill("E2E referral note");
-    await page.getByRole("button", { name: "Log Referral" }).click();
+    await dialog.getByLabel("Reason (required)").fill("E2E referral reason");
+    await dialog.getByRole("button", { name: "Record referral" }).click();
+    await expect(dialog).toHaveCount(0);
 
-    await expect(page.getByRole("button", { name: "Recording..." })).toHaveCount(0);
     await page.getByRole("tab", { name: "Timeline" }).click();
-    await expect(page.getByText(/Referral recorded — MENRO: E2E referral note/)).toBeVisible();
+    await expect(page.getByText(/Referral recorded — MENRO: E2E referral reason/)).toBeVisible();
   });
 
   test("the ticket 8 m away is suggested as possibly related on Ticket Detail (MEO) and on Focal intake detail", async ({ page, browser }) => {

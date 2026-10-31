@@ -990,7 +990,13 @@ async function main() {
       // MDRRMO officer is the one handing the residual road-repair work
       // off to MEO, not the other way around.
       const mdrrmoAdmin = adminsByOffice.MDRRMO[0];
-      await ticketsService.reassignOffice(t.id, mdrrmoAdmin, 'MEO');
+      // A reason is required since manuscript revision Phase 5, step 5a.
+      await ticketsService.reassignOffice(
+        t.id,
+        mdrrmoAdmin,
+        'MEO',
+        'Immediate hazard cleared; the remaining road and site repair is MEO work.',
+      );
       console.log(
         `Reassigned ticket #${t.id} (${t.barangay} / ${t.category}) MDRRMO -> MEO.`,
       );

@@ -53,15 +53,23 @@ async function ticketIdAsSystemAdmin(browser: Browser, office: "MEO" | "MDRRMO")
   await loginAs(otherPage, OFFICE_ADMIN[otherOffice]);
   const otherCookies = await otherContext.cookies();
   const otherHeaders = { ...sessionCookieHeader(otherCookies), "content-type": "application/json" };
-  const anyTicket = await otherContext.request.get(`/api/admin/tickets?status=all&limit=1`, { headers: otherHeaders });
+  // Since manuscript revision Phase 5, step 5a a Reassign needs a reason and
+  // is refused on a Rejected ticket or one with an active Work Order, so try
+  // the other office's active tickets until one moves.
+  const anyTicket = await otherContext.request.get(`/api/admin/tickets?limit=25`, { headers: otherHeaders });
   const anyBody = await anyTicket.json();
   expect(anyBody.tickets.length).toBeGreaterThan(0);
-  const ticket = anyBody.tickets[0] as { id: number; assigned_office: "MEO" | "MDRRMO" };
-  const reassign = await otherContext.request.post(`/api/admin/tickets/${ticket.id}/reassign`, { headers: otherHeaders, data: { toOffice: office } });
-  expect(reassign.ok()).toBe(true);
-  borrowedTicket = { id: ticket.id, originalOffice: ticket.assigned_office };
-  await otherContext.close();
-  return ticket.id;
+  for (const ticket of anyBody.tickets as { id: number; assigned_office: "MEO" | "MDRRMO" }[]) {
+    const reassign = await otherContext.request.post(`/api/admin/tickets/${ticket.id}/reassign`, {
+      headers: otherHeaders,
+      data: { toOffice: office, reason: "E2E: borrowing a ticket for the notification test." },
+    });
+    if (!reassign.ok()) continue;
+    borrowedTicket = { id: ticket.id, originalOffice: ticket.assigned_office };
+    await otherContext.close();
+    return ticket.id;
+  }
+  throw new Error(`No ${otherOffice} ticket could be reassigned to ${office} for the notification test.`);
 }
 
 test.afterAll(async ({ browser }) => {
@@ -77,7 +85,7 @@ test.afterAll(async ({ browser }) => {
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
   await context.request.post(`/api/admin/tickets/${borrowedTicket.id}/reassign`, {
     headers,
-    data: { toOffice: borrowedTicket.originalOffice },
+    data: { toOffice: borrowedTicket.originalOffice, reason: "E2E cleanup: returning the borrowed ticket." },
   });
   await context.close();
 });

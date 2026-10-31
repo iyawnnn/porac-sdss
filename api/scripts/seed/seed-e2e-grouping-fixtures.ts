@@ -11,7 +11,8 @@ import { sql } from '../db';
 // step 4b), whose hazard_information rows are inserted here too, so that
 // spec never calls the live service, and the rainfall context spec
 // (e2e/admin-rainfall-context.spec.ts; step 4c), whose rainfall_context rows
-// are inserted on the same tickets for the same reason. The tickets and reports
+// are inserted on the same tickets for the same reason, and the manual
+// routing spec (e2e/admin-routing.spec.ts; Phase 5, step 5a). The tickets and reports
 // are inserted directly, never through POST /reports, so the specs post no
 // report: a full run already posts 20, the per-IP hourly limit
 // (docs/testing.md). Every fixture report belongs to citizen1 (the step 3g
@@ -36,11 +37,13 @@ const TITLE_PREFIX = 'E2E grouping fixture';
 const CORRECTION_TITLE_PREFIX = 'E2E correction fixture';
 const FEEDBACK_TITLE_PREFIX = 'E2E feedback fixture';
 const HAZARD_TITLE_PREFIX = 'E2E hazard fixture';
+const ROUTING_TITLE_PREFIX = 'E2E routing fixture';
 const TITLE_PATTERNS = [
   `${TITLE_PREFIX}%`,
   `${CORRECTION_TITLE_PREFIX}%`,
   `${FEEDBACK_TITLE_PREFIX}%`,
   `${HAZARD_TITLE_PREFIX}%`,
+  `${ROUTING_TITLE_PREFIX}%`,
 ];
 const CATEGORY = 'Pothole / Road Surface Damage';
 const CITIZEN_EMAIL = 'citizen1@porac.ph';
@@ -61,6 +64,12 @@ const CORRECTION_EAST_DEG = 0.0005; // about 55 m east of the grouping spots
 // grouping spots, so no two are within the 100 m flood / landslide radius
 // of each other or of any other fixture.
 const HAZARD_WEST_STEP_DEG = 0.0015;
+// Routing fixtures (Phase 5, step 5a): on the grouping column, from 400 m
+// north of BASE (past the last grouping spot at 325 m), 30 m apart — beyond
+// the 20 m Pothole radius; the one Leaking Pipe fixture has no other of its
+// category nearby.
+const ROUTING_START_DEG = 400 / 111_320;
+const ROUTING_STEP_DEG = 30 / 111_320;
 
 type Office = 'MEO' | 'MDRRMO';
 interface Point {
@@ -576,7 +585,77 @@ async function create() {
       minutesAgo: 600,
     });
 
+    // Phase 5, step 5a: manual routing (e2e/admin-routing.spec.ts). MEO
+    // tickets, one per routing rule; the spec reassigns and refers through
+    // the UI and checks the refusals through the API.
+    const routingTicket = async (
+      index: number,
+      label: string,
+      options: {
+        status?: 'Reported' | 'Under Review' | 'Rejected';
+        category?: string;
+        workOrder?: boolean;
+      } = {},
+    ) => {
+      const at = {
+        lat: BASE.lat + ROUTING_START_DEG + index * ROUTING_STEP_DEG,
+        lng: BASE.lng,
+      };
+      const category = options.category ?? CATEGORY;
+      const ticketId = await ticket(at, {
+        status: options.status,
+        ageDays: 1,
+        category,
+      });
+      const reportId = await report(
+        ticketId,
+        at,
+        label,
+        1,
+        ROUTING_TITLE_PREFIX,
+        citizen.id,
+        category,
+      );
+      if (options.workOrder) {
+        const [wo] = await tx<{ id: number }[]>`
+          INSERT INTO work_orders (ticket_id, title, assigned_office, status, created_by_admin_id)
+          VALUES (${ticketId}, ${`${ROUTING_TITLE_PREFIX}: patch the pothole`}, 'MEO', 'pending', ${meo.id})
+          RETURNING id
+        `;
+        await tx`
+          INSERT INTO work_order_status_history (work_order_id, status, admin_id, admin_name)
+          VALUES (${wo.id}, 'pending', ${meo.id}, ${meo.name})
+        `;
+      }
+      return { ticketId, reportId };
+    };
+    const routing = {
+      // Focal may route it: Reported, no Work Order.
+      focalReported: await routingTicket(0, 'Focal, Reported'),
+      // Focal may not: Under Review, or Reported with a pending Work Order.
+      focalUnderReview: await routingTicket(1, 'Focal, Under Review', {
+        status: 'Under Review',
+      }),
+      focalWorkOrder: await routingTicket(2, 'Focal, Work Order', {
+        workOrder: true,
+      }),
+      // MEO refers and reassigns it: a referral category, Under Review.
+      meoReferral: await routingTicket(3, 'MEO, referral', {
+        status: 'Under Review',
+        category: 'Leaking Pipe / Water Supply Concern',
+      }),
+      // MEO may not route it: a pending Work Order.
+      meoWorkOrder: await routingTicket(4, 'MEO, Work Order', {
+        status: 'Under Review',
+        workOrder: true,
+      }),
+      // Nobody routes it, and Ticket Detail hides Reassign, New Work Order
+      // and Add Assessment. Already closed, so nothing retires it.
+      rejected: await routingTicket(5, 'Rejected', { status: 'Rejected' }),
+    };
+
     return {
+      routing,
       hazard: {
         classifiedTicketId: hazardClassified,
         noClassificationTicketId: hazardNoClassification,

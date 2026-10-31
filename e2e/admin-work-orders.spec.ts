@@ -79,7 +79,10 @@ async function createDisposableTicketForOffice(browser: Browser, office: "MEO" |
   await loginAs(page, E2E_MEO_ADMIN);
   const cookies = await context.cookies();
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
-  const reassign = await context.request.post(`/api/admin/tickets/${ticketId}/reassign`, { headers, data: { toOffice: "MDRRMO" } });
+  const reassign = await context.request.post(`/api/admin/tickets/${ticketId}/reassign`, {
+    headers,
+    data: { toOffice: "MDRRMO", reason: "E2E: a disposable MDRRMO ticket for the work order tests." },
+  });
   expect(reassign.ok()).toBe(true);
   await context.close();
   return ticketId;
