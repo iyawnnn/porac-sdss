@@ -81,7 +81,7 @@ export function FocalIntakeQueue({
         <p className="mt-1 text-[13px] text-muted-foreground">
           {flaggedOnly
             ? "Incoming reports with integrity flags raised at intake."
-            : "Municipality-wide incoming reports awaiting acknowledgment, screening, or forwarding."}
+            : "Municipality-wide incoming reports awaiting acknowledgment, screening, or routing."}
         </p>
       </div>
 

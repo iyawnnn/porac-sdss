@@ -17,20 +17,22 @@ import { distanceMeters } from "@/lib/utils/distance";
 import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
 import { TicketCorrectionActions } from "@/components/features/admin/tickets/corrections/TicketCorrectionActions";
 import { AcknowledgeDialog } from "@/components/features/admin/focal/dialogs/AcknowledgeDialog";
-import { ForwardEscalateDialog } from "@/components/features/admin/focal/dialogs/ForwardEscalateDialog";
+import { ReassignDialog } from "@/components/features/admin/tickets/routing/ReassignDialog";
+import { ReferDialog } from "@/components/features/admin/tickets/routing/ReferDialog";
 import { SeverityScreeningCard } from "@/components/features/admin/focal/SeverityScreeningCard";
 
 const TicketLocationMapLoader = dynamic(() => import("@/components/features/admin/tickets/TicketLocationMapLoader"), { ssr: false });
 
+// Every intake action is history only: the old general screening action
+// (replaced by severity screening in manuscript revision Phase 3, step 3f)
+// and Forward / Escalate (replaced by Reassign / Refer in Phase 5, step 5a).
 const ACTION_LABEL: Record<string, string> = {
-  // History only: the old general screening action, replaced by severity
-  // screening in manuscript revision Phase 3, step 3f.
   screened: "Initial screening completed",
   forwarded: "Forwarded to another office",
   escalated: "Escalated for priority attention",
 };
 
-type DialogKey = "acknowledge" | "forward" | "escalate" | null;
+type DialogKey = "acknowledge" | "reassign" | "refer" | null;
 
 // Central Monitoring / Focal Personnel intake detail — a separate concept
 // from the MEO/MDRRMO operational Ticket Detail (see
@@ -48,6 +50,7 @@ export function FocalIntakeDetail({
   correction: CorrectionAvailability | null;
 }) {
   const [openDialog, setOpenDialog] = useState<DialogKey>(null);
+  const routingBlocked = report.routing.blockedReason !== null;
   // The map shows the ticket's current location; the citizen's pin is
   // listed when a staff correction moved the ticket away from it
   // (manuscript revision Phase 3, step 3e).
@@ -82,14 +85,21 @@ export function FocalIntakeDetail({
       {/* Focal's intake actions only — no Advance Status/Resolve/Reject/
           Create Work Order affordances. Severity screening (the Severity
           screening card) replaced the old Initial Screening button in
-          manuscript revision Phase 3, step 3f. */}
+          manuscript revision Phase 3, step 3f; Reassign and Refer replaced
+          Forward and Escalate in Phase 5, step 5a, and are open to Focal
+          only while the ticket is Reported with no active Work Order. */}
       <div className="flex flex-wrap items-center gap-2">
         <Button disabled={!!report.acknowledgedAt} onClick={() => setOpenDialog("acknowledge")}>
           {report.acknowledgedAt ? "Acknowledged" : "Acknowledge Report"}
         </Button>
-        <Button onClick={() => setOpenDialog("forward")} variant="outline">Forward</Button>
-        <Button onClick={() => setOpenDialog("escalate")} variant="outline">Escalate</Button>
+        <Button disabled={routingBlocked} onClick={() => setOpenDialog("reassign")} variant="outline">Reassign</Button>
+        <Button disabled={routingBlocked} onClick={() => setOpenDialog("refer")} variant="outline">Refer</Button>
       </div>
+      {report.routing.blockedReason && (
+        <p className="text-xs text-muted-foreground" data-testid="routing-blocked">
+          {report.routing.blockedReason}
+        </p>
+      )}
       {correction && <TicketCorrectionActions afterMove="refresh" availability={correction} />}
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
@@ -221,20 +231,25 @@ export function FocalIntakeDetail({
       </div>
 
       <AcknowledgeDialog onOpenChange={(o) => setOpenDialog(o ? "acknowledge" : null)} open={openDialog === "acknowledge"} report={report} />
-      <ForwardEscalateDialog
-        key={`forward-${report.routedOffice}`}
-        mode="forward"
-        onOpenChange={(o) => setOpenDialog(o ? "forward" : null)}
-        open={openDialog === "forward"}
-        report={report}
-      />
-      <ForwardEscalateDialog
-        key={`escalate-${report.routedOffice}`}
-        mode="escalate"
-        onOpenChange={(o) => setOpenDialog(o ? "escalate" : null)}
-        open={openDialog === "escalate"}
-        report={report}
-      />
+      {!routingBlocked && (
+        <>
+          <ReassignDialog
+            actionPath={`/api/admin/intake/${report.reportId}`}
+            afterMove="refresh"
+            currentOffice={report.routedOffice}
+            key={`reassign-${report.routedOffice}`}
+            onOpenChange={(o) => setOpenDialog(o ? "reassign" : null)}
+            open={openDialog === "reassign"}
+            ticketId={report.ticketId}
+          />
+          <ReferDialog
+            actionPath={`/api/admin/intake/${report.reportId}`}
+            onOpenChange={(o) => setOpenDialog(o ? "refer" : null)}
+            open={openDialog === "refer"}
+            ticketId={report.ticketId}
+          />
+        </>
+      )}
     </div>
   );
 }

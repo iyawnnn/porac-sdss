@@ -17,6 +17,7 @@ import type {
   TicketSeverity,
   HazardInformationView,
   RainfallContextView,
+  TicketRoutingState,
 } from "@/lib/types/admin-tickets";
 import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
@@ -78,6 +79,8 @@ interface TicketDetailResponse {
   hazardInformation: HazardInformationView;
   // Manuscript revision Phase 4, step 4c.
   rainfallContext: RainfallContextView;
+  // Manuscript revision Phase 5, step 5a.
+  routing: TicketRoutingState;
 }
 
 // Per-report Remove / Move on a multi-report active ticket (manuscript
@@ -129,10 +132,14 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
     related = null;
   }
 
-  const { ticket, reports, severity, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback, hazardInformation, rainfallContext } = data;
+  const { ticket, reports, severity, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback, hazardInformation, rainfallContext, routing } = data;
   // A merged-away ticket stays viewable as history, with no actions
   // (manuscript revision Phase 3, step 3d; the API refuses them too).
   const mergedAway = ticket.merged_into_ticket_id !== null;
+  // A Rejected ticket hides Reassign, New Work Order and Add Assessment
+  // (manuscript revision Phase 5, step 5a). The API refuses Reassign and
+  // Refer on it; refusing Work Orders and assessments there is step 5b.
+  const rejected = ticket.status === "Rejected";
   const grouping = reportGrouping(ticket, reports.length, related);
 
   // Category and location correction (manuscript revision Phase 3, step 3e),
@@ -327,7 +334,12 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
                   {ticket.direct_responsibility ? "Direct responsibility" : "Referral — coordinate externally"}
                 </Badge>
               </div>
-              <AssignmentPanel currentOffice={ticket.assigned_office} ticketId={ticket.id} />
+              <AssignmentPanel
+                blockedReason={routing.blockedReason}
+                currentOffice={ticket.assigned_office as "MEO" | "MDRRMO"}
+                hideWhenBlocked={rejected}
+                ticketId={ticket.id}
+              />
             </CardContent>
           </Card>
           )}
@@ -336,7 +348,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             <Card>
               <CardContent className="p-4">
                 <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Referral</p>
-                <ReferralPanel ticketId={ticket.id} />
+                <ReferralPanel blockedReason={routing.blockedReason} hideWhenBlocked={rejected} ticketId={ticket.id} />
               </CardContent>
             </Card>
           )}
@@ -352,7 +364,13 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
 
           <Card>
             <CardContent className="p-4">
-              <WorkOrdersPanel initialWorkOrders={workOrders} office={ticket.assigned_office as "MEO" | "MDRRMO"} readOnly={mergedAway} ticketId={ticket.id} />
+              <WorkOrdersPanel
+                canCreate={!rejected}
+                initialWorkOrders={workOrders}
+                office={ticket.assigned_office as "MEO" | "MDRRMO"}
+                readOnly={mergedAway}
+                ticketId={ticket.id}
+              />
             </CardContent>
           </Card>
 
@@ -370,7 +388,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
 
           <Card>
             <CardContent className="p-4">
-              <OperationalAssessmentPanel assessment={operationalAssessment} readOnly={mergedAway} ticketId={ticket.id} />
+              <OperationalAssessmentPanel assessment={operationalAssessment} readOnly={mergedAway || rejected} ticketId={ticket.id} />
             </CardContent>
           </Card>
 

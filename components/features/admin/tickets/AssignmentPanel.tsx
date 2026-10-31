@@ -1,57 +1,55 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ReassignDialog } from "@/components/features/admin/tickets/routing/ReassignDialog";
 
+// The responsible office and the manual Reassign action (manuscript
+// revision Phase 5, step 5a). blockedReason is the API's own refusal message
+// for this admin and ticket (GET /admin/tickets/:id routing.blockedReason):
+// the button is disabled with that explanation, or left out entirely when
+// hideWhenBlocked (a Rejected ticket).
 export function AssignmentPanel({
   ticketId,
   currentOffice,
+  blockedReason,
+  hideWhenBlocked = false,
 }: {
   ticketId: number;
-  currentOffice: string;
+  currentOffice: "MEO" | "MDRRMO";
+  blockedReason: string | null;
+  hideWhenBlocked?: boolean;
 }) {
-  const router = useRouter();
-  const [target, setTarget] = useState(currentOffice);
-  const [reassigning, setReassigning] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleReassign() {
-    if (target === currentOffice) return;
-    setReassigning(true);
-    setError("");
-
-    const res = await fetch(`/api/admin/tickets/${ticketId}/reassign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ toOffice: target }),
-    });
-
-    if (res.ok) {
-      router.refresh();
-    } else {
-      const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Reassign failed");
-    }
-    setReassigning(false);
-  }
+  const [open, setOpen] = useState(false);
+  const blocked = blockedReason !== null;
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-2">
-        <Select onValueChange={setTarget} value={target}>
-          <SelectTrigger aria-label="Assigned office" className="flex-1"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="MEO">MEO</SelectItem>
-            <SelectItem value="MDRRMO">MDRRMO</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button disabled={reassigning || target === currentOffice} onClick={handleReassign} size="sm" variant="outline">
-          {reassigning ? "Reassigning..." : "Reassign"}
-        </Button>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-ink-700">
+          Responsible office: <span className="font-medium text-ink-900">{currentOffice}</span>
+        </p>
+        {!(blocked && hideWhenBlocked) && (
+          <Button disabled={blocked} onClick={() => setOpen(true)} size="sm" variant="outline">
+            Reassign
+          </Button>
+        )}
       </div>
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {blocked && (
+        <p className="text-xs text-ink-500" data-testid="reassign-blocked">
+          {blockedReason}
+        </p>
+      )}
+      {!blocked && (
+        <ReassignDialog
+          actionPath={`/api/admin/tickets/${ticketId}`}
+          afterMove="leave"
+          currentOffice={currentOffice}
+          onOpenChange={setOpen}
+          open={open}
+          ticketId={ticketId}
+        />
+      )}
     </div>
   );
 }

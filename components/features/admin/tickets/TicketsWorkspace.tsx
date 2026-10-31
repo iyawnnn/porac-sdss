@@ -579,8 +579,8 @@ export function TicketsWorkspace({
               })
             }
             onDismissResult={() => setBulkResult(null)}
-            onReassign={(toOffice) =>
-              runBulk("Assign office", "/api/admin/tickets/bulk/reassign", { toOffice })
+            onReassign={(toOffice, reason) =>
+              runBulk("Assign office", "/api/admin/tickets/bulk/reassign", { toOffice, reason })
             }
             result={bulkResult}
             selectedIds={selectedIds}
