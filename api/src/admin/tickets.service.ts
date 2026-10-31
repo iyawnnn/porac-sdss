@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -25,13 +24,10 @@ import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
   assertOfficeAccess,
-  isFocalPersonnel,
 } from '../common/authz/admin-scope';
 import {
   ALL_CATEGORIES,
   TICKET_RESOLUTION_NOTES_MAX_LENGTH,
-  REFERRAL_AGENCY_MAX_LENGTH,
-  REFERRAL_NOTE_MAX_LENGTH,
   TICKET_REJECTION_REASON_MAX_LENGTH,
 } from '../contracts/schemas';
 import { categoryRouting } from '../common/utils/office';
@@ -45,7 +41,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { EMAIL_SERVICE, type EmailService } from '../citizens/email.service';
 import type { Env } from '../config/env';
 import { AdminAuditService } from './admin-audit.service';
-import { assertNotMergedAway } from './ticket-grouping.rules';
+import { assertNotMergedAway, toHttpException } from './ticket-grouping.rules';
+import {
+  reassignDestinationBlock,
+  referDestinationBlock,
+  routingBlock,
+  validateReferralAgency,
+  validateRoutingReason,
+} from './ticket-routing.rules';
 import {
   TICKET_STATUSES,
   PAGE_LIMITS,
@@ -312,10 +315,17 @@ export interface TicketReassignmentRow {
   to_office: string;
   admin_name: string | null;
   reassigned_at: string;
-  // The routing_actions reason written in the same transaction, when one
-  // was given (a category correction's; plain Reassign has none until
-  // Phase 5).
+  // The routing_actions reason written in the same transaction: required
+  // since manuscript revision Phase 5, step 5a; null for an older
+  // reassignment recorded without one.
   reason: string | null;
+}
+
+// Whether the signed-in admin may Reassign or Refer this ticket right now
+// (manuscript revision Phase 5, step 5a): null when allowed, else the
+// routing endpoints' own refusal message (ticket-routing.rules.ts).
+export interface TicketRoutingState {
+  blockedReason: string | null;
 }
 
 // A staff category or location correction on the Ticket Detail timeline
@@ -337,6 +347,8 @@ export interface TicketCorrectionRow {
 // have. Display this as "Referral recorded", never as a current-state badge.
 export interface TicketReferralRow {
   agency: string;
+  // The referral's reason: metadata.reason since manuscript revision Phase
+  // 5, step 5a (required); an older event's optional metadata.note.
   note: string | null;
   admin_name: string;
   referred_at: string;
@@ -690,21 +702,39 @@ export class TicketsService {
     admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
   ) {
     const sql = this.pg;
-    const [ticket] = await sql<TicketDetail[]>`
+    const [row] = await sql<(TicketDetail & { active_work_orders?: number })[]>`
       SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, ST_AsGeoJSON(b.geom) AS barangay_geojson,
         t.status, t.assigned_office, t.initial_assigned_office, t.resolution_outcome,
         t.member_count, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
         t.priority_index,
         t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at,
         t.disputed_at, t.dispute_reason, t.category_review_required,
-        t.merged_into_ticket_id
+        t.merged_into_ticket_id,
+        (
+          SELECT count(*)::int FROM work_orders w
+          WHERE w.ticket_id = t.id AND w.status IN ('pending', 'in_progress')
+        ) AS active_work_orders
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
       WHERE t.id = ${id}
     `;
 
-    if (!ticket) return null;
-    assertOfficeAccess(admin, ticket.assigned_office as 'MEO' | 'MDRRMO');
+    if (!row) return null;
+    assertOfficeAccess(admin, row.assigned_office as 'MEO' | 'MDRRMO');
+    // Whether this admin may Reassign or Refer the ticket now (manuscript
+    // revision Phase 5, step 5a): the routing endpoints' own rule and
+    // message, so the buttons never promise what the API refuses.
+    const { active_work_orders: activeWorkOrders, ...ticket } = row;
+    const routing: TicketRoutingState = {
+      blockedReason:
+        routingBlock(admin, {
+          id: ticket.id,
+          status: ticket.status,
+          assignedOffice: ticket.assigned_office as 'MEO' | 'MDRRMO',
+          mergedIntoTicketId: ticket.merged_into_ticket_id,
+          activeWorkOrders: activeWorkOrders ?? 0,
+        })?.message ?? null,
+    };
 
     const reports = await sql<TicketReport[]>`
       SELECT r.id, r.tracking_reference, r.title, r.description, r.citizen_severity, r.image_url,
@@ -735,7 +765,7 @@ export class TicketsService {
     `;
     const referralEvents = await sql<
       {
-        metadata: { agency: string; note: string | null };
+        metadata: { agency: string; note?: string | null; reason?: string };
         actor_name: string;
         created_at: string;
       }[]
@@ -746,7 +776,7 @@ export class TicketsService {
     `;
     const referrals: TicketReferralRow[] = referralEvents.map((e) => ({
       agency: e.metadata.agency,
-      note: e.metadata.note,
+      note: e.metadata.reason ?? e.metadata.note ?? null,
       admin_name: e.actor_name,
       referred_at: e.created_at,
     }));
@@ -859,6 +889,7 @@ export class TicketsService {
       mergedInto,
       mergedFrom,
       citizenFeedback,
+      routing,
     };
   }
 
@@ -1069,64 +1100,43 @@ export class TicketsService {
     return { status: nextStatus };
   }
 
-  // Shared by operational reassignment (own-office admins, any ticket
-  // state — unchanged) and Focal's early-intake Forward (Step 14 of the
-  // Batch 2 design): same reassignment mechanism, same office_reassignments/
-  // audit write — only the authorization gate differs, and Focal's gate is
-  // strictly narrower (Reported + no active work order) than an operational
-  // admin's. This is the one place both callers' authorization is checked,
-  // so a future caller can't accidentally skip the safety rule.
+  // Manual Reassign (manuscript pp. 43–44, Appendix H ROUTING_ACTIONS;
+  // manuscript revision Phase 5, step 5a). Reached by the operational
+  // Ticket Detail / bulk bar (own-office Personnel) and by Focal intake
+  // (FocalIntakeService.reassign) — one mechanism, one rule
+  // (ticket-routing.rules.ts), checked here on the locked row inside the
+  // transaction so a race with work starting elsewhere loses safely. The
+  // reason is required.
   async reassignOffice(
     ticketId: number,
     admin: AdminSession,
     toOffice: 'MEO' | 'MDRRMO',
+    reason: unknown,
   ): Promise<{ assignedOffice: 'MEO' | 'MDRRMO' }> {
-    const sql = this.pg;
-    const [ticket] = await sql<
-      {
-        assigned_office: 'MEO' | 'MDRRMO';
-        category: string;
-        status: string;
-        merged_into_ticket_id: number | null;
-      }[]
-    >`
-      SELECT assigned_office, category, status, merged_into_ticket_id FROM tickets WHERE id = ${ticketId}
-    `;
-    if (!ticket) throw new NotFoundException('Ticket not found');
-
-    await this.assertCanReassign(
-      ticketId,
-      ticket,
-      admin,
-      toOffice,
-      async () => {
-        const [{ count }] = await sql<{ count: number }[]>`
-          SELECT count(*)::int AS count FROM work_orders
-          WHERE ticket_id = ${ticketId} AND status IN ('pending', 'in_progress')
-        `;
-        return count;
-      },
-    );
-
-    await sql.begin(async (tx) => {
+    const routingReason = validateRoutingReason(reason);
+    await this.pg.begin(async (tx) => {
+      const ticket = await this.lockForRouting(tx, ticketId);
+      await this.assertCanReassign(ticketId, ticket, admin, toOffice, () =>
+        Promise.resolve(ticket.active_work_orders),
+      );
       await this.writeReassignment(tx, {
         ticketId,
         category: ticket.category,
         fromOffice: ticket.assigned_office,
         toOffice,
         admin,
-        reason: null,
+        reason: routingReason,
       });
     });
 
     return { assignedOffice: toOffice };
   }
 
-  // Reassign's own preconditions. Also checked by the category correction
-  // (manuscript revision Phase 3, step 3e), which reassigns in its own
-  // transaction when the new category belongs to the other office; it
-  // passes the active Work Order count it already read on the locked row.
-  // activeWorkOrders is only called for Focal.
+  // Reassign's own preconditions (routingBlock, then a same-office no-op).
+  // Also checked by the category correction (manuscript revision Phase 3,
+  // step 3e), which reassigns in its own transaction when the new category
+  // belongs to the other office; it passes the active Work Order count it
+  // already read on the locked row.
   async assertCanReassign(
     ticketId: number,
     ticket: {
@@ -1138,39 +1148,56 @@ export class TicketsService {
     toOffice: 'MEO' | 'MDRRMO',
     activeWorkOrders: () => Promise<number>,
   ): Promise<void> {
-    if (isFocalPersonnel(admin)) {
-      // Focal may only forward a report before operational work has begun
-      // — the ticket must still be at its initial Reported state, with no
-      // work order already in progress. Checked immediately before the
-      // mutation (not pre-validated by the caller) so a race with an
-      // operational admin who has already started work loses safely.
-      if (ticket.status !== 'Reported') {
-        throw new ForbiddenException(
-          'This report can no longer be forwarded by Focal — operational review has already started.',
-        );
-      }
-      if ((await activeWorkOrders()) > 0) {
-        throw new ForbiddenException(
-          'This report can no longer be forwarded by Focal — a work order is already active.',
-        );
-      }
-    } else {
-      assertOfficeAccess(admin, ticket.assigned_office);
-    }
-    assertNotMergedAway({ id: ticketId, ...ticket });
+    const facts = {
+      id: ticketId,
+      status: ticket.status,
+      assignedOffice: ticket.assigned_office,
+      mergedIntoTicketId: ticket.merged_into_ticket_id,
+      activeWorkOrders: await activeWorkOrders(),
+    };
+    const block =
+      routingBlock(admin, facts) ?? reassignDestinationBlock(facts, toOffice);
+    if (block) throw toHttpException(block);
+  }
 
-    if (ticket.assigned_office === toOffice) {
-      throw new BadRequestException(
-        `Ticket is already assigned to ${toOffice}`,
-      );
-    }
+  // The ticket row a Reassign or Refer acts on, locked for the rest of the
+  // caller's transaction, with its pending / in-progress Work Order count.
+  private async lockForRouting(
+    tx: TransactionSql,
+    ticketId: number,
+  ): Promise<{
+    assigned_office: 'MEO' | 'MDRRMO';
+    category: string;
+    status: string;
+    merged_into_ticket_id: number | null;
+    active_work_orders: number;
+  }> {
+    const [ticket] = await tx<
+      {
+        assigned_office: 'MEO' | 'MDRRMO';
+        category: string;
+        status: string;
+        merged_into_ticket_id: number | null;
+        active_work_orders: number;
+      }[]
+    >`
+      SELECT t.assigned_office, t.category, t.status, t.merged_into_ticket_id,
+        (
+          SELECT count(*)::int FROM work_orders w
+          WHERE w.ticket_id = t.id AND w.status IN ('pending', 'in_progress')
+        ) AS active_work_orders
+      FROM tickets t
+      WHERE t.id = ${ticketId}
+      FOR UPDATE OF t
+    `;
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    return ticket;
   }
 
   // The Reassign write: the office change, its office_reassignments and
   // routing_actions rows and the ticket_reassigned audit event, inside the
-  // caller's transaction. reason is the routing reason; Reassign itself has
-  // no reason field yet (Phase 5), so it passes null and the not-recorded
-  // text is stored. The category correction passes its own reason.
+  // caller's transaction. reason is the routing reason — the Reassign's own,
+  // or the category correction's.
   async writeReassignment(
     tx: TransactionSql,
     params: {
@@ -1179,7 +1206,7 @@ export class TicketsService {
       fromOffice: 'MEO' | 'MDRRMO';
       toOffice: 'MEO' | 'MDRRMO';
       admin: AdminSession;
-      reason: string | null;
+      reason: string;
     },
   ): Promise<void> {
     const { ticketId, fromOffice, toOffice, admin, reason } = params;
@@ -1189,13 +1216,14 @@ export class TicketsService {
       VALUES (${ticketId}, ${fromOffice}, ${toOffice}, ${admin.adminId}, ${admin.adminName})
     `;
     // Appendix H routing_actions (manuscript revision Phase 2, step 2c),
-    // written alongside office_reassignments until the reads move in
-    // Phase 5. Same transaction, so now() equals reassigned_at — the key
-    // migration 0037 uses to skip rows it already has.
+    // written alongside office_reassignments (the timeline still reads
+    // office_reassignments). Same transaction, so now() equals
+    // reassigned_at — the key migration 0037 uses to skip rows it already
+    // has, and the key the timeline joins the reason on.
     await tx`
       INSERT INTO routing_actions (ticket_id, action_type, from_office, to_office, reason, admin_id, admin_name, created_at)
       VALUES (
-        ${ticketId}, 'REASSIGN', ${fromOffice}, ${toOffice}, ${reason ?? ROUTING_REASON_NOT_RECORDED},
+        ${ticketId}, 'REASSIGN', ${fromOffice}, ${toOffice}, ${reason},
         ${admin.adminId}, left(${admin.adminName}::text, ${ROUTING_ADMIN_NAME_MAX_LENGTH}::int), now()
       )
     `;
@@ -1211,54 +1239,60 @@ export class TicketsService {
       targetType: 'ticket',
       targetId: ticketId,
       targetSummary: `Ticket #${ticketId} (${params.category})`,
-      metadata:
-        reason === null
-          ? { from: fromOffice, to: toOffice }
-          : { from: fromOffice, to: toOffice, reason },
+      metadata: { from: fromOffice, to: toOffice, reason },
     });
   }
 
-  // Documents that a ticket was referred to an external agency (solid waste
-  // enforcement, water/electric utility, MENRO, DPWH, barangay clearing,
-  // etc.) — never mutates the ticket row itself. This is history, not a
-  // status: assigned_office/status are governed entirely by their own rules,
-  // unaffected by a referral. See TicketReferralRow for why the read side
-  // must never be treated as live "currently pending" state.
+  // Manual Refer (manuscript pp. 43–44, Appendix H ROUTING_ACTIONS;
+  // manuscript revision Phase 5, step 5a): documents that a ticket was
+  // referred to an external agency (solid waste enforcement, water/electric
+  // utility, MENRO, DPWH, barangay clearing, etc.) — never mutates the
+  // ticket row itself. This is history, not a status: assigned_office/status
+  // are governed entirely by their own rules, unaffected by a referral. See
+  // TicketReferralRow for why the read side must never be treated as live
+  // "currently pending" state. Same callers and same rule as Reassign; the
+  // reason is required, and a repeat of the ticket's latest referral to the
+  // same agency is refused as a no-op.
   async logReferral(
     ticketId: number,
     admin: AdminSession,
-    agency: string,
-    note: string | undefined,
+    agency: unknown,
+    reason: unknown,
   ): Promise<void> {
-    if (!agency.trim()) {
-      throw new BadRequestException('Agency is required');
-    }
-    if (agency.length > REFERRAL_AGENCY_MAX_LENGTH) {
-      throw new BadRequestException(
-        `Agency must be at most ${REFERRAL_AGENCY_MAX_LENGTH} characters`,
-      );
-    }
-    if (note && note.length > REFERRAL_NOTE_MAX_LENGTH) {
-      throw new BadRequestException(
-        `Note must be at most ${REFERRAL_NOTE_MAX_LENGTH} characters`,
-      );
-    }
+    const referralTarget = validateReferralAgency(agency);
+    const routingReason = validateRoutingReason(reason);
 
-    const sql = this.pg;
-    const [ticket] = await sql<
-      {
-        assigned_office: 'MEO' | 'MDRRMO';
-        category: string;
-        merged_into_ticket_id: number | null;
-      }[]
-    >`
-      SELECT assigned_office, category, merged_into_ticket_id FROM tickets WHERE id = ${ticketId}
-    `;
-    if (!ticket) throw new NotFoundException('Ticket not found');
-    assertOfficeAccess(admin, ticket.assigned_office);
-    assertNotMergedAway({ id: ticketId, ...ticket });
+    await this.pg.begin(async (tx) => {
+      const ticket = await this.lockForRouting(tx, ticketId);
+      const [latest] = await tx<
+        { action_type: 'REASSIGN' | 'REFER'; referral_target: string | null }[]
+      >`
+        SELECT action_type, referral_target FROM routing_actions
+        WHERE ticket_id = ${ticketId}
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+      `;
+      const facts = {
+        id: ticketId,
+        status: ticket.status,
+        assignedOffice: ticket.assigned_office,
+        mergedIntoTicketId: ticket.merged_into_ticket_id,
+        activeWorkOrders: ticket.active_work_orders,
+      };
+      const block =
+        routingBlock(admin, facts) ??
+        referDestinationBlock(
+          facts,
+          referralTarget,
+          latest
+            ? {
+                actionType: latest.action_type,
+                referralTarget: latest.referral_target,
+              }
+            : null,
+        );
+      if (block) throw toHttpException(block);
 
-    await sql.begin(async (tx) => {
       await this.audit.logInPgTx(tx, {
         actor: {
           adminId: admin.adminId,
@@ -1271,19 +1305,19 @@ export class TicketsService {
         targetType: 'ticket',
         targetId: ticketId,
         targetSummary: `Ticket #${ticketId} (${ticket.category})`,
-        metadata: { agency, note: note ?? null },
+        // reason since Phase 5, step 5a; older events carry an optional
+        // note instead, and stay as they are.
+        metadata: { agency: referralTarget, reason: routingReason },
       });
       // Appendix H routing_actions (manuscript revision Phase 2, step 2c),
-      // written alongside the audit event until the reads move in Phase 5.
-      // Same transaction, so now() equals the event's created_at, and
-      // referral_target is the agency exactly as stored in its metadata —
-      // the key migration 0037 uses to skip rows it already has. The note
-      // stays optional until Phase 5; without one the reason is the
-      // not-recorded text.
+      // written alongside the audit event. Same transaction, so now()
+      // equals the event's created_at, and referral_target is the agency
+      // exactly as stored in its metadata — the key migration 0037 uses to
+      // skip rows it already has.
       await tx`
         INSERT INTO routing_actions (ticket_id, action_type, from_office, to_office, referral_target, reason, admin_id, admin_name, created_at)
         VALUES (
-          ${ticketId}, 'REFER', ${ticket.assigned_office}, NULL, ${agency}, ${note?.trim() || ROUTING_REASON_NOT_RECORDED},
+          ${ticketId}, 'REFER', ${ticket.assigned_office}, NULL, ${referralTarget}, ${routingReason},
           ${admin.adminId}, left(${admin.adminName}::text, ${ROUTING_ADMIN_NAME_MAX_LENGTH}::int), now()
         )
       `;
@@ -1488,13 +1522,19 @@ export class TicketsService {
     return { ok: result.ok, skipped: [...skipped, ...result.skipped] };
   }
 
+  // One required reason for the whole selection (manuscript revision Phase
+  // 5, step 5a), validated up front so a blank one refuses the request
+  // rather than skipping every ticket; each ticket is then reassigned — and
+  // checked — on its own, with that reason on its routing_actions row.
   async bulkReassign(
     ticketIds: number[],
     admin: AdminSession,
     toOffice: 'MEO' | 'MDRRMO',
+    reason: unknown,
   ): Promise<BulkActionResult> {
+    const routingReason = validateRoutingReason(reason);
     return this.runBulk(ticketIds, async (id) => {
-      await this.reassignOffice(id, admin, toOffice);
+      await this.reassignOffice(id, admin, toOffice, routingReason);
     });
   }
 }

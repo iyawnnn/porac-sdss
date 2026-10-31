@@ -852,7 +852,12 @@ describe('FocalIntakeService.forward', () => {
 
     await service.forward(1, FOCAL, 'MDRRMO', 'Better suited to MDRRMO');
 
-    expect(reassignOffice).toHaveBeenCalledWith(100, FOCAL, 'MDRRMO');
+    expect(reassignOffice).toHaveBeenCalledWith(
+      100,
+      FOCAL,
+      'MDRRMO',
+      'Better suited to MDRRMO',
+    );
   });
 
   it('rejects with no reason provided, before touching reassignOffice', async () => {

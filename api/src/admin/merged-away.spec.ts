@@ -130,6 +130,12 @@ function fakeSql(answer: (text: string) => unknown[]) {
     texts.push(text);
     return Promise.resolve(answer(text));
   });
+  // Reassign and Refer check the locked row inside their transaction.
+  (
+    sql as unknown as {
+      begin: (cb: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
+    }
+  ).begin = (cb) => cb(sql);
   return { sql: sql as unknown as Sql, texts };
 }
 
@@ -160,16 +166,24 @@ describe('a merged-away ticket is read-only', () => {
       'advance its status',
       (s: TicketsService) => s.advanceStatus(4, MEO, undefined, undefined),
     ],
-    ['reassign it', (s: TicketsService) => s.reassignOffice(4, MEO, 'MDRRMO')],
+    [
+      'reassign it',
+      (s: TicketsService) =>
+        s.reassignOffice(4, MEO, 'MDRRMO', 'Belongs to MDRRMO.'),
+    ],
     [
       'log a referral',
-      (s: TicketsService) => s.logReferral(4, MEO, 'MENRO', undefined),
+      (s: TicketsService) => s.logReferral(4, MEO, 'MENRO', 'Tree on a river.'),
     ],
     ['reject it', (s: TicketsService) => s.rejectTicket(4, MEO, 'Duplicate.')],
   ])('cannot %s (409), and nothing is written', async (_label, act) => {
-    const { sql, texts } = fakeSql(() => [MERGED_ROW]);
+    const { sql, texts } = fakeSql((text) =>
+      text.includes('FROM routing_actions') ? [] : [MERGED_ROW],
+    );
     await expect(act(ticketsService(sql))).rejects.toThrow(READ_ONLY);
-    expect(texts).toHaveLength(1);
+    expect(
+      texts.filter((t) => /INSERT INTO|UPDATE \w+ SET/.test(t)),
+    ).toHaveLength(0);
   });
 
   it('cannot get an Operational Assessment (409)', async () => {

@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { Sql } from 'postgres';
@@ -282,8 +282,18 @@ describe('TicketsService.bulkReassign', () => {
 
   it('delegates every id to reassignOffice', async () => {
     const { service, reassignOffice } = makeService();
-    const result = await service.bulkReassign([10, 11], ADMIN, 'MDRRMO');
+    const result = await service.bulkReassign(
+      [10, 11],
+      ADMIN,
+      'MDRRMO',
+      '  Both belong to MDRRMO  ',
+    );
     expect(reassignOffice.mock.calls.map((c) => c[0])).toEqual([10, 11]);
+    // The one trimmed reason goes on every ticket's Reassign.
+    expect(reassignOffice.mock.calls.map((c) => c[3])).toEqual([
+      'Both belong to MDRRMO',
+      'Both belong to MDRRMO',
+    ]);
     expect(result.ok).toEqual([10, 11]);
     expect(result.skipped).toEqual([]);
   });
@@ -294,12 +304,31 @@ describe('TicketsService.bulkReassign', () => {
     reassignOffice.mockRejectedValueOnce(
       new Error('Ticket is already assigned to MDRRMO'),
     );
-    const result = await service.bulkReassign([12], ADMIN, 'MDRRMO');
+    const result = await service.bulkReassign(
+      [12],
+      ADMIN,
+      'MDRRMO',
+      'Wrong office',
+    );
     expect(result.ok).toEqual([]);
     expect(result.skipped).toEqual([
       { id: 12, reason: 'Ticket is already assigned to MDRRMO' },
     ]);
   });
+
+  it.each([
+    ['no reason', undefined],
+    ['a blank reason', '   '],
+  ])(
+    'refuses the whole request with %s (400), reassigning nothing',
+    async (_label, reason) => {
+      const { service, reassignOffice } = makeService();
+      await expect(
+        service.bulkReassign([10, 11], ADMIN, 'MDRRMO', reason),
+      ).rejects.toThrow(BadRequestException);
+      expect(reassignOffice).not.toHaveBeenCalled();
+    },
+  );
 });
 
 // The entire authorization and audit story for bulk work rests on this: the
@@ -313,7 +342,9 @@ describe('bulk actions delegate rather than re-implementing', () => {
   );
 
   it('bulkReassign calls reassignOffice', () => {
-    expect(bulkSection).toMatch(/this\.reassignOffice\(id, admin, toOffice\)/);
+    expect(bulkSection).toMatch(
+      /this\.reassignOffice\(id, admin, toOffice, routingReason\)/,
+    );
   });
 
   it('writes no ticket UPDATE of its own', () => {

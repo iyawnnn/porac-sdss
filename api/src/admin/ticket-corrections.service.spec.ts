@@ -411,7 +411,7 @@ describe('TicketCorrectionsService.correctCategory', () => {
     },
   );
 
-  it("lets Focal correct a Reported ticket of another office, reassigning through Focal's Forward rule", async () => {
+  it("lets Focal correct a Reported ticket of another office, reassigning through Focal's routing rule", async () => {
     const t = setup({
       ticket: pothole({
         assigned_office: 'MDRRMO',

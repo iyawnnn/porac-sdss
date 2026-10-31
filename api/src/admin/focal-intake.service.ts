@@ -642,7 +642,7 @@ export class FocalIntakeService {
     `;
     if (!report) throw new NotFoundException('Report not found.');
 
-    await this.tickets.reassignOffice(report.ticket_id, admin, toOffice);
+    await this.tickets.reassignOffice(report.ticket_id, admin, toOffice, reason);
 
     await sql`
       INSERT INTO report_intake_actions (report_id, action_type, actor_admin_id, actor_name, remarks)
