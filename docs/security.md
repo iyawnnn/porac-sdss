@@ -107,6 +107,16 @@ Work orders are scoped by the **work order's own** `assigned_office`, not the ca
 
 `assignedAdminId=me` on work orders resolves server-side from the caller's session, so it can't be used to enumerate another admin's assignments by id.
 
+**Manual routing (Reassign / Refer)** — manuscript revision Phase 5, step 5a. One pure rule, `routingBlock` in `api/src/admin/ticket-routing.rules.ts`, decides who may Reassign or Refer and when, checked by `TicketsService.reassignOffice` / `logReferral` on the ticket row locked `FOR UPDATE` inside the write's own transaction (so a race with work starting elsewhere loses safely):
+
+- **Focal Personnel** — any office's ticket, but only while it is `Reported` with no pending/in-progress Work Order (403 otherwise). Focal reaches it only through `POST /admin/intake/:reportId/reassign|refer` behind `FocalGuard`; `OperationalStaffGuard` on `admin/tickets/*` is not relaxed.
+- **MEO / MDRRMO Personnel** — their own office's tickets (403 otherwise), through `POST /admin/tickets/:id/reassign|refer` and bulk reassign.
+- **Everyone** — refused (409) on a merged-away or `Rejected` ticket and while a Work Order is pending or in progress; a Resolved ticket stays routable by its office.
+- **The System Administrator** — never (both guards reject it first; the rule refuses it too).
+- **Input** — a required reason (trimmed, 1–1000 characters) and a valid destination: the other office for a Reassign, an external agency (≤ 200 characters, never MEO/MDRRMO) for a Refer; a no-op destination is 400. Every success writes `routing_actions` with the actor, time, destination and reason, plus the existing audit event (and `office_reassignments` for a Reassign).
+
+Focal's Forward and Escalate (`POST /admin/intake/:reportId/forward|escalate`) were removed in the same step.
+
 ### 3.3 Verified by tests
 
 Office scoping is regression-tested rather than assumed:
@@ -211,7 +221,7 @@ A full Playwright run posts roughly 17 real reports (and creates a similar numbe
 
 ### 6.1 `admin_audit_events`
 
-An append-only trail of administrative actions: account create / role change / deactivate / reactivate, ticket status changes and reassignments, report moderation, work-order create / update / status change, admin login/failed-login (`admin_login` / `admin_login_failed`), and — five-role Batches 2/3 — Focal's `report_acknowledged` / `report_screened` / `report_escalated` and `operational_assessment_created` / `operational_assessment_updated`. Since manuscript revision Phase 3, step 3f, Focal severity screening writes `report_severity_screened` (metadata `{ oldStatus, newStatus, remarks }`), and `report_screened` (the old general screening action) is history only. (`report_forwarded` is deliberately absent: Forward reuses `reassignOffice`, which already logs `ticket_reassigned`; a second event for the same action would be redundant — see `FocalIntakeService.forward`.)
+An append-only trail of administrative actions: account create / role change / deactivate / reactivate, ticket status changes and reassignments, report moderation, work-order create / update / status change, admin login/failed-login (`admin_login` / `admin_login_failed`), and — five-role Batches 2/3 — Focal's `report_acknowledged` / `report_screened` / `report_escalated` and `operational_assessment_created` / `operational_assessment_updated`. Since manuscript revision Phase 3, step 3f, Focal severity screening writes `report_severity_screened` (metadata `{ oldStatus, newStatus, remarks }`), and `report_screened` (the old general screening action) is history only. There never was a `report_forwarded`: Focal's Forward reused `reassignOffice`, which logs `ticket_reassigned`, as Focal's Reassign does since manuscript revision Phase 5, step 5a. Forward and Escalate were removed in that step; old `report_escalated` events stay readable and filterable. Since then `ticket_reassigned` metadata carries `{ from, to, reason }` and `ticket_referral_noted` `{ agency, reason }` (older referral events keep their optional `note`).
 
 Three properties that matter:
 
@@ -263,7 +273,7 @@ Five-role Batch 2/3 additions follow the same structural rule as §7.1:
 
 - No `api/src/citizens/*` response type includes `report_intake_actions`, `operational_assessments`, or intake-state fields — the citizen-visible `acknowledged_at` is the one exception, sourced directly from `report_acknowledgments.acknowledged_at`, never derived from an intake action.
 - `FocalIntakeService`'s responses never include Operational Assessment content, Work Order internals, or staff assignment data — only report reference, category, barangay, coordinates, routed office, Operational Priority, and derived intake state.
-- MIS (`system_admin`) gains no Focal Intake or Operational Assessment access merely by being an administrator — `FocalGuard`/`OperationalStaffGuard` reject it exactly as they reject each other's role. MIS's Activity Log shows that an acknowledgment/screening/forward/escalation/assessment action *occurred* (via the existing `admin_audit_events` action-type/summary fields every other audit entry already has). The acknowledgment, escalation and assessment events carry no remarks or assessment text — no second, richer audit path exists for them. **Exception: severity screening** (manuscript revision Phase 3, step 3f). Its `report_severity_screened` event stores the screening remarks in `metadata` (`{ oldStatus, newStatus, remarks }`), and the System Administrator can read them through the Activity Log API (`GET /admin/activity-log` returns `metadata`); the Activity Log page itself does not display metadata. Other events' metadata (e.g. moderation notes, grouping and correction reasons) is readable the same way.
+- MIS (`system_admin`) gains no Focal Intake or Operational Assessment access merely by being an administrator — `FocalGuard`/`OperationalStaffGuard` reject it exactly as they reject each other's role. MIS's Activity Log shows that an acknowledgment/screening/reassignment/referral/assessment action (or a historical forward/escalation) *occurred* (via the existing `admin_audit_events` action-type/summary fields every other audit entry already has). The acknowledgment, escalation and assessment events carry no remarks or assessment text — no second, richer audit path exists for them. **Exception: severity screening** (manuscript revision Phase 3, step 3f). Its `report_severity_screened` event stores the screening remarks in `metadata` (`{ oldStatus, newStatus, remarks }`), and the System Administrator can read them through the Activity Log API (`GET /admin/activity-log` returns `metadata`); the Activity Log page itself does not display metadata. Other events' metadata (e.g. moderation notes, grouping and correction reasons) is readable the same way.
 
 ---
 

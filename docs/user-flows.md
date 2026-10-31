@@ -176,7 +176,9 @@ Practical bits: due dates are editable inline and derive "overdue" and "due toda
 - **Reach Admin Management or the Activity Log** — System Administrator only.
 - **Probe another admin's assignments** — "My Assignments" resolves to *you*, server-side.
 
-**One thing MEO *can* do that is often assumed otherwise: reassign a ticket to MDRRMO.** Any admin who can access a ticket can hand it to the other office — useful when a "pothole" turns out to be a drainage failure. It is a **one-way hand-off**: once reassigned, the ticket is MDRRMO's and MEO can no longer open it or take it back. Every reassignment is recorded in the audit trail with who did it.
+**One thing MEO *can* do that is often assumed otherwise: reassign a ticket to MDRRMO.** The office that holds a ticket can hand it to the other office — useful when a "pothole" turns out to be a drainage failure. **Reassign** on Ticket Detail opens a dialog that asks for a **reason**; it is refused on a Rejected ticket and while a Work Order is pending or in progress (finish or cancel it first), and the button says why when it is unavailable. It is a **one-way hand-off**: once reassigned, the ticket is MDRRMO's, the dialog says so and offers the way back to the queue, and MEO can no longer open it or take it back. Every reassignment is recorded with who did it, when, and the reason (manuscript revision Phase 5, step 5a).
+
+**Refer** is the other routing action: on a referral/coordination category (Leaking Pipe, Illegal Dumping, Overgrown Vegetation, Other), it records that the ticket was referred to an external agency (MENRO, DPWH, a utility, the barangay, or another named agency), again with a required reason, under the same rules. The office keeps the ticket and its status; the timeline shows "Referral recorded — {agency}: {reason}". Manual routing is only these two actions — there is no Forward or Escalate.
 
 ---
 
@@ -220,7 +222,7 @@ There is no office picker, no city-wide dashboard, no ticket queue, no work orde
 
 ### 4.2 Ticket reassignment — not available
 
-System Administrators cannot reassign a ticket, view one, or reach `/admin/tickets/[id]` at all. Correcting a mis-routed ticket is now an **office-to-office action**: the owning office's own admin reassigns it away (§2.5/§3.4's Assignment panel), or Focal Personnel can Forward it early under the narrower rule in §5, if the ticket is still eligible. There is no "city-wide correction" path anymore.
+System Administrators cannot reassign a ticket, view one, or reach `/admin/tickets/[id]` at all. Correcting a mis-routed ticket is now an **office-to-office action**: the owning office's own admin reassigns it away (§2.5/§3.4's Assignment panel), or Focal Personnel can Reassign it early under the narrower rule in §5, if the ticket is still `Reported` with no active Work Order. There is no "city-wide correction" path anymore, and the System Administrator never reassigns or refers.
 
 ### 4.3 Admin management (`/admin/admins`)
 
@@ -264,14 +266,14 @@ Focal Personnel — municipality-wide report intake, never operational execution
 
 Focal sits between the citizen's submission and the owning office's operational queue: a first-pass monitoring/screening desk that sees every incoming report from both MEO and MDRRMO in one place, before or alongside the owning office picking it up in their own Ticket Queue. **Focal does not own technical validation or operational response** — it never sets a ticket's status, never resolves or rejects, never creates a Work Order, and never touches Operational Assessment; those remain entirely the owning office's responsibility (§2–§3).
 
-### 5.2 Acknowledge, screen, forward or escalate
+### 5.2 Acknowledge, screen, reassign or refer
 
 1. **Acknowledge** — a one-time, report-level "seen this" event. Acknowledging is not a status change: the ticket's real lifecycle status is untouched, and the citizen sees a separate, neutral notification and timeline event (§1) — never anything implying "Under Review."
 2. **Severity screening** (manuscript Table 2; manuscript revision Phase 3, step 3f) — on the intake detail's Severity screening card, Focal reads the citizen's severity against the photo and description and records **No concern noted** or **Requires operational validation**, with optional remarks, while the ticket is still active. The report then shows as Screened in the Intake Queue, and MEO/MDRRMO see "Focal screening: …" on that report in Ticket Detail. Focal can screen again later; the new values replace the old. It is advisory: the citizen's severity and Operational Priority stay exactly as they were, and the citizen never sees it. It replaced the old Initial Screening recommendation (continue / forward / escalate); earlier screenings of that kind stay in the activity list as history.
-3. **Forward**, only while the ticket is still `Reported` and no Work Order has started — an early custody correction, using the same reassignment mechanism the owning office itself would use (§2.5/§3.4), not a separate path. Once operational work has begun, Focal can no longer move it — that correction becomes the owning office's own decision.
-4. **Escalate** — flags the report for the currently-responsible office's attention. Never changes Operational Priority, status, or office by itself.
-5. **Merge** a possibly related ticket (manuscript revision Phase 3, step 3d), under the Forward rule: only while every ticket involved is still `Reported` with no active Work Order, in either office. The same category and office rules apply as for MEO/MDRRMO staff (§2.2, Grouping reports), so two reports routed to different offices need a Forward first.
-6. **Correct the category or location** of the report's ticket (step 3e), under the same rule: only while it is still `Reported` with no active Work Order, in either office. A category the other office handles moves the ticket there, as a Forward would.
+3. **Reassign** or **Refer** (manuscript revision Phase 5, step 5a; Decision 10), **only while the ticket is still `Reported` and no Work Order is pending or in progress** — an early routing correction, through the same dialogs, the same reason requirement and the same recorded history as the owning office's own (§2.5/§3.4), not a separate path. Reassign moves the ticket to the other office; Refer records an external agency. Once operational review or work has begun, both buttons are disabled with the reason, and the correction becomes the responsible office's own decision.
+4. *(Forward and Escalate were removed in step 5a — manual routing is only Reassign or Refer. Reports forwarded or escalated earlier still show it in their activity list and intake state.)*
+5. **Merge** a possibly related ticket (manuscript revision Phase 3, step 3d), under the same Focal rule: only while every ticket involved is still `Reported` with no active Work Order, in either office. The same category and office rules apply as for MEO/MDRRMO staff (§2.2, Grouping reports), so two reports routed to different offices need a Reassign first.
+6. **Correct the category or location** of the report's ticket (step 3e), under the same rule: only while it is still `Reported` with no active Work Order, in either office. A category the other office handles moves the ticket there, recorded as a Reassign with the correction's reason.
 
 ### 5.3 Read-only situational awareness
 
