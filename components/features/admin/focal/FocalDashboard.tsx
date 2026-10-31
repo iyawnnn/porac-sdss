@@ -34,6 +34,8 @@ export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
   // acknowledgment and screening are parallel (manuscript revision Phase 3,
   // step 3f).
   const needsScreening = reports.filter((r) => r.needsScreening).length;
+  // History only: nothing has been forwarded or escalated since manuscript
+  // revision Phase 5, step 5a (Focal routes with Reassign / Refer).
   const forwardedOrEscalated = reports.filter((r) => r.intakeState === "Forwarded" || r.intakeState === "Escalated").length;
 
   return (
@@ -47,7 +49,7 @@ export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
         <KpiCard icon={InboxIcon} label="New Reports" value={newReports.toLocaleString()} />
         <KpiCard icon={AlertTriangleIcon} label="Unacknowledged" value={unacknowledged.toLocaleString()} />
         <KpiCard icon={ClipboardListIcon} label="Needs Screening" value={needsScreening.toLocaleString()} />
-        <KpiCard icon={SendIcon} label="Forwarded / Escalated" value={forwardedOrEscalated.toLocaleString()} />
+        <KpiCard icon={SendIcon} label="Forwarded / Escalated (history)" value={forwardedOrEscalated.toLocaleString()} />
       </div>
 
       <Card className="@container gap-0 rounded-xl bg-muted pt-2 pb-5">

@@ -1,6 +1,8 @@
 // Focal's municipality-wide intake surface — a separate concept from
 // AdminTicketRow/PaginatedTickets (the operational Ticket Queue's own
 // shape). Mirrors api/src/admin/focal-intake.service.ts's response DTOs.
+// Forwarded and Escalated come only from history: Forward and Escalate were
+// removed in manuscript revision Phase 5, step 5a.
 export type IntakeState = "New" | "Acknowledged" | "Screened" | "Forwarded" | "Escalated";
 // Appendix H REPORTS severity_screening_status (manuscript Table 2;
 // manuscript revision Phase 3, step 3f). Mirrors api/src/db/schema.ts.
@@ -62,6 +64,10 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
   submittedCategory: string;
   // Focal severity screening (manuscript revision Phase 3, step 3f).
   severityScreening: SeverityScreening;
+  // Manuscript revision Phase 5, step 5a: null while Focal may Reassign or
+  // Refer the report's ticket (Reported, no active Work Order), else why not
+  // — the API's own refusal message.
+  routing: { blockedReason: string | null };
 }
 
 // Batch 4's Focal-safe read-only map source (GET /admin/intake/geo) — a

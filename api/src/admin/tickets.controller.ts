@@ -29,6 +29,7 @@ import {
   type OperationalAssessmentInput,
 } from './operational-assessment.service';
 import { RelatedTicketsService } from './related-tickets.service';
+import { validateReassignOffice } from './ticket-routing.rules';
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|png|webp)$/;
@@ -223,14 +224,13 @@ export class TicketsController {
     @CurrentAdmin() admin: AdminSession,
     @Body('ticketIds') ticketIds: unknown,
     @Body('toOffice') toOffice: unknown,
+    @Body('reason') reason: unknown,
   ) {
-    if (toOffice !== 'MEO' && toOffice !== 'MDRRMO') {
-      throw new BadRequestException('toOffice must be MEO or MDRRMO');
-    }
     return this.tickets.bulkReassign(
       parseTicketIds(ticketIds),
       admin,
-      toOffice,
+      validateReassignOffice(toOffice),
+      reason,
     );
   }
 
@@ -264,16 +264,26 @@ export class TicketsController {
     return { ok: true, ...result };
   }
 
+  // Manual routing (manuscript revision Phase 5, step 5a): REASSIGN to the
+  // other office or REFER to an external agency, each with a required
+  // reason. The service validates the body and applies the routing rule
+  // (ticket-routing.rules.ts): 400 bad input or a no-op destination, 403
+  // not this office's ticket, 409 merged away / Rejected / an active Work
+  // Order. Focal reaches the same service methods through
+  // /admin/intake/:reportId/reassign|refer.
   @Post(':id/reassign')
   async reassign(
     @Param('id', ParseIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('toOffice') toOffice: unknown,
+    @Body('reason') reason: unknown,
   ) {
-    if (toOffice !== 'MEO' && toOffice !== 'MDRRMO') {
-      throw new BadRequestException('toOffice must be MEO or MDRRMO');
-    }
-    const result = await this.tickets.reassignOffice(id, admin, toOffice);
+    const result = await this.tickets.reassignOffice(
+      id,
+      admin,
+      validateReassignOffice(toOffice),
+      reason,
+    );
     return { ok: true, assignedOffice: result.assignedOffice };
   }
 
@@ -282,15 +292,9 @@ export class TicketsController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('agency') agency: unknown,
-    @Body('note') note: unknown,
+    @Body('reason') reason: unknown,
   ) {
-    if (typeof agency !== 'string') {
-      throw new BadRequestException('agency is required');
-    }
-    if (note !== undefined && typeof note !== 'string') {
-      throw new BadRequestException('note must be a string');
-    }
-    await this.tickets.logReferral(id, admin, agency, note);
+    await this.tickets.logReferral(id, admin, agency, reason);
     return { ok: true };
   }
 

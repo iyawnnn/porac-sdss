@@ -203,6 +203,11 @@ describe('cross-office access to single-resource ticket endpoints', () => {
         },
       };
     }) as unknown as Sql;
+    (
+      sql as unknown as {
+        begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
+      }
+    ).begin = (cb) => cb(sql);
     return new TicketsService(
       sql,
       {} as MediaService,
@@ -279,7 +284,12 @@ describe('cross-office access to single-resource ticket endpoints', () => {
     ]);
     const detail = await service.getTicketDetail(3, MEO_OFFICER);
     expect(detail?.referrals).toEqual([
-      { agency: 'MENRO', note: 'Called 8/15', admin_name: 'Jane Doe', referred_at: '2026-08-15T00:00:00.000Z' },
+      {
+        agency: 'MENRO',
+        note: 'Called 8/15',
+        admin_name: 'Jane Doe',
+        referred_at: '2026-08-15T00:00:00.000Z',
+      },
     ]);
   });
 
@@ -418,10 +428,21 @@ describe('cross-office access to single-resource ticket endpoints', () => {
 
   it("rejects reassigning a ticket that is not the acting admin's own office", async () => {
     const service = makeService([
-      [{ assigned_office: 'MDRRMO' }], // ticket lookup
+      [
+        {
+          assigned_office: 'MDRRMO',
+          status: 'Reported',
+          active_work_orders: 0,
+        },
+      ], // locked ticket
     ]);
     await expect(
-      service.reassignOffice(1, MEO_OFFICER as AdminSession, 'MEO'),
+      service.reassignOffice(
+        1,
+        MEO_OFFICER as AdminSession,
+        'MEO',
+        'Belongs to MEO.',
+      ),
     ).rejects.toThrow(ForbiddenException);
   });
 });
@@ -510,111 +531,359 @@ describe('admin audit logging for ticket mutations', () => {
     expect(createInTx).not.toHaveBeenCalled();
   });
 
-  it('logs ticket_reassigned inside the same transaction as the reassignment', async () => {
+  it('logs ticket_reassigned, with the reason, inside the same transaction as the reassignment', async () => {
     const { service, logInPgTx } = makeService([
-      [{ assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
+      [
+        {
+          assigned_office: 'MEO',
+          category: 'Pothole',
+          status: 'Under Review',
+          merged_into_ticket_id: null,
+          active_work_orders: 0,
+        },
+      ], // locked ticket
       [{}], // UPDATE tickets
       [{}], // INSERT office_reassignments
+      [{}], // INSERT routing_actions
     ]);
 
-    await service.reassignOffice(9, MEO_OFFICER as AdminSession, 'MDRRMO');
+    await service.reassignOffice(
+      9,
+      MEO_OFFICER as AdminSession,
+      'MDRRMO',
+      '  Drainage belongs to MDRRMO  ',
+    );
 
     expect(logInPgTx).toHaveBeenCalledTimes(1);
-    const [, input] = logInPgTx.mock.calls[0];
+    const [, input] = logInPgTx.mock.calls[0] as [
+      unknown,
+      { actionType: string; targetId: number; metadata: unknown },
+    ];
     expect(input.actionType).toBe('ticket_reassigned');
     expect(input.targetId).toBe(9);
-    expect(input.metadata).toEqual({ from: 'MEO', to: 'MDRRMO' });
+    expect(input.metadata).toEqual({
+      from: 'MEO',
+      to: 'MDRRMO',
+      reason: 'Drainage belongs to MDRRMO',
+    });
   });
 
-  // Batch 2 (Focal intake): reassignOffice gains a Focal-specific
-  // authorization branch (early-intake Forward) alongside the existing
-  // assertOfficeAccess path for operational staff — same reassignment
-  // mechanism, same office_reassignments/audit write, different gate.
+  // Manuscript revision Phase 5, step 5a (Decision 10): Focal may Reassign
+  // or Refer any office's ticket, but only while it is still Reported with
+  // no active Work Order — after that the responsible office handles it.
   const FOCAL = {
     accountType: 'PERSONNEL',
     isFocal: true,
     office: 'MDRRMO',
   } as AdminSession;
+  const REPORTED = {
+    status: 'Reported',
+    assigned_office: 'MEO',
+    category: 'Pothole',
+    merged_into_ticket_id: null,
+    active_work_orders: 0,
+  };
 
   it('allows Focal to reassign a Reported ticket with no active work order', async () => {
     const { service, logInPgTx } = makeService([
-      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
-      [{ count: 0 }], // active work-order count
+      [REPORTED], // locked ticket
       [{}], // UPDATE tickets
       [{}], // INSERT office_reassignments
+      [{}], // INSERT routing_actions
     ]);
 
-    const result = await service.reassignOffice(11, FOCAL, 'MDRRMO');
+    const result = await service.reassignOffice(
+      11,
+      FOCAL,
+      'MDRRMO',
+      'Flood report.',
+    );
     expect(result).toEqual({ assignedOffice: 'MDRRMO' });
     expect(logInPgTx).toHaveBeenCalledTimes(1);
     expect(logInPgTx.mock.calls[0][1].actionType).toBe('ticket_reassigned');
   });
 
-  it('rejects Focal reassigning a ticket that already left Reported (Under Review)', async () => {
-    const { service, logInPgTx } = makeService([
-      [{ status: 'Under Review', assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
-    ]);
+  it.each(['Under Review', 'In Progress', 'Resolved', 'Rejected'])(
+    'refuses Focal reassigning or referring a ticket that is %s (403)',
+    async (status) => {
+      for (const act of [
+        (s: TicketsService) => s.reassignOffice(12, FOCAL, 'MDRRMO', 'Flood.'),
+        (s: TicketsService) =>
+          s.logReferral(12, FOCAL, 'DPWH', 'National road.'),
+      ]) {
+        const { service, logInPgTx } = makeService([
+          [{ ...REPORTED, status }],
+          [], // latest routing action (Refer only)
+        ]);
+        await expect(act(service)).rejects.toThrow(
+          new ForbiddenException(
+            `Focal Personnel can only reassign or refer a ticket while it is still Reported; Ticket #12 is ${status}. The responsible office handles routing from here.`,
+          ),
+        );
+        expect(logInPgTx).not.toHaveBeenCalled();
+      }
+    },
+  );
 
-    await expect(service.reassignOffice(12, FOCAL, 'MDRRMO')).rejects.toThrow(
-      ForbiddenException,
+  it('refuses Focal reassigning or referring a Reported ticket with an active work order (403)', async () => {
+    for (const act of [
+      (s: TicketsService) => s.reassignOffice(13, FOCAL, 'MDRRMO', 'Flood.'),
+      (s: TicketsService) => s.logReferral(13, FOCAL, 'DPWH', 'National road.'),
+    ]) {
+      const { service, logInPgTx } = makeService([
+        [{ ...REPORTED, active_work_orders: 1 }],
+        [],
+      ]);
+      await expect(act(service)).rejects.toThrow(
+        new ForbiddenException(
+          'Focal Personnel can only reassign or refer a ticket before work starts; Ticket #13 has an active Work Order. The responsible office handles routing from here.',
+        ),
+      );
+      expect(logInPgTx).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each(['Reported', 'Under Review', 'In Progress', 'Resolved'])(
+    'lets the responsible office reassign and refer its own %s ticket',
+    async (status) => {
+      const reassign = makeService([
+        [{ ...REPORTED, status }],
+        [{}],
+        [{}],
+        [{}],
+      ]);
+      await expect(
+        reassign.service.reassignOffice(
+          14,
+          MEO_OFFICER as AdminSession,
+          'MDRRMO',
+          'Flooding.',
+        ),
+      ).resolves.toEqual({ assignedOffice: 'MDRRMO' });
+
+      const refer = makeService([[{ ...REPORTED, status }], [], [{}]]);
+      await expect(
+        refer.service.logReferral(
+          14,
+          MEO_OFFICER as AdminSession,
+          'DPWH',
+          'National road.',
+        ),
+      ).resolves.toBeUndefined();
+      expect(refer.logInPgTx).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('refuses the responsible office on a Rejected ticket (409)', async () => {
+    for (const act of [
+      (s: TicketsService) =>
+        s.reassignOffice(15, MEO_OFFICER as AdminSession, 'MDRRMO', 'Flood.'),
+      (s: TicketsService) =>
+        s.logReferral(15, MEO_OFFICER as AdminSession, 'DPWH', 'Road.'),
+    ]) {
+      const { service, logInPgTx } = makeService([
+        [{ ...REPORTED, status: 'Rejected' }],
+        [],
+      ]);
+      await expect(act(service)).rejects.toThrow(
+        new ConflictException(
+          'Ticket #15 is Rejected and can no longer be reassigned or referred.',
+        ),
+      );
+      expect(logInPgTx).not.toHaveBeenCalled();
+    }
+  });
+
+  it('refuses the responsible office while a Work Order is pending or in progress (409)', async () => {
+    for (const act of [
+      (s: TicketsService) =>
+        s.reassignOffice(16, MEO_OFFICER as AdminSession, 'MDRRMO', 'Flood.'),
+      (s: TicketsService) =>
+        s.logReferral(16, MEO_OFFICER as AdminSession, 'DPWH', 'Road.'),
+    ]) {
+      const { service, logInPgTx } = makeService([
+        [{ ...REPORTED, status: 'In Progress', active_work_orders: 2 }],
+        [],
+      ]);
+      await expect(act(service)).rejects.toThrow(
+        new ConflictException(
+          'Ticket #16 has an active Work Order. Finish or cancel its Work Orders before reassigning or referring it.',
+        ),
+      );
+      expect(logInPgTx).not.toHaveBeenCalled();
+    }
+  });
+
+  it("refuses another office's ticket (403) and a System Administrator (403)", async () => {
+    const other = makeService([
+      [{ ...REPORTED, assigned_office: 'MDRRMO' }],
+      [],
+    ]);
+    await expect(
+      other.service.logReferral(
+        17,
+        MEO_OFFICER as AdminSession,
+        'MENRO',
+        'Tree.',
+      ),
+    ).rejects.toThrow(
+      new ForbiddenException("You do not have access to this office's data."),
+    );
+
+    const mis = makeService([[REPORTED]]);
+    await expect(
+      mis.service.reassignOffice(
+        17,
+        SYSTEM_ADMIN as AdminSession,
+        'MDRRMO',
+        'Flood.',
+      ),
+    ).rejects.toThrow(
+      new ForbiddenException(
+        'Only MEO, MDRRMO and Focal Personnel can reassign or refer a ticket.',
+      ),
+    );
+  });
+
+  it('refuses a Reassign to the office that already holds the ticket (400)', async () => {
+    const { service, logInPgTx } = makeService([[REPORTED]]);
+    await expect(
+      service.reassignOffice(
+        18,
+        MEO_OFFICER as AdminSession,
+        'MEO',
+        'No change.',
+      ),
+    ).rejects.toThrow(
+      new BadRequestException('Ticket #18 is already assigned to MEO.'),
     );
     expect(logInPgTx).not.toHaveBeenCalled();
   });
 
-  it('rejects Focal reassigning a Reported ticket that already has an active work order', async () => {
-    const { service, logInPgTx } = makeService([
-      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole' }], // ticket lookup
-      [{ count: 1 }], // active work-order count
-    ]);
+  it.each([
+    ['no reason', undefined],
+    ['a blank reason', '  \n '],
+    ['a non-text reason', 42],
+  ])(
+    'refuses a Reassign or Refer with %s (400) before reading the ticket',
+    async (_label, reason) => {
+      for (const act of [
+        (s: TicketsService) =>
+          s.reassignOffice(19, MEO_OFFICER as AdminSession, 'MDRRMO', reason),
+        (s: TicketsService) =>
+          s.logReferral(19, MEO_OFFICER as AdminSession, 'DPWH', reason),
+      ]) {
+        const { service, logInPgTx } = makeService([]);
+        await expect(act(service)).rejects.toThrow(
+          new BadRequestException('A reason is required.'),
+        );
+        expect(logInPgTx).not.toHaveBeenCalled();
+      }
+    },
+  );
 
-    await expect(service.reassignOffice(13, FOCAL, 'MDRRMO')).rejects.toThrow(
-      ForbiddenException,
+  it('refuses a reason over 1000 characters (400)', async () => {
+    const { service } = makeService([]);
+    await expect(
+      service.reassignOffice(
+        19,
+        MEO_OFFICER as AdminSession,
+        'MDRRMO',
+        'x'.repeat(1001),
+      ),
+    ).rejects.toThrow(
+      new BadRequestException('The reason must be 1000 characters or fewer.'),
     );
-    expect(logInPgTx).not.toHaveBeenCalled();
   });
 
-  it('logs ticket_referral_noted without mutating the ticket row', async () => {
+  it('logs ticket_referral_noted with the trimmed agency and reason, without mutating the ticket row', async () => {
     const { service, logInPgTx } = makeService([
-      [{ assigned_office: 'MEO', category: 'Leaking Pipe' }], // ticket lookup
+      [REPORTED], // locked ticket
+      [], // latest routing action: none
+      [{}], // INSERT routing_actions
     ]);
 
-    await service.logReferral(9, MEO_OFFICER as AdminSession, 'Water utility provider', 'Contacted 8/15');
+    await service.logReferral(
+      9,
+      MEO_OFFICER as AdminSession,
+      ' Water utility provider ',
+      ' Contacted 8/15 ',
+    );
 
     expect(logInPgTx).toHaveBeenCalledTimes(1);
-    const [, input] = logInPgTx.mock.calls[0];
+    const [, input] = logInPgTx.mock.calls[0] as [
+      unknown,
+      { actionType: string; targetId: number; metadata: unknown },
+    ];
     expect(input.actionType).toBe('ticket_referral_noted');
     expect(input.targetId).toBe(9);
-    expect(input.metadata).toEqual({ agency: 'Water utility provider', note: 'Contacted 8/15' });
+    expect(input.metadata).toEqual({
+      agency: 'Water utility provider',
+      reason: 'Contacted 8/15',
+    });
   });
 
-  it('rejects logReferral on another office\'s ticket', async () => {
-    const { service } = makeService([
-      [{ assigned_office: 'MDRRMO', category: 'Leaking Pipe' }], // ticket lookup
+  it('refuses a Refer to the agency the latest routing action already referred it to (400)', async () => {
+    const { service, logInPgTx } = makeService([
+      [REPORTED],
+      [{ action_type: 'REFER', referral_target: 'DPWH' }],
     ]);
-
     await expect(
-      service.logReferral(9, MEO_OFFICER as AdminSession, 'MENRO', undefined),
-    ).rejects.toThrow(ForbiddenException);
+      service.logReferral(20, MEO_OFFICER as AdminSession, 'dpwh', 'Again.'),
+    ).rejects.toThrow(
+      new BadRequestException('Ticket #20 is already referred to DPWH.'),
+    );
+    expect(logInPgTx).not.toHaveBeenCalled();
   });
 
-  it('rejects an empty agency', async () => {
-    const { service } = makeService([
-      [{ assigned_office: 'MEO', category: 'Leaking Pipe' }], // ticket lookup
+  it('allows the same agency again once a Reassign came after that referral, and a different agency any time', async () => {
+    const afterReassign = makeService([
+      [REPORTED],
+      [{ action_type: 'REASSIGN', referral_target: null }],
+      [{}],
     ]);
-
     await expect(
-      service.logReferral(9, MEO_OFFICER as AdminSession, '   ', undefined),
-    ).rejects.toThrow(BadRequestException);
+      afterReassign.service.logReferral(
+        21,
+        MEO_OFFICER as AdminSession,
+        'DPWH',
+        'Back to DPWH.',
+      ),
+    ).resolves.toBeUndefined();
+
+    const otherAgency = makeService([
+      [REPORTED],
+      [{ action_type: 'REFER', referral_target: 'DPWH' }],
+      [{}],
+    ]);
+    await expect(
+      otherAgency.service.logReferral(
+        21,
+        MEO_OFFICER as AdminSession,
+        'MENRO',
+        'Environmental.',
+      ),
+    ).resolves.toBeUndefined();
   });
 
-  it('rejects a note over REFERRAL_NOTE_MAX_LENGTH', async () => {
-    const { service } = makeService([
-      [{ assigned_office: 'MEO', category: 'Leaking Pipe' }], // ticket lookup
-    ]);
-
+  it.each([
+    ['an empty agency', '   ', 'Agency is required'],
+    [
+      'an agency over 200 characters',
+      'x'.repeat(201),
+      'Agency must be at most 200 characters',
+    ],
+    [
+      'a municipal office as the agency',
+      ' mdrrmo ',
+      'mdrrmo is a municipal office, not an external agency. Use Reassign to move the ticket between MEO and MDRRMO.',
+    ],
+  ])('refuses %s (400)', async (_label, agency, message) => {
+    const { service, logInPgTx } = makeService([]);
     await expect(
-      service.logReferral(9, MEO_OFFICER as AdminSession, 'MENRO', 'x'.repeat(1001)),
-    ).rejects.toThrow(BadRequestException);
+      service.logReferral(9, MEO_OFFICER as AdminSession, agency, 'Reason.'),
+    ).rejects.toThrow(new BadRequestException(message));
+    expect(logInPgTx).not.toHaveBeenCalled();
   });
 
   it('rejects a Reported ticket: status Rejected, status_history + ticket_rejected audit + citizen notification + email, all with the reason', async () => {
@@ -1048,7 +1317,7 @@ describe('resolution_outcome on status changes (Phase 2, step 2b)', () => {
 // as the blocks above; it also records each query's text, values, and
 // whether it ran inside the sql.begin callback. An Error in `rows` makes
 // that query reject.
-describe('routing_actions dual-write (Phase 2, step 2c)', () => {
+describe('routing_actions dual-write (Phase 2, step 2c; reasons required since Phase 5, step 5a)', () => {
   const MEO_ADMIN = {
     adminId: 4,
     adminName: 'Maria Santos',
@@ -1106,16 +1375,34 @@ describe('routing_actions dual-write (Phase 2, step 2c)', () => {
     return { service, calls, routingInserts };
   }
 
-  it('reassignOffice writes exactly one REASSIGN row, in the same transaction as office_reassignments', async () => {
+  const LOCKED = {
+    assigned_office: 'MEO',
+    category: 'Pothole',
+    status: 'In Progress',
+    merged_into_ticket_id: null,
+    active_work_orders: 0,
+  };
+
+  it('reassignOffice locks the ticket, then writes exactly one REASSIGN row with the reason, in the same transaction as office_reassignments', async () => {
     const { service, calls, routingInserts } = makeRecordingService([
-      [{ assigned_office: 'MEO', category: 'Pothole', status: 'In Progress' }], // ticket lookup
+      [LOCKED], // locked ticket
       [{}], // UPDATE tickets
       [{}], // INSERT office_reassignments
       [{}], // INSERT routing_actions
     ]);
 
-    await service.reassignOffice(21, MEO_ADMIN, 'MDRRMO');
+    await service.reassignOffice(
+      21,
+      MEO_ADMIN,
+      'MDRRMO',
+      '  Flooding is MDRRMO  ',
+    );
 
+    // The rule is checked on the row locked inside the transaction, with
+    // its active Work Order count read in the same statement.
+    expect(calls[0].inTx).toBe(true);
+    expect(calls[0].text).toContain('FOR UPDATE OF t');
+    expect(calls[0].text).toContain("w.status IN ('pending', 'in_progress')");
     const inserts = routingInserts();
     expect(inserts).toHaveLength(1);
     expect(inserts[0].inTx).toBe(true);
@@ -1125,7 +1412,7 @@ describe('routing_actions dual-write (Phase 2, step 2c)', () => {
       21,
       'MEO',
       'MDRRMO',
-      ROUTING_REASON_NOT_RECORDED,
+      'Flooding is MDRRMO',
       4,
       'Maria Santos',
       ROUTING_ADMIN_NAME_MAX_LENGTH,
@@ -1143,16 +1430,15 @@ describe('routing_actions dual-write (Phase 2, step 2c)', () => {
     ]);
   });
 
-  it("Focal's Forward (same reassignOffice path) writes one REASSIGN row too", async () => {
+  it("Focal's Reassign (same reassignOffice path) writes one REASSIGN row with Focal as the actor", async () => {
     const { service, routingInserts } = makeRecordingService([
-      [{ assigned_office: 'MEO', category: 'Pothole', status: 'Reported' }], // ticket lookup
-      [{ count: 0 }], // active work-order count
+      [{ ...LOCKED, status: 'Reported' }], // locked ticket
       [{}], // UPDATE tickets
       [{}], // INSERT office_reassignments
       [{}], // INSERT routing_actions
     ]);
 
-    await service.reassignOffice(22, FOCAL_ADMIN, 'MDRRMO');
+    await service.reassignOffice(22, FOCAL_ADMIN, 'MDRRMO', 'Flood report.');
 
     const inserts = routingInserts();
     expect(inserts).toHaveLength(1);
@@ -1161,50 +1447,57 @@ describe('routing_actions dual-write (Phase 2, step 2c)', () => {
       22,
       'MEO',
       'MDRRMO',
-      ROUTING_REASON_NOT_RECORDED,
+      'Flood report.',
       9,
       'Diana Torres',
       ROUTING_ADMIN_NAME_MAX_LENGTH,
     ]);
   });
 
-  it('a reassign rejected before the transaction writes no routing row', async () => {
-    const { service, routingInserts } = makeRecordingService([
-      [{ assigned_office: 'MDRRMO', category: 'Pothole', status: 'Reported' }],
+  it('a refused reassign writes no routing row and no office_reassignments row', async () => {
+    const { service, calls, routingInserts } = makeRecordingService([
+      [{ ...LOCKED, assigned_office: 'MDRRMO', status: 'Reported' }],
     ]);
 
     await expect(
-      service.reassignOffice(23, MEO_ADMIN, 'MDRRMO'),
+      service.reassignOffice(23, MEO_ADMIN, 'MDRRMO', 'Reason.'),
     ).rejects.toThrow(ForbiddenException);
     expect(routingInserts()).toHaveLength(0);
+    expect(
+      calls.some((c) => c.text.includes('INSERT INTO office_reassignments')),
+    ).toBe(false);
   });
 
   it('a reassign whose office_reassignments insert fails writes no routing row (the transaction rolls back)', async () => {
     const { service, routingInserts } = makeRecordingService([
-      [{ assigned_office: 'MEO', category: 'Pothole', status: 'In Progress' }],
+      [LOCKED],
       [{}], // UPDATE tickets
       new Error('insert failed'), // INSERT office_reassignments
     ]);
 
     await expect(
-      service.reassignOffice(24, MEO_ADMIN, 'MDRRMO'),
+      service.reassignOffice(24, MEO_ADMIN, 'MDRRMO', 'Reason.'),
     ).rejects.toThrow('insert failed');
     expect(routingInserts()).toHaveLength(0);
   });
 
-  it('logReferral writes exactly one REFER row in its transaction, with the note as the reason', async () => {
-    const { service, routingInserts } = makeRecordingService([
-      [{ assigned_office: 'MEO', category: 'Leaking Pipe' }], // ticket lookup
+  it('logReferral writes exactly one REFER row in its transaction, with the trimmed reason', async () => {
+    const { service, calls, routingInserts } = makeRecordingService([
+      [{ ...LOCKED, category: 'Leaking Pipe' }], // locked ticket
+      [], // latest routing action: none
       [{}], // INSERT routing_actions
     ]);
 
     await service.logReferral(
       31,
       MEO_ADMIN,
-      'Water district',
+      ' Water district ',
       '  Called the hotline  ',
     );
 
+    expect(calls[0].text).toContain('FOR UPDATE OF t');
+    expect(calls[1].text).toContain('FROM routing_actions');
+    expect(calls[1].inTx).toBe(true);
     const inserts = routingInserts();
     expect(inserts).toHaveLength(1);
     expect(inserts[0].inTx).toBe(true);
@@ -1220,45 +1513,35 @@ describe('routing_actions dual-write (Phase 2, step 2c)', () => {
     ]);
   });
 
-  it.each([
-    ['a blank note', '   '],
-    ['no note', undefined],
-  ])(
-    'logReferral with %s records the not-recorded reason',
-    async (_label, note) => {
-      const { service, routingInserts } = makeRecordingService([
-        [{ assigned_office: 'MDRRMO', category: 'Leaking Pipe' }],
-        [{}],
-      ]);
+  it('a refused referral (no-op destination) writes no routing row', async () => {
+    const { service, routingInserts } = makeRecordingService([
+      [LOCKED],
+      [{ action_type: 'REFER', referral_target: 'MENRO' }],
+    ]);
 
-      await service.logReferral(
-        32,
-        { ...MEO_ADMIN, office: 'MDRRMO' },
-        'MENRO',
-        note,
-      );
-
-      expect(routingInserts()).toHaveLength(1);
-      expect(routingInserts()[0].values[3]).toBe(ROUTING_REASON_NOT_RECORDED);
-    },
-  );
+    await expect(
+      service.logReferral(32, MEO_ADMIN, 'MENRO', 'Again.'),
+    ).rejects.toThrow(BadRequestException);
+    expect(routingInserts()).toHaveLength(0);
+  });
 
   it('caps the admin name at the varchar(100) limit in SQL, for both inserts', async () => {
     const { service, routingInserts } = makeRecordingService([
-      [{ assigned_office: 'MEO', category: 'Pothole', status: 'In Progress' }],
+      [LOCKED],
       [{}],
       [{}],
       [{}],
-      [{ assigned_office: 'MDRRMO', category: 'Leaking Pipe' }],
+      [{ ...LOCKED, assigned_office: 'MDRRMO', category: 'Leaking Pipe' }],
+      [],
       [{}],
     ]);
 
-    await service.reassignOffice(34, MEO_ADMIN, 'MDRRMO');
+    await service.reassignOffice(34, MEO_ADMIN, 'MDRRMO', 'Reason.');
     await service.logReferral(
       34,
       { ...MEO_ADMIN, office: 'MDRRMO' },
       'MENRO',
-      undefined,
+      'Reason.',
     );
 
     const inserts = routingInserts();
@@ -1267,6 +1550,12 @@ describe('routing_actions dual-write (Phase 2, step 2c)', () => {
       expect(insert.text).toContain('left(?::text, ?::int)');
       expect(insert.values.at(-1)).toBe(ROUTING_ADMIN_NAME_MAX_LENGTH);
     }
+  });
+
+  it('no new routing row is written with the not-recorded text any more', () => {
+    const source = readFileSync(join(__dirname, 'tickets.service.ts'), 'utf8');
+    const writes = source.slice(source.indexOf('async reassignOffice('));
+    expect(writes).not.toContain('ROUTING_REASON_NOT_RECORDED');
   });
 
   it('migration 0037 backfills with the same not-recorded text as the app', () => {

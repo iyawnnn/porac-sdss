@@ -17,6 +17,7 @@ export function WorkOrdersPanel({
   office,
   initialWorkOrders,
   readOnly = false,
+  canCreate = true,
 }: {
   ticketId: number;
   office: "MEO" | "MDRRMO";
@@ -24,6 +25,10 @@ export function WorkOrdersPanel({
   // A merged-away ticket (manuscript revision Phase 3, step 3d): its Work
   // Orders stay listed as history, with no create or edit controls.
   readOnly?: boolean;
+  // False on a Rejected ticket (manuscript revision Phase 5, step 5a): no
+  // New Work Order button. Existing ones keep their controls; the API
+  // rules for Work Orders on a Rejected ticket are step 5b.
+  canCreate?: boolean;
 }) {
   const [workOrders, setWorkOrders] = useState(initialWorkOrders);
 
@@ -38,7 +43,7 @@ export function WorkOrdersPanel({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Work orders ({workOrders.length})</p>
-        {!readOnly && <CreateWorkOrderDialog office={office} onCreated={handleCreated} ticketId={ticketId} />}
+        {!readOnly && canCreate && <CreateWorkOrderDialog office={office} onCreated={handleCreated} ticketId={ticketId} />}
       </div>
       {workOrders.length === 0 ? (
         <EmptyState className="items-start p-0 text-left" title="No work orders yet for this ticket." />

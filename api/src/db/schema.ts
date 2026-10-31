@@ -609,10 +609,13 @@ export const resolutionFeedback = pgTable('resolution_feedback', {
     .defaultNow(),
 });
 
-// Append-only Focal intake activity trail — forwarded/escalated. 'screened'
-// rows (the old general screening action) are history only since manuscript
-// revision Phase 3, step 3f: never written again and no longer read for the
-// intake state, which takes "Screened" from reports.severityScreeningStatus.
+// Append-only Focal intake activity trail — history only since manuscript
+// revision Phase 5, step 5a: nothing writes it any more. 'forwarded' and
+// 'escalated' rows (Focal's removed Forward and Escalate) still feed the
+// derived intake state and the activity list; 'screened' rows (the old
+// general screening action, history since Phase 3, step 3f) are no longer
+// read for the intake state, which takes "Screened" from
+// reports.severityScreeningStatus.
 // Deliberately NOT a mutable "intake status" column: the citizen-/admin-
 // facing "New | Acknowledged | Screened | Forwarded | Escalated" display
 // state is always DERIVED at query time from this table,

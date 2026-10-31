@@ -14,19 +14,25 @@ import { isFocalPersonnel } from '../common/authz/admin-scope';
 import { AdminAuditService } from './admin-audit.service';
 import { TicketsService } from './tickets.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { routingBlock, type RoutingActor } from './ticket-routing.rules';
 
 // Central Monitoring / Focal Personnel's municipality-wide intake surface —
 // a separate concept from the operational Ticket Queue (see
 // api/src/admin/tickets.service.ts). Reads reports (not tickets) joined
 // through to their ticket for routing/status/scoring context, and writes to
-// report_acknowledgments/report_intake_actions and the report's own
-// severity screening fields only — never tickets.status.
+// report_acknowledgments and the report's own severity screening fields —
+// never tickets.status. Reassign and Refer go through TicketsService.
 
+// Forwarded and Escalated come only from old report_intake_actions rows:
+// Forward and Escalate were removed in manuscript revision Phase 5, step 5a
+// (manual routing is only Reassign or Refer), and their history still shows.
 export type IntakeState =
   'New' | 'Acknowledged' | 'Screened' | 'Forwarded' | 'Escalated';
-// 'screened' is history only since manuscript revision Phase 3, step 3f:
-// old rows are kept, never written again, and never read for the intake
-// state (severity screening replaced the general screening action).
+// Every report_intake_actions type is history only: 'screened' since
+// manuscript revision Phase 3, step 3f (never read for the intake state —
+// severity screening replaced the general screening action), 'forwarded'
+// and 'escalated' since Phase 5, step 5a. Old rows are kept, never written
+// again.
 export type IntakeActionType = 'screened' | 'forwarded' | 'escalated';
 export const INTAKE_ACTION_TYPES: IntakeActionType[] = [
   'screened',
@@ -275,7 +281,19 @@ export interface FocalIntakeDetail extends FocalIntakeRow {
     screenedAt: string | null;
     blockedReason: string | null;
   };
+  // Manuscript revision Phase 5, step 5a: null while Focal may Reassign or
+  // Refer the report's ticket, else why not — the routing endpoints' own
+  // rule and message (ticket-routing.rules.ts).
+  routing: { blockedReason: string | null };
 }
+
+// Every reader of the intake detail is Focal Personnel (FocalGuard), so its
+// routing state is worked out for Focal.
+const FOCAL_ACTOR: RoutingActor = {
+  accountType: 'PERSONNEL',
+  isFocal: true,
+  office: 'MDRRMO',
+};
 
 // The intake-state inputs every Focal query selects (deriveIntakeState).
 function intakeStateOf(row: {
@@ -413,6 +431,7 @@ export class FocalIntakeService {
         submitted_category: string;
         severity_screening_remarks: string | null;
         severity_screened_by_name: string | null;
+        active_work_orders: number;
       })[]
     >`
       SELECT
@@ -425,7 +444,11 @@ export class FocalIntakeService {
         ra.acknowledged_at, ra.acknowledged_by_name,
         latest.action_type AS latest_action_type, latest.created_at AS latest_action_at,
         r.severity_screening_status, r.severity_screening_remarks, r.severity_screened_at,
-        (sa.first_name || ' ' || sa.last_name) AS severity_screened_by_name
+        (sa.first_name || ' ' || sa.last_name) AS severity_screened_by_name,
+        (
+          SELECT count(*)::int FROM work_orders w
+          WHERE w.ticket_id = t.id AND w.status IN ('pending', 'in_progress')
+        ) AS active_work_orders
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
@@ -465,6 +488,16 @@ export class FocalIntakeService {
           status: row.ticket_status,
           mergedIntoTicketId: row.merged_into_ticket_id ?? null,
         }),
+      },
+      routing: {
+        blockedReason:
+          routingBlock(FOCAL_ACTOR, {
+            id: row.ticket_id,
+            status: row.ticket_status,
+            assignedOffice: row.assigned_office,
+            mergedIntoTicketId: row.merged_into_ticket_id ?? null,
+            activeWorkOrders: row.active_work_orders ?? 0,
+          })?.message ?? null,
       },
     };
   }
@@ -622,99 +655,41 @@ export class FocalIntakeService {
     return this.getIntakeDetail(reportId);
   }
 
-  // Reuses TicketsService.reassignOffice as the single source of truth for
-  // office-custody changes (Step 14 of the Batch 2 design) — its own
-  // authorization branch for role: 'focal' enforces the early-intake safety
-  // rule (Reported + no active work order). This method only adds the
-  // report-level intake-action record on top of that.
-  async forward(
+  // Focal Reassign and Refer (manuscript pp. 43–44; manuscript revision
+  // Phase 5, step 5a; Decision 10), which replaced Forward and Escalate.
+  // Both act on the report's ticket through TicketsService — the one place
+  // routing is checked and written (routing_actions, office_reassignments
+  // for a Reassign, the audit event) — whose rule lets Focal route only
+  // while the ticket is still Reported with no active Work Order. Nothing
+  // is written to report_intake_actions; its old forwarded/escalated rows
+  // stay as history.
+  async reassign(
     reportId: number,
     admin: AdminSession,
     toOffice: 'MEO' | 'MDRRMO',
-    reason: string,
+    reason: unknown,
   ): Promise<FocalIntakeDetail | null> {
-    if (!reason?.trim()) {
-      throw new BadRequestException('A reason is required.');
-    }
-    const sql = this.pg;
-    const [report] = await sql<{ id: number; ticket_id: number }[]>`
-      SELECT id, ticket_id FROM reports WHERE id = ${reportId}
-    `;
-    if (!report) throw new NotFoundException('Report not found.');
-
-    await this.tickets.reassignOffice(report.ticket_id, admin, toOffice);
-
-    await sql`
-      INSERT INTO report_intake_actions (report_id, action_type, actor_admin_id, actor_name, remarks)
-      VALUES (${reportId}, 'forwarded', ${admin.adminId}, ${admin.adminName}, ${reason.trim()})
-    `;
-
+    const ticketId = await this.ticketIdOf(reportId);
+    await this.tickets.reassignOffice(ticketId, admin, toOffice, reason);
     return this.getIntakeDetail(reportId);
   }
 
-  // Attention signal only — never touches Operational Priority,
-  // ticket.status, or assigned_office (Step 15 of the Batch 2
-  // design). Notifies the ticket's CURRENT office, not a fixed one, since
-  // Forward may already have moved it before Escalate is called.
-  async escalate(
+  async refer(
     reportId: number,
     admin: AdminSession,
-    reason: string,
+    agency: unknown,
+    reason: unknown,
   ): Promise<FocalIntakeDetail | null> {
-    if (!reason?.trim()) {
-      throw new BadRequestException('An escalation reason is required.');
-    }
-    const sql = this.pg;
-    await sql.begin(async (tx) => {
-      const [report] = await tx<
-        {
-          id: number;
-          title: string;
-          ticket_id: number;
-          tracking_reference: string;
-        }[]
-      >`
-        SELECT id, title, ticket_id, tracking_reference FROM reports WHERE id = ${reportId}
-      `;
-      if (!report) throw new NotFoundException('Report not found.');
-
-      const [ticket] = await tx<{ assigned_office: 'MEO' | 'MDRRMO' }[]>`
-        SELECT assigned_office FROM tickets WHERE id = ${report.ticket_id}
-      `;
-
-      await tx`
-        INSERT INTO report_intake_actions (report_id, action_type, actor_admin_id, actor_name, remarks)
-        VALUES (${reportId}, 'escalated', ${admin.adminId}, ${admin.adminName}, ${reason.trim()})
-      `;
-
-      await this.audit.logInPgTx(tx, {
-        actor: {
-          adminId: admin.adminId,
-          adminName: admin.adminName,
-          email: admin.email,
-          accountType: admin.accountType,
-          office: admin.office,
-        },
-        actionType: 'report_escalated',
-        targetType: 'report',
-        targetId: reportId,
-        targetSummary: `${report.title} (Report #${reportId})`,
-      });
-
-      await this.notifications.createInTx(tx, {
-        recipientType: 'admin',
-        recipientOffice: ticket.assigned_office,
-        type: 'report_escalated',
-        title: 'Report escalated for priority attention',
-        // The tracking reference since the Phase 2, step 2b follow-up;
-        // stored notifications keep "Report #<id>".
-        message: `${report.title} (Report ${report.tracking_reference}) was escalated by Focal: ${reason.trim()}`,
-        href: `/admin/tickets/${report.ticket_id}`,
-        entityType: 'report',
-        entityId: reportId,
-      });
-    });
-
+    const ticketId = await this.ticketIdOf(reportId);
+    await this.tickets.logReferral(ticketId, admin, agency, reason);
     return this.getIntakeDetail(reportId);
+  }
+
+  private async ticketIdOf(reportId: number): Promise<number> {
+    const [report] = await this.pg<{ ticket_id: number }[]>`
+      SELECT ticket_id FROM reports WHERE id = ${reportId}
+    `;
+    if (!report) throw new NotFoundException('Report not found.');
+    return report.ticket_id;
   }
 }

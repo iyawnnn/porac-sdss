@@ -192,8 +192,16 @@ export interface TicketReassignmentRow {
   to_office: string;
   admin_name: string | null;
   reassigned_at: string;
-  // The routing reason, when one was given (a category correction's).
+  // The routing reason: required since manuscript revision Phase 5, step
+  // 5a; null for an older reassignment recorded without one.
   reason: string | null;
+}
+
+// Whether the signed-in admin may Reassign or Refer the ticket now
+// (manuscript revision Phase 5, step 5a): null when allowed, else the API's
+// own refusal message. Mirrors api/src/admin/tickets.service.ts.
+export interface TicketRoutingState {
+  blockedReason: string | null;
 }
 
 // A staff category or location correction on the Ticket Detail timeline
@@ -213,6 +221,8 @@ export interface TicketCorrectionRow {
 // as a dated history entry ("Referral recorded — ...").
 export interface TicketReferralRow {
   agency: string;
+  // The referral's reason (required since manuscript revision Phase 5, step
+  // 5a); an older referral's optional note.
   note: string | null;
   admin_name: string;
   referred_at: string;

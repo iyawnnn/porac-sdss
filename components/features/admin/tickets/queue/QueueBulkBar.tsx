@@ -19,6 +19,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { ROUTING_REASON_MAX_LENGTH } from "@/components/features/admin/tickets/routing/postRouting";
 import {
   Select,
   SelectContent,
@@ -51,7 +53,7 @@ export function QueueBulkBar({
 }: {
   selectedIds: number[];
   onClearSelection: () => void;
-  onReassign: (toOffice: "MEO" | "MDRRMO") => void;
+  onReassign: (toOffice: "MEO" | "MDRRMO", reason: string) => void;
   onAdvanceStatus: () => void;
   onCreateWorkOrders: (input: { title: string; dueDate: string }) => void;
   exportHref: string;
@@ -61,6 +63,8 @@ export function QueueBulkBar({
 }) {
   const [dialog, setDialog] = useState<BulkDialog>(null);
   const [office, setOffice] = useState<"MEO" | "MDRRMO">("MEO");
+  const [reassignReason, setReassignReason] = useState("");
+  const [reassignReasonError, setReassignReasonError] = useState("");
   const [workOrderTitle, setWorkOrderTitle] = useState("");
   const [workOrderDue, setWorkOrderDue] = useState("");
 
@@ -141,7 +145,7 @@ export function QueueBulkBar({
             </DialogDescription>
           </DialogHeader>
           <Select onValueChange={(v) => setOffice(v as "MEO" | "MDRRMO")} value={office}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger aria-label="Reassign to" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -149,14 +153,44 @@ export function QueueBulkBar({
               <SelectItem value="MDRRMO">MDRRMO</SelectItem>
             </SelectContent>
           </Select>
+          {/* One required reason for every ticket in the selection
+              (manuscript revision Phase 5, step 5a). */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="bulk-reassign-reason">
+              Reason (required)
+            </label>
+            <Textarea
+              aria-describedby={reassignReasonError ? "bulk-reassign-reason-error" : undefined}
+              aria-invalid={reassignReasonError ? true : undefined}
+              id="bulk-reassign-reason"
+              maxLength={ROUTING_REASON_MAX_LENGTH}
+              onChange={(e) => {
+                setReassignReason(e.target.value);
+                if (reassignReasonError && e.target.value.trim()) setReassignReasonError("");
+              }}
+              placeholder={`Why ${office} is responsible for these tickets`}
+              rows={3}
+              value={reassignReason}
+            />
+            {reassignReasonError && (
+              <p className="text-xs text-destructive" id="bulk-reassign-reason-error">
+                {reassignReasonError}
+              </p>
+            )}
+          </div>
           <DialogFooter>
             <Button onClick={() => setDialog(null)} variant="outline">
               Cancel
             </Button>
             <Button
               onClick={() => {
+                if (!reassignReason.trim()) {
+                  setReassignReasonError("A reason is required.");
+                  return;
+                }
                 setDialog(null);
-                onReassign(office);
+                onReassign(office, reassignReason.trim());
+                setReassignReason("");
               }}
             >
               Assign to {office}

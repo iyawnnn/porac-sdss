@@ -34,10 +34,9 @@ export type AdminAuditActionType =
   | 'work_order_status_changed'
   | 'work_order_completed'
   | 'work_order_cancelled'
-  // report_forwarded is deliberately absent — Forward's audit trail already
-  // comes from reassignOffice's own 'ticket_reassigned' event (actor=focal)
-  // plus the report_intake_actions 'forwarded' row; a third audit event for
-  // the same action would be redundant. See FocalIntakeService.forward.
+  // There never was a report_forwarded: Focal's old Forward was audited by
+  // reassignOffice's own 'ticket_reassigned' event (actor=focal), as Focal's
+  // Reassign is since manuscript revision Phase 5, step 5a.
   | 'report_acknowledged'
   // History only since manuscript revision Phase 3, step 3f: the old
   // general screening action, never written again.
@@ -45,6 +44,9 @@ export type AdminAuditActionType =
   // Focal severity screening (step 3f), metadata { oldStatus, newStatus,
   // remarks }.
   | 'report_severity_screened'
+  // History only since manuscript revision Phase 5, step 5a: Focal's old
+  // Escalate, removed (manual routing is only Reassign or Refer). Old
+  // events stay readable and filterable.
   | 'report_escalated'
   | 'operational_assessment_created'
   | 'operational_assessment_updated'
