@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -65,9 +66,18 @@ const VALID_INPUT = {
 // Mirrors focal-intake.service.spec.ts's makeService convention: an ordered
 // array of row-sets, one per query call in sequence, with sql.begin just
 // invoking the callback against the same fake client.
+// Every query's SQL text and parameters, in order. A JS Date parameter is
+// refused (the Phase 4c rule: timestamps go as ISO strings ::timestamptz).
+const queries: { text: string; values: unknown[] }[] = [];
+
 function makeService(rows: unknown[][]) {
   let i = 0;
-  const sql = ((..._args: unknown[]) => {
+  queries.length = 0;
+  const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+    if (values.some((v) => v instanceof Date)) {
+      throw new Error('JS Date passed to the database');
+    }
+    queries.push({ text: Array.from(strings).join('$'), values });
     return {
       then(resolve: (v: unknown) => void, reject?: (e: unknown) => void) {
         const next = rows[i++] ?? [];
@@ -423,5 +433,308 @@ describe('OperationalAssessmentService.getForTicket', () => {
     expect(result?.operationalConstraints).toEqual(
       VALID_INPUT.operationalConstraints,
     );
+  });
+});
+
+// Manuscript revision Phase 5, step 5b.
+describe('OperationalAssessmentService.upsert — step 5b rules', () => {
+  const ticket = (overrides: Record<string, unknown> = {}) => [
+    {
+      status: 'Under Review',
+      assigned_office: 'MEO',
+      merged_into_ticket_id: null,
+      ...overrides,
+    },
+  ];
+
+  it('404s when the ticket does not exist, before any write', async () => {
+    const { service, logInPgTx } = makeService([[]]);
+    await expect(service.upsert(10, MEO_OFFICER, VALID_INPUT)).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(queries).toHaveLength(1);
+    expect(logInPgTx).not.toHaveBeenCalled();
+  });
+
+  it('refuses a Rejected ticket with 409, before any write', async () => {
+    const { service, logInPgTx } = makeService([
+      ticket({ status: 'Rejected' }),
+    ]);
+    await expect(service.upsert(10, MEO_OFFICER, VALID_INPUT)).rejects.toThrow(
+      new ConflictException(
+        'Ticket #10 is Rejected; its Operational Assessment can no longer be changed.',
+      ),
+    );
+    expect(queries).toHaveLength(1);
+    expect(logInPgTx).not.toHaveBeenCalled();
+  });
+
+  it('refuses a merged-away ticket with 409, before any write', async () => {
+    const { service } = makeService([ticket({ merged_into_ticket_id: 12 })]);
+    await expect(service.upsert(10, MEO_OFFICER, VALID_INPUT)).rejects.toThrow(
+      new ConflictException(
+        'Ticket #10 was merged into Ticket #12 and is read-only.',
+      ),
+    );
+    expect(queries).toHaveLength(1);
+  });
+
+  it('checks the office before the Rejected/merged state (403 first)', async () => {
+    const { service } = makeService([
+      ticket({ assigned_office: 'MDRRMO', status: 'Rejected' }),
+    ]);
+    await expect(service.upsert(10, MEO_OFFICER, VALID_INPUT)).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('locks the ticket row and writes only while it is not merged away and not Rejected', async () => {
+    const { service } = makeService([
+      ticket(),
+      [{ inserted: true }],
+      [ASSESSMENT_ROW],
+    ]);
+    await service.upsert(10, MEO_OFFICER, VALID_INPUT);
+    expect(queries[0].text).toMatch(/FROM tickets WHERE id = \$\s+FOR UPDATE/);
+    expect(queries[1].text).toMatch(
+      /FROM tickets t\s+WHERE t\.id = \$\s+AND t\.merged_into_ticket_id IS NULL\s+AND t\.status <> 'Rejected'/,
+    );
+  });
+
+  it('409s when the guarded insert writes no row (the ticket changed underneath)', async () => {
+    const { service, logInPgTx } = makeService([ticket(), []]);
+    await expect(service.upsert(10, MEO_OFFICER, VALID_INPUT)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(logInPgTx).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['blank', '   '],
+    ['missing', undefined],
+  ])(
+    'refuses %s observed conditions on a new save, even with every other field filled',
+    async (_label, observedConditions) => {
+      const { service } = makeService([ticket()]);
+      await expect(
+        service.upsert(10, MEO_OFFICER, {
+          ...VALID_INPUT,
+          observedConditions,
+          actualAction: 'Patched',
+          remarks: 'Something',
+        }),
+      ).rejects.toThrow(
+        new BadRequestException('Observed conditions are required.'),
+      );
+      expect(queries).toHaveLength(1);
+    },
+  );
+
+  it('stores actual action, evidence URL and constraint notes; notes go as a JSON string cast to jsonb', async () => {
+    const { service } = makeService([
+      ticket(),
+      [{ inserted: true }],
+      [ASSESSMENT_ROW],
+    ]);
+    await service.upsert(10, MEO_OFFICER, {
+      ...VALID_INPUT,
+      actualAction: '  Cold patch applied  ',
+      supportingEvidenceUrl: ' https://res.cloudinary.com/demo/site.jpg ',
+      operationalConstraintNotes: {
+        equipment: ' Backhoe under repair ',
+        funding: '',
+      },
+    });
+    const insert = queries[1];
+    expect(insert.text).toMatch(/\$::jsonb/);
+    expect(insert.values).toEqual(
+      expect.arrayContaining([
+        'Cold patch applied',
+        'https://res.cloudinary.com/demo/site.jpg',
+        JSON.stringify({ equipment: 'Backhoe under repair' }),
+      ]),
+    );
+    // DO UPDATE carries the new columns too, so an edit changes them.
+    expect(insert.text).toMatch(/actual_action = EXCLUDED\.actual_action/);
+    expect(insert.text).toMatch(
+      /supporting_evidence_url = EXCLUDED\.supporting_evidence_url/,
+    );
+    expect(insert.text).toMatch(
+      /operational_constraint_notes = EXCLUDED\.operational_constraint_notes/,
+    );
+  });
+
+  it('stores a blank evidence URL and blank actual action as NULL (never empty strings) and no notes as {}', async () => {
+    const { service } = makeService([
+      ticket(),
+      [{ inserted: true }],
+      [ASSESSMENT_ROW],
+    ]);
+    await service.upsert(10, MEO_OFFICER, {
+      ...VALID_INPUT,
+      actualAction: '   ',
+      supportingEvidenceUrl: '   ',
+    });
+    const values = queries[1].values;
+    expect(values).not.toContain('');
+    expect(values).toContain('{}');
+  });
+
+  it.each([
+    ['ftp://example.com/photo.jpg'],
+    ['javascript:alert(1)'],
+    ['not a url'],
+    ['/uploads/reports/photo.jpg'],
+    ['https://example.com/' + 'a'.repeat(2048)],
+  ])('refuses the evidence URL %s with 400', async (url) => {
+    const { service } = makeService([ticket()]);
+    await expect(
+      service.upsert(10, MEO_OFFICER, {
+        ...VALID_INPUT,
+        supportingEvidenceUrl: url,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(queries).toHaveLength(1);
+  });
+
+  it('accepts an http:// evidence URL', async () => {
+    const { service } = makeService([
+      ticket(),
+      [{ inserted: true }],
+      [ASSESSMENT_ROW],
+    ]);
+    await expect(
+      service.upsert(10, MEO_OFFICER, {
+        ...VALID_INPUT,
+        supportingEvidenceUrl: 'http://intranet.porac.gov.ph/photos/1.jpg',
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  it.each([
+    [
+      'an unknown key',
+      { not_a_constraint: 'x' },
+      'Invalid operational constraint note: not_a_constraint',
+    ],
+    [
+      'an array',
+      ['equipment'],
+      'Operational constraint notes must be an object keyed by constraint.',
+    ],
+    [
+      'a non-text value',
+      { equipment: 5 },
+      'The note for equipment must be text.',
+    ],
+    [
+      'a note over 500 characters',
+      { equipment: 'x'.repeat(501) },
+      'The note for equipment must be at most 500 characters',
+    ],
+    [
+      'a note for a constraint that is not selected',
+      { weather: 'Rain' },
+      'A note was given for weather, which is not selected as an operational constraint.',
+    ],
+  ])(
+    'refuses constraint notes with %s (400)',
+    async (_label, notes, message) => {
+      const { service } = makeService([ticket()]);
+      await expect(
+        service.upsert(10, MEO_OFFICER, {
+          ...VALID_INPUT,
+          operationalConstraintNotes: notes,
+        }),
+      ).rejects.toThrow(new BadRequestException(message));
+      expect(queries).toHaveLength(1);
+    },
+  );
+
+  it('keeps the audit event shape: no metadata on create or update', async () => {
+    const { service, logInPgTx } = makeService([
+      ticket(),
+      [{ inserted: false }],
+      [ASSESSMENT_ROW],
+    ]);
+    await service.upsert(10, MEO_OFFICER, {
+      ...VALID_INPUT,
+      actualAction: 'Patched',
+    });
+    expect(logInPgTx).toHaveBeenCalledWith(expect.anything(), {
+      actor: expect.objectContaining({ adminId: MEO_OFFICER.adminId }),
+      actionType: 'operational_assessment_updated',
+      targetType: 'ticket',
+      targetId: 10,
+      targetSummary: 'Ticket #10',
+    });
+  });
+
+  it('the fake database refuses a JS Date parameter', () => {
+    const { sql } = makeService([]);
+    expect(() => sql`SELECT ${new Date()}::timestamptz`).toThrow(/JS Date/);
+  });
+});
+
+describe('OperationalAssessmentService.getForTicket — step 5b read model', () => {
+  it('returns the new fields and the Appendix H aliases', async () => {
+    const { service } = makeService([
+      [
+        {
+          ...ASSESSMENT_ROW,
+          actual_action: 'Cold patch applied',
+          supporting_evidence_url: 'https://example.com/a.jpg',
+          operational_constraint_notes: { equipment: 'Backhoe under repair' },
+          deferment_reason: 'Waiting for dry weather',
+        },
+      ],
+    ]);
+    const result = await service.getForTicket(10);
+    expect(result).toMatchObject({
+      actualAction: 'Cold patch applied',
+      supportingEvidenceUrl: 'https://example.com/a.jpg',
+      operationalConstraintNotes: { equipment: 'Backhoe under repair' },
+      assessedConditions: ASSESSMENT_ROW.observed_conditions,
+      observedConditions: ASSESSMENT_ROW.observed_conditions,
+      interimMitigation: ASSESSMENT_ROW.temporary_mitigation,
+      temporaryMitigation: ASSESSMENT_ROW.temporary_mitigation,
+      defermentOrReferralReason: 'Waiting for dry weather',
+      createdAt: ASSESSMENT_ROW.assessed_at,
+      assessedAt: ASSESSMENT_ROW.assessed_at,
+    });
+  });
+
+  it('labels both reasons in the deferment_or_referral_reason alias when both are set', async () => {
+    const { service } = makeService([
+      [
+        {
+          ...ASSESSMENT_ROW,
+          deferment_reason: 'Rain',
+          referral_reason: 'DPWH road',
+        },
+      ],
+    ]);
+    const result = await service.getForTicket(10);
+    expect(result?.defermentOrReferralReason).toBe(
+      'Deferment: Rain\nReferral: DPWH road',
+    );
+  });
+
+  it('still reads a legacy row saved with blank observed conditions and no 5b fields', async () => {
+    const { service } = makeService([
+      [
+        {
+          ...ASSESSMENT_ROW,
+          observed_conditions: '',
+          operational_constraint_notes: null,
+        },
+      ],
+    ]);
+    const result = await service.getForTicket(10);
+    expect(result).toMatchObject({
+      observedConditions: '',
+      assessedConditions: '',
+      operationalConstraintNotes: {},
+    });
   });
 });

@@ -69,6 +69,8 @@ export const SEVERITIES = ['Low', 'Medium', 'High', 'Critical'] as const;
 // services with no Zod parsing, just plain if/throw guards.
 export const WORK_ORDER_TITLE_MAX_LENGTH = 200;
 export const WORK_ORDER_NOTES_MAX_LENGTH = 2000;
+// Manuscript revision Phase 5, step 5b.
+export const WORK_ORDER_CANCELLATION_REASON_MAX_LENGTH = 1000;
 export const TICKET_RESOLUTION_NOTES_MAX_LENGTH = 2000;
 export const TICKET_DISPUTE_REASON_MAX_LENGTH = 1000;
 export const TICKET_REJECTION_REASON_MAX_LENGTH = 1000;
@@ -78,6 +80,10 @@ export const REFERRAL_NOTE_MAX_LENGTH = 1000;
 export const OPERATIONAL_ASSESSMENT_TEXT_MAX_LENGTH = 2000;
 export const OPERATIONAL_ASSESSMENT_REASON_MAX_LENGTH = 1000;
 export const OPERATIONAL_ASSESSMENT_REMARKS_MAX_LENGTH = 1000;
+// Manuscript revision Phase 5, step 5b. The URL limit matches the CHECK
+// operational_assessments_evidence_url_check (migration 0045).
+export const OPERATIONAL_ASSESSMENT_EVIDENCE_URL_MAX_LENGTH = 2048;
+export const OPERATIONAL_CONSTRAINT_NOTE_MAX_LENGTH = 500;
 
 // The responsible office's own vocabulary for why a hazard can't simply be
 // scheduled and fixed (Batch 3: Operational Assessment) — a fixed tag set,

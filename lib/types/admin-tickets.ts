@@ -149,6 +149,15 @@ export interface OperationalAssessment {
   updatedByAdminId: number | null;
   updatedByName: string | null;
   updatedAt: string;
+  // Manuscript revision Phase 5, step 5b.
+  actualAction: string | null;
+  supportingEvidenceUrl: string | null;
+  operationalConstraintNotes: Record<string, string>;
+  // Appendix H aliases (docs/database.md has the mapping).
+  assessedConditions: string;
+  interimMitigation: string;
+  defermentOrReferralReason: string | null;
+  createdAt: string;
 }
 
 export interface TicketReport {

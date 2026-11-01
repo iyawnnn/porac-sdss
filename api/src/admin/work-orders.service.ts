@@ -18,8 +18,15 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import { DB } from '../db/db.module';
-import { admins, tickets, workOrders, workOrderStatusHistory } from '../db/schema';
+import {
+  admins,
+  operationalAssessments,
+  tickets,
+  workOrders,
+  workOrderStatusHistory,
+} from '../db/schema';
 import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
@@ -28,20 +35,50 @@ import {
 } from '../common/authz/admin-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminAuditService } from './admin-audit.service';
-import { assertNotMergedAway } from './ticket-grouping.rules';
+import {
+  ASSESSMENT_REQUIRED_MESSAGE,
+  OPEN_WORK_ORDER_STATUSES,
+  WORK_ORDER_STATUSES,
+  assertResponsibleOfficeCanAct,
+  assertWorkOrderNotFinal,
+  assertWorkOrderTransition,
+  isFinalWorkOrder,
+  pgErrorInfo,
+  type ResponsibleTicketFacts,
+  type WorkOrderStatus,
+} from './work-order.rules';
 import {
   WORK_ORDER_TITLE_MAX_LENGTH,
   WORK_ORDER_NOTES_MAX_LENGTH,
+  WORK_ORDER_CANCELLATION_REASON_MAX_LENGTH,
 } from '../contracts/schemas';
 
-export type WorkOrderStatus =
-  'pending' | 'in_progress' | 'completed' | 'cancelled';
-const WORK_ORDER_STATUSES: WorkOrderStatus[] = [
-  'pending',
-  'in_progress',
-  'completed',
-  'cancelled',
-];
+export type { WorkOrderStatus } from './work-order.rules';
+
+// Timestamps go to the database as ISO strings cast to timestamptz, never
+// as JS Date objects (the Phase 4c lesson; the unit-test fake rejects Date).
+function ts(iso: string) {
+  return dsql`${iso}::timestamptz`;
+}
+
+// A due date from the request as an ISO string, or null when cleared.
+function parseDueDate(value: unknown): string | null {
+  if (!value) return null;
+  const date = new Date(value as string);
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestException('dueDate is not a valid date.');
+  }
+  return date.toISOString();
+}
+
+// The write guard every Work Order UPDATE carries on top of the locked
+// pre-checks: its ticket is still not merged away and not Rejected.
+const TICKET_STILL_WRITABLE = dsql`EXISTS (
+  SELECT 1 FROM tickets t
+  WHERE t.id = ${workOrders.ticketId}
+    AND t.merged_into_ticket_id IS NULL
+    AND t.status <> 'Rejected'
+)`;
 
 export interface WorkOrderRow {
   id: number;
@@ -56,6 +93,14 @@ export interface WorkOrderRow {
   created_at: Date;
   updated_at: Date;
   completed_at: Date | null;
+  // Manuscript revision Phase 5, step 5b (staff only, like the whole row).
+  // A Work Order cancelled before 5b has status 'cancelled' and all four
+  // NULL ("No reason recorded (legacy)").
+  cancellation_reason: string | null;
+  cancelled_by_admin_id: number | null;
+  cancelled_by_name: string | null;
+  cancelled_at: Date | null;
+  replacement_work_order_id: number | null;
 }
 
 // The list query's own row shape — adds the linked ticket's already-computed
@@ -123,8 +168,6 @@ export interface WorkOrderExportRow {
   updated_at: Date;
 }
 
-const OPEN_WORK_ORDER_STATUSES = ['pending', 'in_progress'] as const;
-
 const SAFE_COLUMNS = {
   id: workOrders.id,
   ticket_id: workOrders.ticketId,
@@ -138,6 +181,15 @@ const SAFE_COLUMNS = {
   created_at: workOrders.createdAt,
   updated_at: workOrders.updatedAt,
   completed_at: workOrders.completedAt,
+  cancellation_reason: workOrders.cancellationReason,
+  cancelled_by_admin_id: workOrders.cancelledByAdminId,
+  // The canceller's current name, for "Cancelled by … on …" on the final
+  // Work Order card.
+  cancelled_by_name: dsql<
+    string | null
+  >`(SELECT a.first_name || ' ' || a.last_name FROM admins a WHERE a.id = ${workOrders.cancelledByAdminId})`,
+  cancelled_at: workOrders.cancelledAt,
+  replacement_work_order_id: workOrders.replacementWorkOrderId,
 };
 
 // list()-only column set: SAFE_COLUMNS plus the linked ticket's Operational
@@ -182,8 +234,9 @@ export class WorkOrdersService {
   private async assertValidAssignee(
     assignedAdminId: number,
     office: 'MEO' | 'MDRRMO',
+    db: PostgresJsDatabase = this.db,
   ): Promise<void> {
-    const [assignee] = await this.db
+    const [assignee] = await db
       .select({
         office: admins.office,
         isActive: admins.isActive,
@@ -202,6 +255,66 @@ export class WorkOrdersService {
         'assignedAdminId must be an active Personnel account belonging to this office.',
       );
     }
+  }
+
+  // Reads the Work Order's ticket and locks its row for the rest of the
+  // transaction, so a concurrent Reject, Merge or Reassign (each of which
+  // updates the tickets row) can't slip between these checks and the write.
+  // Reads merged_into_ticket_id rather than filtering on it: a merged-away
+  // ticket must answer 409 (read-only history), not 404.
+  private async lockTicket(
+    tx: PostgresJsDatabase,
+    ticketId: number,
+  ): Promise<ResponsibleTicketFacts> {
+    const [ticket] = await tx
+      .select({
+        id: tickets.id,
+        status: tickets.status,
+        assigned_office: tickets.assignedOffice,
+        merged_into_ticket_id: tickets.mergedIntoTicketId,
+      })
+      .from(tickets)
+      .where(eq(tickets.id, ticketId))
+      .for('update');
+    if (!ticket) throw new NotFoundException('Ticket not found.');
+    return ticket;
+  }
+
+  private async lockWorkOrder(
+    tx: PostgresJsDatabase,
+    id: number,
+  ): Promise<WorkOrderRow> {
+    const [row] = await tx
+      .select(SAFE_COLUMNS)
+      .from(workOrders)
+      .where(eq(workOrders.id, id))
+      .for('update', { of: workOrders });
+    if (!row) throw new NotFoundException('Work order not found.');
+    return row;
+  }
+
+  // Constraint violations from migration 0045 (and the FKs) as clean 400/409
+  // answers instead of a 500. The service checks every one of these first,
+  // so reaching here means a race or a direct-SQL edge case.
+  private mapConstraintError(err: unknown, workOrderId?: number): never {
+    const { code, constraint } = pgErrorInfo(err);
+    const which = workOrderId ? `Work Order #${workOrderId}` : 'The Work Order';
+    if (code === '23503') {
+      if (constraint === 'work_orders_replacement_same_ticket_fkey') {
+        throw new BadRequestException(
+          'The replacement must be a Work Order of the same ticket.',
+        );
+      }
+      throw new BadRequestException(
+        `${which} refers to a record that does not exist.`,
+      );
+    }
+    if (code === '23514') {
+      throw new ConflictException(
+        `${which} could not be saved: it would break the rule ${constraint ?? 'on Work Orders'}.`,
+      );
+    }
+    throw err;
   }
 
   parseQuery(
@@ -375,40 +488,47 @@ export class WorkOrdersService {
     if (assignedAdminId != null && !Number.isInteger(assignedAdminId)) {
       throw new BadRequestException('assignedAdminId must be an integer.');
     }
-    const dueDate = input.dueDate ? new Date(input.dueDate as string) : null;
-    if (dueDate && Number.isNaN(dueDate.getTime())) {
-      throw new BadRequestException('dueDate is not a valid date.');
-    }
+    const dueDate = parseDueDate(input.dueDate);
 
-    const [ticket] = await this.db
-      .select({
-        assignedOffice: tickets.assignedOffice,
-        mergedIntoTicketId: tickets.mergedIntoTicketId,
-      })
-      .from(tickets)
-      .where(eq(tickets.id, ticketId));
-    if (!ticket) throw new NotFoundException('Ticket not found.');
-    assertOfficeAccess(admin, ticket.assignedOffice);
-    // A merged-away ticket is read-only history (Phase 3, step 3d).
-    assertNotMergedAway({
-      id: ticketId,
-      merged_into_ticket_id: ticket.mergedIntoTicketId,
-    });
-    if (assignedAdminId != null) {
-      await this.assertValidAssignee(assignedAdminId, ticket.assignedOffice);
-    }
+    // Every creation path (this, bulkCreate, the demo seed) comes through
+    // here, so the manuscript rules (p. 45) hold everywhere: the ticket's
+    // current responsible office only, never on a merged-away or Rejected
+    // ticket, and only once the ticket has an Operational Assessment with
+    // observed conditions. Tickets that already had Work Orders without an
+    // assessment keep them; the rule is for new ones.
+    const { row, office } = await this.db.transaction(async (tx) => {
+      const ticket = await this.lockTicket(tx, ticketId);
+      assertResponsibleOfficeCanAct(admin, ticket, 'Work Orders');
+      const [assessment] = await tx
+        .select({ id: operationalAssessments.id })
+        .from(operationalAssessments)
+        .where(
+          and(
+            eq(operationalAssessments.ticketId, ticketId),
+            dsql`btrim(${operationalAssessments.observedConditions}) <> ''`,
+          ),
+        );
+      if (!assessment) {
+        throw new ConflictException(ASSESSMENT_REQUIRED_MESSAGE);
+      }
+      if (assignedAdminId != null) {
+        await this.assertValidAssignee(
+          assignedAdminId,
+          ticket.assigned_office,
+          tx,
+        );
+      }
 
-    const row = await this.db.transaction(async (tx) => {
       const [created] = await tx
         .insert(workOrders)
         .values({
           ticketId,
           title: input.title as string,
           notes,
-          assignedOffice: ticket.assignedOffice,
+          assignedOffice: ticket.assigned_office,
           assignedAdminId,
           createdByAdminId: admin.adminId,
-          dueDate,
+          dueDate: dueDate ? ts(dueDate) : null,
         })
         .returning(SAFE_COLUMNS);
       // Origin row for the status timeline. Without it a work order that is
@@ -430,12 +550,12 @@ export class WorkOrdersService {
         targetSummary: `Work order #${created.id} for Ticket #${ticketId}`,
         metadata: {
           ticketId,
-          assignedOffice: ticket.assignedOffice,
+          assignedOffice: ticket.assigned_office,
           hasDueDate: dueDate !== null,
           assignedAdminId,
         },
       });
-      return created;
+      return { row: created, office: ticket.assigned_office };
     });
 
     if (assignedAdminId) {
@@ -452,7 +572,7 @@ export class WorkOrdersService {
     } else {
       await this.notifications.create({
         recipientType: 'admin',
-        recipientOffice: ticket.assignedOffice,
+        recipientOffice: office,
         type: 'work_order_created',
         title: 'New work order',
         message: `Work order "${row.title}" was created for Ticket #${ticketId}.`,
@@ -465,6 +585,10 @@ export class WorkOrdersService {
     return row;
   }
 
+  // Edits title / notes / assignee / due date. Only while the Work Order is
+  // pending or in progress (Completed and Cancelled are final for every
+  // field), by the ticket's current responsible office, and never on a
+  // merged-away or Rejected ticket.
   async update(
     id: number,
     input: {
@@ -475,107 +599,124 @@ export class WorkOrdersService {
     },
     admin: AdminSession,
   ): Promise<WorkOrderRow> {
-    const [existing] = await this.db
-      .select(SAFE_COLUMNS)
-      .from(workOrders)
-      .where(eq(workOrders.id, id));
-    if (!existing) throw new NotFoundException('Work order not found.');
-    assertOfficeAccess(admin, existing.assigned_office);
+    try {
+      return await this.db.transaction(async (tx) => {
+        const existing = await this.lockWorkOrder(tx, id);
+        const ticket = await this.lockTicket(tx, existing.ticket_id);
+        assertResponsibleOfficeCanAct(admin, ticket, 'Work Orders');
+        assertWorkOrderNotFinal(existing);
 
-    const patch: Partial<typeof workOrders.$inferInsert> = {
-      updatedAt: new Date(),
-    };
-    const changedFields: string[] = [];
-    if (input.title !== undefined) {
-      if (typeof input.title !== 'string' || !input.title.trim()) {
-        throw new BadRequestException('title cannot be empty.');
-      }
-      if (input.title.trim().length > WORK_ORDER_TITLE_MAX_LENGTH) {
-        throw new BadRequestException(
-          `title must be ${WORK_ORDER_TITLE_MAX_LENGTH} characters or fewer.`,
-        );
-      }
-      patch.title = input.title.trim();
-      changedFields.push('title');
-    }
-    if (input.notes !== undefined) {
-      const notes =
-        typeof input.notes === 'string' && input.notes.trim()
-          ? input.notes.trim()
-          : null;
-      if (notes && notes.length > WORK_ORDER_NOTES_MAX_LENGTH) {
-        throw new BadRequestException(
-          `notes must be ${WORK_ORDER_NOTES_MAX_LENGTH} characters or fewer.`,
-        );
-      }
-      patch.notes = notes;
-      changedFields.push('notes');
-    }
-    if (input.assignedAdminId !== undefined) {
-      const assignedAdminId =
-        input.assignedAdminId != null ? Number(input.assignedAdminId) : null;
-      if (assignedAdminId != null && !Number.isInteger(assignedAdminId)) {
-        throw new BadRequestException('assignedAdminId must be an integer.');
-      }
-      // assigned_office itself is immutable via this endpoint (it's only
-      // ever set once, from the ticket, at creation — see create() above),
-      // so there is no "office changed" case to reconcile here: the
-      // assignee is always validated against the work order's one, fixed
-      // office.
-      if (assignedAdminId != null) {
-        await this.assertValidAssignee(
-          assignedAdminId,
-          existing.assigned_office,
-        );
-      }
-      patch.assignedAdminId = assignedAdminId;
-      changedFields.push('assignedAdminId');
-    }
-    if (input.dueDate !== undefined) {
-      const dueDate = input.dueDate ? new Date(input.dueDate as string) : null;
-      if (dueDate && Number.isNaN(dueDate.getTime())) {
-        throw new BadRequestException('dueDate is not a valid date.');
-      }
-      patch.dueDate = dueDate;
-      changedFields.push('dueDate');
-    }
+        const patch: PgUpdateSetSource<typeof workOrders> = {
+          updatedAt: ts(new Date().toISOString()),
+        };
+        const changedFields: string[] = [];
+        if (input.title !== undefined) {
+          if (typeof input.title !== 'string' || !input.title.trim()) {
+            throw new BadRequestException('title cannot be empty.');
+          }
+          if (input.title.trim().length > WORK_ORDER_TITLE_MAX_LENGTH) {
+            throw new BadRequestException(
+              `title must be ${WORK_ORDER_TITLE_MAX_LENGTH} characters or fewer.`,
+            );
+          }
+          patch.title = input.title.trim();
+          changedFields.push('title');
+        }
+        if (input.notes !== undefined) {
+          const notes =
+            typeof input.notes === 'string' && input.notes.trim()
+              ? input.notes.trim()
+              : null;
+          if (notes && notes.length > WORK_ORDER_NOTES_MAX_LENGTH) {
+            throw new BadRequestException(
+              `notes must be ${WORK_ORDER_NOTES_MAX_LENGTH} characters or fewer.`,
+            );
+          }
+          patch.notes = notes;
+          changedFields.push('notes');
+        }
+        if (input.assignedAdminId !== undefined) {
+          const assignedAdminId =
+            input.assignedAdminId != null
+              ? Number(input.assignedAdminId)
+              : null;
+          if (assignedAdminId != null && !Number.isInteger(assignedAdminId)) {
+            throw new BadRequestException(
+              'assignedAdminId must be an integer.',
+            );
+          }
+          // assigned_office itself is immutable via this endpoint (it's only
+          // ever set once, from the ticket, at creation — see create()
+          // above), so there is no "office changed" case to reconcile here:
+          // the assignee is always validated against the work order's one,
+          // fixed office.
+          if (assignedAdminId != null) {
+            await this.assertValidAssignee(
+              assignedAdminId,
+              existing.assigned_office,
+              tx,
+            );
+          }
+          patch.assignedAdminId = assignedAdminId;
+          changedFields.push('assignedAdminId');
+        }
+        if (input.dueDate !== undefined) {
+          const dueDate = parseDueDate(input.dueDate);
+          patch.dueDate = dueDate ? ts(dueDate) : null;
+          changedFields.push('dueDate');
+        }
 
-    const row = await this.db.transaction(async (tx) => {
-      const [updated] = await tx
-        .update(workOrders)
-        .set(patch)
-        .where(eq(workOrders.id, id))
-        .returning(SAFE_COLUMNS);
-      await this.audit.logInTx(tx, {
-        actor: actorFrom(admin),
-        actionType: 'work_order_updated',
-        targetType: 'work_order',
-        targetId: id,
-        targetSummary: `Work order #${id} for Ticket #${existing.ticket_id}`,
-        // Field names only, plus assignedAdminId's own before/after when it
-        // changed — bare integer ids, never note bodies or other content.
-        metadata: {
-          changedFields,
-          ...(changedFields.includes('assignedAdminId')
-            ? {
-                assignedAdminId: {
-                  from: existing.assigned_admin_id,
-                  to: patch.assignedAdminId,
-                },
-              }
-            : {}),
-        },
+        const [updated] = await tx
+          .update(workOrders)
+          .set(patch)
+          .where(
+            and(
+              eq(workOrders.id, id),
+              inArray(workOrders.status, OPEN_WORK_ORDER_STATUSES),
+              TICKET_STILL_WRITABLE,
+            ),
+          )
+          .returning(SAFE_COLUMNS);
+        if (!updated) {
+          throw new ConflictException(
+            `Work Order #${id} changed while it was being saved; reload and try again.`,
+          );
+        }
+        await this.audit.logInTx(tx, {
+          actor: actorFrom(admin),
+          actionType: 'work_order_updated',
+          targetType: 'work_order',
+          targetId: id,
+          targetSummary: `Work order #${id} for Ticket #${existing.ticket_id}`,
+          // Field names only, plus assignedAdminId's own before/after when it
+          // changed — bare integer ids, never note bodies or other content.
+          metadata: {
+            changedFields,
+            ...(changedFields.includes('assignedAdminId')
+              ? {
+                  assignedAdminId: {
+                    from: existing.assigned_admin_id,
+                    to: patch.assignedAdminId,
+                  },
+                }
+              : {}),
+          },
+        });
+        return updated;
       });
-      return updated;
-    });
-
-    return row;
+    } catch (err) {
+      this.mapConstraintError(err, id);
+    }
   }
 
+  // pending -> in_progress -> completed (manuscript Table 4). Completing
+  // sets completed_at and never touches the ticket's own status. A request
+  // for 'cancelled' goes to cancel(), which needs a reason.
   async setStatus(
     id: number,
     status: unknown,
     admin: AdminSession,
+    cancellation: { reason?: unknown; replacementWorkOrderId?: unknown } = {},
   ): Promise<WorkOrderRow> {
     if (!WORK_ORDER_STATUSES.includes(status as WorkOrderStatus)) {
       throw new BadRequestException(
@@ -583,63 +724,192 @@ export class WorkOrdersService {
       );
     }
     const nextStatus = status as WorkOrderStatus;
+    if (nextStatus === 'cancelled') {
+      return this.cancel(id, cancellation, admin);
+    }
 
-    const [existing] = await this.db
-      .select(SAFE_COLUMNS)
-      .from(workOrders)
-      .where(eq(workOrders.id, id));
-    if (!existing) throw new NotFoundException('Work order not found.');
-    assertOfficeAccess(admin, existing.assigned_office);
+    try {
+      return await this.db.transaction(async (tx) => {
+        const existing = await this.lockWorkOrder(tx, id);
+        const ticket = await this.lockTicket(tx, existing.ticket_id);
+        assertResponsibleOfficeCanAct(admin, ticket, 'Work Orders');
+        assertWorkOrderNotFinal(existing);
+        assertWorkOrderTransition(existing, nextStatus);
 
-    const completedAt = nextStatus === 'completed' ? new Date() : null;
+        const now = new Date().toISOString();
+        const [updated] = await tx
+          .update(workOrders)
+          .set({
+            status: nextStatus,
+            completedAt: nextStatus === 'completed' ? ts(now) : null,
+            updatedAt: ts(now),
+          })
+          .where(
+            and(
+              eq(workOrders.id, id),
+              eq(workOrders.status, existing.status),
+              TICKET_STILL_WRITABLE,
+            ),
+          )
+          .returning(SAFE_COLUMNS);
+        if (!updated) {
+          throw new ConflictException(
+            `Work Order #${id} changed while it was being saved; reload and try again.`,
+          );
+        }
+        // Append-only status timeline, in the same transaction as the status
+        // write itself so the two can never disagree. This is what makes the
+        // dashboard's Pending Work Orders sparkline reconstructable — the
+        // work_orders row only ever holds the current status. Distinct from
+        // the audit log below, which is System-Administrator-only and keyed
+        // on actor, not on the metric.
+        await tx.insert(workOrderStatusHistory).values({
+          workOrderId: id,
+          status: nextStatus,
+          adminId: admin.adminId,
+          adminName: admin.adminName,
+        });
+        await this.audit.logInTx(tx, {
+          actor: actorFrom(admin),
+          actionType:
+            nextStatus === 'completed'
+              ? 'work_order_completed'
+              : 'work_order_status_changed',
+          targetType: 'work_order',
+          targetId: id,
+          targetSummary: `Work order #${id} for Ticket #${existing.ticket_id}`,
+          metadata: { from: existing.status, to: nextStatus },
+        });
+        return updated;
+      });
+    } catch (err) {
+      this.mapConstraintError(err, id);
+    }
+  }
 
-    const row = await this.db.transaction(async (tx) => {
-      const [updated] = await tx
-        .update(workOrders)
-        .set({ status: nextStatus, completedAt, updatedAt: new Date() })
-        .where(
-          and(
-            eq(workOrders.id, id),
-            // A merged-away ticket's Work Orders are read-only history
-            // (Phase 3, step 3d), so none can be reopened.
-            dsql`NOT EXISTS (SELECT 1 FROM tickets t WHERE t.id = ${workOrders.ticketId} AND t.merged_into_ticket_id IS NOT NULL)`,
-          ),
-        )
-        .returning(SAFE_COLUMNS);
-      if (!updated) {
-        throw new ConflictException(
-          `Work order #${id} belongs to a ticket that was merged into another and is read-only.`,
+  // Cancel a pending or in-progress Work Order (manuscript Table 4,
+  // Appendix H WORK_ORDERS): a required reason, who and when, and optionally
+  // the Work Order of the same ticket that replaces it. One UPDATE sets all
+  // of them, so work_orders_cancellation_check holds. Never touches the
+  // ticket's status.
+  async cancel(
+    id: number,
+    input: { reason?: unknown; replacementWorkOrderId?: unknown },
+    admin: AdminSession,
+  ): Promise<WorkOrderRow> {
+    const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
+    if (!reason) {
+      throw new BadRequestException('A cancellation reason is required.');
+    }
+    if (reason.length > WORK_ORDER_CANCELLATION_REASON_MAX_LENGTH) {
+      throw new BadRequestException(
+        `The cancellation reason must be ${WORK_ORDER_CANCELLATION_REASON_MAX_LENGTH} characters or fewer.`,
+      );
+    }
+    let replacementId: number | null = null;
+    if (
+      input.replacementWorkOrderId !== undefined &&
+      input.replacementWorkOrderId !== null &&
+      input.replacementWorkOrderId !== ''
+    ) {
+      replacementId = Number(input.replacementWorkOrderId);
+      if (!Number.isInteger(replacementId) || replacementId <= 0) {
+        throw new BadRequestException(
+          'replacementWorkOrderId must be a Work Order id.',
         );
       }
-      // Append-only status timeline, in the same transaction as the status
-      // write itself so the two can never disagree. This is what makes the
-      // dashboard's Pending Work Orders sparkline reconstructable — the
-      // work_orders row only ever holds the current status. Distinct from
-      // the audit log below, which is System-Administrator-only and keyed on
-      // actor, not on the metric.
-      await tx.insert(workOrderStatusHistory).values({
-        workOrderId: id,
-        status: nextStatus,
-        adminId: admin.adminId,
-        adminName: admin.adminName,
-      });
-      await this.audit.logInTx(tx, {
-        actor: actorFrom(admin),
-        actionType:
-          nextStatus === 'completed'
-            ? 'work_order_completed'
-            : nextStatus === 'cancelled'
-              ? 'work_order_cancelled'
-              : 'work_order_status_changed',
-        targetType: 'work_order',
-        targetId: id,
-        targetSummary: `Work order #${id} for Ticket #${existing.ticket_id}`,
-        metadata: { from: existing.status, to: nextStatus },
-      });
-      return updated;
-    });
+      if (replacementId === id) {
+        throw new BadRequestException(
+          'A Work Order cannot be its own replacement.',
+        );
+      }
+    }
 
-    return row;
+    try {
+      return await this.db.transaction(async (tx) => {
+        const existing = await this.lockWorkOrder(tx, id);
+        const ticket = await this.lockTicket(tx, existing.ticket_id);
+        assertResponsibleOfficeCanAct(admin, ticket, 'Work Orders');
+        assertWorkOrderNotFinal(existing);
+        assertWorkOrderTransition(existing, 'cancelled');
+
+        if (replacementId !== null) {
+          const [replacement] = await tx
+            .select({
+              id: workOrders.id,
+              ticket_id: workOrders.ticketId,
+              status: workOrders.status,
+            })
+            .from(workOrders)
+            .where(eq(workOrders.id, replacementId));
+          if (!replacement) {
+            throw new BadRequestException(
+              `Replacement Work Order #${replacementId} was not found.`,
+            );
+          }
+          if (replacement.ticket_id !== existing.ticket_id) {
+            throw new BadRequestException(
+              `Replacement Work Order #${replacementId} belongs to another ticket; choose one of Ticket #${existing.ticket_id}.`,
+            );
+          }
+          if (isFinalWorkOrder(replacement.status)) {
+            throw new ConflictException(
+              `Replacement Work Order #${replacementId} is ${replacement.status}; choose a pending or in-progress Work Order.`,
+            );
+          }
+        }
+
+        const now = new Date().toISOString();
+        const [updated] = await tx
+          .update(workOrders)
+          .set({
+            status: 'cancelled',
+            cancellationReason: reason,
+            cancelledByAdminId: admin.adminId,
+            cancelledAt: ts(now),
+            replacementWorkOrderId: replacementId,
+            completedAt: null,
+            updatedAt: ts(now),
+          })
+          .where(
+            and(
+              eq(workOrders.id, id),
+              inArray(workOrders.status, OPEN_WORK_ORDER_STATUSES),
+              TICKET_STILL_WRITABLE,
+            ),
+          )
+          .returning(SAFE_COLUMNS);
+        if (!updated) {
+          throw new ConflictException(
+            `Work Order #${id} changed while it was being saved; reload and try again.`,
+          );
+        }
+        await tx.insert(workOrderStatusHistory).values({
+          workOrderId: id,
+          status: 'cancelled',
+          adminId: admin.adminId,
+          adminName: admin.adminName,
+        });
+        await this.audit.logInTx(tx, {
+          actor: actorFrom(admin),
+          actionType: 'work_order_cancelled',
+          targetType: 'work_order',
+          targetId: id,
+          targetSummary: `Work order #${id} for Ticket #${existing.ticket_id}`,
+          metadata: {
+            from: existing.status,
+            to: 'cancelled',
+            reason,
+            ...(replacementId !== null
+              ? { replacementWorkOrderId: replacementId }
+              : {}),
+          },
+        });
+        return updated;
+      });
+    } catch (err) {
+      this.mapConstraintError(err, id);
+    }
   }
 
   // "This week" = the last 7 days, matching the existing dashboard KPI

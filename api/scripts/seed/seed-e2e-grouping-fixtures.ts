@@ -12,7 +12,11 @@ import { sql } from '../db';
 // spec never calls the live service, and the rainfall context spec
 // (e2e/admin-rainfall-context.spec.ts; step 4c), whose rainfall_context rows
 // are inserted on the same tickets for the same reason, and the manual
-// routing spec (e2e/admin-routing.spec.ts; Phase 5, step 5a). The tickets and reports
+// routing spec (e2e/admin-routing.spec.ts; Phase 5, step 5a), and the
+// Operational Assessment / Work Order spec
+// (e2e/admin-assessment-work-orders.spec.ts; step 5b). Every fixture that
+// carries a Work Order also carries an Operational Assessment, as step 5b
+// requires of new Work Orders. The tickets and reports
 // are inserted directly, never through POST /reports, so the specs post no
 // report: a full run already posts 20, the per-IP hourly limit
 // (docs/testing.md). Every fixture report belongs to citizen1 (the step 3g
@@ -27,9 +31,13 @@ import { sql } from '../db';
 // Both first retire whatever an earlier run left active: every active ticket
 // (or Resolved step 3g feedback ticket) that is not merged away and whose
 // reports are all fixture reports is set to Rejected, with a status_history
-// row, after its active Work Orders are cancelled, with a
+// row, after its active Work Orders are cancelled the way step 5b requires
+// (cancelled_at, cancelled_by_admin_id = the MEO demo admin and the reason
+// "E2E fixture cleanup", so work_orders_cancellation_check holds), with a
 // work_order_status_history row. Its resolution_feedback rows stay as they
-// are. Nothing is deleted and no
+// are. The MEO demo admin (meo@porac.gov.ph) is never one of the "e2e-%"
+// accounts cleanup-e2e-admins.ts deletes, so the cancelled_by_admin_id FK
+// always has its row. Nothing is deleted and no
 // history is rewritten; a merged-away fixture ticket stays as the read-only
 // history it is.
 
@@ -38,12 +46,14 @@ const CORRECTION_TITLE_PREFIX = 'E2E correction fixture';
 const FEEDBACK_TITLE_PREFIX = 'E2E feedback fixture';
 const HAZARD_TITLE_PREFIX = 'E2E hazard fixture';
 const ROUTING_TITLE_PREFIX = 'E2E routing fixture';
+const WORK_ORDER_TITLE_PREFIX = 'E2E work order fixture';
 const TITLE_PATTERNS = [
   `${TITLE_PREFIX}%`,
   `${CORRECTION_TITLE_PREFIX}%`,
   `${FEEDBACK_TITLE_PREFIX}%`,
   `${HAZARD_TITLE_PREFIX}%`,
   `${ROUTING_TITLE_PREFIX}%`,
+  `${WORK_ORDER_TITLE_PREFIX}%`,
 ];
 const CATEGORY = 'Pothole / Road Surface Damage';
 const CITIZEN_EMAIL = 'citizen1@porac.ph';
@@ -90,6 +100,13 @@ function correctionSpot(index: number, member = 0): Point {
 }
 
 async function retireLeftovers(): Promise<number> {
+  const [meo] = await sql<{ id: number }[]>`
+    SELECT id FROM admins WHERE email = ${MEO_EMAIL}
+  `;
+  if (!meo)
+    throw new Error(
+      'The MEO demo admin is missing; run seed:users and seed:e2e-admins first.',
+    );
   return sql.begin(async (tx) => {
     const tickets = await tx<{ id: number }[]>`
       SELECT t.id FROM tickets t
@@ -109,7 +126,9 @@ async function retireLeftovers(): Promise<number> {
     const ids = tickets.map((t) => t.id);
     if (ids.length === 0) return 0;
     const cancelled = await tx<{ id: number }[]>`
-      UPDATE work_orders SET status = 'cancelled', updated_at = now()
+      UPDATE work_orders SET
+        status = 'cancelled', cancelled_at = now(), cancelled_by_admin_id = ${meo.id},
+        cancellation_reason = ${CLEANUP_ACTOR}, completed_at = NULL, updated_at = now()
       WHERE ticket_id = ANY(${ids}) AND status IN ('pending', 'in_progress')
       RETURNING id
     `;
@@ -216,6 +235,20 @@ async function create() {
       await tx`UPDATE tickets SET member_count = member_count + 1 WHERE id = ${ticketId}`;
       return row.id;
     };
+    // An Operational Assessment by the MEO demo admin, with observed
+    // conditions: what step 5b requires before a new Work Order.
+    const assess = async (ticketId: number, prefix: string) => {
+      await tx`
+        INSERT INTO operational_assessments (
+          ticket_id, assessed_by_admin_id, assessed_by_name, observed_conditions,
+          recommended_action, updated_by_admin_id, updated_by_name
+        )
+        VALUES (
+          ${ticketId}, ${meo.id}, ${meo.name}, ${`${prefix}: pothole about 1 m wide`},
+          'Patch the pothole', ${meo.id}, ${meo.name}
+        )
+      `;
+    };
 
     // 1. Merge: the older ticket is Under Review; the newer one carries
     //    citizen1's report, whose page then shows the survivor's status.
@@ -269,6 +302,7 @@ async function create() {
     await report(workOrderViewedTicketId, spot(4), 'work order, viewed', 2);
     const workOrderTicketId = await ticket(spot(4, 1), { ageDays: 1 });
     await report(workOrderTicketId, spot(4, 1), 'work order, has one', 1);
+    await assess(workOrderTicketId, TITLE_PREFIX);
     const [workOrder] = await tx<{ id: number }[]>`
       INSERT INTO work_orders (ticket_id, title, assigned_office, status, created_by_admin_id)
       VALUES (${workOrderTicketId}, ${`${TITLE_PREFIX}: patch the pothole`}, 'MEO', 'pending', ${meo.id})
@@ -305,6 +339,7 @@ async function create() {
       2,
       'category blocked by a Work Order',
     );
+    await assess(blockedByWorkOrder.ticketId, CORRECTION_TITLE_PREFIX);
     const [correctionWorkOrder] = await tx<{ id: number }[]>`
       INSERT INTO work_orders (ticket_id, title, assigned_office, status, created_by_admin_id)
       VALUES (${blockedByWorkOrder.ticketId}, ${`${CORRECTION_TITLE_PREFIX}: patch the pothole`}, 'MEO', 'pending', ${meo.id})
@@ -617,6 +652,7 @@ async function create() {
         category,
       );
       if (options.workOrder) {
+        await assess(ticketId, ROUTING_TITLE_PREFIX);
         const [wo] = await tx<{ id: number }[]>`
           INSERT INTO work_orders (ticket_id, title, assigned_office, status, created_by_admin_id)
           VALUES (${ticketId}, ${`${ROUTING_TITLE_PREFIX}: patch the pothole`}, 'MEO', 'pending', ${meo.id})
@@ -654,7 +690,53 @@ async function create() {
       rejected: await routingTicket(5, 'Rejected', { status: 'Rejected' }),
     };
 
+    // Phase 5, step 5b: Operational Assessment and Work Orders
+    // (e2e/admin-assessment-work-orders.spec.ts). Under Review tickets on
+    // the routing column, 60, 90 and 120 m past the last routing fixture
+    // (inside Jalung, beyond the 20 m Pothole radius): an MEO one with no
+    // assessment (New Work Order refused), an MEO one with an assessment,
+    // on which the spec creates, completes and cancels Work Orders through
+    // the API and the UI, and an MDRRMO one with an assessment. The
+    // notification, export and work order specs create their Work Orders
+    // on the two assessed ones rather than on a demo ticket.
+    const workOrderTicket = async (
+      index: number,
+      label: string,
+      office: Office = 'MEO',
+    ) => {
+      const at = {
+        lat: BASE.lat + ROUTING_START_DEG + index * ROUTING_STEP_DEG,
+        lng: BASE.lng,
+      };
+      const ticketId = await ticket(at, {
+        office,
+        initialOffice: 'MEO',
+        status: 'Under Review',
+        ageDays: 1,
+      });
+      await report(ticketId, at, label, 1, WORK_ORDER_TITLE_PREFIX);
+      return ticketId;
+    };
+    const assessmentWorkOrders = {
+      noAssessmentTicketId: await workOrderTicket(7, 'no assessment'),
+      assessedTicketId: await workOrderTicket(8, 'assessed'),
+      mdrrmoAssessedTicketId: await workOrderTicket(
+        9,
+        'assessed, MDRRMO',
+        'MDRRMO',
+      ),
+    };
+    await assess(
+      assessmentWorkOrders.assessedTicketId,
+      WORK_ORDER_TITLE_PREFIX,
+    );
+    await assess(
+      assessmentWorkOrders.mdrrmoAssessedTicketId,
+      WORK_ORDER_TITLE_PREFIX,
+    );
+
     return {
+      assessmentWorkOrders,
       routing,
       hazard: {
         classifiedTicketId: hazardClassified,

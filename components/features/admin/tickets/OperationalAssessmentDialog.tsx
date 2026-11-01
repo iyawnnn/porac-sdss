@@ -5,8 +5,15 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { OPERATIONAL_CONSTRAINTS, OPERATIONAL_CONSTRAINT_LABEL, type OperationalConstraint } from "@/lib/types/admin-ticket-constants";
+import {
+  OPERATIONAL_ASSESSMENT_EVIDENCE_URL_MAX_LENGTH,
+  OPERATIONAL_CONSTRAINTS,
+  OPERATIONAL_CONSTRAINT_LABEL,
+  OPERATIONAL_CONSTRAINT_NOTE_MAX_LENGTH,
+  type OperationalConstraint,
+} from "@/lib/types/admin-ticket-constants";
 import type { OperationalAssessment } from "@/lib/types/admin-tickets";
 
 // Real production Operational Assessment form — one manageable dialog, not
@@ -37,6 +44,11 @@ export function OperationalAssessmentDialog({
   const [defermentReason, setDefermentReason] = useState(existing?.defermentReason ?? "");
   const [referralReason, setReferralReason] = useState(existing?.referralReason ?? "");
   const [remarks, setRemarks] = useState(existing?.remarks ?? "");
+  // Manuscript revision Phase 5, step 5b.
+  const [actualAction, setActualAction] = useState(existing?.actualAction ?? "");
+  const [evidenceUrl, setEvidenceUrl] = useState(existing?.supportingEvidenceUrl ?? "");
+  const [constraintNotes, setConstraintNotes] = useState<Record<string, string>>(existing?.operationalConstraintNotes ?? {});
+  const [observedError, setObservedError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,13 +58,25 @@ export function OperationalAssessmentDialog({
 
   function resetAndClose() {
     setError("");
+    setObservedError("");
     setSubmitting(false);
     onOpenChange(false);
   }
 
   async function handleSubmit() {
-    setSubmitting(true);
     setError("");
+    // Required on every save (Appendix H assessed_conditions); the API
+    // refuses a blank one too.
+    if (!observedConditions.trim()) {
+      setObservedError("Observed conditions are required.");
+      return;
+    }
+    setObservedError("");
+    setSubmitting(true);
+    // A note only for a constraint that is still checked, and never blank.
+    const notes = Object.fromEntries(
+      constraints.map((c) => [c, (constraintNotes[c] ?? "").trim()] as const).filter(([, note]) => note),
+    );
     const res = await fetch(`/api/admin/tickets/${ticketId}/assessment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -60,11 +84,14 @@ export function OperationalAssessmentDialog({
         observedConditions,
         safetyImplications,
         operationalConstraints: constraints,
+        operationalConstraintNotes: notes,
         recommendedAction,
+        actualAction: actualAction.trim() || undefined,
         temporaryMitigation,
         defermentReason: defermentReason.trim() || undefined,
         referralReason: referralReason.trim() || undefined,
         remarks: remarks.trim() || undefined,
+        supportingEvidenceUrl: evidenceUrl.trim() || null,
       }),
     });
     if (res.ok) {
@@ -89,8 +116,21 @@ export function OperationalAssessmentDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <Field label="Observed Conditions">
-            <Textarea onChange={(e) => setObservedConditions(e.target.value)} rows={3} value={observedConditions} />
+          <Field label="Observed Conditions (required)">
+            <Textarea
+              aria-describedby={observedError ? "observed-conditions-error" : undefined}
+              aria-invalid={observedError ? true : undefined}
+              aria-label="Observed Conditions"
+              onChange={(e) => {
+                setObservedConditions(e.target.value);
+                if (observedError && e.target.value.trim()) setObservedError("");
+              }}
+              rows={3}
+              value={observedConditions}
+            />
+            {observedError && (
+              <p className="text-xs text-destructive" id="observed-conditions-error">{observedError}</p>
+            )}
           </Field>
           <Field label="Safety Implications">
             <Textarea onChange={(e) => setSafetyImplications(e.target.value)} rows={3} value={safetyImplications} />
@@ -104,12 +144,41 @@ export function OperationalAssessmentDialog({
                 </label>
               ))}
             </div>
+            {/* One optional note per checked constraint. */}
+            {constraints.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {OPERATIONAL_CONSTRAINTS.filter((c) => constraints.includes(c)).map((c) => (
+                  <Input
+                    aria-label={`Note on ${OPERATIONAL_CONSTRAINT_LABEL[c]}`}
+                    key={c}
+                    maxLength={OPERATIONAL_CONSTRAINT_NOTE_MAX_LENGTH}
+                    onChange={(e) => setConstraintNotes((prev) => ({ ...prev, [c]: e.target.value }))}
+                    placeholder={`${OPERATIONAL_CONSTRAINT_LABEL[c]}: note (optional)`}
+                    value={constraintNotes[c] ?? ""}
+                  />
+                ))}
+              </div>
+            )}
           </Field>
           <Field label="Recommended Action">
             <Textarea onChange={(e) => setRecommendedAction(e.target.value)} rows={3} value={recommendedAction} />
           </Field>
+          <Field label="Actual Action Taken (optional)">
+            <Textarea aria-label="Actual Action Taken" onChange={(e) => setActualAction(e.target.value)} rows={2} value={actualAction} />
+          </Field>
           <Field label="Temporary Mitigation / Interim Measures">
             <Textarea onChange={(e) => setTemporaryMitigation(e.target.value)} rows={3} value={temporaryMitigation} />
+          </Field>
+          <Field label="Supporting Evidence URL (optional)">
+            <Input
+              aria-label="Supporting Evidence URL"
+              inputMode="url"
+              maxLength={OPERATIONAL_ASSESSMENT_EVIDENCE_URL_MAX_LENGTH}
+              onChange={(e) => setEvidenceUrl(e.target.value)}
+              placeholder="https://…"
+              type="url"
+              value={evidenceUrl}
+            />
           </Field>
           <Field label="Deferment Reason (optional)">
             <Textarea onChange={(e) => setDefermentReason(e.target.value)} rows={2} value={defermentReason} />

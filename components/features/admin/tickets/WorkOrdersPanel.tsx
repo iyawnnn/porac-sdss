@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
+import { ASSESSMENT_REQUIRED_MESSAGE, isFinalWorkOrder, type WorkOrderRow } from "@/lib/types/admin-work-orders";
 import { CreateWorkOrderDialog } from "@/components/features/admin/work-orders/CreateWorkOrderDialog";
 import { WorkOrderStatusBadge } from "@/components/features/admin/work-orders/WorkOrderStatusBadge";
 import { WorkOrderStatusSelect } from "@/components/features/admin/work-orders/WorkOrderStatusSelect";
 import { WorkOrderAssigneeSelect } from "@/components/features/admin/work-orders/WorkOrderAssigneeSelect";
 import { WorkOrderDueDateEditor } from "@/components/features/admin/work-orders/WorkOrderDueDateEditor";
 import { WorkOrderNotesEditor } from "@/components/features/admin/work-orders/WorkOrderNotesEditor";
+import { WorkOrderFinalState } from "@/components/features/admin/work-orders/WorkOrderFinalState";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 
 // Internal-only panel — work orders (and their notes) never appear on any
@@ -17,18 +18,18 @@ export function WorkOrdersPanel({
   office,
   initialWorkOrders,
   readOnly = false,
-  canCreate = true,
+  hasAssessment = true,
 }: {
   ticketId: number;
   office: "MEO" | "MDRRMO";
   initialWorkOrders: WorkOrderRow[];
-  // A merged-away ticket (manuscript revision Phase 3, step 3d): its Work
-  // Orders stay listed as history, with no create or edit controls.
+  // A merged-away ticket (manuscript revision Phase 3, step 3d) or a
+  // Rejected one (step 5b): its Work Orders stay listed as history, with
+  // no create or edit controls. The API refuses both.
   readOnly?: boolean;
-  // False on a Rejected ticket (manuscript revision Phase 5, step 5a): no
-  // New Work Order button. Existing ones keep their controls; the API
-  // rules for Work Orders on a Rejected ticket are step 5b.
-  canCreate?: boolean;
+  // Step 5b: a ticket needs an Operational Assessment with observed
+  // conditions before a Work Order can be created (the API enforces it).
+  hasAssessment?: boolean;
 }) {
   const [workOrders, setWorkOrders] = useState(initialWorkOrders);
 
@@ -41,22 +42,32 @@ export function WorkOrdersPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Work orders ({workOrders.length})</p>
-        {!readOnly && canCreate && <CreateWorkOrderDialog office={office} onCreated={handleCreated} ticketId={ticketId} />}
+        {!readOnly && hasAssessment && <CreateWorkOrderDialog office={office} onCreated={handleCreated} ticketId={ticketId} />}
       </div>
+      {!readOnly && !hasAssessment && (
+        <p className="rounded-md border border-line-100 bg-muted/40 p-2 text-xs text-ink-700" data-testid="work-order-assessment-required">
+          {ASSESSMENT_REQUIRED_MESSAGE}
+        </p>
+      )}
       {workOrders.length === 0 ? (
         <EmptyState className="items-start p-0 text-left" title="No work orders yet for this ticket." />
       ) : (
         <ul className="space-y-2">
           {workOrders.map((wo) => (
-            <li className="rounded-lg border border-line-100 p-3" key={wo.id}>
+            <li className="scroll-mt-20 rounded-lg border border-line-100 p-3" data-testid={`work-order-${wo.id}`} id={`work-order-${wo.id}`} key={wo.id}>
               <div className="flex items-start justify-between gap-2">
-                <p className="min-w-0 truncate text-sm font-medium text-ink-900">{wo.title}</p>
+                <p className="min-w-0 truncate text-sm font-medium text-ink-900">
+                  <span className="text-ink-400">#{wo.id}</span> {wo.title}
+                </p>
                 <WorkOrderStatusBadge status={wo.status} />
               </div>
-              {readOnly ? (
-                wo.notes && <p className="mt-1 text-xs whitespace-pre-wrap text-ink-500">{wo.notes}</p>
+              {readOnly || isFinalWorkOrder(wo.status) ? (
+                <>
+                  {wo.notes && <p className="mt-1 text-xs whitespace-pre-wrap text-ink-500">{wo.notes}</p>}
+                  <WorkOrderFinalState replacementHref={(id) => `#work-order-${id}`} workOrder={wo} />
+                </>
               ) : (
                 <>
                   <WorkOrderNotesEditor onUpdated={handleUpdated} workOrder={wo} />

@@ -137,8 +137,8 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
   // (manuscript revision Phase 3, step 3d; the API refuses them too).
   const mergedAway = ticket.merged_into_ticket_id !== null;
   // A Rejected ticket hides Reassign, New Work Order and Add Assessment
-  // (manuscript revision Phase 5, step 5a). The API refuses Reassign and
-  // Refer on it; refusing Work Orders and assessments there is step 5b.
+  // (manuscript revision Phase 5, step 5a), and its Work Orders are
+  // read-only (step 5b). The API refuses all of them on it.
   const rejected = ticket.status === "Rejected";
   const grouping = reportGrouping(ticket, reports.length, related);
 
@@ -365,10 +365,10 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           <Card>
             <CardContent className="p-4">
               <WorkOrdersPanel
-                canCreate={!rejected}
+                hasAssessment={Boolean(operationalAssessment?.observedConditions.trim())}
                 initialWorkOrders={workOrders}
                 office={ticket.assigned_office as "MEO" | "MDRRMO"}
-                readOnly={mergedAway}
+                readOnly={mergedAway || rejected}
                 ticketId={ticket.id}
               />
             </CardContent>

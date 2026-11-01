@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 
 // Shared by every spec that needs an authenticated session — replaces the
 // ~7 near-identical inline loginAdmin/loginCitizen copies that used to be
@@ -128,4 +128,45 @@ export async function loginCitizen(
   await page.getByLabel("Email").fill(account.email);
   await page.getByPlaceholder("Password").fill(account.password);
   await submitWithRetry(page, "Sign In with Email", /\/dashboard/);
+}
+
+// Manuscript revision Phase 5, step 5b: a ticket needs an Operational
+// Assessment with observed conditions before a Work Order can be created.
+// Specs that create Work Orders on a ticket call this first, signed in as
+// the ticket's responsible office (the request context carries the session
+// cookie). An assessment the ticket already has is kept: only blank
+// observed conditions are filled in, with every other field sent back as
+// it was, since a save replaces the whole assessment.
+export async function ensureAssessment(
+  request: APIRequestContext,
+  ticketId: number,
+  headers: Record<string, string> = {},
+): Promise<void> {
+  const detail = await request.get(`/api/admin/tickets/${ticketId}`, { headers });
+  expect(detail.ok()).toBe(true);
+  const existing = ((await detail.json()) as {
+    operationalAssessment: (Record<string, unknown> & { observedConditions: string }) | null;
+  }).operationalAssessment;
+  if (existing?.observedConditions.trim()) return;
+  const res = await request.post(`/api/admin/tickets/${ticketId}/assessment`, {
+    headers: { ...headers, "content-type": "application/json" },
+    data: {
+      ...(existing
+        ? {
+            safetyImplications: existing.safetyImplications,
+            operationalConstraints: existing.operationalConstraints,
+            operationalConstraintNotes: existing.operationalConstraintNotes,
+            recommendedAction: existing.recommendedAction,
+            actualAction: existing.actualAction ?? undefined,
+            temporaryMitigation: existing.temporaryMitigation,
+            defermentReason: existing.defermentReason ?? undefined,
+            referralReason: existing.referralReason ?? undefined,
+            remarks: existing.remarks ?? undefined,
+            supportingEvidenceUrl: existing.supportingEvidenceUrl ?? null,
+          }
+        : {}),
+      observedConditions: "E2E: site checked before creating a work order.",
+    },
+  });
+  expect(res.ok()).toBe(true);
 }

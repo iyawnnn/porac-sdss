@@ -52,6 +52,7 @@ import { DUPLICATE_MERGE_WINDOW_DAYS } from '../../src/common/utils/duplicate-de
 import { haversineMeters } from '../../src/common/utils/distance';
 import { TicketsService } from '../../src/admin/tickets.service';
 import { WorkOrdersService } from '../../src/admin/work-orders.service';
+import { OperationalAssessmentService } from '../../src/admin/operational-assessment.service';
 import { ReportsService } from '../../src/reports/reports.service';
 import { NotificationsService } from '../../src/notifications/notifications.service';
 import { AdminAuditService } from '../../src/admin/admin-audit.service';
@@ -1572,6 +1573,10 @@ async function seedWorkOrders(
     );
   }
   const workOrdersService = buildWorkOrdersService();
+  const assessmentService = new OperationalAssessmentService(
+    sql,
+    new AdminAuditService(db),
+  );
   const ids: number[] = [];
 
   async function makeWorkOrder(
@@ -1580,6 +1585,14 @@ async function seedWorkOrders(
     finalStatus: 'pending' | 'in_progress' | 'completed',
   ) {
     const admin = pickAdminForTicket(adminsByOffice, ticket.category);
+    // Manuscript revision Phase 5, step 5b: a ticket needs an Operational
+    // Assessment with observed conditions before a Work Order can be
+    // created, through the same real service the Ticket Detail form uses.
+    await assessmentService.upsert(ticket.id, admin, {
+      observedConditions: `Site inspected for "${title}": ${ticket.category.toLowerCase()} confirmed on the ground.`,
+      recommendedAction: title,
+      operationalConstraints: [],
+    });
     const wo = await workOrdersService.create(
       {
         ticketId: ticket.id,

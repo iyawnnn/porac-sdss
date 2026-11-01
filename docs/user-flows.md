@@ -154,7 +154,9 @@ The final step is different. "Advance to Resolved" opens a dialog that asks for 
 
 Work orders track the field work needed to close a ticket. A ticket can have several.
 
-Each carries a title, **internal progress notes**, an assigned office, optionally a specific assigned admin, a due date, and its own status: pending → in progress → completed (or cancelled).
+**Assessment first** (manuscript revision Phase 5, step 5b). A ticket needs an Operational Assessment with observed conditions before its first new Work Order; until then the Work Orders panel shows "Add an Operational Assessment first" in place of the New Work Order button, and the API refuses the same (409), bulk creation included. The assessment form asks for observed conditions (required), safety implications, operational constraints (each with an optional note), the recommended and the actual action, interim measures, a deferment or referral reason, remarks and an optional supporting evidence link.
+
+Each carries a title, **internal progress notes**, an assigned office, optionally a specific assigned admin, a due date, and its own status: pending → in progress → completed (or cancelled). Since step 5b a Work Order only moves forward, and **cancelling needs a reason**: "Cancel…" in the status control opens a dialog for the reason and, optionally, the Work Order of the same ticket that replaces it. **Completed and cancelled Work Orders are final** — no further status change and no edits to notes, assignee or due date; they show when they were completed, or who cancelled them, when, why and the replacement. Old Work Orders cancelled before step 5b say "No reason recorded (legacy)". On a Rejected or merged-away ticket nothing about Work Orders or the assessment can change.
 
 **Work order status is completely independent of ticket status.** Completing every work order does not advance the ticket, and advancing the ticket does not touch its work orders. A person decides when the ticket is actually resolved.
 
@@ -299,7 +301,7 @@ Maria gets a "Report received" notification. Because Localized Flooding routes t
 
 **4 — MDRRMO picks it up.** Ronald opens `/admin` at the start of his shift; the ticket is near the top of the Operational Priority queue. On Ticket Detail he reads the photos, checks the priority breakdown (high severity, not just a busy barangay), records an Operational Assessment of the flooding, and advances the status to **Under Review**, then **In Progress**. Maria gets a notification at each step.
 
-**5 — Field work.** Ronald creates a work order — *"Clear blocked drainage inlet, Cangatba main road"* — assigns it to a colleague, sets tomorrow's due date, and later adds the internal note *"Inlet blocked by construction debris; coordinated with MEO for hauling."* **Maria never sees any of that.** He moves the work order to *in progress*, then *completed* — which does **not** advance the ticket. That stays a human decision.
+**5 — Field work.** With the assessment recorded (step 5b requires one first), Ronald creates a work order — *"Clear blocked drainage inlet, Cangatba main road"* — assigns it to a colleague, sets tomorrow's due date, and later adds the internal note *"Inlet blocked by construction debris; coordinated with MEO for hauling."* **Maria never sees any of that.** He moves the work order to *in progress*, then *completed* — which does **not** advance the ticket. That stays a human decision.
 
 **6 — Resolution.** Once the water has cleared, Ronald clicks "Advance to Resolved". The dialog asks for completion notes and a photo. He writes *"Drainage inlet cleared and flushed. Road passable."* and attaches a photo of the cleared road.
 

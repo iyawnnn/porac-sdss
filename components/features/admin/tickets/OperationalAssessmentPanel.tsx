@@ -24,7 +24,8 @@ export function OperationalAssessmentPanel({
 }: {
   ticketId: number;
   assessment: OperationalAssessment | null;
-  // A merged-away ticket (manuscript revision Phase 3, step 3d).
+  // A merged-away ticket (manuscript revision Phase 3, step 3d) or a
+  // Rejected one (step 5b: the API refuses both).
   readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -63,10 +64,36 @@ export function OperationalAssessmentPanel({
                   </Badge>
                 ))}
               </div>
+              {assessment.operationalConstraints.some((c) => assessment.operationalConstraintNotes[c]) && (
+                <ul className="mt-1.5 space-y-0.5 text-xs text-ink-700">
+                  {assessment.operationalConstraints
+                    .filter((c) => assessment.operationalConstraintNotes[c])
+                    .map((c) => (
+                      <li key={c}>
+                        <span className="font-medium">{OPERATIONAL_CONSTRAINT_LABEL[c as OperationalConstraint] ?? c}:</span>{" "}
+                        {assessment.operationalConstraintNotes[c]}
+                      </li>
+                    ))}
+                </ul>
+              )}
             </div>
           )}
           <AssessmentField label="Recommended Action" value={assessment.recommendedAction} />
+          <AssessmentField label="Actual Action Taken" value={assessment.actualAction} />
           <AssessmentField label="Temporary Mitigation / Interim Measures" value={assessment.temporaryMitigation} />
+          {assessment.supportingEvidenceUrl && (
+            <div>
+              <p className="text-xs font-medium text-ink-500">Supporting Evidence</p>
+              <a
+                className="mt-0.5 block text-sm break-all text-primary underline"
+                href={assessment.supportingEvidenceUrl}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                {assessment.supportingEvidenceUrl}
+              </a>
+            </div>
+          )}
           <AssessmentField label="Deferment Reason" value={assessment.defermentReason} />
           <AssessmentField label="Referral Reason" value={assessment.referralReason} />
           <AssessmentField label="Additional Remarks" value={assessment.remarks} />
