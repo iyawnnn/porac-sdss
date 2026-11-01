@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
+import { isFinalWorkOrder, type WorkOrderRow } from "@/lib/types/admin-work-orders";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
@@ -30,6 +30,13 @@ export function WorkOrderNotesEditor({
       setEditing(false);
     }
     setSaving(false);
+  }
+
+  // Completed and Cancelled are final for every field (step 5b).
+  if (isFinalWorkOrder(workOrder.status)) {
+    return workOrder.notes ? (
+      <p className="mt-1.5 p-1.5 text-sm whitespace-pre-wrap text-ink-700">{workOrder.notes}</p>
+    ) : null;
   }
 
   if (!editing) {

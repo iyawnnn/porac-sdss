@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
+import { isFinalWorkOrder, type WorkOrderRow } from "@/lib/types/admin-work-orders";
 import type { AdminDirectoryRow } from "@/lib/types/admin-directory";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -60,7 +60,7 @@ export function WorkOrderAssigneeSelect({
 
   return (
     <Select
-      disabled={loading || saving}
+      disabled={loading || saving || isFinalWorkOrder(workOrder.status)}
       onValueChange={handleChange}
       value={workOrder.assigned_admin_id != null ? String(workOrder.assigned_admin_id) : UNASSIGNED}
     >

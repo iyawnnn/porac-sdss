@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
-import { loginAdmin as loginAs } from "./helpers";
+import { ensureAssessment, loginAdmin as loginAs } from "./helpers";
 
 test.setTimeout(60_000);
 
@@ -29,14 +29,30 @@ function sessionCookieHeader(cookies: { name: string; value: string }[]): Record
 const OFFICE_ADMIN = { MEO: E2E_MEO_ADMIN, MDRRMO: E2E_MDRRMO_ADMIN } as const;
 let borrowedTicket: { id: number; originalOffice: "MEO" | "MDRRMO" } | null = null;
 
+// Manuscript revision Phase 5, step 5b: the assessed MEO and MDRRMO fixture
+// tickets e2e/global-setup.ts inserts, when present. Work Orders need an
+// assessment on their ticket now, and a fixture keeps these notification
+// Work Orders off the demo tickets.
+const workOrderFixtures: { assessedTicketId: number; mdrrmoAssessedTicketId: number } | null = process.env
+  .E2E_GROUPING_FIXTURES
+  ? ((
+      JSON.parse(process.env.E2E_GROUPING_FIXTURES) as {
+        assessmentWorkOrders?: { assessedTicketId: number; mdrrmoAssessedTicketId: number };
+      }
+    ).assessmentWorkOrders ?? null)
+  : null;
+
 async function ticketIdAsSystemAdmin(browser: Browser, office: "MEO" | "MDRRMO"): Promise<number> {
+  if (workOrderFixtures) {
+    return office === "MEO" ? workOrderFixtures.assessedTicketId : workOrderFixtures.mdrrmoAssessedTicketId;
+  }
   const context = await browser.newContext();
   const page = await context.newPage();
   await loginAs(page, OFFICE_ADMIN[office]);
   const cookies = await context.cookies();
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
 
-  const res = await context.request.get(`/api/admin/tickets?status=all&limit=1`, { headers });
+  const res = await context.request.get(`/api/admin/tickets?limit=1`, { headers });
   const body = await res.json();
   if (body.tickets.length > 0) {
     await context.close();
@@ -99,6 +115,7 @@ test.afterAll(async ({ browser }) => {
 async function createOfficeNotification(page: Page, ticketId: number): Promise<string> {
   const cookies = await page.context().cookies();
   const title = `E2E notification check ${Date.now()}`;
+  await ensureAssessment(page.request, ticketId, sessionCookieHeader(cookies));
   const res = await page.request.post("/api/admin/work-orders", {
     headers: sessionCookieHeader(cookies),
     data: { ticketId, title },

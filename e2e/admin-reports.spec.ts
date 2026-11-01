@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
-import { loginAdmin as loginAs } from "./helpers";
+import { ensureAssessment, loginAdmin as loginAs } from "./helpers";
 
 test.setTimeout(60_000);
 
@@ -250,11 +250,22 @@ test("work order CSV export never leaks a note body, even though the column itse
 
   // Reuse an existing ticket rather than creating a new report — this test
   // only cares about the work order's notes field, not which ticket it's
-  // attached to, so any ticket works. Zero reports created (docs/testing.md §6).
-  const ticketsRes = await request.get("/api/admin/tickets?status=all&limit=1", { headers });
-  const { tickets } = await ticketsRes.json();
-  test.skip(tickets.length === 0, "no tickets exist — run `pnpm --prefix api seed:diverse-reports` first");
-  const ticketId = tickets[0].id;
+  // attached to. Zero reports created (docs/testing.md §6). Since step 5b
+  // the ticket must be active (no Work Order on a Rejected one) and carry
+  // an Operational Assessment: the assessed MEO fixture ticket
+  // e2e/global-setup.ts inserts, else the first active MEO ticket.
+  const fixtureTicketId = process.env.E2E_GROUPING_FIXTURES
+    ? (JSON.parse(process.env.E2E_GROUPING_FIXTURES) as { assessmentWorkOrders?: { assessedTicketId: number } })
+        .assessmentWorkOrders?.assessedTicketId
+    : undefined;
+  let ticketId = fixtureTicketId;
+  if (ticketId === undefined) {
+    const ticketsRes = await request.get("/api/admin/tickets?limit=1", { headers });
+    const { tickets } = await ticketsRes.json();
+    test.skip(tickets.length === 0, "no active tickets exist — run `pnpm --prefix api seed:diverse-reports` first");
+    ticketId = tickets[0].id as number;
+  }
+  await ensureAssessment(request, ticketId, headers);
 
   const sentinel = `SECRET-CSV-NOTE-${Date.now()}`;
   const createRes = await request.post("/api/admin/work-orders", {

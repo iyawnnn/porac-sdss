@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
+import { isFinalWorkOrder, type WorkOrderRow } from "@/lib/types/admin-work-orders";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { getDueState } from "./WorkOrderStatusBadge";
@@ -60,6 +60,9 @@ export function WorkOrderDueDateEditor({
     }
   }
 
+  // Completed and Cancelled are final for every field (step 5b).
+  const final = isFinalWorkOrder(workOrder.status);
+
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const next = e.target.value;
     if (next === value) return;
@@ -71,12 +74,12 @@ export function WorkOrderDueDateEditor({
       <Input
         aria-label={`Due date for work order #${workOrder.id}`}
         className={"h-8 w-36 text-xs " + (DUE_STATE_CLASS[dueState] ?? "")}
-        disabled={saving}
+        disabled={saving || final}
         onChange={handleChange}
         type="date"
         value={value}
       />
-      {value && (
+      {value && !final && (
         <Button
           aria-label={`Clear due date for work order #${workOrder.id}`}
           disabled={saving}

@@ -100,12 +100,36 @@ export class WorkOrdersController {
     return this.workOrders.update(id, { title, notes, assignedAdminId, dueDate }, admin);
   }
 
+  // pending -> in_progress -> completed. status 'cancelled' is accepted here
+  // too, with the same reason / replacementWorkOrderId body as POST
+  // /:id/cancel (manuscript revision Phase 5, step 5b).
   @Post(':id/status')
   setStatus(
     @Param('id', ParseIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('status') status: unknown,
+    @Body('reason') reason: unknown,
+    @Body('replacementWorkOrderId') replacementWorkOrderId: unknown,
   ) {
-    return this.workOrders.setStatus(id, status, admin);
+    return this.workOrders.setStatus(id, status, admin, {
+      reason,
+      replacementWorkOrderId,
+    });
+  }
+
+  // Cancel a pending or in-progress Work Order: required reason (1-1000
+  // characters), optional replacement Work Order of the same ticket.
+  @Post(':id/cancel')
+  cancel(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+    @Body('reason') reason: unknown,
+    @Body('replacementWorkOrderId') replacementWorkOrderId: unknown,
+  ) {
+    return this.workOrders.cancel(
+      id,
+      { reason, replacementWorkOrderId },
+      admin,
+    );
   }
 }

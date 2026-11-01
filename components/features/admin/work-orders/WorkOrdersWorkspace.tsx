@@ -21,6 +21,7 @@ import { PriorityBadge } from "./TicketComboboxSelect";
 import { WorkOrderStatusSelect } from "./WorkOrderStatusSelect";
 import { WorkOrderAssigneeSelect } from "./WorkOrderAssigneeSelect";
 import { WorkOrderDueDateEditor } from "./WorkOrderDueDateEditor";
+import { WorkOrderFinalState } from "./WorkOrderFinalState";
 
 // Rows show the linked ticket's Operational Priority with the same
 // PriorityBadge the ticket picker uses. The Hazard Urgency badge was removed
@@ -322,6 +323,7 @@ function WorkOrderDesktopRow({ workOrder, onUpdated }: { workOrder: WorkOrderLis
           <span aria-hidden="true">·</span>
           <Link className="text-brand-600 hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
         </p>
+        <WorkOrderFinalState replacementHref={(id) => `/admin/tickets/${workOrder.ticket_id}#work-order-${id}`} workOrder={workOrder} />
       </TableCell>
       {/* State */}
       <TableCell className="border-l text-center"><PriorityBadge priorityIndex={workOrder.priority_index} /></TableCell>
@@ -347,6 +349,7 @@ function WorkOrderCard({ workOrder, onUpdated }: { workOrder: WorkOrderListRow; 
             <span aria-hidden="true">·</span>
             <Link className="text-brand-600 hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
           </p>
+          <WorkOrderFinalState replacementHref={(id) => `/admin/tickets/${workOrder.ticket_id}#work-order-${id}`} workOrder={workOrder} />
         </div>
         {/* State */}
         <div className="flex flex-wrap items-center gap-2">

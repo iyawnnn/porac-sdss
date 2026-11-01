@@ -1,9 +1,16 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN, E2E_CITIZEN_ACCOUNT, type E2EAdminAccount } from "./test-credentials";
-import { loginAdmin as loginAs, loginCitizen } from "./helpers";
+import { ensureAssessment, loginAdmin as loginAs, loginCitizen } from "./helpers";
 
 test.setTimeout(60_000);
+
+// The step 5b fixture tickets e2e/global-setup.ts inserts (with an
+// assessment), when present.
+const workOrderFixtures: { assessedTicketId: number } | null = process.env.E2E_GROUPING_FIXTURES
+  ? ((JSON.parse(process.env.E2E_GROUPING_FIXTURES) as { assessmentWorkOrders?: { assessedTicketId: number } })
+      .assessmentWorkOrders ?? null)
+  : null;
 
 function sessionCookieHeader(cookies: { name: string; value: string }[]): Record<string, string> {
   const cookie = cookies.find((c) => c.name === "ac_admin_session");
@@ -103,9 +110,21 @@ async function createDisposableTicketForOffice(browser: Browser, office: "MEO" |
 let sharedMeoTicketId: number;
 let sharedMdrrmoTicketId: number;
 
+// Manuscript revision Phase 5, step 5b: a Work Order needs an Operational
+// Assessment on its ticket first, recorded by the ticket's own office.
+async function assessAs(browser: Browser, account: E2EAdminAccount, ticketId: number): Promise<void> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await loginAs(page, account);
+  await ensureAssessment(context.request, ticketId, sessionCookieHeader(await context.cookies()));
+  await context.close();
+}
+
 test.beforeAll(async ({ browser }) => {
   sharedMeoTicketId = await createDisposableTicket(browser, "shared-meo");
   sharedMdrrmoTicketId = await createDisposableTicketForOffice(browser, "MDRRMO", "shared-mdrrmo");
+  await assessAs(browser, E2E_MEO_ADMIN, sharedMeoTicketId);
+  await assessAs(browser, E2E_MDRRMO_ADMIN, sharedMdrrmoTicketId);
 });
 
 // `<input type="date">.fill()` is flaky in this repo's shadcn Input wrapper —
@@ -401,7 +420,12 @@ test("audit events are written for work order creation and status changes", asyn
     data: { ticketId: sharedMeoTicketId, title, notes: null, assignedAdminId: null, dueDate: null },
   });
   const created = await createRes.json();
-  await request.post(`/api/admin/work-orders/${created.id}/status`, { headers: meoHeaders, data: { status: "cancelled" } });
+  // Cancelling needs a reason since step 5b.
+  const cancelRes = await request.post(`/api/admin/work-orders/${created.id}/cancel`, {
+    headers: meoHeaders,
+    data: { reason: "E2E: audit check" },
+  });
+  expect(cancelRes.ok()).toBe(true);
 
   await page.context().clearCookies();
   await loginAs(page, E2E_SYSTEM_ADMIN);
@@ -608,14 +632,19 @@ test("work order notes never appear on the citizen's report tracking page", asyn
   await loginCitizen(citizenPage, E2E_CITIZEN_ACCOUNT);
   const reports = await citizenPage.evaluate(async () => {
     const res = await fetch("/api/reports/mine");
-    return (await res.json()) as { id: number; ticket_id: number; assigned_office: "MEO" | "MDRRMO" }[];
+    return (await res.json()) as { id: number; ticket_id: number; status: string; assigned_office: "MEO" | "MDRRMO" }[];
   });
-  test.skip(reports.length === 0, "citizen1 has no seeded reports — run `pnpm --prefix api seed:diverse-reports` first");
-  const report = reports[0];
+  // Step 5b: no new Work Order on a Rejected ticket, so an active one —
+  // preferably citizen1's report on the step 5b fixture ticket, which
+  // already has an assessment.
+  const active = reports.filter((r) => ["Reported", "Under Review", "In Progress"].includes(r.status));
+  test.skip(active.length === 0, "citizen1 has no active reports — run `pnpm --prefix api seed:diverse-reports` first");
+  const report = active.find((r) => r.ticket_id === workOrderFixtures?.assessedTicketId) ?? active[0];
   const officeAdmin = report.assigned_office === "MEO" ? E2E_MEO_ADMIN : E2E_MDRRMO_ADMIN;
 
   await loginAs(page, officeAdmin);
   const cookies = await page.context().cookies();
+  await ensureAssessment(request, report.ticket_id, sessionCookieHeader(cookies));
   const createRes = await request.post("/api/admin/work-orders", {
     headers: { ...sessionCookieHeader(cookies), "content-type": "application/json" },
     data: {
