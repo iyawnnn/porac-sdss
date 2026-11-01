@@ -692,6 +692,24 @@ export const operationalAssessments = pgTable('operational_assessments', {
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // Manuscript revision Phase 5, step 5b (Appendix H, migration
+  // 0045_assessment_work_orders.sql). actual_action is optional free text.
+  // supporting_evidence_url is a URL or a file path (format checked in the
+  // API; CHECK operational_assessments_evidence_url_check: NULL, or non-blank
+  // and at most 2048 characters). operational_constraint_notes is one note
+  // per selected operational_constraints key (same 12 keys, checked in the
+  // API; CHECK operational_assessments_constraint_notes_check: a JSON
+  // object), kept beside the text[] tags rather than converting them.
+  // App H names differ for some older columns (observed_conditions =
+  // assessed_conditions, temporary_mitigation = interim_mitigation,
+  // deferment_reason + referral_reason = deferment_or_referral_reason,
+  // assessed_at = created_at); the physical renames are Phase 8.
+  actualAction: text('actual_action'),
+  supportingEvidenceUrl: text('supporting_evidence_url'),
+  operationalConstraintNotes: jsonb('operational_constraint_notes')
+    .$type<Record<string, string>>()
+    .notNull()
+    .default({}),
 });
 
 export const verifications = pgTable('verifications', {
@@ -819,6 +837,28 @@ export const workOrders = pgTable('work_orders', {
     .notNull()
     .defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
+  // Manuscript revision Phase 5, step 5b (Appendix H WORK_ORDERS, migration
+  // 0045_assessment_work_orders.sql). Set together when a pending or
+  // in-progress Work Order is cancelled; CHECK work_orders_cancellation_check
+  // keys off cancelled_at (cancelled => non-blank reason + who), so Work
+  // Orders cancelled before this step (no cancelled_at, empty reason) stay
+  // valid, and work_orders_cancellation_fields_check keeps the reason, who
+  // and replacement off rows that were never cancelled this way.
+  // cancelled_by_admin_id has a real FK to admins(id), as Appendix H defines
+  // it. replacement_work_order_id is optional, never the row itself
+  // (work_orders_replacement_not_self_check), and always a Work Order on the
+  // same ticket: the composite FK work_orders_replacement_same_ticket_fkey
+  // (replacement_work_order_id, ticket_id) -> work_orders (id, ticket_id),
+  // backed by UNIQUE work_orders_id_ticket_id_unique, declared in the SQL
+  // only. Also CHECKs work_orders_completed_at_check (completed =>
+  // completed_at) and work_orders_cancelled_not_completed_check (cancelled
+  // => no completed_at).
+  cancellationReason: text('cancellation_reason'),
+  cancelledByAdminId: integer('cancelled_by_admin_id').references(
+    () => admins.id,
+  ),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  replacementWorkOrderId: integer('replacement_work_order_id'),
 });
 
 // Append-only status timeline for work orders — what status_history is to
