@@ -53,6 +53,10 @@ export interface MyReportDetail {
   moderated_at: string | null;
   resolution_notes: string | null;
   resolution_image_url: string | null;
+  // When the ticket was last resolved (manuscript revision Phase 5, step
+  // 5c); null on a legacy Resolved ticket, where the page falls back to
+  // ticket_updated_at.
+  resolved_at: string | null;
   // This citizen's own resolution feedback (manuscript revision Phase 3,
   // step 3g), null until they answer. Never another citizen's answer.
   my_feedback: MyResolutionFeedback | null;

@@ -67,6 +67,10 @@ export interface BulkActionResult {
   skipped: { id: number; reason: string }[];
 }
 
+// Manuscript revision Phase 5, step 5c: the two Appendix H resolution
+// outcomes, one required when a ticket is resolved.
+export type ResolutionOutcome = "MUNICIPAL_ACTION_COMPLETED" | "EXTERNAL_REFERRAL";
+
 export interface TicketDetail {
   id: number;
   category: string;
@@ -77,9 +81,20 @@ export interface TicketDetail {
   assigned_office: string;
   // Appendix H (manuscript revision Phase 2, step 2b): the office automatic
   // Initial Routing first assigned, and the outcome recorded on resolution
-  // (NULL while active and on a Rejected ticket).
+  // (NULL while active, on a Rejected ticket, and on a legacy Resolved
+  // ticket — see resolution_legacy).
   initial_assigned_office: string;
-  resolution_outcome: "MUNICIPAL_ACTION_COMPLETED" | "EXTERNAL_REFERRAL" | null;
+  resolution_outcome: ResolutionOutcome | null;
+  // Manuscript revision Phase 5, step 5c: when and by whom it was resolved
+  // (NULL while active, on a legacy Resolved ticket and after a return to
+  // Under Review); resolution_legacy = resolved before outcomes were
+  // recorded, shown as "Not recorded (legacy)".
+  resolved_at: string | null;
+  resolved_by_name: string | null;
+  resolution_legacy: boolean;
+  // Whether the Disputed badge applies to the current resolution (the
+  // dispute is at or after resolved_at, or there is no resolved_at).
+  disputed_current: boolean;
   member_count: number;
   lat: number;
   lng: number;
@@ -192,6 +207,23 @@ export interface TicketStatusHistoryRow {
   status: string;
   admin_name: string | null;
   changed_at: string;
+  // Staff-only (manuscript revision Phase 5, step 5c). NULL on rows written
+  // before migration 0046 and on ordinary ladder steps.
+  from_status: string | null;
+  // The reason on a return to Under Review.
+  reason: string | null;
+  // The resolution as recorded, on a Resolved row.
+  resolution_outcome: ResolutionOutcome | null;
+  resolution_notes: string | null;
+  // On a return row: the ticket's latest referral at that moment.
+  latest_referral_agency: string | null;
+  latest_referral_at: string | null;
+}
+
+// Whether the signed-in admin may return this ticket to Under Review now
+// (manuscript revision Phase 5, step 5c): the endpoint's own rule.
+export interface TicketReturnToReviewState {
+  available: boolean;
 }
 
 // Fetched by GET /admin/tickets/:id but unused by the frontend until now —

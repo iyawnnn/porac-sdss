@@ -304,8 +304,53 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
     'r.moderated_at',
     't.resolution_notes',
     't.resolution_image_url',
+    // Manuscript revision Phase 5, step 5c: the page's resolved date.
+    't.resolved_at',
   ])('getMyReportDetail selects %s', (field) => {
     expect(getMyReportDetail).toContain(field);
+  });
+
+  // Manuscript revision Phase 5, step 5c: status_history gained staff-only
+  // columns (from_status, the return reason, the resolution snapshot). The
+  // citizen's queries, as actually executed, select none of them, nor the
+  // resolver or the outcome.
+  it('getMyReportDetail never sends the return reason, from_status, the resolution snapshot, the resolver or the outcome', async () => {
+    const texts: string[] = [];
+    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      if (values.some((v) => v instanceof Date)) {
+        throw new Error('A JS Date was passed to raw SQL');
+      }
+      const text = strings.join('?');
+      texts.push(text);
+      const rows = text.includes('FROM status_history')
+        ? [{ status: 'Under Review', admin_name: 'Mae', changed_at: 'x' }]
+        : [{ id: 2, ticket_id: 9 }];
+      return {
+        then(resolve: (v: unknown) => void) {
+          void Promise.resolve(rows).then(resolve);
+        },
+      };
+    }) as unknown as Sql;
+    const service = new ReportsService(
+      sql,
+      {} as BarangayService,
+      {} as MediaService,
+      {} as RateLimitService,
+      {} as OperationalPriorityService,
+      {} as NotificationsService,
+      {} as HazardInformationService,
+    );
+
+    await service.getMyReportDetail(1, 2);
+
+    const [detail, history] = texts;
+    expect(history).toMatch(
+      /SELECT status, admin_name, changed_at\s+FROM status_history WHERE ticket_id = \?/,
+    );
+    expect(history).not.toMatch(/reason|from_status|resolution_|\*/);
+    expect(detail).not.toMatch(
+      /from_status|sh\.reason|resolution_outcome|resolved_by/,
+    );
   });
 
   it("both queries derive is_merged from this report being later than the ticket's earliest report, not a stored column", () => {

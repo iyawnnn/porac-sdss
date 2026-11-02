@@ -18,6 +18,7 @@ import type {
   HazardInformationView,
   RainfallContextView,
   TicketRoutingState,
+  TicketReturnToReviewState,
 } from "@/lib/types/admin-tickets";
 import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
@@ -35,6 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AssignmentPanel } from "@/components/features/admin/tickets/AssignmentPanel";
 import { ReferralPanel } from "@/components/features/admin/tickets/ReferralPanel";
 import { RejectTicketPanel } from "@/components/features/admin/tickets/RejectTicketPanel";
+import { ReturnToReviewPanel } from "@/components/features/admin/tickets/ReturnToReviewPanel";
 import { WorkOrdersPanel } from "@/components/features/admin/tickets/WorkOrdersPanel";
 import { OperationalAssessmentPanel } from "@/components/features/admin/tickets/OperationalAssessmentPanel";
 import { RelatedTicketsPanel } from "@/components/features/admin/tickets/RelatedTicketsPanel";
@@ -58,6 +60,13 @@ const RESOLUTION_OUTCOME_LABEL: Record<NonNullable<TicketDetail["resolution_outc
   MUNICIPAL_ACTION_COMPLETED: "Municipal action completed",
   EXTERNAL_REFERRAL: "External referral",
 };
+// A Resolved ticket's outcome as shown (manuscript revision Phase 5, step 5c,
+// decision 1): a legacy one — resolved before outcomes were recorded — says
+// "Not recorded (legacy)", whatever migration 0036 stored for it (the API
+// already sends null for it).
+function outcomeLabel(ticket: TicketDetail): string {
+  return ticket.resolution_legacy || !ticket.resolution_outcome ? "Not recorded (legacy)" : RESOLUTION_OUTCOME_LABEL[ticket.resolution_outcome];
+}
 
 interface TicketDetailResponse {
   ticket: TicketDetail;
@@ -81,6 +90,8 @@ interface TicketDetailResponse {
   rainfallContext: RainfallContextView;
   // Manuscript revision Phase 5, step 5a.
   routing: TicketRoutingState;
+  // Manuscript revision Phase 5, step 5c.
+  returnToReview: TicketReturnToReviewState;
 }
 
 // Per-report Remove / Move on a multi-report active ticket (manuscript
@@ -132,7 +143,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
     related = null;
   }
 
-  const { ticket, reports, severity, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback, hazardInformation, rainfallContext, routing } = data;
+  const { ticket, reports, severity, history, reassignments, referrals, corrections, operationalAssessment, mergedInto, mergedFrom, citizenFeedback, hazardInformation, rainfallContext, routing, returnToReview } = data;
   // A merged-away ticket stays viewable as history, with no actions
   // (manuscript revision Phase 3, step 3d; the API refuses them too).
   const mergedAway = ticket.merged_into_ticket_id !== null;
@@ -183,9 +194,9 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             {primaryReport ? ` — ${primaryReport.title}` : ""}
           </h1>
           <StatusPill size="lg" status={ticket.status} />
-          {ticket.status === "Resolved" && ticket.resolution_outcome && (
-            <Badge className="bg-line-100 text-ink-700" variant="outline">
-              Outcome: {RESOLUTION_OUTCOME_LABEL[ticket.resolution_outcome]}
+          {ticket.status === "Resolved" && (
+            <Badge className="bg-line-100 text-ink-700" data-testid="resolution-outcome" variant="outline">
+              Outcome: {outcomeLabel(ticket)}
             </Badge>
           )}
           {/* Manuscript revision Phase 1, step 5: the header shows Operational
@@ -193,7 +204,9 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
             Operational Priority <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> · {priorityBandLabel(ticket.priority_index)}
           </Badge>
-          {ticket.disputed_at && (
+          {/* Only a dispute of the current resolution (manuscript revision
+              Phase 5, step 5c, decision 11). */}
+          {ticket.disputed_at && ticket.disputed_current && (
             <Badge className="bg-red-50 text-red-700" variant="outline">
               Disputed {new Date(ticket.disputed_at).toLocaleDateString()}
             </Badge>
@@ -309,7 +322,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             <Card className="border-red-200 bg-red-50">
               <CardContent className="p-4">
                 <p className="text-xs font-semibold tracking-wide text-red-700 uppercase">
-                  Citizen reports issue not fixed
+                  Citizen reports issue not fixed{!ticket.disputed_current && " (an earlier resolution)"}
                 </p>
                 <p className="mt-1 text-xs text-red-700/80">Disputed {new Date(ticket.disputed_at).toLocaleString()}</p>
                 {ticket.dispute_reason && <p className="mt-2 text-sm text-red-900">{ticket.dispute_reason}</p>}
@@ -349,6 +362,39 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
               <CardContent className="p-4">
                 <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Referral</p>
                 <ReferralPanel blockedReason={routing.blockedReason} hideWhenBlocked={rejected} ticketId={ticket.id} />
+              </CardContent>
+            </Card>
+          )}
+
+          {ticket.status === "Resolved" && (
+            <Card data-testid="resolution-card">
+              <CardContent className="p-4">
+                <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Resolution</p>
+                <dl className="space-y-1.5 text-sm">
+                  <div>
+                    <dt className="text-xs text-ink-500">Outcome</dt>
+                    <dd className="text-ink-900">{outcomeLabel(ticket)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-ink-500">Resolution notes (shown to the citizen)</dt>
+                    <dd className="whitespace-pre-line text-ink-900">{ticket.resolution_notes?.trim() || "None recorded"}</dd>
+                  </div>
+                  {ticket.resolved_at && (
+                    <div>
+                      <dt className="text-xs text-ink-500">Resolved</dt>
+                      <dd className="text-ink-900">
+                        {new Date(ticket.resolved_at).toLocaleString()}
+                        {ticket.resolved_by_name && <> by {ticket.resolved_by_name}</>}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+                {!mergedAway && returnToReview.available && (
+                  <div className="mt-4 border-t border-line-100 pt-3">
+                    <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Return to Under Review</p>
+                    <ReturnToReviewPanel ticketId={ticket.id} />
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -658,6 +704,23 @@ function ScoringTab({
   );
 }
 
+// Manuscript revision Phase 5, step 5c: a resolve recorded since migration
+// 0046 shows its outcome and notes; a return to Under Review shows its reason
+// and the ticket's latest referral at that moment (the referral itself also
+// stays listed as its own "Referral recorded" line).
+function historyDescription(h: TicketStatusHistoryRow): string {
+  if (h.status === "Resolved" && h.resolution_outcome) {
+    return `Resolved — ${RESOLUTION_OUTCOME_LABEL[h.resolution_outcome]}${h.resolution_notes ? `: ${h.resolution_notes}` : ""}`;
+  }
+  if (h.from_status === "Resolved" && h.status === "Under Review") {
+    const referral = h.latest_referral_agency
+      ? `. Latest referral: ${h.latest_referral_agency}${h.latest_referral_at ? ` (${new Date(h.latest_referral_at).toLocaleDateString()})` : ""}`
+      : "";
+    return `Returned to Under Review: ${h.reason ?? ""}${referral}`;
+  }
+  return `Status changed to ${h.status}`;
+}
+
 interface TimelineEntry {
   key: string;
   timestamp: string;
@@ -680,7 +743,7 @@ function TimelineTab({
 }) {
   const entries: TimelineEntry[] = [
     { key: "created", timestamp: createdAt, description: "Ticket created (Reported)", actor: null },
-    ...history.map((h, i) => ({ key: `status-${i}`, timestamp: h.changed_at, description: `Status changed to ${h.status}`, actor: h.admin_name })),
+    ...history.map((h, i) => ({ key: `status-${i}`, timestamp: h.changed_at, description: historyDescription(h), actor: h.admin_name })),
     ...reassignments.map((r, i) => ({
       key: `reassign-${i}`,
       timestamp: r.reassigned_at,

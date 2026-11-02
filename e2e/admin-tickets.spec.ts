@@ -358,7 +358,11 @@ test("Ticket Detail shows the dispute section only when the ticket is disputed",
   // disputes it — deterministically produces a disputed ticket instead of
   // depending on one already existing (and not yet consumed) in seed data.
   for (let i = 0; i < 3; i++) {
-    const res = await page.request.post(`/api/admin/tickets/${ticketId}/status`, { multipart: { notes: "e2e" } });
+    // Resolving needs an outcome and notes (manuscript revision Phase 5,
+    // step 5c); the earlier steps ignore both.
+    const res = await page.request.post(`/api/admin/tickets/${ticketId}/status`, {
+      multipart: { notes: "e2e", outcome: "MUNICIPAL_ACTION_COMPLETED" },
+    });
     expect(res.ok()).toBe(true);
   }
   const disputeRes = await citizenPage.request.post(`/api/reports/mine/${reportId}/dispute`, {
@@ -785,7 +789,10 @@ test("resolving a ticket through the admin UI records notes, photo, and updates 
     mimeType: "image/jpeg",
     buffer: readFileSync("public/uploads/reports/01_poblacion.jpg"),
   });
-  await dialog.getByLabel("Completion notes").fill(RESOLUTION_NOTES);
+  // Outcome and notes are required since manuscript revision Phase 5, step
+  // 5c; the photo stays optional.
+  await dialog.getByRole("radio", { name: /Municipal action completed/ }).check();
+  await dialog.getByLabel("Resolution notes (shown to the citizen)").fill(RESOLUTION_NOTES);
   const resolveButton = dialog.getByRole("button", { name: "Mark resolved" });
   await resolveButton.scrollIntoViewIfNeeded();
   await resolveButton.click();
@@ -804,9 +811,11 @@ test("resolving a ticket through the admin UI records notes, photo, and updates 
   // is set — proves the photo upload actually persisted, not just the form
   // closing successfully.
   await expect(page.getByText("Before & after resolution")).toBeVisible();
-  await expect(page.getByText(RESOLUTION_NOTES)).toBeVisible();
+  // The notes also appear in the before/after card and the timeline; the
+  // Resolution card (Phase 5, step 5c) is the one place that owns them.
+  await expect(page.getByTestId("resolution-card").getByText(RESOLUTION_NOTES)).toBeVisible();
   // Manuscript revision Phase 2, step 2b (Appendix H): resolving through the
-  // dialog records the municipal-action outcome, and the evidence list shows
+  // dialog records the chosen outcome (Phase 5, step 5c), and the evidence list shows
   // the report's PRC tracking reference.
   await expect(headerRow.getByText("Outcome: Municipal action completed", { exact: true })).toBeVisible();
   expect(trackingReference).toMatch(/^PRC-\d{4}-\d{6,}$/);

@@ -78,7 +78,7 @@ Two situations get their own explanation on that page:
 
 Once the ticket reaches **Resolved**, the report page gains two cards:
 
-- **Case Closure Summary** (read-only) — the date it was resolved, the staff's completion notes, the staff's resolution photo, and a recap of the citizen's own feedback once given.
+- **Case Closure Summary** (read-only) — the date it was resolved, the staff's resolution notes, the staff's resolution photo, and a recap of the citizen's own feedback once given.
 - **Resolution Feedback** (the action) — two buttons:
   - **Confirm Fixed** — recorded permanently and survives reload. No office notification, because a confirmation needs no action.
   - **Report Still Not Fixed** — asks "What's still wrong?", records the reason, **notifies the assigned office**, and marks the ticket as disputed in the admin queue.
@@ -146,9 +146,11 @@ A report can arrive with the wrong category or a pin in the wrong spot. **Correc
 
 One button advances the status: **Reported → Under Review → In Progress → Resolved.**
 
-The final step is different. "Advance to Resolved" opens a dialog that asks for **completion notes** and accepts a **resolution photo**. That photo and those notes are what the citizen later sees in their Case Closure Summary, so they are written for a public audience, not as internal shorthand. After Resolved there is no further transition.
+The final step is different. "Advance to Resolved" opens a dialog that asks for an **outcome** — *Municipal action completed* (the office fixed it) or *External referral* (an outside agency took it on; this needs a referral already recorded on the ticket) — and **resolution notes**, both required, and accepts an optional **resolution photo**. The notes and the photo are what the citizen later sees in their Case Closure Summary (the field is labeled "shown to the citizen"), so they are written for a public audience, not as internal shorthand. The outcome is staff-only. Resolving is refused while any Work Order on the ticket is still pending or in progress — finish or cancel it first (manuscript revision Phase 5, step 5c).
 
-**Rejecting a ticket** (Phase 4 workflow completeness) is a separate action, not a step on this ladder — it's offered next to the status tracker while the ticket is still `Reported`, `Under Review`, or `In Progress`, and requires a reason. Maria (the citizen) is told why, both in-app and by email where mail delivery is configured. Once rejected, the ticket is terminal — same as Resolved — and the reject action disappears.
+**Returning a ticket after a wrong referral** (step 5c). The ladder has no step after Resolved, with one exception: a ticket resolved by **External referral** can be returned to **Under Review** — say the water district tells MEO the leak is not theirs. The Resolution card on Ticket Detail offers "Return to Under Review" with a required reason, which only staff see; the citizen is not notified and just sees the status move back. The ticket's outcome and notes are cleared until it is resolved again, but nothing is lost: the timeline keeps the referral, the earlier resolution with its notes, and the return with its reason and the latest referral next to it. From there the office works the ticket again (Under Review → In Progress → Resolved). A ticket resolved as Municipal action completed, or one resolved before outcomes were recorded ("Not recorded (legacy)"), cannot be returned. Citizens who already confirmed or disputed the earlier resolution keep that answer; anyone who had not answered can answer the new resolution.
+
+**Rejecting a ticket** (Phase 4 workflow completeness) is a separate action, not a step on this ladder — it's offered next to the status tracker while the ticket is still `Reported`, `Under Review`, or `In Progress`, and requires a reason. Maria (the citizen) is told why, both in-app and by email where mail delivery is configured. Once rejected, the ticket is final and the reject action disappears.
 
 ### 2.4 Work orders
 

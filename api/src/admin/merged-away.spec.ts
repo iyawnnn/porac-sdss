@@ -11,6 +11,7 @@ import type { NotificationsService } from '../notifications/notifications.servic
 import type { AdminAuditService } from './admin-audit.service';
 import { OperationalAssessmentService } from './operational-assessment.service';
 import { TicketsService } from './tickets.service';
+import type { OperationalPriorityService } from '../domain/operational-priority.service';
 
 // Manuscript revision Phase 3, step 3d. A ticket merged into another keeps
 // its old status as history, so every list, count and recalculation that
@@ -64,13 +65,15 @@ describe('merged-away tickets are left out of lists, counts and recalculation', 
     );
   });
 
-  it('the dashboard (active count, barangays, categories, trends, status, workload, deltas)', () => {
+  // 8 since manuscript revision Phase 5, step 5c: the average resolution
+  // time now reads only current, non-merged Resolved tickets.
+  it('the dashboard (active count, barangays, categories, trends, status, workload, deltas, average resolution time)', () => {
     expect(
       count(
         read('admin', 'dashboard.service.ts'),
         'merged_into_ticket_id IS NULL',
       ),
-    ).toBe(7);
+    ).toBe(8);
   });
 
   it('Barangay Insights (list, top category, KPIs, categories, trend, recent)', () => {
@@ -147,6 +150,7 @@ function ticketsService(sql: Sql) {
     {} as EmailService,
     {} as ConfigService<Env, true>,
     {} as AdminAuditService,
+    {} as OperationalPriorityService,
   );
 }
 

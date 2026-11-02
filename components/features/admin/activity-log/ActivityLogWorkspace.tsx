@@ -25,6 +25,7 @@ const ACTION_LABELS: Record<AdminAuditActionType, string> = {
   ticket_reassigned: "Ticket reassigned",
   ticket_referral_noted: "Referral recorded",
   ticket_rejected: "Ticket rejected",
+  ticket_returned_to_review: "Ticket returned to Under Review",
   ticket_merged: "Tickets merged",
   report_removed_from_ticket: "Report removed from ticket",
   report_regrouped: "Report moved to another ticket",

@@ -348,3 +348,29 @@ describe('getKpiDeltas', () => {
     expect(scoped).toHaveLength(3);
   });
 });
+
+// Manuscript revision Phase 5, step 5c (decision 10): the 30-day average
+// resolution time measures each currently Resolved ticket to its LATEST
+// resolution (tickets.resolved_at), falling back to the first Resolved
+// status_history row only for a legacy ticket with no resolved_at. A ticket
+// returned to Under Review is not Resolved, so it is left out.
+describe('average resolution time (Phase 5, step 5c)', () => {
+  it('uses resolved_at, the first Resolved history row only as the legacy fallback, and only current Resolved tickets', async () => {
+    const sql = jest.fn().mockResolvedValue([{}]) as unknown as Sql;
+    const service = new DashboardService(sql);
+    await service.getDashboardKpis('MEO');
+
+    const query = (sql as unknown as jest.Mock).mock.calls
+      .map((call: [string[]]) => call[0].join('?'))
+      .find((text: string) => text.includes('resolved_events'))!;
+    expect(query).toContain(
+      'COALESCE(t.resolved_at, MIN(sh.changed_at)) AS resolved_at',
+    );
+    expect(query).toContain(
+      "WHERE t.status = 'Resolved' AND t.merged_into_ticket_id IS NULL",
+    );
+    expect(query).toContain(
+      "LEFT JOIN status_history sh ON sh.ticket_id = t.id AND sh.status = 'Resolved'",
+    );
+  });
+});

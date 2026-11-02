@@ -64,7 +64,7 @@ import type { Env } from '../../src/config/env';
 import type { MediaService } from '../../src/domain/media.service';
 import type { BarangayService } from '../../src/domain/barangay.service';
 import type { RateLimitService } from '../../src/domain/ratelimit.service';
-import type { OperationalPriorityService } from '../../src/domain/operational-priority.service';
+import { OperationalPriorityService } from '../../src/domain/operational-priority.service';
 
 // ---------------------------------------------------------------------
 // Safety guard — fail loudly on anything that doesn't look like a local
@@ -1497,6 +1497,7 @@ function buildTicketsService(): TicketsService {
     email,
     config,
     audit,
+    new OperationalPriorityService(sql),
   );
 }
 
@@ -1546,9 +1547,24 @@ async function advanceToTarget(
     );
     return;
   }
+  // Resolving needs an outcome and resolution notes (manuscript revision
+  // Phase 5, step 5c). Every demo resolution is Municipal action completed:
+  // the demo records no referral, which External referral would need. Work
+  // Orders are seeded only on In Progress targets, after this loop
+  // (seedWorkOrders), so no ticket resolved here has an active Work Order
+  // to block it.
   const targetIndex = STATUS_LADDER.indexOf(target);
   for (let i = 1; i <= targetIndex; i++) {
-    await ticketsService.advanceStatus(ticketId, admin, undefined, undefined);
+    const resolving = STATUS_LADDER[i] === 'Resolved';
+    await ticketsService.advanceStatus(
+      ticketId,
+      admin,
+      resolving
+        ? `Resolved by the ${admin.office ?? 'office'} field team (demo seed).`
+        : undefined,
+      undefined,
+      resolving ? 'MUNICIPAL_ACTION_COMPLETED' : undefined,
+    );
   }
 }
 
@@ -1654,7 +1670,7 @@ async function backdateTimestamps(
   for (const t of createdTickets) {
     if (t.ageDays <= 0) continue;
     const days = t.ageDays;
-    await sql`UPDATE tickets SET created_at = created_at - make_interval(days => ${days}), updated_at = updated_at - make_interval(days => ${days}), disputed_at = disputed_at - make_interval(days => ${days}), resolution_confirmed_at = resolution_confirmed_at - make_interval(days => ${days}) WHERE id = ${t.id}`;
+    await sql`UPDATE tickets SET created_at = created_at - make_interval(days => ${days}), updated_at = updated_at - make_interval(days => ${days}), disputed_at = disputed_at - make_interval(days => ${days}), resolution_confirmed_at = resolution_confirmed_at - make_interval(days => ${days}), resolved_at = resolved_at - make_interval(days => ${days}) WHERE id = ${t.id}`;
     await sql`UPDATE reports SET created_at = created_at - make_interval(days => ${days}) WHERE ticket_id = ${t.id}`;
     await sql`UPDATE status_history SET changed_at = changed_at - make_interval(days => ${days}) WHERE ticket_id = ${t.id}`;
     await sql`UPDATE office_reassignments SET reassigned_at = reassigned_at - make_interval(days => ${days}) WHERE ticket_id = ${t.id}`;
