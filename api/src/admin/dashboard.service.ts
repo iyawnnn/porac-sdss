@@ -103,11 +103,18 @@ export class DashboardService {
     const sql = this.pg;
     const activeStatuses = this.activeStatuses();
     const [row] = await sql<DashboardKpis[]>`
+      -- Tickets currently Resolved, measured to their LATEST resolution
+      -- (tickets.resolved_at, manuscript revision Phase 5, step 5c); a
+      -- legacy Resolved ticket (no resolved_at) falls back to its first
+      -- Resolved status_history row. A ticket returned to Under Review is
+      -- not Resolved, so it is left out until it is resolved again.
       WITH resolved_events AS (
-        SELECT t.id, t.created_at, t.assigned_office, MIN(sh.changed_at) AS resolved_at
+        SELECT t.id, t.created_at, t.assigned_office,
+          COALESCE(t.resolved_at, MIN(sh.changed_at)) AS resolved_at
         FROM tickets t
-        JOIN status_history sh ON sh.ticket_id = t.id AND sh.status = 'Resolved'
-        GROUP BY t.id, t.created_at, t.assigned_office
+        LEFT JOIN status_history sh ON sh.ticket_id = t.id AND sh.status = 'Resolved'
+        WHERE t.status = 'Resolved' AND t.merged_into_ticket_id IS NULL
+        GROUP BY t.id, t.created_at, t.assigned_office, t.resolved_at
       )
       SELECT
         (SELECT COUNT(*) FROM tickets WHERE status IN ${activeStatuses}

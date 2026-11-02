@@ -27,7 +27,6 @@ import {
 } from '../common/authz/admin-scope';
 import {
   ALL_CATEGORIES,
-  TICKET_RESOLUTION_NOTES_MAX_LENGTH,
   TICKET_REJECTION_REASON_MAX_LENGTH,
 } from '../contracts/schemas';
 import { categoryRouting } from '../common/utils/office';
@@ -57,6 +56,15 @@ import {
   type TicketStatus,
   type TicketSort,
 } from './ticket-constants';
+import {
+  isLegacyResolution,
+  resolveBlock,
+  returnBlock,
+  validateResolutionInput,
+  validateReturnReason,
+} from './ticket-resolution.rules';
+import type { ResolutionOutcome } from '../contracts/schemas';
+import { OperationalPriorityService } from '../domain/operational-priority.service';
 
 // Counts behind the queue's built-in view tabs. Each field MUST be counted
 // with the same predicate the tab's filter applies, or the tab will promise a
@@ -155,6 +163,10 @@ export interface AdminTicketExportRow {
   merged_into_ticket_id: number | null;
   // Same line as AdminTicketRow.hazard_summary (Phase 4, step 4b).
   hazard_summary: string;
+  // Phase 5, step 5c. The CSV leaves the outcome blank for a legacy
+  // Resolved ticket (resolved_at NULL).
+  resolution_outcome: ResolutionOutcome | null;
+  resolved_at: string | null;
 }
 
 // The ticket's current Hazard Information row, when it is for the ticket's
@@ -227,8 +239,22 @@ export interface TicketDetail {
   // reassignment.
   initial_assigned_office: string;
   // Appendix H: set when the ticket is resolved; NULL while active and on a
-  // Rejected ticket.
-  resolution_outcome: 'MUNICIPAL_ACTION_COMPLETED' | 'EXTERNAL_REFERRAL' | null;
+  // Rejected ticket. Also NULL in this response for a legacy Resolved ticket
+  // (resolution_legacy), whatever migration 0036 stored for it (manuscript
+  // revision Phase 5, step 5c, decision 1).
+  resolution_outcome: ResolutionOutcome | null;
+  // Phase 5, step 5c (migration 0046): when and by whom the ticket was
+  // resolved; NULL while active, on a legacy Resolved ticket, and again
+  // after a return to Under Review clears them.
+  resolved_at: string | null;
+  resolved_by_name: string | null;
+  // Resolved before outcomes were recorded (resolved_at NULL): the UI shows
+  // "Not recorded (legacy)" for the outcome.
+  resolution_legacy: boolean;
+  // Whether the "Disputed" badge applies to the current resolution: the
+  // citizen dispute is at or after resolved_at, or the ticket has no
+  // resolved_at (legacy, or returned and not yet resolved again).
+  disputed_current: boolean;
   member_count: number;
   lat: number;
   lng: number;
@@ -304,10 +330,31 @@ export interface TicketReport {
   severity_screening_remarks: string | null;
 }
 
+// Staff-only (manuscript revision Phase 5, step 5c): from_status, reason and
+// the resolution snapshot are never part of the citizen's status history
+// (ReportsService.getMyReportDetail selects its own three columns).
 export interface TicketStatusHistoryRow {
   status: string;
   admin_name: string | null;
   changed_at: string;
+  // NULL on rows written before migration 0046 and on ordinary ladder steps.
+  from_status: string | null;
+  // The reason on a return to Under Review.
+  reason: string | null;
+  // The resolution as it was recorded, on a Resolved row (NULL on legacy
+  // Resolved rows).
+  resolution_outcome: ResolutionOutcome | null;
+  resolution_notes: string | null;
+  // On a return row: the ticket's latest referral at the time of the
+  // return (routing_actions), shown next to it on the timeline.
+  latest_referral_agency: string | null;
+  latest_referral_at: string | null;
+}
+
+// Whether the signed-in admin may return this ticket to Under Review now
+// (manuscript revision Phase 5, step 5c): the endpoint's own rule.
+export interface TicketReturnToReviewState {
+  available: boolean;
 }
 
 export interface TicketReassignmentRow {
@@ -362,8 +409,11 @@ export interface TicketPriorityContext {
 }
 
 // Same 3-status "active" set used throughout the codebase (dashboard,
-// escalation, recompute, etc.) — a ticket outside this set is already
-// terminal (Resolved or Rejected) and cannot be rejected again.
+// escalation, recompute, etc.) — a ticket outside this set is closed
+// (Resolved or Rejected) and cannot be rejected. Rejected is final. Resolved
+// is final on the NEXT_STATUS ladder too; the one way back is
+// returnToReview (manuscript revision Phase 5, step 5c), and only for a
+// ticket resolved by External Referral.
 const ACTIVE_TICKET_STATUSES: TicketStatus[] = [
   'Reported',
   'Under Review',
@@ -394,6 +444,23 @@ const STATUS_NOTIFICATION: Partial<
   },
 };
 
+// Resolving and returning validate every rule behind migration 0046's CHECKs
+// in code first, on the locked row. A check_violation (23514) from either
+// therefore means the row changed under the request, or a bug; it is
+// reported as a 409 for the action being attempted — never mapped by
+// constraint name, since Postgres names only one of several failing CHECKs.
+// Anything else is passed through unchanged.
+function checkViolationAsConflict(err: unknown, message: string): unknown {
+  if (
+    err !== null &&
+    typeof err === 'object' &&
+    (err as { code?: unknown }).code === '23514'
+  ) {
+    return new ConflictException(message);
+  }
+  return err;
+}
+
 @Injectable()
 export class TicketsService {
   constructor(
@@ -403,6 +470,9 @@ export class TicketsService {
     @Inject(EMAIL_SERVICE) private readonly email: EmailService,
     private readonly config: ConfigService<Env, true>,
     private readonly audit: AdminAuditService,
+    // Return to Under Review recalculates the ticket's Operational Priority
+    // inside its own transaction (manuscript revision Phase 5, step 5c).
+    private readonly operationalPriority: OperationalPriorityService,
   ) {}
 
   // URL <-> filter mapping shared between SSR first paint (Phase 8) and the
@@ -644,7 +714,7 @@ export class TicketsService {
     >`
       SELECT t.id, t.status, t.assigned_office, t.category, b.name AS barangay_name,
         t.priority_index, t.member_count, t.created_at, t.updated_at,
-        t.merged_into_ticket_id,
+        t.merged_into_ticket_id, t.resolution_outcome, t.resolved_at,
         ${hazardCurrentColumn(sql)}
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
@@ -702,12 +772,19 @@ export class TicketsService {
     admin: Pick<AdminSession, 'accountType' | 'isFocal' | 'office'>,
   ) {
     const sql = this.pg;
-    const [row] = await sql<(TicketDetail & { active_work_orders?: number })[]>`
+    // Not filtered on merged_into_ticket_id: a merged-away ticket stays
+    // viewable as read-only history (manuscript revision Phase 3, step 3d).
+    const [row] = await sql<
+      (Omit<TicketDetail, 'resolution_legacy' | 'disputed_current'> & {
+        active_work_orders?: number;
+      })[]
+    >`
       SELECT t.id, t.category, t.barangay_id, b.name AS barangay_name, ST_AsGeoJSON(b.geom) AS barangay_geojson,
         t.status, t.assigned_office, t.initial_assigned_office, t.resolution_outcome,
         t.member_count, ST_Y(t.geom) AS lat, ST_X(t.geom) AS lng,
         t.priority_index,
         t.resolution_image_url, t.resolution_notes, t.created_at, t.updated_at,
+        t.resolved_at, concat_ws(' ', ra.first_name, ra.last_name) AS resolved_by_name,
         t.disputed_at, t.dispute_reason, t.category_review_required,
         t.merged_into_ticket_id,
         (
@@ -716,6 +793,7 @@ export class TicketsService {
         ) AS active_work_orders
       FROM tickets t
       JOIN barangays b ON b.id = t.barangay_id
+      LEFT JOIN admins ra ON ra.id = t.resolved_by_admin_id
       WHERE t.id = ${id}
     `;
 
@@ -724,7 +802,32 @@ export class TicketsService {
     // Whether this admin may Reassign or Refer the ticket now (manuscript
     // revision Phase 5, step 5a): the routing endpoints' own rule and
     // message, so the buttons never promise what the API refuses.
-    const { active_work_orders: activeWorkOrders, ...ticket } = row;
+    const { active_work_orders: activeWorkOrders, ...base } = row;
+    // Phase 5, step 5c: a legacy Resolved ticket's stored outcome is never
+    // shown (decision 1), and the Disputed badge only follows a dispute of
+    // the current resolution (decision 11).
+    const legacy = isLegacyResolution(base.status, base.resolved_at);
+    const ticket: TicketDetail = {
+      ...base,
+      resolved_by_name: base.resolved_at ? base.resolved_by_name || null : null,
+      resolution_outcome: legacy ? null : base.resolution_outcome,
+      resolution_legacy: legacy,
+      disputed_current:
+        base.disputed_at !== null &&
+        (base.resolved_at === null ||
+          new Date(base.disputed_at).getTime() >=
+            new Date(base.resolved_at).getTime()),
+    };
+    const returnToReview: TicketReturnToReviewState = {
+      available:
+        returnBlock({
+          id: ticket.id,
+          status: ticket.status,
+          resolutionOutcome: base.resolution_outcome,
+          resolvedAt: ticket.resolved_at,
+          mergedIntoTicketId: ticket.merged_into_ticket_id,
+        }) === null,
+    };
     const routing: TicketRoutingState = {
       blockedReason:
         routingBlock(admin, {
@@ -747,9 +850,23 @@ export class TicketsService {
       JOIN tickets t ON t.id = r.ticket_id
       WHERE r.ticket_id = ${id} ORDER BY r.created_at
     `;
+    // Staff-only columns (Phase 5, step 5c). On a return to Under Review,
+    // the ticket's latest referral at that moment rides along for the
+    // timeline line (decision 12: routing_actions is read only for this).
     const history = await sql<TicketStatusHistoryRow[]>`
-      SELECT status, admin_name, changed_at
-      FROM status_history WHERE ticket_id = ${id} ORDER BY changed_at
+      SELECT sh.status, sh.admin_name, sh.changed_at, sh.from_status, sh.reason,
+        sh.resolution_outcome, sh.resolution_notes,
+        lr.referral_target AS latest_referral_agency,
+        lr.created_at AS latest_referral_at
+      FROM status_history sh
+      LEFT JOIN LATERAL (
+        SELECT ra.referral_target, ra.created_at FROM routing_actions ra
+        WHERE ra.ticket_id = sh.ticket_id AND ra.action_type = 'REFER'
+          AND ra.created_at <= sh.changed_at
+        ORDER BY ra.created_at DESC, ra.id DESC
+        LIMIT 1
+      ) lr ON sh.from_status = 'Resolved' AND sh.status = 'Under Review'
+      WHERE sh.ticket_id = ${id} ORDER BY sh.changed_at, sh.id
     `;
     const reassignments = await sql<TicketReassignmentRow[]>`
       SELECT o.from_office, o.to_office, o.admin_name, o.reassigned_at,
@@ -890,6 +1007,7 @@ export class TicketsService {
       mergedFrom,
       citizenFeedback,
       routing,
+      returnToReview,
     };
   }
 
@@ -948,15 +1066,20 @@ export class TicketsService {
     return { breakdown };
   }
 
-  // Resolving is the only transition that can carry a proof photo + notes;
-  // every other transition ignores notes/imageBuffer entirely.
+  // The NEXT_STATUS ladder. Resolving (In Progress -> Resolved) is the only
+  // step that takes an outcome, notes and an optional proof photo, and it
+  // has its own rules (resolveTicket below); every other step ignores
+  // notes, outcome and imageBuffer entirely.
   async advanceStatus(
     ticketId: number,
     admin: AdminSession,
-    notes: string | undefined,
+    notes: unknown,
     imageBuffer: Buffer | undefined,
+    outcome?: unknown,
   ): Promise<{ status: TicketStatus }> {
     const sql = this.pg;
+    // Not filtered on merged_into_ticket_id, so a merged-away ticket is a
+    // 409 (assertNotMergedAway), not a 404.
     const [ticket] = await sql<
       {
         status: TicketStatus;
@@ -977,29 +1100,18 @@ export class TicketsService {
         `No transition available from ${ticket.status}`,
       );
     }
-
-    let resolutionImageUrl: string | null = null;
-    let resolutionNotes: string | null = null;
-    // Appendix H (manuscript revision Phase 2, step 2b): resolving through
-    // this ladder is municipal action. The External Referral outcome becomes
-    // choosable in Phase 5; rejectTicket leaves the outcome NULL.
-    let resolutionOutcome: 'MUNICIPAL_ACTION_COMPLETED' | null = null;
     if (nextStatus === 'Resolved') {
-      resolutionOutcome = 'MUNICIPAL_ACTION_COMPLETED';
-      resolutionNotes = notes?.trim() || null;
-      if (
-        resolutionNotes &&
-        resolutionNotes.length > TICKET_RESOLUTION_NOTES_MAX_LENGTH
-      ) {
-        throw new BadRequestException(
-          `resolution notes must be ${TICKET_RESOLUTION_NOTES_MAX_LENGTH} characters or fewer.`,
-        );
-      }
-      if (imageBuffer)
-        resolutionImageUrl = await this.media.uploadImage(imageBuffer);
+      return this.resolveTicket(
+        ticketId,
+        admin,
+        ticket.category,
+        outcome,
+        notes,
+        imageBuffer,
+      );
     }
 
-    const emailRecipients = await sql.begin(async (tx) => {
+    await sql.begin(async (tx) => {
       // Guarded on the status this request actually read: two requests
       // racing off the same starting status (double-click, retried
       // request, two admins) can no longer both succeed. The loser's
@@ -1010,9 +1122,6 @@ export class TicketsService {
       const updateResult = await tx`
         UPDATE tickets SET
           status = ${nextStatus},
-          resolution_image_url = COALESCE(${resolutionImageUrl}, resolution_image_url),
-          resolution_notes = COALESCE(${resolutionNotes}, resolution_notes),
-          resolution_outcome = COALESCE(${resolutionOutcome}::resolution_outcome, resolution_outcome),
           updated_at = now()
         WHERE id = ${ticketId} AND status = ${ticket.status}
       `;
@@ -1026,78 +1135,366 @@ export class TicketsService {
         VALUES (${ticketId}, ${nextStatus}, ${admin.adminId}, ${admin.adminName}, now())
       `;
       await this.audit.logInPgTx(tx, {
-        actor: {
-          adminId: admin.adminId,
-          adminName: admin.adminName,
-          email: admin.email,
-          accountType: admin.accountType,
-          office: admin.office,
-        },
+        actor: this.auditActor(admin),
         actionType: 'ticket_status_advanced',
         targetType: 'ticket',
         targetId: ticketId,
         targetSummary: `Ticket #${ticketId} (${ticket.category})`,
         metadata: { from: ticket.status, to: nextStatus },
       });
-
-      const notice = STATUS_NOTIFICATION[nextStatus];
-      if (!notice) return [];
-
-      const citizenRows = await tx<
-        { citizen_id: number; report_id: number; email: string }[]
-      >`
-        SELECT DISTINCT ON (r.citizen_id) r.citizen_id, r.id AS report_id, c.email
-        FROM reports r
-        JOIN citizens c ON c.id = r.citizen_id
-        WHERE r.ticket_id = ${ticketId}
-        ORDER BY r.citizen_id, r.id ASC
-      `;
-      for (const row of citizenRows) {
-        await this.notifications.createInTx(tx, {
-          recipientType: 'citizen',
-          recipientId: row.citizen_id,
-          type: notice.type,
-          title: notice.title,
-          message: notice.message,
-          href: `/dashboard/reports/${row.report_id}`,
-          entityType: 'ticket',
-          entityId: ticketId,
-        });
-      }
-
-      // Email is selective, not one-per-status — only Resolved warrants an
-      // email through this ladder (the rest stay in-app-only), per PLAN.md's
-      // notification-system design decision. Rejected is a separate terminal
-      // outcome reached via rejectTicket below, never via this ladder — see
-      // that method for its own (also selective) email send.
-      return nextStatus === 'Resolved'
-        ? citizenRows.map((row) => ({
-            email: row.email,
-            reportId: row.report_id,
-          }))
-        : [];
+      await this.notifyCitizensOfStatus(tx, ticketId, nextStatus);
     });
 
-    if (emailRecipients.length > 0) {
-      const webOrigin = this.config.get('WEB_ORIGIN', { infer: true });
-      // Post-commit, never inside the transaction — an external HTTP call
-      // has no place holding a DB transaction open. Both send methods
-      // never throw (ResendEmailService's existing contract), but the
-      // try/catch here is the belt-and-suspenders guarantee that a
-      // misbehaving EmailService implementation can never undo or block
-      // the status change that already committed.
-      for (const recipient of emailRecipients) {
-        try {
-          const reportUrl = `${webOrigin}/dashboard/reports/${recipient.reportId}`;
-          await this.email.sendReportResolved(recipient.email, reportUrl);
-        } catch {
-          // Never let an email failure surface to the caller — the status
-          // change and in-app notification already committed.
-        }
-      }
+    return { status: nextStatus };
+  }
+
+  // Resolving (manuscript revision Phase 5, step 5c; migration 0046). The
+  // caller (advanceStatus) has already applied the status-change gate:
+  // operational Personnel of the ticket's current office, never a
+  // merged-away ticket. Here: an outcome and non-blank notes are required
+  // (400), no Work Order may be pending or in progress (409), and External
+  // Referral needs a recorded referral (409) — checked once before the
+  // optional photo is uploaded, so a refused request uploads nothing, and
+  // again on the locked row. Everything else is written in one transaction:
+  // the ticket's resolution record (outcome, notes, photo — NULL when there
+  // is none, never carried over from an earlier resolution — resolved_at,
+  // resolved_by), the status_history row with the same snapshot, the audit
+  // event (with the outcome) and the citizen notifications; the resolve
+  // email goes out after the commit, as before.
+  private async resolveTicket(
+    ticketId: number,
+    admin: AdminSession,
+    category: string,
+    outcomeInput: unknown,
+    notesInput: unknown,
+    imageBuffer: Buffer | undefined,
+  ): Promise<{ status: TicketStatus }> {
+    const { outcome, notes } = validateResolutionInput(
+      outcomeInput,
+      notesInput,
+    );
+    const pre = await this.readResolveFacts(this.pg, ticketId, false);
+    if (pre) {
+      const block = resolveBlock({ id: ticketId, ...pre.facts }, outcome);
+      if (block) throw toHttpException(block);
     }
 
-    return { status: nextStatus };
+    const imageUrl = imageBuffer
+      ? await this.media.uploadImage(imageBuffer)
+      : null;
+
+    let emailRecipients: { email: string; reportId: number }[];
+    try {
+      emailRecipients = await this.pg.begin(async (tx) => {
+        const locked = await this.readResolveFacts(tx, ticketId, true);
+        if (!locked) throw new NotFoundException('Ticket not found');
+        assertOfficeAccess(admin, locked.assigned_office);
+        assertNotMergedAway({
+          id: ticketId,
+          merged_into_ticket_id: locked.merged_into_ticket_id,
+        });
+        if (locked.status !== 'In Progress') {
+          throw new ConflictException(
+            'Ticket status already changed by another request (expected In Progress)',
+          );
+        }
+        const block = resolveBlock({ id: ticketId, ...locked.facts }, outcome);
+        if (block) throw toHttpException(block);
+
+        // Same optimistic status guard as the other ladder steps.
+        const updateResult = await tx`
+          UPDATE tickets SET
+            status = 'Resolved',
+            resolution_outcome = ${outcome}::resolution_outcome,
+            resolution_notes = ${notes},
+            resolution_image_url = ${imageUrl},
+            resolved_at = now(),
+            resolved_by_admin_id = ${admin.adminId},
+            updated_at = now()
+          WHERE id = ${ticketId} AND status = 'In Progress'
+        `;
+        if (updateResult.count === 0) {
+          throw new ConflictException(
+            'Ticket status already changed by another request (expected In Progress)',
+          );
+        }
+        await tx`
+          INSERT INTO status_history (
+            ticket_id, status, from_status, admin_id, admin_name, changed_at,
+            resolution_outcome, resolution_notes, resolution_image_url
+          )
+          VALUES (
+            ${ticketId}, 'Resolved', 'In Progress', ${admin.adminId}, ${admin.adminName}, now(),
+            ${outcome}::resolution_outcome, ${notes}, ${imageUrl}
+          )
+        `;
+        await this.audit.logInPgTx(tx, {
+          actor: this.auditActor(admin),
+          actionType: 'ticket_status_advanced',
+          targetType: 'ticket',
+          targetId: ticketId,
+          targetSummary: `Ticket #${ticketId} (${category})`,
+          metadata: { from: 'In Progress', to: 'Resolved', outcome },
+        });
+        return this.notifyCitizensOfStatus(tx, ticketId, 'Resolved');
+      });
+    } catch (err) {
+      throw checkViolationAsConflict(
+        err,
+        `Ticket #${ticketId} could not be resolved: its resolution record was refused by the database. Reload the ticket and try again.`,
+      );
+    }
+
+    await this.sendResolvedEmails(emailRecipients);
+    return { status: 'Resolved' };
+  }
+
+  // What the resolve rules read: the ticket's status, office and merge
+  // state, its pending / in-progress Work Orders and its REFER routing
+  // actions. lock = true takes the ticket's row lock for the rest of the
+  // caller's transaction.
+  private async readResolveFacts(
+    client: Sql | TransactionSql,
+    ticketId: number,
+    lock: boolean,
+  ): Promise<{
+    status: string;
+    assigned_office: 'MEO' | 'MDRRMO';
+    merged_into_ticket_id: number | null;
+    facts: { activeWorkOrders: number; referralCount: number };
+  } | null> {
+    const sql = client as Sql;
+    type Row = {
+      status: string;
+      assigned_office: 'MEO' | 'MDRRMO';
+      merged_into_ticket_id: number | null;
+      active_work_orders: number;
+      referral_count: number;
+    };
+    // Two literal queries rather than one with a FOR UPDATE fragment, so
+    // each read is a single statement.
+    const [row] = lock
+      ? await sql<Row[]>`
+          SELECT t.status, t.assigned_office, t.merged_into_ticket_id,
+            (
+              SELECT count(*)::int FROM work_orders w
+              WHERE w.ticket_id = t.id AND w.status IN ('pending', 'in_progress')
+            ) AS active_work_orders,
+            (
+              SELECT count(*)::int FROM routing_actions ra
+              WHERE ra.ticket_id = t.id AND ra.action_type = 'REFER'
+            ) AS referral_count
+          FROM tickets t
+          WHERE t.id = ${ticketId}
+          FOR UPDATE OF t
+        `
+      : await sql<Row[]>`
+          SELECT t.status, t.assigned_office, t.merged_into_ticket_id,
+            (
+              SELECT count(*)::int FROM work_orders w
+              WHERE w.ticket_id = t.id AND w.status IN ('pending', 'in_progress')
+            ) AS active_work_orders,
+            (
+              SELECT count(*)::int FROM routing_actions ra
+              WHERE ra.ticket_id = t.id AND ra.action_type = 'REFER'
+            ) AS referral_count
+          FROM tickets t
+          WHERE t.id = ${ticketId}
+        `;
+    if (!row) return null;
+    return {
+      status: row.status,
+      assigned_office: row.assigned_office,
+      merged_into_ticket_id: row.merged_into_ticket_id,
+      facts: {
+        activeWorkOrders: row.active_work_orders,
+        referralCount: row.referral_count,
+      },
+    };
+  }
+
+  // Return to Under Review after a wrong referral (manuscript revision
+  // Phase 5, step 5c). Only a ticket resolved by External Referral since
+  // migration 0046 (resolved_at set) may return; a legacy Resolved ticket
+  // never can. Same gate as resolving: operational Personnel of the
+  // ticket's current office, never a merged-away ticket (read unfiltered so
+  // it is a 409, not a 404). One transaction on the locked row: the status
+  // change and the clearing of the ticket's resolution record in the same
+  // UPDATE (so the 0046 CHECKs hold), a status_history row with the reason
+  // (the earlier Resolved row keeps its snapshot, and the referral stays in
+  // routing_actions — nothing earlier is touched), the audit event and the
+  // ticket's Operational Priority. No notification and no email. The
+  // reason is staff-only.
+  async returnToReview(
+    ticketId: number,
+    admin: AdminSession,
+    reasonInput: unknown,
+  ): Promise<{ status: 'Under Review' }> {
+    const reason = validateReturnReason(reasonInput);
+
+    try {
+      await this.pg.begin(async (tx) => {
+        const [ticket] = await tx<
+          {
+            status: string;
+            assigned_office: 'MEO' | 'MDRRMO';
+            category: string;
+            merged_into_ticket_id: number | null;
+            resolution_outcome: ResolutionOutcome | null;
+            resolved_at: string | null;
+          }[]
+        >`
+          SELECT status, assigned_office, category, merged_into_ticket_id,
+            resolution_outcome, resolved_at
+          FROM tickets WHERE id = ${ticketId}
+          FOR UPDATE
+        `;
+        if (!ticket) throw new NotFoundException('Ticket not found');
+        assertOfficeAccess(admin, ticket.assigned_office);
+        assertNotMergedAway({ id: ticketId, ...ticket });
+        const block = returnBlock({
+          id: ticketId,
+          status: ticket.status,
+          resolutionOutcome: ticket.resolution_outcome,
+          resolvedAt: ticket.resolved_at,
+          mergedIntoTicketId: ticket.merged_into_ticket_id,
+        });
+        if (block) throw toHttpException(block);
+
+        const [latestReferral] = await tx<{ id: number }[]>`
+          SELECT id FROM routing_actions
+          WHERE ticket_id = ${ticketId} AND action_type = 'REFER'
+          ORDER BY created_at DESC, id DESC
+          LIMIT 1
+        `;
+
+        const updateResult = await tx`
+          UPDATE tickets SET
+            status = 'Under Review',
+            resolution_outcome = NULL,
+            resolution_notes = NULL,
+            resolution_image_url = NULL,
+            resolved_at = NULL,
+            resolved_by_admin_id = NULL,
+            updated_at = now()
+          WHERE id = ${ticketId}
+            AND status = 'Resolved'
+            AND resolution_outcome = 'EXTERNAL_REFERRAL'
+            AND resolved_at IS NOT NULL
+            AND merged_into_ticket_id IS NULL
+        `;
+        if (updateResult.count === 0) {
+          throw new ConflictException(
+            'Ticket status already changed by another request (expected Resolved by External referral)',
+          );
+        }
+        await tx`
+          INSERT INTO status_history (ticket_id, status, from_status, reason, admin_id, admin_name, changed_at)
+          VALUES (${ticketId}, 'Under Review', 'Resolved', ${reason}, ${admin.adminId}, ${admin.adminName}, now())
+        `;
+        await this.audit.logInPgTx(tx, {
+          actor: this.auditActor(admin),
+          actionType: 'ticket_returned_to_review',
+          targetType: 'ticket',
+          targetId: ticketId,
+          targetSummary: `Ticket #${ticketId} (${ticket.category})`,
+          metadata: {
+            from: 'Resolved',
+            to: 'Under Review',
+            reason,
+            previousOutcome: ticket.resolution_outcome,
+            latestReferralId: latestReferral?.id ?? null,
+          },
+        });
+        // Active again: its priority commits with the return.
+        await this.operationalPriority.recalculateTickets(tx, [ticketId]);
+      });
+    } catch (err) {
+      throw checkViolationAsConflict(
+        err,
+        `Ticket #${ticketId} could not be returned to Under Review: the change was refused by the database. Reload the ticket and try again.`,
+      );
+    }
+
+    // Barangay demand moved for the other active tickets there.
+    await this.operationalPriority.recalculateActiveTickets();
+    return { status: 'Under Review' };
+  }
+
+  private auditActor(admin: AdminSession) {
+    return {
+      adminId: admin.adminId,
+      adminName: admin.adminName,
+      email: admin.email,
+      accountType: admin.accountType,
+      office: admin.office,
+    };
+  }
+
+  // The in-app status notification for each distinct citizen reporter
+  // (STATUS_NOTIFICATION), inside the caller's transaction. Returns the
+  // email recipients: only Resolved warrants an email through this ladder
+  // (the rest stay in-app-only), per PLAN.md's notification-system design
+  // decision. Rejected is a separate terminal outcome reached via
+  // rejectTicket, never via this ladder — see that method for its own (also
+  // selective) email send.
+  private async notifyCitizensOfStatus(
+    tx: TransactionSql,
+    ticketId: number,
+    status: TicketStatus,
+  ): Promise<{ email: string; reportId: number }[]> {
+    const notice = STATUS_NOTIFICATION[status];
+    if (!notice) return [];
+
+    const citizenRows = await tx<
+      { citizen_id: number; report_id: number; email: string }[]
+    >`
+      SELECT DISTINCT ON (r.citizen_id) r.citizen_id, r.id AS report_id, c.email
+      FROM reports r
+      JOIN citizens c ON c.id = r.citizen_id
+      WHERE r.ticket_id = ${ticketId}
+      ORDER BY r.citizen_id, r.id ASC
+    `;
+    for (const row of citizenRows) {
+      await this.notifications.createInTx(tx, {
+        recipientType: 'citizen',
+        recipientId: row.citizen_id,
+        type: notice.type,
+        title: notice.title,
+        message: notice.message,
+        href: `/dashboard/reports/${row.report_id}`,
+        entityType: 'ticket',
+        entityId: ticketId,
+      });
+    }
+    return status === 'Resolved'
+      ? citizenRows.map((row) => ({
+          email: row.email,
+          reportId: row.report_id,
+        }))
+      : [];
+  }
+
+  // Post-commit, never inside the transaction — an external HTTP call has
+  // no place holding a DB transaction open. Both send methods never throw
+  // (ResendEmailService's existing contract), but the try/catch here is the
+  // belt-and-suspenders guarantee that a misbehaving EmailService
+  // implementation can never undo or block the status change that already
+  // committed.
+  private async sendResolvedEmails(
+    recipients: { email: string; reportId: number }[],
+  ): Promise<void> {
+    if (recipients.length === 0) return;
+    const webOrigin = this.config.get('WEB_ORIGIN', { infer: true });
+    for (const recipient of recipients) {
+      try {
+        const reportUrl = `${webOrigin}/dashboard/reports/${recipient.reportId}`;
+        await this.email.sendReportResolved(recipient.email, reportUrl);
+      } catch {
+        // Never let an email failure surface to the caller — the status
+        // change and in-app notification already committed.
+      }
+    }
   }
 
   // Manual Reassign (manuscript pp. 43–44, Appendix H ROUTING_ACTIONS;
@@ -1474,11 +1871,11 @@ export class TicketsService {
     return result;
   }
 
-  // Resolving is the one transition that carries a proof photo, and
-  // advanceStatus is where that photo is uploaded — so a ticket sitting at
-  // "In Progress" is filtered out here BEFORE the loop rather than being
-  // allowed through and silently resolved with no evidence attached. The
-  // admin is told to open those tickets individually.
+  // Resolving needs a per-ticket outcome and resolution notes (and may
+  // carry a photo) — manuscript revision Phase 5, step 5c — so a ticket
+  // sitting at "In Progress" is filtered out here BEFORE the loop rather
+  // than being resolved without them. The admin is told to open those
+  // tickets individually.
   async bulkAdvanceStatus(
     ticketIds: number[],
     admin: AdminSession,
@@ -1509,7 +1906,7 @@ export class TicketsService {
         skipped.push({
           id,
           reason:
-            'Resolving needs a proof photo — open the ticket to resolve it.',
+            'Resolving needs an outcome and resolution notes — open the ticket to resolve it.',
         });
         continue;
       }

@@ -10,6 +10,7 @@ import type { EmailService } from '../citizens/email.service';
 import type { Env } from '../config/env';
 import type { AdminAuditService } from './admin-audit.service';
 import { TicketsService } from './tickets.service';
+import type { OperationalPriorityService } from '../domain/operational-priority.service';
 
 // The Precision Queue rebuild's two new server behaviours: the view-tab counts
 // and the bulk actions. Kept out of tickets.service.spec.ts only because that
@@ -45,6 +46,7 @@ function buildService(sql: Sql): TicketsService {
     {} as EmailService,
     {} as ConfigService<Env, true>,
     {} as AdminAuditService,
+    {} as OperationalPriorityService,
   );
 }
 
@@ -167,7 +169,8 @@ describe('TicketsService.bulkAdvanceStatus eligibility', () => {
   // advanceStatus is stubbed on purpose: this suite is about which ids reach it,
   // which is the whole safety property. A ticket whose next status is Resolved
   // must be filtered out BEFORE the call, because only the detail page can
-  // collect the proof photo that transition requires.
+  // collect the outcome and resolution notes that transition requires
+  // (manuscript revision Phase 5, step 5c; the photo is optional).
   function makeService(rows: { id: number; status: string }[]) {
     const sql = (() => ({
       then(resolve: (v: unknown) => void) {
@@ -187,7 +190,7 @@ describe('TicketsService.bulkAdvanceStatus eligibility', () => {
     office: null,
   } as AdminSession;
 
-  it('skips a ticket bound for Resolved instead of resolving it with no photo', async () => {
+  it('skips a ticket bound for Resolved instead of resolving it without an outcome and notes', async () => {
     const { service, advanceStatus } = makeService([
       { id: 1, status: 'In Progress' },
     ]);
@@ -196,7 +199,9 @@ describe('TicketsService.bulkAdvanceStatus eligibility', () => {
     expect(result.ok).toEqual([]);
     expect(result.skipped).toHaveLength(1);
     expect(result.skipped[0]).toMatchObject({ id: 1 });
-    expect(result.skipped[0].reason).toMatch(/proof photo/);
+    expect(result.skipped[0].reason).toBe(
+      'Resolving needs an outcome and resolution notes — open the ticket to resolve it.',
+    );
   });
 
   it('skips terminal statuses with no transition left', async () => {

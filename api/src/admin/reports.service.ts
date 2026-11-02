@@ -102,6 +102,18 @@ export class ReportsService {
       // Phase 3, step 3d: set only on merged-away tickets, which appear in a
       // status=all export.
       { header: 'Merged into', value: (r) => r.merged_into_ticket_id },
+      // Phase 5, step 5c (decision 13). Blank while unresolved, and the
+      // outcome is blank for a legacy Resolved ticket (no resolved_at),
+      // whatever migration 0036 stored for it. Resolution notes stay out of
+      // the export.
+      {
+        header: 'Resolution Outcome',
+        value: (r) => (r.resolved_at ? r.resolution_outcome : null),
+      },
+      {
+        header: 'Resolved At',
+        value: (r) => r.resolved_at && new Date(r.resolved_at).toISOString(),
+      },
     ]);
   }
 

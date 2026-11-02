@@ -25,6 +25,8 @@ export type AdminAuditActionType =
   | 'ticket_reassigned'
   | 'ticket_referral_noted'
   | 'ticket_rejected'
+  // Manuscript revision Phase 5, step 5c.
+  | 'ticket_returned_to_review'
   // Manuscript revision Phase 3, step 3e: staff corrections.
   | 'ticket_category_corrected'
   | 'ticket_location_corrected'
@@ -127,6 +129,7 @@ const ACTION_TYPES: AdminAuditActionType[] = [
   'ticket_reassigned',
   'ticket_referral_noted',
   'ticket_rejected',
+  'ticket_returned_to_review',
   'ticket_category_corrected',
   'ticket_location_corrected',
   'report_moderated',

@@ -3,7 +3,8 @@ import { ReportImage } from "@/components/features/citizen/dashboard/ReportImage
 
 // Citizen-safe summary of how this report was closed — deliberately reads
 // only fields already present on MyReportDetail (resolution_notes/
-// resolution_image_url/ticket_updated_at/my_feedback, the citizen's own answer),
+// resolution_image_url/resolved_at/ticket_updated_at/my_feedback, the
+// citizen's own answer),
 // the same "no admin notes, no scoring internals" rule ReportTimeline
 // follows. Distinct from ResolutionFeedback below it: this is a read-only
 // recap of the outcome, not the confirm/dispute action itself.
@@ -18,10 +19,12 @@ export default function CaseClosureSummary({
 }: {
   report: Pick<
     MyReportDetail,
-    "resolution_notes" | "resolution_image_url" | "ticket_updated_at" | "my_feedback"
+    "resolution_notes" | "resolution_image_url" | "resolved_at" | "ticket_updated_at" | "my_feedback"
   >;
 }) {
-  const resolvedDate = new Date(report.ticket_updated_at);
+  // The latest resolution's own time (manuscript revision Phase 5, step 5c);
+  // a legacy Resolved ticket has none, so it keeps the old fallback.
+  const resolvedDate = new Date(report.resolved_at ?? report.ticket_updated_at);
   const feedbackLine = feedbackStateLine(report);
 
   return (

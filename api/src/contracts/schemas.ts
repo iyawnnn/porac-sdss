@@ -72,6 +72,16 @@ export const WORK_ORDER_NOTES_MAX_LENGTH = 2000;
 // Manuscript revision Phase 5, step 5b.
 export const WORK_ORDER_CANCELLATION_REASON_MAX_LENGTH = 1000;
 export const TICKET_RESOLUTION_NOTES_MAX_LENGTH = 2000;
+// Manuscript revision Phase 5, step 5c: the two Appendix H resolution
+// outcomes (the resolution_outcome enum, migration 0036), one of which is
+// required when a ticket is resolved, and the reason required to return a
+// Resolved EXTERNAL_REFERRAL ticket to Under Review.
+export const RESOLUTION_OUTCOMES = [
+  'MUNICIPAL_ACTION_COMPLETED',
+  'EXTERNAL_REFERRAL',
+] as const;
+export type ResolutionOutcome = (typeof RESOLUTION_OUTCOMES)[number];
+export const TICKET_RETURN_REASON_MAX_LENGTH = 1000;
 export const TICKET_DISPUTE_REASON_MAX_LENGTH = 1000;
 export const TICKET_REJECTION_REASON_MAX_LENGTH = 1000;
 export const MODERATION_NOTE_MAX_LENGTH = 1000;

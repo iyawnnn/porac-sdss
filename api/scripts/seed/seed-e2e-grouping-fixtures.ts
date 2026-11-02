@@ -14,7 +14,9 @@ import { sql } from '../db';
 // are inserted on the same tickets for the same reason, and the manual
 // routing spec (e2e/admin-routing.spec.ts; Phase 5, step 5a), and the
 // Operational Assessment / Work Order spec
-// (e2e/admin-assessment-work-orders.spec.ts; step 5b). Every fixture that
+// (e2e/admin-assessment-work-orders.spec.ts; step 5b), and the resolution
+// outcome / return to Under Review spec (e2e/admin-resolution.spec.ts; step
+// 5c). Every fixture that
 // carries a Work Order also carries an Operational Assessment, as step 5b
 // requires of new Work Orders. The tickets and reports
 // are inserted directly, never through POST /reports, so the specs post no
@@ -29,9 +31,11 @@ import { sql } from '../db';
 // Run by e2e/global-setup.ts (creates the fixtures and prints their ids on
 // one E2E_GROUPING_FIXTURES= line) and e2e/global-teardown.ts (--cleanup).
 // Both first retire whatever an earlier run left active: every active ticket
-// (or Resolved step 3g feedback ticket) that is not merged away and whose
-// reports are all fixture reports is set to Rejected, with a status_history
-// row, after its active Work Orders are cancelled the way step 5b requires
+// (or Resolved step 3g feedback or step 5c resolution ticket) that is not
+// merged away and whose reports are all fixture reports is set to Rejected,
+// with a status_history row and its resolution record (outcome, notes,
+// photo, resolved_at, resolved_by) cleared in the same UPDATE, so migration
+// 0046's CHECKs hold, after its active Work Orders are cancelled the way step 5b requires
 // (cancelled_at, cancelled_by_admin_id = the MEO demo admin and the reason
 // "E2E fixture cleanup", so work_orders_cancellation_check holds), with a
 // work_order_status_history row. Its resolution_feedback rows stay as they
@@ -47,6 +51,7 @@ const FEEDBACK_TITLE_PREFIX = 'E2E feedback fixture';
 const HAZARD_TITLE_PREFIX = 'E2E hazard fixture';
 const ROUTING_TITLE_PREFIX = 'E2E routing fixture';
 const WORK_ORDER_TITLE_PREFIX = 'E2E work order fixture';
+const RESOLUTION_TITLE_PREFIX = 'E2E resolution fixture';
 const TITLE_PATTERNS = [
   `${TITLE_PREFIX}%`,
   `${CORRECTION_TITLE_PREFIX}%`,
@@ -54,6 +59,13 @@ const TITLE_PATTERNS = [
   `${HAZARD_TITLE_PREFIX}%`,
   `${ROUTING_TITLE_PREFIX}%`,
   `${WORK_ORDER_TITLE_PREFIX}%`,
+  `${RESOLUTION_TITLE_PREFIX}%`,
+];
+// Closed fixture tickets a run may leave Resolved, retired like the active
+// ones: the step 3g feedback ticket and the step 5c resolution tickets.
+const RESOLVED_TITLE_PATTERNS = [
+  `${FEEDBACK_TITLE_PREFIX}%`,
+  `${RESOLUTION_TITLE_PREFIX}%`,
 ];
 const CATEGORY = 'Pothole / Road Surface Damage';
 const CITIZEN_EMAIL = 'citizen1@porac.ph';
@@ -114,7 +126,7 @@ async function retireLeftovers(): Promise<number> {
           t.status IN ('Reported', 'Under Review', 'In Progress')
           OR (
             t.status = 'Resolved'
-            AND EXISTS (SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title LIKE ${`${FEEDBACK_TITLE_PREFIX}%`})
+            AND EXISTS (SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title LIKE ANY(${RESOLVED_TITLE_PATTERNS}::text[]))
           )
         )
         AND t.merged_into_ticket_id IS NULL
@@ -138,8 +150,16 @@ async function retireLeftovers(): Promise<number> {
         VALUES (${wo.id}, 'cancelled', NULL, ${CLEANUP_ACTOR})
       `;
     }
-    // resolution_outcome is set only on a Resolved ticket (the step 3g one).
-    await tx`UPDATE tickets SET status = 'Rejected', resolution_outcome = NULL, updated_at = now() WHERE id = ANY(${ids})`;
+    // A Resolved fixture's resolution record is cleared in the same UPDATE
+    // as the status change (migration 0046: outcome and resolved_at only on
+    // a Resolved ticket).
+    await tx`
+      UPDATE tickets SET
+        status = 'Rejected', resolution_outcome = NULL, resolution_notes = NULL,
+        resolution_image_url = NULL, resolved_at = NULL, resolved_by_admin_id = NULL,
+        updated_at = now()
+      WHERE id = ANY(${ids})
+    `;
     for (const id of ids) {
       await tx`
         INSERT INTO status_history (ticket_id, status, admin_id, admin_name)
@@ -174,7 +194,8 @@ async function create() {
       options: {
         office?: Office;
         initialOffice?: Office;
-        status?: 'Reported' | 'Under Review' | 'Resolved' | 'Rejected';
+        status?:
+          'Reported' | 'Under Review' | 'In Progress' | 'Resolved' | 'Rejected';
         ageDays: number;
         category?: string;
       },
@@ -397,9 +418,13 @@ async function create() {
       status: 'Resolved',
       ageDays: 3,
     });
+    // A full resolution record (migration 0046): resolved by the MEO demo
+    // admin, with notes and an outcome, at the Resolved history row's time.
     await tx`
       UPDATE tickets SET resolution_outcome = 'MUNICIPAL_ACTION_COMPLETED',
-        resolution_notes = ${`${FEEDBACK_TITLE_PREFIX}: pothole patched`}
+        resolution_notes = ${`${FEEDBACK_TITLE_PREFIX}: pothole patched`},
+        resolved_at = now() - make_interval(days => 3) + interval '1 hour',
+        resolved_by_admin_id = ${meo.id}
       WHERE id = ${feedbackTicketId}
     `;
     const feedback = {
@@ -735,9 +760,122 @@ async function create() {
       WORK_ORDER_TITLE_PREFIX,
     );
 
+    // Phase 5, step 5c: resolution outcome and return to Under Review
+    // (e2e/admin-resolution.spec.ts). MEO tickets on the routing column,
+    // 90-180 m past the last step 5b fixture (30 m apart, beyond the 20 m
+    // Pothole radius): three In Progress ones the spec resolves through the
+    // API and the dialog, and one legacy Resolved one.
+    const resolutionTicket = async (
+      index: number,
+      label: string,
+      options: {
+        status?: 'In Progress' | 'Resolved';
+        category?: string;
+      } = {},
+    ) => {
+      const at = {
+        lat: BASE.lat + ROUTING_START_DEG + index * ROUTING_STEP_DEG,
+        lng: BASE.lng,
+      };
+      const category = options.category ?? CATEGORY;
+      const ticketId = await ticket(at, {
+        status: options.status ?? 'In Progress',
+        ageDays: 2,
+        category,
+      });
+      await report(
+        ticketId,
+        at,
+        label,
+        2,
+        RESOLUTION_TITLE_PREFIX,
+        citizen.id,
+        category,
+      );
+      return ticketId;
+    };
+    // a. No referral and no Work Order: the outcome / notes refusals, the
+    //    External Referral refusal, then resolved as Municipal action
+    //    completed (which offers no return).
+    const resolutionInputTicketId = await resolutionTicket(
+      12,
+      'needs outcome and notes',
+    );
+    // b. A pending Work Order (with the assessment step 5b requires):
+    //    resolving is refused.
+    const resolutionWorkOrderTicketId = await resolutionTicket(
+      13,
+      'active Work Order',
+    );
+    await assess(resolutionWorkOrderTicketId, RESOLUTION_TITLE_PREFIX);
+    const [resolutionWorkOrder] = await tx<{ id: number }[]>`
+      INSERT INTO work_orders (ticket_id, title, assigned_office, status, created_by_admin_id)
+      VALUES (${resolutionWorkOrderTicketId}, ${`${RESOLUTION_TITLE_PREFIX}: patch the pothole`}, 'MEO', 'pending', ${meo.id})
+      RETURNING id
+    `;
+    await tx`
+      INSERT INTO work_order_status_history (work_order_id, status, admin_id, admin_name)
+      VALUES (${resolutionWorkOrder.id}, 'pending', ${meo.id}, ${meo.name})
+    `;
+    // c. A referral category with one referral recorded a day ago, written
+    //    the way logReferral writes it (a routing_actions REFER row and its
+    //    ticket_referral_noted audit event, same time): resolved by External
+    //    Referral, returned to Under Review, then resolved again.
+    const resolutionReferredTicketId = await resolutionTicket(14, 'referred', {
+      category: 'Leaking Pipe / Water Supply Concern',
+    });
+    // citizen1's report on it: the spec checks the citizen page never shows
+    // the staff-only return reason.
+    const [resolutionReferredReport] = await tx<{ id: number }[]>`
+      SELECT id FROM reports WHERE ticket_id = ${resolutionReferredTicketId}
+    `;
+    const referralAgency = 'Porac Water District';
+    const referralReason = `${RESOLUTION_TITLE_PREFIX}: water supply line`;
+    await tx`
+      INSERT INTO routing_actions (ticket_id, action_type, from_office, to_office, referral_target, reason, admin_id, admin_name, created_at)
+      VALUES (
+        ${resolutionReferredTicketId}, 'REFER', 'MEO', NULL, ${referralAgency}, ${referralReason},
+        ${meo.id}, ${meo.name}, now() - interval '1 day'
+      )
+    `;
+    await tx`
+      INSERT INTO admin_audit_events (
+        actor_admin_id, actor_name, actor_email, actor_role, actor_account_type, actor_office,
+        action_type, target_type, target_id, target_summary, metadata, created_at
+      )
+      VALUES (
+        ${meo.id}, ${meo.name}, ${MEO_EMAIL}, (SELECT role FROM admins WHERE id = ${meo.id}), 'PERSONNEL', 'MEO',
+        'ticket_referral_noted', 'ticket', ${resolutionReferredTicketId},
+        ${`Ticket #${resolutionReferredTicketId} (Leaking Pipe / Water Supply Concern)`},
+        ${JSON.stringify({ agency: referralAgency, reason: referralReason })}::jsonb,
+        now() - interval '1 day'
+      )
+    `;
+    // d. A legacy Resolved ticket: the outcome migration 0036 gave every
+    //    old Resolved ticket, no resolved_at, no notes. Shown as "Not
+    //    recorded (legacy)" and never returnable.
+    const resolutionLegacyTicketId = await resolutionTicket(
+      15,
+      'legacy Resolved',
+      { status: 'Resolved' },
+    );
+    await tx`
+      UPDATE tickets SET resolution_outcome = 'MUNICIPAL_ACTION_COMPLETED'
+      WHERE id = ${resolutionLegacyTicketId}
+    `;
+
     return {
+      resolution: {
+        inputTicketId: resolutionInputTicketId,
+        workOrderTicketId: resolutionWorkOrderTicketId,
+        referredTicketId: resolutionReferredTicketId,
+        referredReportId: resolutionReferredReport.id,
+        referralAgency,
+        legacyTicketId: resolutionLegacyTicketId,
+      },
       assessmentWorkOrders,
       routing,
+
       hazard: {
         classifiedTicketId: hazardClassified,
         noClassificationTicketId: hazardNoClassification,

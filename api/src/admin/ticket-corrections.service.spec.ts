@@ -169,6 +169,7 @@ function setup(options: {
     {} as EmailService,
     {} as ConfigService<Env, true>,
     audit,
+    {} as OperationalPriorityService,
   );
   const service = new TicketCorrectionsService(
     sql,

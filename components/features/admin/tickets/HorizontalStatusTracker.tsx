@@ -8,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import type { ResolutionOutcome } from "@/lib/types/admin-tickets";
+import { apiErrorMessage } from "@/lib/utils/api-error-message";
 import { TICKET_STATUS_STYLE } from "../shared/StatusPill";
 
 const STEPS = ["Reported", "Under Review", "In Progress", "Resolved"] as const;
@@ -73,8 +75,18 @@ export function HorizontalStatusTracker({
   const [showResolveModal, setShowResolveModal] = useState(false);
 
   const isRejected = currentStatus === "Rejected";
+  // The statuses reached on the way to the CURRENT position (manuscript
+  // revision Phase 5, step 5c): a step back (a return to Under Review)
+  // un-reaches every later step, so after a return Resolved and In Progress
+  // show as upcoming again and Under Review carries the return's time.
   const reachedAt: Record<string, string> = { Reported: createdAt };
-  for (const h of history) if (!(h.status in reachedAt)) reachedAt[h.status] = h.changed_at;
+  for (const h of history) {
+    const index = STEPS.indexOf(h.status as (typeof STEPS)[number]);
+    if (index >= 0) {
+      for (const later of STEPS.slice(index + 1)) delete reachedAt[later];
+    }
+    reachedAt[h.status] = h.changed_at;
+  }
 
   const lastReachedIndex = STEPS.reduce((max, step, i) => (step in reachedAt ? i : max), 0);
   const rejectedNodeIndex = isRejected ? Math.min(lastReachedIndex + 1, STEPS.length - 1) : -1;
@@ -156,6 +168,24 @@ export function HorizontalStatusTracker({
   );
 }
 
+// Resolving needs an outcome and resolution notes (manuscript revision Phase
+// 5, step 5c); the photo stays optional. The API enforces the same rules and
+// its 400/409 messages (a missing referral for External referral, an active
+// Work Order) are shown inline as they come back.
+const RESOLUTION_OUTCOMES: { value: ResolutionOutcome; label: string; hint: string }[] = [
+  {
+    value: "MUNICIPAL_ACTION_COMPLETED",
+    label: "Municipal action completed",
+    hint: "The office fixed it.",
+  },
+  {
+    value: "EXTERNAL_REFERRAL",
+    label: "External referral",
+    hint: "Handed to an outside agency. Needs a referral recorded on this ticket.",
+  },
+];
+const RESOLUTION_NOTES_MAX_LENGTH = 2000;
+
 function ResolveDialog({
   ticketId,
   open,
@@ -169,8 +199,11 @@ function ResolveDialog({
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<ResolutionOutcome | "">("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [outcomeError, setOutcomeError] = useState("");
+  const [notesError, setNotesError] = useState("");
   const [error, setError] = useState("");
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -180,19 +213,31 @@ function ResolveDialog({
   }
 
   async function handleSubmit() {
+    const trimmed = notes.trim();
+    const missingOutcome = outcome === "";
+    const notesProblem = !trimmed
+      ? "Resolution notes are required."
+      : trimmed.length > RESOLUTION_NOTES_MAX_LENGTH
+        ? `Resolution notes must be ${RESOLUTION_NOTES_MAX_LENGTH} characters or fewer.`
+        : "";
+    setOutcomeError(missingOutcome ? "Choose an outcome." : "");
+    setNotesError(notesProblem);
+    if (missingOutcome || notesProblem) return;
+
     setSubmitting(true);
     setError("");
 
     const formData = new FormData();
     if (file) formData.append("image", file);
-    if (notes.trim()) formData.append("notes", notes.trim());
+    formData.append("outcome", outcome);
+    formData.append("notes", trimmed);
 
     const res = await fetch(`/api/admin/tickets/${ticketId}/status`, { method: "POST", body: formData });
     if (res.ok) {
       onResolved();
     } else {
       const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Could not mark this ticket resolved.");
+      setError(apiErrorMessage(data, "Could not mark this ticket resolved."));
       setSubmitting(false);
     }
   }
@@ -202,12 +247,69 @@ function ResolveDialog({
       <DialogContent aria-label="Mark ticket resolved" className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Mark ticket resolved</DialogTitle>
-          <DialogDescription>Optionally attach a proof-of-completion photo and notes for the record.</DialogDescription>
+          <DialogDescription>Choose the outcome and write the resolution notes. A proof photo is optional.</DialogDescription>
         </DialogHeader>
+
+        <fieldset aria-describedby={outcomeError ? "resolve-outcome-error" : undefined}>
+          <legend className="mb-1.5 block text-xs font-medium text-ink-700">Outcome</legend>
+          <div className="space-y-2">
+            {RESOLUTION_OUTCOMES.map((option) => (
+              <label
+                className="flex cursor-pointer items-start gap-2 rounded-md border border-line-200 p-2.5 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50"
+                key={option.value}
+              >
+                <input
+                  checked={outcome === option.value}
+                  className="mt-0.5 accent-brand-600"
+                  name="resolve-outcome"
+                  onChange={() => {
+                    setOutcome(option.value);
+                    setOutcomeError("");
+                  }}
+                  type="radio"
+                  value={option.value}
+                />
+                <span>
+                  <span className="block font-medium text-ink-900">{option.label}</span>
+                  <span className="block text-xs text-ink-500">{option.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {outcomeError && (
+            <p className="mt-1 text-xs text-destructive" id="resolve-outcome-error">
+              {outcomeError}
+            </p>
+          )}
+        </fieldset>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-ink-700" htmlFor="resolve-notes">
+            Resolution notes (shown to the citizen)
+          </label>
+          <Textarea
+            aria-describedby={notesError ? "resolve-notes-error" : undefined}
+            aria-invalid={notesError ? true : undefined}
+            id="resolve-notes"
+            maxLength={RESOLUTION_NOTES_MAX_LENGTH}
+            onChange={(e) => {
+              setNotes(e.target.value);
+              setNotesError("");
+            }}
+            placeholder="What was done, or which agency it was referred to"
+            rows={3}
+            value={notes}
+          />
+          {notesError && (
+            <p className="mt-1 text-xs text-destructive" id="resolve-notes-error">
+              {notesError}
+            </p>
+          )}
+        </div>
 
         <div>
           <label className="mb-1.5 block text-xs font-medium text-ink-700" htmlFor="resolve-photo">
-            Resolution photo
+            Resolution photo (optional)
           </label>
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -218,14 +320,11 @@ function ResolveDialog({
           <Input accept="image/*" id="resolve-photo" onChange={handleFileChange} type="file" />
         </div>
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-700" htmlFor="resolve-notes">
-            Completion notes
-          </label>
-          <Textarea id="resolve-notes" onChange={(e) => setNotes(e.target.value)} placeholder="What was done to resolve this?" rows={3} value={notes} />
-        </div>
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
 
         <DialogFooter>
           <Button disabled={submitting} onClick={() => onOpenChange(false)} variant="outline">

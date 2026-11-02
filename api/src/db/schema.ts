@@ -53,9 +53,9 @@ export const ticketStatusEnum = pgEnum('ticket_status', [
   'Rejected',
 ]);
 export const officeEnum = pgEnum('office', ['MEO', 'MDRRMO']);
-// Appendix H (manuscript revision Phase 2, step 2b, migration 0036). Set to
-// MUNICIPAL_ACTION_COMPLETED when a ticket is resolved through the status
-// ladder; EXTERNAL_REFERRAL becomes choosable in Phase 5.
+// Appendix H (manuscript revision Phase 2, step 2b, migration 0036). Chosen
+// by staff when a ticket is resolved, since Phase 5, step 5c (before that,
+// every resolve wrote MUNICIPAL_ACTION_COMPLETED).
 export const resolutionOutcomeEnum = pgEnum('resolution_outcome', [
   'MUNICIPAL_ACTION_COMPLETED',
   'EXTERNAL_REFERRAL',
@@ -335,7 +335,7 @@ export const tickets = pgTable('tickets', {
   // fills it from assigned_office for any other insert path.
   initialAssignedOffice: officeEnum('initial_assigned_office').notNull(),
   // Appendix H. NULL until the ticket is resolved; a Rejected ticket stays
-  // NULL.
+  // NULL, and a return to Under Review clears it (Phase 5, step 5c).
   resolutionOutcome: resolutionOutcomeEnum('resolution_outcome'),
   // Implementation extension (handoff Decision 11), not in the manuscript's
   // data dictionary: the ticket this one was merged into. Unused until the
@@ -347,10 +347,25 @@ export const tickets = pgTable('tickets', {
   // moderation — surfaced to admins separately from urgency/priority,
   // which are purely environmental/cluster-driven.
   flagged: boolean('flagged').notNull().default(false),
-  // Optional field-team proof photo + notes captured when a ticket
-  // transitions to Resolved (admin ticket detail "Mark Resolved" modal).
+  // Field-team proof photo (optional) and resolution notes (required since
+  // manuscript revision Phase 5, step 5c, and shown to the citizen)
+  // captured when a ticket transitions to Resolved (admin ticket detail
+  // resolve dialog). Legacy Resolved tickets may have blank notes.
   resolutionImageUrl: text('resolution_image_url'),
   resolutionNotes: text('resolution_notes'),
+  // Manuscript revision Phase 5, step 5c (migration 0046): when and by whom
+  // the ticket was resolved. NULL while active, on every legacy Resolved
+  // ticket (resolved before 0046; it keeps the outcome 0036 gave it, which
+  // the UI and export show as "Not recorded (legacy)" / blank), and again
+  // after a return to Under Review clears the resolution record. CHECKs
+  // (SQL only): tickets_resolved_at_status_check,
+  // tickets_resolution_record_check (outcome, resolver and non-blank notes
+  // whenever resolved_at is set) and tickets_resolution_outcome_status_check
+  // (outcome only on a Resolved ticket).
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  resolvedByAdminId: integer('resolved_by_admin_id').references(
+    (): AnyPgColumn => admins.id,
+  ),
   // Citizen resolution-feedback loop: set when a citizen reports that a
   // Resolved ticket isn't actually fixed (ReportsService.disputeReport).
   // Deliberately does not roll ticket.status back to an earlier state — a
@@ -467,6 +482,18 @@ export const statusHistory = pgTable('status_history', {
   changedAt: timestamp('changed_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // Manuscript revision Phase 5, step 5c (migration 0046), staff-only —
+  // never in the citizen's status history. from_status / reason are set on
+  // a resolve and on a return to Under Review (reason required there); a
+  // Resolved row written since 0046 keeps the resolution as recorded, so a
+  // later return (which clears the ticket row) loses nothing. NULL on older
+  // rows. CHECKs (SQL only): status_history_resolution_snapshot_check,
+  // status_history_return_reason_check, status_history_reason_nonblank_check.
+  fromStatus: ticketStatusEnum('from_status'),
+  reason: text('reason'),
+  resolutionOutcome: resolutionOutcomeEnum('resolution_outcome'),
+  resolutionNotes: text('resolution_notes'),
+  resolutionImageUrl: text('resolution_image_url'),
 });
 
 // Separate from status_history because that table's `status` column is

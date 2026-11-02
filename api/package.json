@@ -62,6 +62,7 @@
     "migrate:hazard-information": "tsx --env-file=.env scripts/migrations/migrate-hazard-information.ts",
     "migrate:rainfall-context": "tsx --env-file=.env scripts/migrations/migrate-rainfall-context.ts",
     "migrate:assessment-work-orders": "tsx --env-file=.env scripts/migrations/migrate-assessment-work-orders.ts",
+    "migrate:resolution-record": "tsx --env-file=.env scripts/migrations/migrate-resolution-record.ts",
     "recalc:median-severity": "tsx --env-file=.env scripts/recalculate-median-severity.ts",
     "backfill:hazard-information": "tsx --env-file=.env scripts/backfill-hazard-information.ts",
     "import:barangays": "tsx --env-file=.env scripts/seed/import-barangays.ts",

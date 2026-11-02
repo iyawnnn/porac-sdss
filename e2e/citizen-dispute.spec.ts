@@ -49,10 +49,12 @@ async function submitAndResolveReport(
   expect(submitRes.ok()).toBe(true);
   const { reportId, ticketId } = (await submitRes.json()) as { reportId: number; ticketId: number };
 
-  // Reported -> Under Review -> In Progress -> Resolved.
+  // Reported -> Under Review -> In Progress -> Resolved. Resolving needs an
+  // outcome and notes (manuscript revision Phase 5, step 5c); the earlier
+  // steps ignore both.
   for (let i = 0; i < 3; i++) {
     const res = await adminPage.request.post(`/api/admin/tickets/${ticketId}/status`, {
-      multipart: { notes: "e2e" },
+      multipart: { notes: "e2e", outcome: "MUNICIPAL_ACTION_COMPLETED" },
     });
     expect(res.ok()).toBe(true);
   }
@@ -219,6 +221,7 @@ test.describe("Case Closure Summary", () => {
     const resolveRes = await adminPage.request.post(`/api/admin/tickets/${ticketId}/status`, {
       multipart: {
         notes: "Pothole patched and repaved.",
+        outcome: "MUNICIPAL_ACTION_COMPLETED",
         image: {
           name: "01_poblacion.jpg",
           mimeType: "image/jpeg",

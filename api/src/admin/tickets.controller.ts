@@ -240,10 +240,15 @@ export class TicketsController {
   // conditional-on-content-type Next handler.
   @Post(':id/status')
   @UseInterceptors(FileInterceptor('image'))
+  // Resolving (In Progress -> Resolved) needs `outcome`
+  // (MUNICIPAL_ACTION_COMPLETED | EXTERNAL_REFERRAL) and non-blank `notes`;
+  // the photo stays optional (manuscript revision Phase 5, step 5c). Other
+  // steps ignore all three.
   async advanceStatus(
     @Param('id', ParseIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
-    @Body('notes') notes: string | undefined,
+    @Body('notes') notes: unknown,
+    @Body('outcome') outcome: unknown,
     @UploadedFile(
       new ParseFilePipe({
         fileIsRequired: false,
@@ -260,7 +265,23 @@ export class TicketsController {
       admin,
       notes,
       image?.buffer,
+      outcome,
     );
+    return { ok: true, ...result };
+  }
+
+  // Return a Resolved External Referral ticket to Under Review after a
+  // wrong referral (manuscript revision Phase 5, step 5c), with a required
+  // reason: 400 bad reason, 403 not this office's ticket (Focal and the
+  // System Administrator never reach here — OperationalStaffGuard), 409
+  // merged away, not Resolved, legacy, or not an External Referral.
+  @Post(':id/return-to-review')
+  async returnToReview(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+    @Body('reason') reason: unknown,
+  ) {
+    const result = await this.tickets.returnToReview(id, admin, reason);
     return { ok: true, ...result };
   }
 

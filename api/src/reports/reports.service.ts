@@ -167,6 +167,11 @@ export interface MyReportDetail {
   moderated_at: string | null;
   resolution_notes: string | null;
   resolution_image_url: string | null;
+  // When the ticket was last resolved (manuscript revision Phase 5, step
+  // 5c); NULL on a legacy Resolved ticket, where the page falls back to
+  // ticket_updated_at. The resolver, the outcome and the return reason are
+  // never sent.
+  resolved_at: string | null;
   // This citizen's own resolution feedback on the report's ticket (Appendix
   // H RESOLUTION_FEEDBACK; manuscript revision Phase 3, step 3g), null until
   // they answer. Only ever their own row: other citizens' answers, and the
@@ -532,7 +537,7 @@ export class ReportsService {
         c.first_name AS citizen_first_name, c.last_name AS citizen_last_name,
         r.created_at, t.created_at AS ticket_created_at, t.updated_at AS ticket_updated_at,
         t.assigned_office, t.member_count, r.moderation_status, r.moderated_at, t.resolution_notes,
-        t.resolution_image_url,
+        t.resolution_image_url, t.resolved_at,
         CASE WHEN rf.id IS NOT NULL THEN json_build_object(
           'feedback_type', rf.feedback_type, 'reason', rf.reason, 'created_at', rf.created_at
         ) END AS my_feedback,
@@ -558,9 +563,12 @@ export class ReportsService {
 
     if (!report) return null;
 
+    // Three named columns, never *: status_history's from_status, reason
+    // (the staff-only return reason) and resolution snapshot are not for
+    // citizens (manuscript revision Phase 5, step 5c).
     const history = await sql<StatusHistoryStep[]>`
       SELECT status, admin_name, changed_at
-      FROM status_history WHERE ticket_id = ${report.ticket_id} ORDER BY changed_at
+      FROM status_history WHERE ticket_id = ${report.ticket_id} ORDER BY changed_at, id
     `;
 
     return { report, history };

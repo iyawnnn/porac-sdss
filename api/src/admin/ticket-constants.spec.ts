@@ -23,7 +23,11 @@ describe('TICKET_STATUSES (manuscript lifecycle)', () => {
 });
 
 describe('NEXT_STATUS ladder', () => {
-  it('has no entry for Resolved or Rejected (both terminal)', () => {
+  // Neither has a next rung. Rejected is final; Resolved is final on the
+  // ladder too — the one way back is TicketsService.returnToReview, outside
+  // the ladder, and only for a ticket resolved by External Referral
+  // (manuscript revision Phase 5, step 5c).
+  it('has no entry for Resolved or Rejected (neither advances on the ladder)', () => {
     expect(NEXT_STATUS.Resolved).toBeUndefined();
     expect(NEXT_STATUS.Rejected).toBeUndefined();
   });

@@ -18,6 +18,7 @@ import {
   ROUTING_ADMIN_NAME_MAX_LENGTH,
   ROUTING_REASON_NOT_RECORDED,
 } from '../db/schema';
+import type { OperationalPriorityService } from '../domain/operational-priority.service';
 
 const MEO_OFFICER = {
   accountType: 'PERSONNEL',
@@ -44,6 +45,7 @@ describe('parseTicketQuery category filter', () => {
     {} as EmailService,
     {} as ConfigService<Env, true>,
     {} as AdminAuditService,
+    {} as OperationalPriorityService,
   );
 
   it.each(['Localized Flooding', 'Pothole / Road Surface Damage', 'Other Minor Infrastructure Hazard'])(
@@ -85,6 +87,7 @@ describe('parseTicketQuery office scoping', () => {
     {} as EmailService,
     {} as ConfigService<Env, true>,
     {} as AdminAuditService,
+    {} as OperationalPriorityService,
   );
 
   it('clamps an officer to their own office regardless of the query param', () => {
@@ -128,6 +131,7 @@ describe('parseTicketQuery disputed filter', () => {
     {} as EmailService,
     {} as ConfigService<Env, true>,
     {} as AdminAuditService,
+    {} as OperationalPriorityService,
   );
 
   it('parses disputed=true', () => {
@@ -158,6 +162,7 @@ describe('parseTicketQuery categoryReview filter', () => {
     {} as EmailService,
     {} as ConfigService<Env, true>,
     {} as AdminAuditService,
+    {} as OperationalPriorityService,
   );
 
   it('parses categoryReview=true', () => {
@@ -215,6 +220,7 @@ describe('cross-office access to single-resource ticket endpoints', () => {
       {} as EmailService,
       {} as ConfigService<Env, true>,
       {} as AdminAuditService,
+      {} as OperationalPriorityService,
     );
   }
 
@@ -477,6 +483,7 @@ describe('admin audit logging for ticket mutations', () => {
       { sendReportRejected } as unknown as EmailService,
       { get: jest.fn().mockReturnValue('https://porac.example') } as unknown as ConfigService<Env, true>,
       audit,
+      {} as OperationalPriorityService,
     );
     return { service, logInPgTx, createInTx, sendReportRejected };
   }
@@ -511,7 +518,15 @@ describe('admin audit logging for ticket mutations', () => {
   // its UPDATE matches zero rows, which is what `count: 0` simulates here.
   it('rejects a stale advance when another request already changed the status, before any status_history/audit/notification write', async () => {
     const { service, logInPgTx, createInTx } = makeService([
-      [{ status: 'In Progress', assigned_office: 'MEO', category: 'Flooding' }], // ticket lookup
+      // Under Review -> In Progress: an ordinary ladder step (resolving has
+      // its own locked flow, covered in ticket-resolution.spec.ts).
+      [
+        {
+          status: 'Under Review',
+          assigned_office: 'MEO',
+          category: 'Flooding',
+        },
+      ], // ticket lookup
       Object.assign([], { count: 0 }), // UPDATE tickets — 0 rows matched, another request already advanced it
     ]);
 
@@ -1000,6 +1015,7 @@ describe('TicketsService.getTicketsForExport', () => {
       {} as EmailService,
       {} as ConfigService<Env, true>,
       {} as AdminAuditService,
+      {} as OperationalPriorityService,
     );
   }
 
@@ -1139,13 +1155,18 @@ describe('ticket-status notification email selection', () => {
   );
 
   it('keeps advanceStatus email delivery post-commit and limited to resolved tickets', () => {
+    // Phase 5, step 5c: the fan-out moved into notifyCitizensOfStatus and
+    // the send into sendResolvedEmails, which resolveTicket calls after its
+    // transaction commits.
     expect(ticketsServiceSource).toMatch(
-      /return nextStatus === 'Resolved'\s*\n\s*\? citizenRows/,
+      /return status === 'Resolved'\s*\n\s*\? citizenRows/,
     );
     expect(ticketsServiceSource).toMatch(
-      /const emailRecipients = await sql\.begin[\s\S]*?if \(emailRecipients\.length > 0\)/,
+      /emailRecipients = await this\.pg\.begin[\s\S]*?await this\.sendResolvedEmails\(emailRecipients\)/,
     );
-    expect(ticketsServiceSource).toMatch(/this\.email\.sendReportResolved/);
+    expect(ticketsServiceSource).toMatch(
+      /private async sendResolvedEmails[\s\S]*?this\.email\.sendReportResolved/,
+    );
   });
 
   it('sends the rejection email from rejectTicket, not advanceStatus', () => {
@@ -1164,9 +1185,10 @@ describe('ticket-status notification email selection', () => {
   });
 });
 
-// Manuscript revision Phase 2, step 2b (Appendix H): resolving through the
-// status ladder records the MUNICIPAL_ACTION_COMPLETED outcome in the same
-// UPDATE; the other transitions and rejecting leave it untouched (NULL).
+// Manuscript revision Phase 2, step 2b (Appendix H): resolving records the
+// outcome in the same UPDATE (chosen by staff since Phase 5, step 5c; until
+// then always MUNICIPAL_ACTION_COMPLETED); the other transitions and
+// rejecting leave it untouched (NULL).
 // Same fake client as the audit-logging block above, except that it also
 // records each query's text and values.
 describe('resolution_outcome on status changes (Phase 2, step 2b)', () => {
@@ -1200,6 +1222,7 @@ describe('resolution_outcome on status changes (Phase 2, step 2b)', () => {
       {
         logInPgTx: jest.fn().mockResolvedValue(undefined),
       } as unknown as AdminAuditService,
+      {} as OperationalPriorityService,
     );
     const ticketUpdate = () => {
       const update = calls.find((c) => c.text.includes('UPDATE tickets'));
@@ -1209,15 +1232,29 @@ describe('resolution_outcome on status changes (Phase 2, step 2b)', () => {
     return { service, ticketUpdate };
   }
 
-  it('sets MUNICIPAL_ACTION_COMPLETED in the same UPDATE that resolves the ticket', async () => {
+  // Phase 5, step 5c: the outcome is chosen (no longer always
+  // MUNICIPAL_ACTION_COMPLETED) and written as-is, with the notes, in the
+  // same UPDATE — no COALESCE carry-over from an earlier resolution. The
+  // full resolve and return rules are in ticket-resolution.spec.ts.
+  it('writes the chosen outcome and the notes in the same UPDATE that resolves the ticket, without COALESCE', async () => {
+    const facts = {
+      status: 'In Progress',
+      assigned_office: 'MEO',
+      merged_into_ticket_id: null,
+      active_work_orders: 0,
+      referral_count: 1,
+    };
     const { service, ticketUpdate } = makeRecordingService([
       [
         {
           status: 'In Progress',
           assigned_office: 'MEO',
           category: 'Streetlight Out',
+          merged_into_ticket_id: null,
         },
       ], // ticket lookup
+      [facts], // resolve facts, before any photo upload
+      [facts], // resolve facts, locked
       [{}], // UPDATE tickets
       [{}], // INSERT status_history
       [], // citizenRows (no notification recipients)
@@ -1226,17 +1263,18 @@ describe('resolution_outcome on status changes (Phase 2, step 2b)', () => {
     const result = await service.advanceStatus(
       7,
       MEO_OFFICER as AdminSession,
-      'Lamp replaced.',
+      '  Referred to the electric cooperative.  ',
       undefined,
+      'EXTERNAL_REFERRAL',
     );
 
     expect(result).toEqual({ status: 'Resolved' });
     const update = ticketUpdate();
-    expect(update.text).toMatch(
-      /resolution_outcome = COALESCE\(\?::resolution_outcome, resolution_outcome\)/,
-    );
-    expect(update.values).toContain('Resolved');
-    expect(update.values).toContain('MUNICIPAL_ACTION_COMPLETED');
+    expect(update.text).not.toMatch(/COALESCE/);
+    expect(update.text).toMatch(/resolution_outcome = \?::resolution_outcome/);
+    expect(update.values).toContain('EXTERNAL_REFERRAL');
+    expect(update.values).toContain('Referred to the electric cooperative.');
+    expect(update.values).not.toContain('MUNICIPAL_ACTION_COMPLETED');
   });
 
   it.each([
@@ -1369,6 +1407,7 @@ describe('routing_actions dual-write (Phase 2, step 2c; reasons required since P
       {} as EmailService,
       {} as ConfigService<Env, true>,
       { logInPgTx } as unknown as AdminAuditService,
+      {} as OperationalPriorityService,
     );
     const routingInserts = () =>
       calls.filter((c) => c.text.includes('INSERT INTO routing_actions'));

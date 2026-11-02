@@ -96,6 +96,8 @@ describe('ReportsService.ticketsCsv', () => {
         merged_into_ticket_id: null,
         // Manuscript revision Phase 4, step 4b.
         hazard_summary: 'Flood: MF (Moderate Susceptibility to Flooding)',
+        resolution_outcome: null,
+        resolved_at: null,
       },
       // A merged-away ticket (manuscript revision Phase 3, step 3d), as a
       // status=all export lists it.
@@ -111,6 +113,8 @@ describe('ReportsService.ticketsCsv', () => {
         updated_at: '2026-01-08T00:00:00.000Z',
         merged_into_ticket_id: 42,
         hazard_summary: 'Not applicable',
+        resolution_outcome: null,
+        resolved_at: null,
       },
     ]);
     const { service } = makeService({ getTicketsForExport });
@@ -119,14 +123,60 @@ describe('ReportsService.ticketsCsv', () => {
 
     const [header, row, mergedRow] = csv.trim().split('\r\n');
     expect(header).toBe(
-      'Ticket ID,Status,Assigned Office,Operational Priority,Category,Hazard Information,Barangay,Report Count,Created At,Updated At,Merged into',
+      'Ticket ID,Status,Assigned Office,Operational Priority,Category,Hazard Information,Barangay,Report Count,Created At,Updated At,Merged into,Resolution Outcome,Resolved At',
     );
     expect(row).toBe(
-      '42,Reported,MEO,64,Localized Flooding,Flood: MF (Moderate Susceptibility to Flooding),Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z,',
+      '42,Reported,MEO,64,Localized Flooding,Flood: MF (Moderate Susceptibility to Flooding),Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z,,,',
     );
     expect(mergedRow).toBe(
-      '43,Reported,MEO,40,Pothole,Not applicable,Poblacion,1,2026-01-07T00:00:00.000Z,2026-01-08T00:00:00.000Z,42',
+      '43,Reported,MEO,40,Pothole,Not applicable,Poblacion,1,2026-01-07T00:00:00.000Z,2026-01-08T00:00:00.000Z,42,,',
     );
+  });
+
+  // Manuscript revision Phase 5, step 5c (decision 13): Resolution Outcome
+  // and Resolved At. A legacy Resolved ticket (no resolved_at) exports a
+  // blank outcome whatever migration 0036 stored for it; notes never appear.
+  it('exports the resolution outcome and resolved time, blank outcome for a legacy Resolved ticket', async () => {
+    const base = {
+      assigned_office: 'MEO',
+      category: 'Pothole',
+      barangay_name: 'Poblacion',
+      priority_index: 40,
+      member_count: 1,
+      created_at: '2026-01-07T00:00:00.000Z',
+      updated_at: '2026-01-08T00:00:00.000Z',
+      merged_into_ticket_id: null,
+      hazard_summary: 'Not applicable',
+    };
+    const getTicketsForExport = jest.fn().mockResolvedValue([
+      {
+        ...base,
+        id: 50,
+        status: 'Resolved',
+        resolution_outcome: 'EXTERNAL_REFERRAL',
+        resolved_at: new Date('2026-01-09T10:00:00.000Z'),
+        resolution_notes: 'Referred to DPWH.',
+      },
+      {
+        ...base,
+        id: 51,
+        status: 'Resolved',
+        resolution_outcome: 'MUNICIPAL_ACTION_COMPLETED',
+        resolved_at: null,
+      },
+    ]);
+    const { service } = makeService({ getTicketsForExport });
+
+    const csv = await service.ticketsCsv({ status: 'Resolved' }, MEO_OFFICER);
+
+    const [header, current, legacy] = csv.trim().split(/\r?\n/);
+    expect(header.endsWith(',Resolution Outcome,Resolved At')).toBe(true);
+    expect(
+      current.endsWith(',EXTERNAL_REFERRAL,2026-01-09T10:00:00.000Z'),
+    ).toBe(true);
+    expect(legacy.endsWith(',,')).toBe(true);
+    expect(csv).not.toContain('MUNICIPAL_ACTION_COMPLETED');
+    expect(csv).not.toContain('Referred to DPWH');
   });
 
   // Manuscript revision Phase 1, step 4: no Hazard Urgency column or value
