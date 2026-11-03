@@ -21,10 +21,16 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { z } from 'zod';
 import { CitizenSessionGuard } from '../common/guards/citizen-session.guard';
+import { ReferenceLookupRateLimitGuard } from '../common/guards/reference-lookup-rate-limit.guard';
 import { CurrentCitizen } from '../common/decorators/current-citizen.decorator';
 import type { CitizenSession } from '../auth/session.service';
 import { reportSchema } from '../contracts/schemas';
 import { ReportsService } from './reports.service';
+
+// The one 404 message for every reference that does not resolve to the
+// citizen's own report.
+export const REFERENCE_NOT_FOUND_MESSAGE =
+  'No report found with that reference.';
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|png|webp)$/;
@@ -90,6 +96,26 @@ export class ReportsController {
   @Get('reports/mine')
   mine(@CurrentCitizen() citizen: CitizenSession) {
     return this.reports.getMyReports(citizen.citizenId);
+  }
+
+  // Owner-only tracking-reference lookup (manuscript revision Phase 6, step
+  // 6b): { id } of the signed-in citizen's own report. A malformed
+  // reference, a missing one and another citizen's all get the same 404
+  // with the same body (REFERENCE_NOT_FOUND_MESSAGE), so nothing about other citizens'
+  // reports can be learned. Throttled per citizen
+  // (ReferenceLookupRateLimitGuard, 30 a minute).
+  @Get('reports/mine/by-reference/:ref')
+  @UseGuards(ReferenceLookupRateLimitGuard)
+  async mineByReference(
+    @CurrentCitizen() citizen: CitizenSession,
+    @Param('ref') ref: string,
+  ) {
+    const found = await this.reports.findMyReportIdByReference(
+      citizen.citizenId,
+      ref,
+    );
+    if (!found) throw new NotFoundException(REFERENCE_NOT_FOUND_MESSAGE);
+    return found;
   }
 
   @Get('reports/mine/:id')

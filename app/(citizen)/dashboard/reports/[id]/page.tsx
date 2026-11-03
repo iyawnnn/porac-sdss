@@ -1,15 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { apiGetOptional } from "@/lib/api-client";
-import type { MyReportDetail, StatusHistoryStep } from "@/lib/types/citizens-reports";
+import type { MyReportDetailResponse } from "@/lib/types/citizens-reports";
 import {
   duplicateCopy,
-  mergedCopy,
   officeLabel,
-  othersJoinedCopy,
   quarantinedCopy,
   resolvedUpdateLine,
   statusCopy,
+  trackedTogetherCopy,
 } from "@/lib/utils/citizen-report-copy";
 import LocationPreviewMapLoader from "@/components/features/citizen/dashboard/LocationPreviewMapLoader";
 import ReportTimeline from "@/components/features/citizen/dashboard/ReportTimeline";
@@ -170,14 +169,14 @@ export default async function MyReportDetailPage({
   // this citizen) are both "nothing to show" — proxy.ts already redirects
   // unauthenticated requests before this renders, so 401 is defense in
   // depth only, and 404 is the API's own ownership check.
-  const data = await apiGetOptional<{ report: MyReportDetail; history: StatusHistoryStep[] }>(
+  const data = await apiGetOptional<MyReportDetailResponse>(
     `/reports/mine/${id}`,
     [401, 404],
   );
 
   if (!data) notFound();
 
-  const { report, history } = data;
+  const { report, history, referrals } = data;
 
   const submittedDate = new Date(report.created_at);
   const updatedDate = new Date(report.ticket_updated_at);
@@ -220,7 +219,7 @@ export default async function MyReportDetailPage({
               Reported as <span className="text-ink-500">{report.citizen_severity}</span>
             </p>
 
-            {(report.moderation_status === "quarantined" || report.moderation_status === "duplicate" || report.member_count > 1) && (
+            {(report.moderation_status === "quarantined" || report.moderation_status === "duplicate" || report.other_reports_count > 0) && (
               <div className="mt-4 flex flex-col gap-2">
                 {report.moderation_status === "quarantined" && (
                   <InfoBanner tone="amber" title={quarantinedCopy(report.title).title}>
@@ -232,9 +231,14 @@ export default async function MyReportDetailPage({
                     {duplicateCopy(report.title).message}
                   </InfoBanner>
                 )}
-                {report.moderation_status !== "duplicate" && report.member_count > 1 && (
-                  <InfoBanner tone="brand" title={report.is_merged ? "Merged with an existing issue" : "Other residents joined this report"}>
-                    {report.is_merged ? mergedCopy(report.member_count) : othersJoinedCopy(report.member_count)}
+                {/* Manuscript revision Phase 6, step 6b: the merge comes from the
+                    staff merge that moved this report (is_merged), so the
+                    reporter whose ticket others were merged into is never told
+                    their own report was merged; only the count of the other
+                    reports, never their references. */}
+                {report.moderation_status !== "duplicate" && report.other_reports_count > 0 && (
+                  <InfoBanner tone="brand" title={report.is_merged ? "Merged with an existing issue" : "Other residents reported this issue too"}>
+                    {trackedTogetherCopy(report.other_reports_count)}
                   </InfoBanner>
                 )}
               </div>
@@ -312,7 +316,7 @@ export default async function MyReportDetailPage({
             </div>
 
             <div className="mt-4 rounded-lg bg-canvas p-4">
-              <ReportTimeline report={report} history={history} />
+              <ReportTimeline report={report} history={history} referrals={referrals} />
             </div>
 
             {(resolvedUpdate || copy.update) && (

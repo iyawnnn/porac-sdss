@@ -249,6 +249,13 @@ test("citizen report form explains each severity and confirms Critical before it
   });
   await page.getByRole("button", { name: "Submit Report" }).click();
   await expect(page.getByText(/Report submitted\. Tracking reference: E2E-STUB\./)).toBeVisible();
+  // Manuscript revision Phase 6, step 6b: the office's full name, and no
+  // internal ticket number or raw office code.
+  const submitted = page.getByText(/Report submitted\./);
+  await expect(submitted).toContainText("Barangay: Poblacion.");
+  await expect(submitted).toContainText("Handled by the Municipal Engineering Office.");
+  await expect(submitted).not.toContainText("Ticket #");
+  await expect(submitted).not.toContainText("office: MEO");
   expect(submittedSeverity).toBe("Critical");
   await expect(critical).not.toBeChecked();
 

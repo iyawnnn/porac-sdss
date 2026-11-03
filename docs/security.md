@@ -194,7 +194,7 @@ Same shape as admin login (§5.2), for the same reasons: keyed on normalized ema
 |---|---|---|
 | IP backstop | **20 / hour** | `ip` |
 
-A different threat shape from login — an attacker can't repeat-attempt signup against one target email (duplicate email is already rejected by the existing account-conflict check, unrelated to rate limiting), so the control is IP-only, no email component. The threshold intentionally mirrors §5.1's report-submission IP backstop (same value, same reasoning): the E2E suite creates roughly 17 disposable citizen accounts from one IP in a full run (one per disposable-ticket fixture across several specs), so a materially lower threshold would break the suite before its own report-limit backstop ever would. An attempt is recorded for every request that clears the check itself, regardless of whether it goes on to hit the duplicate-email conflict or succeed.
+A different threat shape from login — an attacker can't repeat-attempt signup against one target email (duplicate email is already rejected by the existing account-conflict check, unrelated to rate limiting), so the control is IP-only, no email component. The threshold intentionally mirrors §5.1's report-submission IP backstop (same value, same reasoning): the E2E suite creates about 16 disposable citizen accounts from one IP in a full run (one per disposable-ticket test across several specs; fewer since manuscript revision Phase 6, step 6a moved several tests to fixtures — see [`testing.md`](testing.md) §6), so a materially lower threshold would break the suite before its own report-limit backstop ever would. An attempt is recorded for every request that clears the check itself, regardless of whether it goes on to hit the duplicate-email conflict or succeed.
 
 ### 5.5 Password reset
 
@@ -208,6 +208,10 @@ Both must pass. Crucially, an attempt is recorded **for every request, including
 ### 5.6 OAuth
 
 **10 requests/minute per IP** on OAuth start/callback (`OAuthRateLimitGuard`). This one is **in-memory, not Postgres-backed** — a deliberate, marked tradeoff: OAuth abuse doesn't need to survive a restart the way report spam does. It assumes a single instance; see §8.
+
+### 5.6a Tracking-reference lookup
+
+`GET /reports/mine/by-reference/:ref` (manuscript revision Phase 6, step 6b) is throttled to **30 lookups a minute per citizen** by `ReferenceLookupRateLimitGuard` (`api/src/common/guards/reference-lookup-rate-limit.guard.ts`; 429 over the limit), so sequential `PRC-YYYY-<report id>` references cannot be enumerated through it. In memory, like `OAuthRateLimitGuard` (§5.6): it does not survive a restart and would need a shared store if the API ran as more than one instance. See §7.2b for the ownership rule.
 
 ### 5.7 Retention
 
@@ -260,6 +264,18 @@ Work-order fields — **especially `notes`** — moderation notes, and citizen d
 ### 7.2 Citizens see only their own reports
 
 `GET /reports/mine` and every per-report route check ownership and existence in a **single clause** (`WHERE r.id = ... AND r.citizen_id = ...`), so a wrong id and someone else's id are indistinguishable to the caller — no probing an id space for existence.
+
+### 7.2b Citizen report page and tracking-reference lookup
+
+Manuscript revision Phase 6, step 6b. `GET /reports/mine/:id` returns `{ report, history, referrals }` for the citizen's own report only (§7.2):
+
+- **No staff names.** `history` is `SELECT status, changed_at, COALESCE(from_status = 'Resolved' AND status = 'Under Review', false) AS returned` — no `admin_name`, no `from_status` (used only inside SQL for `returned`), no return `reason`, no resolution snapshot columns. Pinned exactly in `reports.service.spec.ts`; putting `admin_name` back fails it.
+- **Outcome in citizen terms.** The raw `resolution_outcome` is read only under an internal alias, mapped by `citizenOutcome` (`api/src/reports/citizen-report-view.ts`) to `HANDLED_BY_MUNICIPALITY` / `REFERRED_OUTSIDE`, or null (not Resolved, or a legacy Resolved ticket with no `resolved_at`), and dropped before the response.
+- **Referrals without reasons.** `referrals` is `[{ agency, referred_at }]` from the ticket's `REFER` routing actions; `citizenReferralAgency` shows a suggested agency by name and anything typed or unrecorded as "an outside agency". No reason, staff member or office codes.
+- **Acknowledgment without remarks.** Only the time (the earliest of the report's own acknowledgment and the ticket-level acknowledgment of its ticket or of the ticket a merge moved it from), never the remark or the acknowledging admin.
+- **Merges without other citizens.** `is_merged`, `merged_at` and `other_reports_count` only; the merge event's id list is read in SQL and never returned, and another citizen's tracking reference never appears.
+
+**Owner-only reference lookup.** `GET /reports/mine/by-reference/:ref` (citizen session required) returns `{ id }` only for the citizen's own report. A malformed reference (not `PRC-<4 digits>-<6–12 digits>`, case-insensitive), a reference that does not exist and another citizen's reference all get the **same 404 with the same body** ("No report found with that reference."); the last two run the same single owner-scoped query (`WHERE r.tracking_reference = … AND r.citizen_id = …`), and a malformed one runs none. There is no public or anonymous lookup. Throttled per citizen (§5.6a). Unit-tested in `api/src/reports/reference-lookup.spec.ts` (a 403 for another citizen's reference fails it).
 
 ### 7.2a The public map shows other citizens' reports only in outline
 

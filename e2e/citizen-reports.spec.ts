@@ -90,7 +90,9 @@ test.describe("Report detail timeline", () => {
 
     await page.goto(`/dashboard/reports/${merged!.id}`);
     await expect(page.getByText("Merged with an existing issue").first()).toBeVisible();
-    await expect(page.getByText(/Grouped with \d+ other report/)).toBeVisible();
+    // Manuscript revision Phase 6, step 6b: the banner and the timeline's
+    // merge step both give the count of the other reports.
+    await expect(page.getByText(/Now tracked together with \d+ other reports?\./).first()).toBeVisible();
   });
 
   test("shows a citizen-safe banner, matching notification wording, after an admin quarantines the report", async ({ page, browser }: { page: Page; browser: Browser }) => {

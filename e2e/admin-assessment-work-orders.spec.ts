@@ -9,8 +9,8 @@ import { loginAdmin, settleAdminPage } from "./helpers";
 // replacement on the same ticket; Completed and Cancelled are final; a
 // Rejected ticket takes neither. Posts no report: the tickets come from
 // api/scripts/seed/seed-e2e-grouping-fixtures.ts, which e2e/global-setup.ts
-// runs and e2e/global-teardown.ts retires as Rejected (a full run already
-// posts 20 reports, the per-IP hourly limit; docs/testing.md). Serial
+// runs and e2e/global-teardown.ts retires as Rejected (a full run
+// posts 15 reports, kept at 16 or fewer under the 20-an-hour per-IP limit; docs/testing.md §6). Serial
 // (--workers=1): the Work Orders created here stay on the fixture ticket.
 
 test.setTimeout(60_000);

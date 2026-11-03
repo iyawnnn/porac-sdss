@@ -175,6 +175,15 @@ test.describe.serial("Resolution outcome and return to Under Review", () => {
     await citizenPage.goto(`/dashboard/reports/${referredReportId}`);
     await expect(citizenPage.getByRole("heading", { name: "Timeline" })).toBeVisible();
     await expect(citizenPage.getByText(RETURN_REASON, { exact: false })).toHaveCount(0);
+    // Manuscript revision Phase 6, step 6b: a generic "Back under review"
+    // step, and the referral as "an outside agency" (the agency was typed,
+    // not one of the suggested ones), with no staff name.
+    const citizenTimeline = citizenPage.getByRole("list", { name: "Report timeline" });
+    await expect(citizenTimeline.getByText("Back under review", { exact: true })).toBeVisible();
+    await expect(citizenTimeline.getByText("Referred to an outside agency").first()).toBeVisible();
+    const citizenText = await citizenPage.locator("main").innerText();
+    expect(citizenText).not.toContain(fixtures!.referralAgency);
+    expect(citizenText).not.toContain(`${E2E_MEO_ADMIN.firstName} ${E2E_MEO_ADMIN.lastName}`);
     await citizenContext.close();
 
     // Resolved again, as Municipal action completed.

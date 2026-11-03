@@ -5,8 +5,8 @@ import { loginAdmin, loginCitizen, settleAdminPage } from "./helpers";
 // Staff Merge / Remove / Regroup (manuscript revision Phase 3, step 3d).
 // Posts no report: the tickets come from api/scripts/seed/
 // seed-e2e-grouping-fixtures.ts, which e2e/global-setup.ts runs and
-// e2e/global-teardown.ts retires (a full run already posts 20 reports, the
-// per-IP hourly limit; docs/testing.md). Serial, because the citizen test
+// e2e/global-teardown.ts retires (a full run posts 15 reports, kept at 16 or fewer under the 20-an-hour per-IP limit;
+// docs/testing.md §6). Serial, because the citizen test
 // reads the merge the first test makes (--workers=1).
 
 test.setTimeout(60_000);
@@ -134,8 +134,18 @@ test.describe.serial("Staff Merge / Remove / Regroup of related reports", () => 
     await settleAdminPage(page, row);
 
     await expect(row.getByRole("button", { name: "Merge…" })).toBeDisabled();
-    await row.getByLabel(/^Merge unavailable: /).hover();
-    await expect(page.getByRole("tooltip")).toContainText("Reassign or Refer first so both tickets have the same office.");
+    const trigger = row.getByLabel(/^Merge unavailable: /);
+    // The reason is also the wrapper's accessible name (no hover needed).
+    await expect(trigger).toHaveAttribute("aria-label", /Reassign or Refer first so both tickets have the same office\./);
+    // Radix opens the tooltip on pointer movement over the wrapper; a hover
+    // that lands before the client component has hydrated is lost and never
+    // retried, so retry it, moving the mouse away first so each attempt is
+    // a fresh movement.
+    await expect(async () => {
+      await page.mouse.move(0, 0);
+      await trigger.hover();
+      await expect(page.getByRole("tooltip")).toContainText("Reassign or Refer first so both tickets have the same office.", { timeout: 1_000 });
+    }).toPass({ timeout: 10_000 });
   });
 
   test("a ticket with an active Work Order can't be merged away, in the dialog and on the server", async ({ page }) => {

@@ -57,14 +57,25 @@ export interface MyReportDetail {
   // 5c); null on a legacy Resolved ticket, where the page falls back to
   // ticket_updated_at.
   resolved_at: string | null;
+  // The resolution outcome in citizen terms (manuscript revision Phase 6,
+  // step 6b), mapped on the server; null unless the ticket is Resolved with
+  // a resolution record — a legacy Resolved ticket shows a neutral
+  // "Resolved". See lib/utils/citizen-report-copy.ts outcomeCopy.
+  outcome: CitizenOutcome | null;
   // This citizen's own resolution feedback (manuscript revision Phase 3,
   // step 3g), null until they answer. Never another citizen's answer.
   my_feedback: MyResolutionFeedback | null;
-  // Sourced directly from report_acknowledgments.acknowledged_at — null
-  // means Focal (Central Monitoring) has not yet acknowledged this specific
-  // report. See ReportTimeline.tsx's "acknowledged" event kind.
+  // When municipal monitoring acknowledged the issue (step 6b): the
+  // earliest of this report's own acknowledgment and the ticket-level
+  // acknowledgment of its ticket (or of the ticket a merge moved it from).
+  // Null until acknowledged. See ReportTimeline.tsx's "acknowledged" event.
   acknowledged_at: string | null;
+  // True when this report joined an existing ticket (a staff merge moved it,
+  // or the legacy automatic merge), with when it joined.
   is_merged: boolean;
+  merged_at: string | null;
+  // The other reports on the same ticket, never their references.
+  other_reports_count: number;
   // Manuscript revision Phase 3, step 3e: the category the citizen picked
   // (category above is the ticket's current one, which staff may have
   // corrected), and the ticket's current location only when staff
@@ -75,8 +86,28 @@ export interface MyReportDetail {
   corrected_lng: number | null;
 }
 
+// The citizen's resolution outcome keys (api/src/reports/citizen-report-view.ts).
+export type CitizenOutcome = "HANDLED_BY_MUNICIPALITY" | "REFERRED_OUTSIDE";
+
+// One status change on the citizen's ticket (manuscript revision Phase 6,
+// step 6b): no staff name, no reason. returned marks a Resolved -> Under
+// Review step, shown as "Back under review".
 export interface StatusHistoryStep {
   status: string;
-  admin_name: string | null;
   changed_at: string;
+  returned: boolean;
+}
+
+// A referral to an outside agency: the agency (a suggested agency by name,
+// otherwise "an outside agency") and the date — never the staff reason.
+export interface CitizenReferral {
+  agency: string;
+  referred_at: string;
+}
+
+// GET /reports/mine/:id.
+export interface MyReportDetailResponse {
+  report: MyReportDetail;
+  history: StatusHistoryStep[];
+  referrals: CitizenReferral[];
 }
