@@ -215,7 +215,7 @@ Both must pass. Crucially, an attempt is recorded **for every request, including
 
 ### 5.8 The E2E caveat
 
-A full Playwright run posts roughly 17 real reports (and creates a similar number of disposable citizen accounts, §5.4) and will exhaust the 20/hour IP backstops if repeated within the hour. **This is the control working correctly.** There is deliberately **no test-only bypass, env flag, or relaxed limit** — the documented workaround is targeted spec runs. See [`README.md`](../README.md) §I.
+A full Playwright run posts 15 real reports since manuscript revision Phase 6, step 6a (kept at 16 or fewer; see [`testing.md`](testing.md) §6) and creates a similar number of disposable citizen accounts (§5.4), and will exhaust the 20/hour IP backstops if repeated within the hour. **This is the control working correctly.** There is deliberately **no test-only bypass, env flag, or relaxed limit** — the documented workaround is targeted spec runs. See [`README.md`](../README.md) §I.
 
 ---
 
@@ -260,6 +260,18 @@ Work-order fields — **especially `notes`** — moderation notes, and citizen d
 ### 7.2 Citizens see only their own reports
 
 `GET /reports/mine` and every per-report route check ownership and existence in a **single clause** (`WHERE r.id = ... AND r.citizen_id = ...`), so a wrong id and someone else's id are indistinguishable to the caller — no probing an id space for existence.
+
+### 7.2a The public map shows other citizens' reports only in outline
+
+`GET /public-map` (`ReportsService.getPublicHazardMapData`; manuscript Appendix L, handoff Decision 8, manuscript revision Phase 6, step 6a) is behind `CitizenSessionGuard` — signed-in citizens only, no anonymous map, no staff access. It lists active (`Reported` / `Under Review` / `In Progress`), unflagged, not merged-away tickets, and each row carries exactly eight fields: `key`, `category`, `status`, `barangay_name`, `lat`, `lng`, `reported_at`, `own_report_id`. The rules:
+
+- **No identifiers.** No ticket number, no tracking reference, no report id of anyone else. `key` is an opaque per-response position key (`p1`, `p2`, …) added by `withPublicMapPositionKeys` after the query; it is never derived from a database id, and the same ticket can get a different key in the next response.
+- **Order reveals nothing extra.** Rows are ordered by reported date (newest first) with `random()` as the tiebreak, never by id, so a key's position tells no more than the `reported_at` the row already shows.
+- **No content or internals.** No title, description, photo, reporter, EXIF, integrity flags, score, last-updated time, assigned office, staff names or notes, assessments, Work Orders, routing or audit data. `withPublicMapPositionKeys` copies the eight fields by name, so a column added to the query later still never reaches the response.
+- **Approximate pins.** `lat`/`lng` are rounded to 3 decimals (about 100 m) in SQL.
+- **Own reports only by their own id.** `own_report_id` is set only on the signed-in citizen's own tickets (their own report id, for the "View my report" link) and is null everywhere else.
+
+Unit-tested in `api/src/reports/reports.service.spec.ts` (the exact output column list, the filters and ordering, the exact key set of every returned row, and keys that are positions rather than ids) and in `e2e/citizen-map.spec.ts` (the exact key set of every live row; the popup shows no last update, office or ticket number).
 
 ### 7.3 Server-computed values are never client-trusted
 

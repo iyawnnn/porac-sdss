@@ -55,7 +55,7 @@ At `/report`. The form enforces an order deliberately: **evidence first, then lo
    - *High* — major disruption or a clear safety concern.
    - *Critical* — immediate serious danger, or the area or service is effectively blocked or unusable.
 
-   **Choosing Critical asks for confirmation** ("Confirm Critical severity"), with a reminder that a report does not dispatch help and that anyone in immediate danger should call emergency hotlines. "Choose another level" (or closing the dialog) puts back the previous level. The form submits Critical only once it is confirmed, and asks again if the citizen changes the level away and back.
+   **Choosing Critical asks for confirmation** ("Confirm Critical severity"), with a reminder that anyone in immediate danger should contact the appropriate emergency service right away and that a report does not dispatch help. "Choose another level" (or closing the dialog) puts back the previous level. The form submits Critical only once it is confirmed, and asks again if the citizen changes the level away and back.
 5. **Submit.**
 
 Behind the scenes the server recomputes everything it will not take on trust: which barangay the point falls in and the integrity flags. It also decides whether this report is a new ticket or joins an existing one (§1.3).
@@ -88,7 +88,7 @@ Each citizen who reported the issue answers once, for themselves, and the answer
 ### 1.5 Notifications and the map
 
 - **Notifications** arrive in a bell and link straight to the relevant report. Citizens receive: report received, report quarantined, flagged as duplicate, and each status change (under review, in progress, resolved).
-- **`/map`** shows city-wide ticket pins over the municipal boundary. It requires a citizen session — it is city-wide in *content*, not open to the public. Other people's reports are privacy-limited (manuscript Appendix L, since manuscript revision Phase 1, step 6d): the pin is approximate (about 100 m) and the popup shows only status, category, barangay, reported and last-update dates, the handling office and a short public update — no title, photo or reporter. On their own reports, "View my report" opens the full detail.
+- **`/map`** shows city-wide ticket pins over the municipal boundary. It requires a citizen session — it is city-wide in *content*, not open to the public. Other people's reports are privacy-limited (manuscript Appendix L and handoff Decision 8; since manuscript revision Phase 6, step 6a): the pin is approximate (about 100 m) and the popup shows only status, category, barangay, the reported date and a short public update — no ticket number, tracking reference, title, photo, reporter, last-update date or handling office. On their own reports, "View my report" opens the full detail.
 
 **What a citizen never sees:** work orders, internal staff notes, moderation reasoning, any system score (Operational Priority), or anyone else's report details.
 

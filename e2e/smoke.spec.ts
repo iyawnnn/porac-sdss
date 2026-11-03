@@ -137,9 +137,40 @@ test("citizen report form validates EXIF GPS, dynamic barangay search, and Porac
 // Manuscript revision Phase 3, step 3a. The submit at the end is stubbed
 // with page.route (as admin-flagged.spec.ts does for its error card): the
 // form-only rule under test is that a confirmed Critical gets sent, and a
-// real report would add an 18th submission against the 20/hour IP limit
+// real report would add a submission against the 20/hour IP limit
 // (docs/testing.md §6) plus a Critical ticket at the top of MEO's queue on
 // every run.
+// Manuscript revision Phase 6, step 6a: the emergency notice, always shown
+// (no dismiss control) on the dashboard and the report form. No report is
+// submitted.
+test("the emergency notice is shown on the citizen dashboard and the report form, at desktop and phone width", async ({ page }) => {
+  const title = "For non-emergency concerns only";
+  const body =
+    "PORAC-SDSS does not replace emergency hotlines, QRT communication channels or established emergency-dispatch procedures. If you or someone else is in immediate danger, contact the appropriate emergency service right away.";
+
+  async function expectNotice() {
+    const notice = page.getByRole("note").filter({ hasText: title });
+    await expect(notice).toHaveCount(1);
+    await expect(notice).toBeVisible();
+    await expect(notice).toHaveAccessibleName(title);
+    await expect(notice).toContainText(body);
+    await expect(notice.getByRole("button")).toHaveCount(0);
+  }
+
+  await sharedLoginCitizen(page, E2E_CITIZEN_ACCOUNT);
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expectNotice();
+  await page.goto("/report");
+  await expect(page.getByRole("heading", { name: "Report a Hazard" })).toBeVisible();
+  await expectNotice();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNotice();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.goto("/dashboard");
+  await expectNotice();
+});
+
 test("citizen report form explains each severity and confirms Critical before it can be submitted", async ({ page }) => {
   const failures: string[] = [];
   page.on("pageerror", error => failures.push(`pageerror: ${error.message}`));
@@ -175,7 +206,8 @@ test("citizen report form explains each severity and confirms Critical before it
   await critical.click();
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("Critical means immediate serious danger, or the area or service is effectively blocked or unusable. Is that what you're seeing?");
-  await expect(dialog).toContainText("If someone is in immediate danger, call emergency hotlines. Submitting a report does not dispatch help.");
+  await expect(dialog).toContainText("If you or someone else is in immediate danger, contact the appropriate emergency service right away. Submitting a report does not dispatch help.");
+  await expect(dialog).not.toContainText("call emergency hotlines");
   await dialog.getByRole("button", { name: "Choose another level" }).click();
   await expect(dialog).toBeHidden();
   await expect(high).toBeChecked();
