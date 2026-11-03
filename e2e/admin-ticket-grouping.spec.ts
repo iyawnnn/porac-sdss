@@ -134,8 +134,18 @@ test.describe.serial("Staff Merge / Remove / Regroup of related reports", () => 
     await settleAdminPage(page, row);
 
     await expect(row.getByRole("button", { name: "Merge…" })).toBeDisabled();
-    await row.getByLabel(/^Merge unavailable: /).hover();
-    await expect(page.getByRole("tooltip")).toContainText("Reassign or Refer first so both tickets have the same office.");
+    const trigger = row.getByLabel(/^Merge unavailable: /);
+    // The reason is also the wrapper's accessible name (no hover needed).
+    await expect(trigger).toHaveAttribute("aria-label", /Reassign or Refer first so both tickets have the same office\./);
+    // Radix opens the tooltip on pointer movement over the wrapper; a hover
+    // that lands before the client component has hydrated is lost and never
+    // retried, so retry it, moving the mouse away first so each attempt is
+    // a fresh movement.
+    await expect(async () => {
+      await page.mouse.move(0, 0);
+      await trigger.hover();
+      await expect(page.getByRole("tooltip")).toContainText("Reassign or Refer first so both tickets have the same office.", { timeout: 1_000 });
+    }).toPass({ timeout: 10_000 });
   });
 
   test("a ticket with an active Work Order can't be merged away, in the dialog and on the server", async ({ page }) => {

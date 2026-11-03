@@ -168,9 +168,18 @@ test.describe.serial("Staff category and location correction", () => {
     const button = page.getByRole("button", { name: "Correct category…" });
     await settleAdminPage(page, button);
     await expect(button).toBeDisabled();
-    await page.getByLabel(/^Correct category unavailable: /).hover();
-    await expect(page.getByRole("tooltip")).toContainText(
-      `Focal Personnel can only correct a ticket while it is still Reported; Ticket #${focalUnderReview.ticketId} is Under Review.`,
-    );
+    const reason = `Focal Personnel can only correct a ticket while it is still Reported; Ticket #${focalUnderReview.ticketId} is Under Review.`;
+    const trigger = page.getByLabel(/^Correct category unavailable: /);
+    // The reason is also the wrapper's accessible name (no hover needed).
+    await expect(trigger).toHaveAttribute("aria-label", new RegExp(reason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    // Radix opens the tooltip on pointer movement over the wrapper; a hover
+    // that lands before the client component has hydrated is lost and never
+    // retried, so retry it, moving the mouse away first so each attempt is
+    // a fresh movement.
+    await expect(async () => {
+      await page.mouse.move(0, 0);
+      await trigger.hover();
+      await expect(page.getByRole("tooltip")).toContainText(reason, { timeout: 1_000 });
+    }).toPass({ timeout: 10_000 });
   });
 });
