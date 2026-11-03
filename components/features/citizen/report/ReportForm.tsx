@@ -18,6 +18,7 @@ import {
 } from "@/lib/utils/severity-selection";
 import { Button } from "@/components/ui/button";
 import { EmergencyNotice } from "@/components/features/citizen/emergency/EmergencyNotice";
+import { officeLabel } from "@/lib/utils/citizen-report-copy";
 import {
   Dialog,
   DialogContent,
@@ -427,8 +428,11 @@ export default function ReportForm() {
       // never shown as raw codes to the citizen; the report goes through review
       // either way, so a short neutral note is enough here.
       const flagNote: string = data.flags?.length ? " This report has been flagged for additional review by city staff." : "";
+      // The tracking reference and the office's full name (manuscript
+      // revision Phase 6, step 6b) — not the internal ticket number or the
+      // raw office code.
       setMessage(
-        `Report submitted. Tracking reference: ${data.trackingReference}. Ticket #${data.ticketId}, barangay: ${data.barangay}, office: ${data.assignedOffice}.${flagNote}`
+        `Report submitted. Tracking reference: ${data.trackingReference}. Barangay: ${data.barangay}. Handled by the ${officeLabel(data.assignedOffice)}.${flagNote}`
       );
       formRef.current?.reset();
       setFile(null);

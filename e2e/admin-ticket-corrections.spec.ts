@@ -6,7 +6,7 @@ import { loginAdmin, loginCitizen, settleAdminPage } from "./helpers";
 // 3e). Posts no report: the tickets come from api/scripts/seed/
 // seed-e2e-grouping-fixtures.ts (its correction fixtures), which
 // e2e/global-setup.ts runs and e2e/global-teardown.ts retires (a full run
-// already posts 20 reports, the per-IP hourly limit; docs/testing.md).
+// posts 15 reports, kept at 16 or fewer under the 20-an-hour per-IP limit; docs/testing.md §6).
 // Serial, because the citizen test reads the first test's correction
 // (--workers=1).
 

@@ -1,5 +1,6 @@
 import type { MyReportDetail } from "@/lib/types/citizens-reports";
 import { ReportImage } from "@/components/features/citizen/dashboard/ReportImage";
+import { outcomeCopy } from "@/lib/utils/citizen-report-copy";
 
 // Citizen-safe summary of how this report was closed — deliberately reads
 // only fields already present on MyReportDetail (resolution_notes/
@@ -19,13 +20,17 @@ export default function CaseClosureSummary({
 }: {
   report: Pick<
     MyReportDetail,
-    "resolution_notes" | "resolution_image_url" | "resolved_at" | "ticket_updated_at" | "my_feedback"
+    "resolution_notes" | "resolution_image_url" | "resolved_at" | "ticket_updated_at" | "my_feedback" | "outcome"
   >;
 }) {
   // The latest resolution's own time (manuscript revision Phase 5, step 5c);
   // a legacy Resolved ticket has none, so it keeps the old fallback.
   const resolvedDate = new Date(report.resolved_at ?? report.ticket_updated_at);
   const feedbackLine = feedbackStateLine(report);
+  // The outcome in citizen words (manuscript revision Phase 6, step 6b);
+  // none on a legacy Resolved ticket, which keeps only the neutral
+  // "Resolved" pill.
+  const outcome = outcomeCopy(report.outcome);
 
   return (
     <div className="rounded-xl border border-line-200 bg-surface p-5">
@@ -41,6 +46,14 @@ export default function CaseClosureSummary({
           Resolved
         </span>
       </div>
+
+      {outcome && (
+        <div className="mt-4" data-testid="citizen-outcome">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-400">Outcome</p>
+          <p className="mt-1 text-[14px] font-medium leading-[20px] text-ink-900">{outcome.label}</p>
+          {outcome.note && <p className="mt-1 text-[13px] leading-[18px] text-ink-500">{outcome.note}</p>}
+        </div>
+      )}
 
       {report.resolution_notes && (
         <div className="mt-4">

@@ -311,54 +311,178 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
     expect(getMyReportDetail).toContain(field);
   });
 
-  // Manuscript revision Phase 5, step 5c: status_history gained staff-only
-  // columns (from_status, the return reason, the resolution snapshot). The
-  // citizen's queries, as actually executed, select none of them, nor the
-  // resolver or the outcome.
-  it('getMyReportDetail never sends the return reason, from_status, the resolution snapshot, the resolver or the outcome', async () => {
-    const texts: string[] = [];
-    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
-      if (values.some((v) => v instanceof Date)) {
-        throw new Error('A JS Date was passed to raw SQL');
+  // Manuscript revision Phase 5, step 5c added staff-only status_history
+  // columns (from_status, the return reason, the resolution snapshot), and
+  // since Phase 6, step 6b the staff name is gone too. The citizen's three
+  // queries, as actually executed, are pinned exactly: the history sends
+  // status, changed_at and a computed returned boolean only; referrals send
+  // the mapped agency and date only; the raw outcome code is mapped and
+  // dropped.
+  describe('getMyReportDetail, as actually executed (Phase 6, step 6b)', () => {
+    function run(detailRow: Record<string, unknown>) {
+      const texts: string[] = [];
+      const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+        if (values.some((v) => v instanceof Date)) {
+          throw new Error('A JS Date was passed to raw SQL');
+        }
+        const text = strings.join('?');
+        texts.push(text);
+        const rows = text.includes('FROM status_history')
+          ? [
+              { status: 'Resolved', changed_at: 'a', returned: false },
+              { status: 'Under Review', changed_at: 'b', returned: true },
+            ]
+          : text.includes('FROM routing_actions')
+            ? [
+                { referral_target: 'dpwh', created_at: 'c' },
+                { referral_target: 'Porac Water District', created_at: 'd' },
+                { referral_target: null, created_at: 'e' },
+              ]
+            : [detailRow];
+        return {
+          then(resolve: (v: unknown) => void) {
+            void Promise.resolve(rows).then(resolve);
+          },
+        };
+      }) as unknown as Sql;
+      const service = new ReportsService(
+        sql,
+        {} as BarangayService,
+        {} as MediaService,
+        {} as RateLimitService,
+        {} as OperationalPriorityService,
+        {} as NotificationsService,
+        {} as HazardInformationService,
+      );
+      return { texts, result: service.getMyReportDetail(1, 2) };
+    }
+
+    const resolvedRow = {
+      id: 2,
+      ticket_id: 9,
+      status: 'Resolved',
+      resolved_at: '2026-11-01T00:00:00.000Z',
+      outcome_code: 'EXTERNAL_REFERRAL',
+    };
+
+    it('pins the history query to status, changed_at and the computed returned flag', async () => {
+      const { texts, result } = run(resolvedRow);
+      await result;
+      const history = texts.find((t) => t.includes('FROM status_history'))!;
+      expect(history.replace(/\r\n/g, '\n').trim()).toBe(
+        "SELECT status, changed_at, COALESCE(from_status = 'Resolved' AND status = 'Under Review', false) AS returned\n      FROM status_history WHERE ticket_id = ? ORDER BY changed_at, id",
+      );
+      expect(history).not.toMatch(
+        /admin_name|admin_id|\breason\b|resolution_|\*/,
+      );
+    });
+
+    it('pins the referral query to the target (to map) and the date', async () => {
+      const { texts, result } = run(resolvedRow);
+      await result;
+      const referrals = texts.find((t) => t.includes('FROM routing_actions'))!;
+      expect(referrals.replace(/\r\n/g, '\n').trim()).toBe(
+        "SELECT referral_target, created_at FROM routing_actions\n      WHERE ticket_id = ? AND action_type = 'REFER'\n      ORDER BY created_at, id",
+      );
+    });
+
+    it('the detail query reads no staff name, return reason, snapshot, resolver or remarks', async () => {
+      const { texts, result } = run(resolvedRow);
+      await result;
+      const detail = texts[0];
+      expect(detail).not.toMatch(
+        /admin_name|from_status|sh\.|resolved_by|acknowledged_by|remarks|referral_target|routing_actions/,
+      );
+      // The outcome code is read only under an internal alias, to be mapped.
+      expect(detail.match(/resolution_outcome/g)).toHaveLength(1);
+      expect(detail).toContain('t.resolution_outcome AS outcome_code');
+    });
+
+    it('returns exactly report, history and referrals, with the outcome mapped and no raw code', async () => {
+      const { result } = run(resolvedRow);
+      const response = (await result)!;
+      expect(Object.keys(response).sort()).toEqual([
+        'history',
+        'referrals',
+        'report',
+      ]);
+      expect(response.report).not.toHaveProperty('outcome_code');
+      expect(response.report.outcome).toBe('REFERRED_OUTSIDE');
+      expect(JSON.stringify(response)).not.toMatch(/EXTERNAL_REFERRAL/);
+      for (const step of response.history) {
+        expect(Object.keys(step).sort()).toEqual([
+          'changed_at',
+          'returned',
+          'status',
+        ]);
       }
-      const text = strings.join('?');
-      texts.push(text);
-      const rows = text.includes('FROM status_history')
-        ? [{ status: 'Under Review', admin_name: 'Mae', changed_at: 'x' }]
-        : [{ id: 2, ticket_id: 9 }];
-      return {
-        then(resolve: (v: unknown) => void) {
-          void Promise.resolve(rows).then(resolve);
-        },
-      };
-    }) as unknown as Sql;
-    const service = new ReportsService(
-      sql,
-      {} as BarangayService,
-      {} as MediaService,
-      {} as RateLimitService,
-      {} as OperationalPriorityService,
-      {} as NotificationsService,
-      {} as HazardInformationService,
-    );
+      expect(response.history.map((s) => s.returned)).toEqual([false, true]);
+      expect(response.referrals).toEqual([
+        { agency: 'DPWH', referred_at: 'c' },
+        { agency: 'an outside agency', referred_at: 'd' },
+        { agency: 'an outside agency', referred_at: 'e' },
+      ]);
+      expect(JSON.stringify(response.referrals)).not.toMatch(
+        /Porac Water District/,
+      );
+    });
 
-    await service.getMyReportDetail(1, 2);
+    it('a legacy Resolved ticket (no resolved_at) gets no outcome', async () => {
+      const { result } = run({
+        ...resolvedRow,
+        resolved_at: null,
+        outcome_code: 'MUNICIPAL_ACTION_COMPLETED',
+      });
+      expect((await result)!.report.outcome).toBeNull();
+    });
 
-    const [detail, history] = texts;
-    expect(history).toMatch(
-      /SELECT status, admin_name, changed_at\s+FROM status_history WHERE ticket_id = \?/,
-    );
-    expect(history).not.toMatch(/reason|from_status|resolution_|\*/);
-    expect(detail).not.toMatch(
-      /from_status|sh\.reason|resolution_outcome|resolved_by/,
-    );
+    it('a missing or not-owned report returns null without reading history or referrals', async () => {
+      const texts: string[] = [];
+      const sql = ((strings: TemplateStringsArray) => {
+        texts.push(strings.join('?'));
+        return {
+          then(resolve: (v: unknown) => void) {
+            void Promise.resolve([]).then(resolve);
+          },
+        };
+      }) as unknown as Sql;
+      const service = new ReportsService(
+        sql,
+        {} as BarangayService,
+        {} as MediaService,
+        {} as RateLimitService,
+        {} as OperationalPriorityService,
+        {} as NotificationsService,
+        {} as HazardInformationService,
+      );
+      expect(await service.getMyReportDetail(1, 2)).toBeNull();
+      expect(texts).toHaveLength(1);
+    });
   });
 
-  it("both queries derive is_merged from this report being later than the ticket's earliest report, not a stored column", () => {
-    const isMergedPattern =
-      /r\.id != \(SELECT MIN\(id\) FROM reports WHERE ticket_id = r\.ticket_id\) AS is_merged/;
-    expect(getMyReports).toMatch(isMergedPattern);
-    expect(getMyReportDetail).toMatch(isMergedPattern);
+  // Phase 6, step 6b: is_merged comes from the ticket_merged audit event
+  // that moved this report onto its ticket; the "not the earliest report"
+  // rule is only the fallback for a ticket with no such event (the legacy
+  // automatic merge). Only a boolean and a time leave the query.
+  it('getMyReportDetail derives is_merged from the merge event, with the legacy rule only as the fallback', () => {
+    expect(getMyReportDetail).toMatch(
+      /WHEN te\.has_event THEN me\.merged_at IS NOT NULL\s+ELSE r\.id != \(SELECT MIN\(id\) FROM reports WHERE ticket_id = r\.ticket_id\)\s+END AS is_merged/,
+    );
+    expect(getMyReportDetail).toMatch(
+      /e\.action_type = 'ticket_merged'\s+AND e\.metadata->'movedReportIds' @> to_jsonb\(r\.id\)/,
+    );
+    expect(getMyReportDetail).toContain(
+      'GREATEST(t.member_count - 1, 0)::int AS other_reports_count',
+    );
+    // The id list itself is never selected.
+    expect(getMyReportDetail).not.toMatch(/metadata->'movedReportIds'\s+AS/);
+    expect(getMyReportDetail).not.toMatch(/e\.metadata\s+AS|e\.metadata,/);
+  });
+
+  it('getMyReports keeps the legacy is_merged rule (the list view is unchanged in step 6b)', () => {
+    expect(getMyReports).toMatch(
+      /r\.id != \(SELECT MIN\(id\) FROM reports WHERE ticket_id = r\.ticket_id\) AS is_merged/,
+    );
   });
 
   // Manuscript revision Phase 3, step 3g: only the citizen's OWN answer (the
@@ -378,11 +502,25 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
   // report_acknowledgments.acknowledged_at (never derived from the first
   // intake action; see FocalIntakeService.deriveIntakeState's own docblock
   // for why those are deliberately different sources of truth).
-  it('getMyReportDetail sources acknowledgedAt directly from report_acknowledgments, via LEFT JOIN so an unacknowledged report still returns', () => {
+  // Phase 6, step 6b: the ticket-level acknowledgment (Appendix H
+  // ACKNOWLEDGMENTS) of the report's current ticket and of the ticket a
+  // merge moved it from (the row stays on the old ticket id), plus the
+  // per-report row as the legacy fallback — the earliest, and a ticket-level
+  // row only when it is not earlier than the report. All LEFT JOINs, so an
+  // unacknowledged report still returns.
+  it('getMyReportDetail takes the earliest of the per-report, current-ticket and pre-merge-ticket acknowledgments', () => {
     expect(getMyReportDetail).toMatch(
       /LEFT JOIN report_acknowledgments ra ON ra\.report_id = r\.id/,
     );
-    expect(getMyReportDetail).toContain('ra.acknowledged_at');
+    expect(getMyReportDetail).toMatch(
+      /LEFT JOIN acknowledgments ta ON ta\.ticket_id = r\.ticket_id/,
+    );
+    expect(getMyReportDetail).toMatch(
+      /LEFT JOIN acknowledgments oa ON oa\.ticket_id = me\.from_ticket_id/,
+    );
+    expect(getMyReportDetail).toMatch(
+      /LEAST\(\s+ra\.acknowledged_at,\s+CASE WHEN ta\.acknowledged_at >= r\.created_at THEN ta\.acknowledged_at END,\s+CASE WHEN oa\.acknowledged_at >= r\.created_at THEN oa\.acknowledged_at END\s+\) AS acknowledged_at/,
+    );
   });
 
   // Note: methodBody's slice runs up to the next `\n  async `, which also

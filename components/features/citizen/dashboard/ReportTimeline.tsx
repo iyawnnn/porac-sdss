@@ -1,18 +1,22 @@
-import type { MyReportDetail, StatusHistoryStep } from "@/lib/types/citizens-reports";
+import type { CitizenReferral, MyReportDetail, StatusHistoryStep } from "@/lib/types/citizens-reports";
+import { trackedTogetherCopy } from "@/lib/utils/citizen-report-copy";
 
 // Vertical, mobile-safe chronological timeline of citizen-safe events for a
 // single report — replaces the old static, timestamp-less ProgressSteps
 // stepper (duplicated across the list and detail pages) and the unused,
 // fixed-4-step StatusTimeline component, neither of which could represent
 // merge/moderation events. Deliberately only reads fields already present
-// on MyReportDetail/StatusHistoryStep — no admin notes, raw flags, EXIF, or
-// internal scoring ever reach this component.
+// on MyReportDetail/StatusHistoryStep/CitizenReferral — no staff names
+// (removed in manuscript revision Phase 6, step 6b), admin notes, routing
+// or return reasons, raw flags, EXIF, or internal scoring ever reach this
+// component.
 
 // "acknowledged" is its own event kind, deliberately never merged into
 // "status" — Focal's acknowledgment is a municipal-monitoring event, not a
 // TicketStatus value, and must never render through the same code path as
-// one (see api/src/db/schema.ts's reportAcknowledgments docblock).
-type TimelineEventKind = "submitted" | "acknowledged" | "merged" | "status" | "quarantined" | "duplicate";
+// one (see api/src/db/schema.ts's reportAcknowledgments docblock). Likewise
+// "referred": a referral is routing history, never a status.
+type TimelineEventKind = "submitted" | "acknowledged" | "merged" | "status" | "referred" | "quarantined" | "duplicate";
 
 interface TimelineEvent {
   key: string;
@@ -20,7 +24,6 @@ interface TimelineEvent {
   label: string;
   detail?: string;
   timestamp: string;
-  adminName?: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -31,21 +34,35 @@ const STATUS_LABEL: Record<string, string> = {
   Rejected: "Not accepted",
 };
 
+// A Resolved -> Under Review step (step 6b): generic, never the reason.
+const RETURNED_LABEL = "Back under review";
+
 const KIND_STYLE: Record<TimelineEventKind, { dot: string; ink: string }> = {
   submitted: { dot: "var(--color-brand-500)", ink: "var(--color-ink-900)" },
   acknowledged: { dot: "var(--color-brand-500)", ink: "var(--color-ink-900)" },
   merged: { dot: "var(--color-brand-500)", ink: "var(--color-ink-900)" },
   status: { dot: "var(--color-brand-500)", ink: "var(--color-ink-900)" },
+  referred: { dot: "var(--color-brand-500)", ink: "var(--color-ink-900)" },
   quarantined: { dot: "#B7791F", ink: "var(--color-ink-900)" },
   duplicate: { dot: "#8A5FD1", ink: "var(--color-ink-900)" },
 };
 
+type TimelineReport = Pick<
+  MyReportDetail,
+  | "created_at"
+  | "is_merged"
+  | "merged_at"
+  | "other_reports_count"
+  | "moderation_status"
+  | "moderated_at"
+  | "ticket_created_at"
+  | "acknowledged_at"
+>;
+
 export function buildReportTimeline(
-  report: Pick<
-    MyReportDetail,
-    "created_at" | "is_merged" | "member_count" | "moderation_status" | "moderated_at" | "ticket_created_at" | "acknowledged_at"
-  >,
+  report: TimelineReport,
   history: StatusHistoryStep[],
+  referrals: CitizenReferral[] = [],
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [
     {
@@ -72,8 +89,8 @@ export function buildReportTimeline(
       key: "merged",
       kind: "merged",
       label: "Merged with an existing issue",
-      detail: `Grouped with ${report.member_count - 1} other report${report.member_count - 1 === 1 ? "" : "s"} on this ticket.`,
-      timestamp: report.created_at,
+      detail: trackedTogetherCopy(report.other_reports_count),
+      timestamp: report.merged_at ?? report.created_at,
     });
   }
 
@@ -91,15 +108,23 @@ export function buildReportTimeline(
     });
   }
 
-  for (const step of history) {
+  history.forEach((step, index) => {
     events.push({
-      key: `status-${step.status}-${step.changed_at}`,
+      key: `status-${index}`,
       kind: "status",
-      label: STATUS_LABEL[step.status] ?? step.status,
+      label: step.returned ? RETURNED_LABEL : (STATUS_LABEL[step.status] ?? step.status),
       timestamp: step.changed_at,
-      adminName: step.admin_name,
     });
-  }
+  });
+
+  referrals.forEach((referral, index) => {
+    events.push({
+      key: `referred-${index}`,
+      kind: "referred",
+      label: `Referred to ${referral.agency}`,
+      timestamp: referral.referred_at,
+    });
+  });
 
   if (report.moderation_status === "quarantined" && report.moderated_at) {
     events.push({
@@ -125,21 +150,20 @@ export function buildReportTimeline(
 export default function ReportTimeline({
   report,
   history,
+  referrals,
 }: {
-  report: Pick<
-    MyReportDetail,
-    "created_at" | "is_merged" | "member_count" | "moderation_status" | "moderated_at" | "ticket_created_at" | "acknowledged_at"
-  >;
+  report: TimelineReport;
   history: StatusHistoryStep[];
+  referrals: CitizenReferral[];
 }) {
-  const events = buildReportTimeline(report, history);
+  const events = buildReportTimeline(report, history, referrals);
 
   return (
     <ol className="flex flex-col gap-0" aria-label="Report timeline">
       {events.map((event, i) => {
         const style = KIND_STYLE[event.kind];
         return (
-          <li key={event.key} className="flex gap-3">
+          <li key={event.key} className="flex gap-3" data-kind={event.kind}>
             <div className="flex flex-col items-center">
               <span
                 className="mt-1 size-2.5 flex-shrink-0 rounded-full"
@@ -161,7 +185,6 @@ export default function ReportTimeline({
                   hour: "numeric",
                   minute: "2-digit",
                 })}
-                {event.adminName ? ` · ${event.adminName}` : ""}
               </p>
             </div>
           </li>

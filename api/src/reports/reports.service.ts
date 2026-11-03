@@ -22,6 +22,12 @@ import { TICKET_DISPUTE_REASON_MAX_LENGTH } from '../contracts/schemas';
 import type { CitizenSession } from '../auth/session.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { ResolutionFeedbackType } from '../db/schema';
+import {
+  citizenOutcome,
+  citizenReferralAgency,
+  normalizeTrackingReference,
+  type CitizenOutcome,
+} from './citizen-report-view';
 
 // Evidence-integrity flags (manuscript pp. 42–43, Appendix H REPORTS.flags;
 // manuscript revision Phase 3, step 3b). Flags never block a submission.
@@ -169,20 +175,41 @@ export interface MyReportDetail {
   resolution_image_url: string | null;
   // When the ticket was last resolved (manuscript revision Phase 5, step
   // 5c); NULL on a legacy Resolved ticket, where the page falls back to
-  // ticket_updated_at. The resolver, the outcome and the return reason are
-  // never sent.
+  // ticket_updated_at. The resolver and the return reason are never sent.
   resolved_at: string | null;
+  // The resolution outcome in citizen terms (manuscript revision Phase 6,
+  // step 6b; citizenOutcome in citizen-report-view.ts): null unless the
+  // ticket is Resolved with a resolution record (resolved_at set). The raw
+  // resolution_outcome code is never sent.
+  outcome: CitizenOutcome | null;
   // This citizen's own resolution feedback on the report's ticket (Appendix
   // H RESOLUTION_FEEDBACK; manuscript revision Phase 3, step 3g), null until
   // they answer. Only ever their own row: other citizens' answers, and the
   // ticket-level dispute flag another citizen may have set, are never sent.
   my_feedback: CitizenResolutionFeedback | null;
-  // Sourced directly from report_acknowledgments.acknowledged_at (never
-  // derived from the first intake action) — null means Focal has not yet
-  // acknowledged this specific report. See CitizenReportTimeline's
-  // 'acknowledged' event kind.
+  // When municipal monitoring acknowledged the issue (manuscript revision
+  // Phase 6, step 6b): the earliest of this report's own
+  // report_acknowledgments row (legacy data, and every acknowledgment
+  // since Batch 2) and the ticket-level acknowledgments rows of the
+  // report's current ticket and of the ticket a staff merge moved it from
+  // (the ticket-level row stays on the old ticket id after a merge) — a
+  // ticket-level row only when it is not earlier than this report itself.
+  // Never derived from an intake action; no remarks, no staff name. Null
+  // until acknowledged.
   acknowledged_at: string | null;
+  // True when this report joined an existing ticket (step 6b): a staff
+  // merge moved it (a ticket_merged audit event on its ticket lists it in
+  // movedReportIds), or — on a ticket with no such event, i.e. the legacy
+  // automatic merge — it is not the ticket's earliest report. Only the
+  // boolean and the time leave the API, never the event or its id list.
   is_merged: boolean;
+  // When it joined: the merge event's time, or the report's own creation
+  // time for a legacy automatic merge. Null when is_merged is false.
+  merged_at: string | null;
+  // The other reports on the same ticket (member_count - 1, never below
+  // 0), for "Now tracked together with N other report(s)". Never their
+  // references or reporters.
+  other_reports_count: number;
   // Manuscript revision Phase 3, step 3e: the category the citizen picked
   // (category above is the ticket's current one, which staff may have
   // corrected), and the ticket's current location only when staff
@@ -209,11 +236,36 @@ export interface ResolutionFeedbackResult {
 // its survivor; this only bounds the walk.
 const MAX_MERGE_HOPS = 10;
 
+// A citizen's view of one status_history row (manuscript revision Phase 6,
+// step 6b): the status and when, nothing else — no staff name, no
+// from_status, no return reason, no resolution snapshot. returned is true
+// for a Resolved -> Under Review row (computed in SQL from from_status,
+// which itself is never sent), shown as "Back under review".
 export interface StatusHistoryStep {
   status: string;
-  admin_name: string | null;
   changed_at: string;
+  returned: boolean;
 }
+
+// A referral of the citizen's ticket to an outside agency (step 6b): the
+// agency in citizen terms (citizenReferralAgency) and the date. Never the
+// staff reason, the staff member or the office codes.
+export interface CitizenReferral {
+  agency: string;
+  referred_at: string;
+}
+
+export interface MyReportDetailResponse {
+  report: MyReportDetail;
+  history: StatusHistoryStep[];
+  referrals: CitizenReferral[];
+}
+
+// The detail query's row: MyReportDetail before the outcome is mapped,
+// with the raw outcome code it is mapped from (dropped before the response).
+type MyReportDetailRow = Omit<MyReportDetail, 'outcome'> & {
+  outcome_code: string | null;
+};
 
 // The public map's privacy-limited row (manuscript Appendix L, Citizen
 // Web-GIS Map; Table 12; handoff Decision 8; manuscript revision Phase 6,
@@ -553,22 +605,44 @@ export class ReportsService {
   // `AND r.citizen_id = ${citizenId}` is the authorization check. A
   // wrong-owner request and a nonexistent report ID both return null, so
   // callers do not leak ownership.
-  async getMyReportDetail(citizenId: number, reportId: number) {
+  async getMyReportDetail(
+    citizenId: number,
+    reportId: number,
+  ): Promise<MyReportDetailResponse | null> {
     const sql = this.pg;
-    const [report] = await sql<MyReportDetail[]>`
+    // Manuscript revision Phase 6, step 6b:
+    // - outcome_code is read only to be mapped (citizenOutcome) and dropped.
+    // - the merge: me is the latest ticket_merged event on this ticket that
+    //   moved this report; te says whether the ticket has any such event at
+    //   all (if not, the legacy automatic-merge rule applies). Only a boolean,
+    //   a time and the old ticket id (for its acknowledgment) are read.
+    // - the acknowledgment: see MyReportDetail.acknowledged_at.
+    const [row] = await sql<MyReportDetailRow[]>`
       SELECT
         r.id, r.ticket_id, r.tracking_reference, r.title, r.description, r.citizen_severity, r.image_url,
         t.category, t.status, b.name AS barangay_name,
         ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng,
         c.first_name AS citizen_first_name, c.last_name AS citizen_last_name,
         r.created_at, t.created_at AS ticket_created_at, t.updated_at AS ticket_updated_at,
-        t.assigned_office, t.member_count, r.moderation_status, r.moderated_at, t.resolution_notes,
-        t.resolution_image_url, t.resolved_at,
+        t.assigned_office, t.member_count, GREATEST(t.member_count - 1, 0)::int AS other_reports_count,
+        r.moderation_status, r.moderated_at, t.resolution_notes,
+        t.resolution_image_url, t.resolved_at, t.resolution_outcome AS outcome_code,
         CASE WHEN rf.id IS NOT NULL THEN json_build_object(
           'feedback_type', rf.feedback_type, 'reason', rf.reason, 'created_at', rf.created_at
         ) END AS my_feedback,
-        ra.acknowledged_at,
-        r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id) AS is_merged,
+        LEAST(
+          ra.acknowledged_at,
+          CASE WHEN ta.acknowledged_at >= r.created_at THEN ta.acknowledged_at END,
+          CASE WHEN oa.acknowledged_at >= r.created_at THEN oa.acknowledged_at END
+        ) AS acknowledged_at,
+        CASE
+          WHEN te.has_event THEN me.merged_at IS NOT NULL
+          ELSE r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id)
+        END AS is_merged,
+        CASE
+          WHEN te.has_event THEN me.merged_at
+          WHEN r.id != (SELECT MIN(id) FROM reports WHERE ticket_id = r.ticket_id) THEN r.created_at
+        END AS merged_at,
         r.submitted_category,
         CASE WHEN lc.corrected THEN ST_Y(t.geom) END AS corrected_lat,
         CASE WHEN lc.corrected THEN ST_X(t.geom) END AS corrected_lng
@@ -584,20 +658,82 @@ export class ReportsService {
           AND e.action_type = 'ticket_location_corrected'
         LIMIT 1
       ) lc ON true
+      LEFT JOIN LATERAL (
+        SELECT true AS has_event FROM admin_audit_events e
+        WHERE e.target_type = 'ticket' AND e.target_id = r.ticket_id
+          AND e.action_type = 'ticket_merged'
+        LIMIT 1
+      ) te ON true
+      LEFT JOIN LATERAL (
+        SELECT e.created_at AS merged_at,
+          (e.metadata->>'mergedTicketId')::int AS from_ticket_id
+        FROM admin_audit_events e
+        WHERE e.target_type = 'ticket' AND e.target_id = r.ticket_id
+          AND e.action_type = 'ticket_merged'
+          AND e.metadata->'movedReportIds' @> to_jsonb(r.id)
+        ORDER BY e.created_at DESC, e.id DESC
+        LIMIT 1
+      ) me ON true
+      LEFT JOIN acknowledgments ta ON ta.ticket_id = r.ticket_id
+      LEFT JOIN acknowledgments oa ON oa.ticket_id = me.from_ticket_id
       WHERE r.id = ${reportId} AND r.citizen_id = ${citizenId}
     `;
 
-    if (!report) return null;
+    if (!row) return null;
 
-    // Three named columns, never *: status_history's from_status, reason
-    // (the staff-only return reason) and resolution snapshot are not for
-    // citizens (manuscript revision Phase 5, step 5c).
+    const { outcome_code, ...rest } = row;
+    const report: MyReportDetail = {
+      ...rest,
+      outcome: citizenOutcome({
+        status: row.status,
+        resolvedAt: row.resolved_at,
+        outcomeCode: outcome_code,
+      }),
+    };
+
+    // Named columns, never *: status_history's admin_name, from_status,
+    // reason (the staff-only return reason) and resolution snapshot are not
+    // for citizens (manuscript revision Phase 5, step 5c; Phase 6, step 6b).
+    // returned is computed here, so from_status itself never leaves SQL.
     const history = await sql<StatusHistoryStep[]>`
-      SELECT status, admin_name, changed_at
+      SELECT status, changed_at, COALESCE(from_status = 'Resolved' AND status = 'Under Review', false) AS returned
       FROM status_history WHERE ticket_id = ${report.ticket_id} ORDER BY changed_at, id
     `;
 
-    return { report, history };
+    // The ticket's referrals, oldest first: the target only to map it
+    // (citizenReferralAgency), and the date. Never the reason, the staff
+    // member or the offices.
+    const referralRows = await sql<
+      { referral_target: string | null; created_at: string }[]
+    >`
+      SELECT referral_target, created_at FROM routing_actions
+      WHERE ticket_id = ${report.ticket_id} AND action_type = 'REFER'
+      ORDER BY created_at, id
+    `;
+    const referrals: CitizenReferral[] = referralRows.map((r) => ({
+      agency: citizenReferralAgency(r.referral_target),
+      referred_at: r.created_at,
+    }));
+
+    return { report, history, referrals };
+  }
+
+  // Owner-only tracking-reference lookup (manuscript revision Phase 6, step
+  // 6b): the citizen's own report id for a PRC reference, or null. A
+  // malformed reference, a reference that does not exist and another
+  // citizen's reference are all null — the same 404 to the caller — and the
+  // last two run the same single query, so ownership is never revealed.
+  async findMyReportIdByReference(
+    citizenId: number,
+    reference: unknown,
+  ): Promise<{ id: number } | null> {
+    const ref = normalizeTrackingReference(reference);
+    if (ref === null) return null;
+    const [row] = await this.pg<{ id: number }[]>`
+      SELECT r.id FROM reports r
+      WHERE r.tracking_reference = ${ref} AND r.citizen_id = ${citizenId}
+    `;
+    return row ? { id: row.id } : null;
   }
 
   // Citizen resolution feedback (Appendix H RESOLUTION_FEEDBACK; manuscript

@@ -1,4 +1,4 @@
-import type { MyReportDetail, MyReportRow } from "@/lib/types/citizens-reports";
+import type { CitizenOutcome, MyReportDetail, MyReportRow } from "@/lib/types/citizens-reports";
 
 // Single source of truth for citizen-facing report/ticket status copy — the
 // list page, detail page, and timeline all read from here instead of each
@@ -8,7 +8,30 @@ import type { MyReportDetail, MyReportRow } from "@/lib/types/citizens-reports";
 // (requirement: notification wording must match what the page shows).
 
 export function officeLabel(office: "MEO" | "MDRRMO"): string {
-  return office === "MEO" ? "Municipal Engineering Office" : "Municipal Disaster Risk Reduction Office";
+  return office === "MEO" ? "Municipal Engineering Office" : "Municipal Disaster Risk Reduction and Management Office";
+}
+
+// The resolution outcome in citizen words (manuscript revision Phase 6, step
+// 6b) — never the raw codes. Null for no outcome: an unresolved ticket, or a
+// legacy Resolved one, which shows a neutral "Resolved" with no label.
+export const REFERRED_OUTSIDE_NOTE =
+  "The municipality's handling is complete. The agency may not have resolved the issue yet.";
+
+export function outcomeCopy(outcome: CitizenOutcome | null): { label: string; note: string | null } | null {
+  switch (outcome) {
+    case "HANDLED_BY_MUNICIPALITY":
+      return { label: "Handled by the municipality", note: null };
+    case "REFERRED_OUTSIDE":
+      return { label: "Referred to an outside agency", note: REFERRED_OUTSIDE_NOTE };
+    default:
+      return null;
+  }
+}
+
+// The banner on a report that shares its ticket with other reports (step
+// 6b). Only the count — never the other reports' references or reporters.
+export function trackedTogetherCopy(otherReports: number): string {
+  return `Now tracked together with ${otherReports} other report${otherReports === 1 ? "" : "s"}.`;
 }
 
 const STATUS_COPY: Record<string, { subtitle: string; update: string }> = {

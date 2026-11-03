@@ -5,8 +5,8 @@ import { loginAdmin, loginCitizen, settleAdminPage } from "./helpers";
 // Staff Merge / Remove / Regroup (manuscript revision Phase 3, step 3d).
 // Posts no report: the tickets come from api/scripts/seed/
 // seed-e2e-grouping-fixtures.ts, which e2e/global-setup.ts runs and
-// e2e/global-teardown.ts retires (a full run already posts 20 reports, the
-// per-IP hourly limit; docs/testing.md). Serial, because the citizen test
+// e2e/global-teardown.ts retires (a full run posts 15 reports, kept at 16 or fewer under the 20-an-hour per-IP limit;
+// docs/testing.md §6). Serial, because the citizen test
 // reads the merge the first test makes (--workers=1).
 
 test.setTimeout(60_000);

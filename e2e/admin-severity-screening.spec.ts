@@ -7,7 +7,7 @@ import { loginAdmin, loginCitizen, settleAdminPage } from "./helpers";
 // comes from api/scripts/seed/seed-e2e-grouping-fixtures.ts (its screening
 // fixture, whose report carries one old general 'screened' intake action),
 // which e2e/global-setup.ts runs and e2e/global-teardown.ts retires (a full
-// run already posts 20 reports, the per-IP hourly limit; docs/testing.md).
+// run posts 15 reports, kept at 16 or fewer under the 20-an-hour per-IP limit; docs/testing.md §6).
 // Serial, because the later tests read the first test's screening
 // (--workers=1).
 

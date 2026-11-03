@@ -69,10 +69,12 @@ const TITLE_PATTERNS = [
   `${CITIZEN_TITLE_PREFIX}%`,
 ];
 // Closed fixture tickets a run may leave Resolved, retired like the active
-// ones: the step 3g feedback ticket and the step 5c resolution tickets.
+// ones: the step 3g feedback ticket, the step 5c resolution tickets and
+// (Phase 6, step 6b) the citizen report page's Resolved tickets.
 const RESOLVED_TITLE_PATTERNS = [
   `${FEEDBACK_TITLE_PREFIX}%`,
   `${RESOLUTION_TITLE_PREFIX}%`,
+  `${CITIZEN_TITLE_PREFIX}%`,
 ];
 const CATEGORY = 'Pothole / Road Surface Damage';
 const CITIZEN_EMAIL = 'citizen1@porac.ph';
@@ -919,6 +921,250 @@ async function create() {
       'unresolved report',
     );
 
+    // Phase 6, step 6b: the citizen report page
+    // (e2e/citizen-report-page.spec.ts). Read-only views of citizen1's
+    // reports, on the routing column past the 6a fixtures (30 m apart). The
+    // staff-only text each carries (routing reasons, the return reason, the
+    // acknowledgment remark, the earlier resolution's notes) is a sentinel
+    // the spec checks never reaches the citizen page. status_history rows
+    // follow migration 0046's CHECKs: the resolution snapshot only on a
+    // Resolved row, and a reason on the Resolved -> Under Review row.
+    const STAFF_ONLY = `${CITIZEN_TITLE_PREFIX}: staff-only`;
+    const reportPageAt = (index: number) => ({
+      lat: BASE.lat + ROUTING_START_DEG + index * ROUTING_STEP_DEG,
+      lng: BASE.lng,
+    });
+    const trackingReferenceOf = async (reportId: number) => {
+      const [row] = await tx<{ tracking_reference: string }[]>`
+        SELECT tracking_reference FROM reports WHERE id = ${reportId}
+      `;
+      return row.tracking_reference;
+    };
+    const refer = async (ticketId: number, agency: string, daysAgo: number) => {
+      await tx`
+        INSERT INTO routing_actions (ticket_id, action_type, from_office, to_office, referral_target, reason, admin_id, admin_name, created_at)
+        VALUES (
+          ${ticketId}, 'REFER', 'MEO', NULL, ${agency}, ${`${STAFF_ONLY} referral reason`},
+          ${meo.id}, ${meo.name}, now() - make_interval(days => ${daysAgo})
+        )
+      `;
+    };
+    const LEAKING_PIPE = 'Leaking Pipe / Water Supply Concern';
+
+    // a. Referred twice, still Under Review: once to a suggested agency
+    //    (shown by name) and once to a typed one (shown as "an outside
+    //    agency").
+    const referredAt = reportPageAt(21);
+    const referredTicketId = await ticket(referredAt, {
+      status: 'Under Review',
+      ageDays: 4,
+      category: LEAKING_PIPE,
+    });
+    const referredReportId = await report(
+      referredTicketId,
+      referredAt,
+      'referred',
+      4,
+      CITIZEN_TITLE_PREFIX,
+      citizen.id,
+      LEAKING_PIPE,
+    );
+    await refer(referredTicketId, 'DPWH', 3);
+    await refer(referredTicketId, 'Porac Water District', 2);
+
+    // b. Resolved by External referral, then returned to Under Review: the
+    //    ticket carries no resolution record now; its history keeps the
+    //    Resolved row's snapshot and the return's staff-only reason.
+    const returnedAt = reportPageAt(22);
+    const returnedTicketId = await ticket(returnedAt, {
+      status: 'Under Review',
+      ageDays: 5,
+      category: LEAKING_PIPE,
+    });
+    const returnedReportId = await report(
+      returnedTicketId,
+      returnedAt,
+      'returned to Under Review',
+      5,
+      CITIZEN_TITLE_PREFIX,
+      citizen.id,
+      LEAKING_PIPE,
+    );
+    await refer(returnedTicketId, 'Water utility provider', 4);
+    await tx`
+      INSERT INTO status_history (ticket_id, status, from_status, admin_id, admin_name, changed_at)
+      VALUES (${returnedTicketId}, 'In Progress', 'Under Review', ${meo.id}, ${meo.name}, now() - interval '4 days')
+    `;
+    await tx`
+      INSERT INTO status_history (
+        ticket_id, status, from_status, admin_id, admin_name, changed_at,
+        resolution_outcome, resolution_notes, resolution_image_url
+      )
+      VALUES (
+        ${returnedTicketId}, 'Resolved', 'In Progress', ${meo.id}, ${meo.name}, now() - interval '3 days',
+        'EXTERNAL_REFERRAL', ${`${STAFF_ONLY} earlier resolution notes`}, NULL
+      )
+    `;
+    await tx`
+      INSERT INTO status_history (ticket_id, status, from_status, reason, admin_id, admin_name, changed_at)
+      VALUES (
+        ${returnedTicketId}, 'Under Review', 'Resolved', ${`${STAFF_ONLY} return reason`},
+        ${meo.id}, ${meo.name}, now() - interval '2 days'
+      )
+    `;
+
+    // c. A staff merge: citizen1's report (the older one, lower id) on a
+    //    ticket merged into a newer ticket that carries citizen2's report.
+    //    The legacy "not the earliest report" rule would call citizen2's
+    //    report the merged one; the ticket_merged event says citizen1's.
+    //    The merged-away ticket keeps its ticket-level acknowledgment (a
+    //    merge never moves it), with no per-report row, so citizen1's page
+    //    must find it on the old ticket.
+    const mergedAwayAt = reportPageAt(23);
+    const mergedAwayTicketId = await ticket(mergedAwayAt, { ageDays: 3 });
+    const movedReportId = await report(
+      mergedAwayTicketId,
+      mergedAwayAt,
+      'merged, moved report',
+      3,
+      CITIZEN_TITLE_PREFIX,
+    );
+    await tx`
+      INSERT INTO acknowledgments (ticket_id, acknowledged_by_admin_id, remarks, acknowledged_at)
+      VALUES (${mergedAwayTicketId}, ${focal.id}, ${`${STAFF_ONLY} acknowledgment remark`}, now() - interval '60 hours')
+    `;
+    const survivorAt = reportPageAt(24);
+    const survivorTicketId = await ticket(survivorAt, {
+      status: 'Under Review',
+      ageDays: 2,
+    });
+    const survivorReportId = await report(
+      survivorTicketId,
+      survivorAt,
+      'merged, survivor report',
+      2,
+      CITIZEN_TITLE_PREFIX,
+      secondCitizen.id,
+    );
+    await tx`UPDATE reports SET ticket_id = ${survivorTicketId} WHERE id = ${movedReportId}`;
+    await tx`
+      UPDATE tickets SET merged_into_ticket_id = ${survivorTicketId}, member_count = 0, updated_at = now()
+      WHERE id = ${mergedAwayTicketId}
+    `;
+    await tx`UPDATE tickets SET member_count = 2 WHERE id = ${survivorTicketId}`;
+    await tx`
+      INSERT INTO admin_audit_events (
+        actor_admin_id, actor_name, actor_email, actor_role, actor_account_type, actor_office,
+        action_type, target_type, target_id, target_summary, metadata, created_at
+      )
+      VALUES (
+        ${meo.id}, ${meo.name}, ${MEO_EMAIL}, (SELECT role FROM admins WHERE id = ${meo.id}), 'PERSONNEL', 'MEO',
+        'ticket_merged', 'ticket', ${survivorTicketId},
+        ${`Ticket #${survivorTicketId} (${CATEGORY})`},
+        ${JSON.stringify({
+          mergedTicketId: mergedAwayTicketId,
+          movedReportIds: [movedReportId],
+          reason: `${STAFF_ONLY} merge reason`,
+        })}::jsonb,
+        now() - interval '1 day'
+      )
+    `;
+
+    // d. Acknowledged the way FocalIntakeService.acknowledge writes it: the
+    //    report row and the ticket-level row, same time.
+    const acknowledgedAt = reportPageAt(25);
+    const acknowledgedTicketId = await ticket(acknowledgedAt, { ageDays: 1 });
+    const acknowledgedReportId = await report(
+      acknowledgedTicketId,
+      acknowledgedAt,
+      'acknowledged',
+      1,
+      CITIZEN_TITLE_PREFIX,
+    );
+    await tx`
+      INSERT INTO report_acknowledgments (report_id, acknowledged_by_admin_id, acknowledged_by_name, remarks, acknowledged_at)
+      VALUES (${acknowledgedReportId}, ${focal.id}, ${focal.name}, ${`${STAFF_ONLY} acknowledgment remark`}, now() - interval '12 hours')
+    `;
+    await tx`
+      INSERT INTO acknowledgments (ticket_id, acknowledged_by_admin_id, remarks, acknowledged_at)
+      VALUES (${acknowledgedTicketId}, ${focal.id}, ${`${STAFF_ONLY} acknowledgment remark`}, now() - interval '12 hours')
+    `;
+
+    // e. Resolved, one per outcome, with a full resolution record, and a
+    //    legacy Resolved one (migration 0036's outcome, no resolved_at, no
+    //    notes).
+    const resolvedTicket = async (
+      index: number,
+      label: string,
+      outcome: 'MUNICIPAL_ACTION_COMPLETED' | 'EXTERNAL_REFERRAL' | 'LEGACY',
+      category = CATEGORY,
+    ) => {
+      const at = reportPageAt(index);
+      const ticketId = await ticket(at, {
+        status: 'Resolved',
+        ageDays: 3,
+        category,
+      });
+      if (outcome === 'LEGACY') {
+        await tx`
+          UPDATE tickets SET resolution_outcome = 'MUNICIPAL_ACTION_COMPLETED'
+          WHERE id = ${ticketId}
+        `;
+      } else {
+        await tx`
+          UPDATE tickets SET resolution_outcome = ${outcome}::resolution_outcome,
+            resolution_notes = ${`${CITIZEN_TITLE_PREFIX}: ${label} notes`},
+            resolved_at = now() - make_interval(days => 3) + interval '1 hour',
+            resolved_by_admin_id = ${meo.id}
+          WHERE id = ${ticketId}
+        `;
+      }
+      const reportId = await report(
+        ticketId,
+        at,
+        label,
+        3,
+        CITIZEN_TITLE_PREFIX,
+        citizen.id,
+        category,
+      );
+      return { ticketId, reportId };
+    };
+    const resolvedMunicipal = await resolvedTicket(
+      26,
+      'resolved by the municipality',
+      'MUNICIPAL_ACTION_COMPLETED',
+    );
+    const resolvedReferral = await resolvedTicket(
+      27,
+      'resolved by referral',
+      'EXTERNAL_REFERRAL',
+      LEAKING_PIPE,
+    );
+    await refer(resolvedReferral.ticketId, 'Electric utility provider', 4);
+    const resolvedLegacy = await resolvedTicket(
+      28,
+      'legacy resolved',
+      'LEGACY',
+    );
+
+    const reportPage = {
+      staffNames: [meo.name, focal.name],
+      staffOnlyText: STAFF_ONLY,
+      referredReportId,
+      returnedReportId,
+      merged: {
+        movedReportId,
+        survivorReportId,
+        survivorTrackingReference: await trackingReferenceOf(survivorReportId),
+      },
+      acknowledgedReportId,
+      resolvedMunicipalReportId: resolvedMunicipal.reportId,
+      resolvedReferralReportId: resolvedReferral.reportId,
+      resolvedLegacyReportId: resolvedLegacy.reportId,
+      ownTrackingReference: await trackingReferenceOf(referredReportId),
+    };
+
     return {
       tickets: {
         sharedReadOnly: {
@@ -934,6 +1180,7 @@ async function create() {
           reportId: publicMapLifecycle.reportId,
         },
         unresolvedReportId: unresolved.reportId,
+        reportPage,
       },
       resolution: {
         inputTicketId: resolutionInputTicketId,

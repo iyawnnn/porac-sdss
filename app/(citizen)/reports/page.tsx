@@ -5,6 +5,7 @@ import { StatTile } from "@/components/features/citizen/dashboard/StatTile";
 import { REPORT_STATUS_STYLE, REPORT_STATUS_FALLBACK } from "@/components/features/citizen/dashboard/reportStatusStyle";
 import { CitizenUnauthorized } from "@/components/features/citizen/dashboard/CitizenUnauthorized";
 import { ReportImage } from "@/components/features/citizen/dashboard/ReportImage";
+import { ReferenceSearch } from "@/components/features/citizen/dashboard/ReferenceSearch";
 import { latestUpdateLine, officeLabel } from "@/lib/utils/citizen-report-copy";
 
 function PinIcon() {
@@ -97,6 +98,8 @@ export default async function MyReportsPage() {
           Report New Hazard
         </Link>
       </div>
+
+      <ReferenceSearch />
 
       {/* The "High Urgency" tile was removed in manuscript revision Phase 1, step 6c — citizens are shown no system score. */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3">

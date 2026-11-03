@@ -7,8 +7,8 @@ import { loginAdmin, loginCitizen, settleAdminPage } from "./helpers";
 // one report by citizen1 and one by citizen2, comes from
 // api/scripts/seed/seed-e2e-grouping-fixtures.ts (its feedback fixture),
 // which e2e/global-setup.ts runs and e2e/global-teardown.ts retires as
-// Rejected (a full run already posts 20 reports, the per-IP hourly limit;
-// docs/testing.md). Serial, because each test builds on the answers before
+// Rejected (a full run posts 15 reports, kept at 16 or fewer under the 20-an-hour per-IP limit;
+// docs/testing.md §6). Serial, because each test builds on the answers before
 // it (--workers=1).
 
 test.setTimeout(60_000);
