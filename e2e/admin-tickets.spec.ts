@@ -82,6 +82,27 @@ async function signupCitizen(page: Page, label: string): Promise<{ email: string
   return { email, password };
 }
 
+// Manuscript revision Phase 6, step 6a: three tests that only needed a fresh
+// active MEO ticket now use tickets api/scripts/seed/seed-e2e-grouping-
+// fixtures.ts inserts directly (Reported Pothole tickets with one citizen1
+// report each), instead of posting a report — a full run must stay at 16
+// report posts or fewer against the 20-an-hour per-IP limit
+// (docs/testing.md §6). e2e/global-setup.ts always provides them; a missing
+// fixture fails the test rather than skipping it.
+interface TicketFixtures {
+  sharedReadOnly: { ticketId: number; title: string };
+  advanceStatusTicketId: number;
+  rejectTicketId: number;
+}
+
+function ticketFixtures(): TicketFixtures {
+  const parsed = process.env.E2E_GROUPING_FIXTURES
+    ? (JSON.parse(process.env.E2E_GROUPING_FIXTURES) as { tickets?: TicketFixtures }).tickets
+    : undefined;
+  if (!parsed) throw new Error("Missing the ticket fixtures e2e/global-setup.ts inserts (E2E_GROUPING_FIXTURES.tickets).");
+  return parsed;
+}
+
 // Shared by three tests that only read a ticket — queue→detail navigation,
 // Ticket Detail's read-only sections, and the mobile card list — none of
 // which advance status, reassign office, resolve, or dispute, or assert on
@@ -90,19 +111,15 @@ async function signupCitizen(page: Page, label: string): Promise<{ email: string
 // per-test DB isolation), same reasoning as admin-work-orders.spec.ts's
 // sharedMeoTicketId and this file's own resolvedFixture below.
 let sharedReadOnlyTicketId: number;
-// Its title ends in a millisecond timestamp, so searching the queue by it
-// matches this ticket alone. Searching by the numeric id also substring-
-// matches every older E2E title whose timestamp contains those digits (16
-// tickets for id 240), which can push this newer, lower-priority ticket off
-// page 1.
+// Its title ends in this run's millisecond timestamp (the fixture seed adds
+// it), so searching the queue by it matches this ticket alone. Searching by
+// the numeric id also substring-matches every older E2E title whose
+// timestamp contains those digits (16 tickets for id 240), which can push
+// this newer, lower-priority ticket off page 1.
 let sharedReadOnlyTitle: string;
 
-test.beforeAll(async ({ browser }) => {
-  const citizenContext = await browser.newContext();
-  const citizenPage = await citizenContext.newPage();
-  await signupCitizen(citizenPage, "shared-readonly");
-  ({ ticketId: sharedReadOnlyTicketId, title: sharedReadOnlyTitle } = await createThrowawayReport(citizenPage, `shared-readonly-${Date.now()}`));
-  await citizenContext.close();
+test.beforeAll(() => {
+  ({ ticketId: sharedReadOnlyTicketId, title: sharedReadOnlyTitle } = ticketFixtures().sharedReadOnly);
 });
 
 // --- 1. Ticket Queue baseline ---------------------------------------------
@@ -377,12 +394,9 @@ test("Ticket Detail shows the dispute section only when the ticket is disputed",
 
 // --- 6. Ticket status advancement --------------------------------------------
 
-test("advancing a ticket's status from the queue-linked detail page updates the status tracker", async ({ page, browser }) => {
-  const citizenContext = await browser.newContext();
-  const citizenPage = await citizenContext.newPage();
-  await signupCitizen(citizenPage, "status");
-  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
-  await citizenContext.close();
+test("advancing a ticket's status from the queue-linked detail page updates the status tracker", async ({ page }) => {
+  // A fresh Reported fixture ticket (Phase 6, step 6a; no report posted).
+  const ticketId = ticketFixtures().advanceStatusTicketId;
 
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto(`/admin/tickets/${ticketId}`);
@@ -880,8 +894,10 @@ async function createReferralReport(
 }
 
 // Manuscript revision Phase 3, step 3c: the two referral tickets also serve
-// the "Possibly related tickets" panel, so it costs no extra report (a full
-// run already posts 20, the per-IP hourly limit; docs/testing.md §6). The
+// the "Possibly related tickets" panel, so it costs no extra report (the
+// per-IP limit is 20 an hour; docs/testing.md §6). The first must start
+// alone in its area (the "no related tickets" check), so these two stay
+// posted reports rather than fixtures created before the run. The
 // second is placed 8 m north of the first, inside Leaking Pipe's 50 m radius.
 // The area is a point in Jalung that had no ticket of any kind within 400 m,
 // away from the Poblacion box the other fixtures use, and both tickets are
@@ -987,12 +1003,9 @@ test.describe.serial("Referral tickets and their related-ticket suggestions", ()
 
 // --- 9. Reject (Phase 4 workflow completeness) --------------------------------
 
-test("rejecting a fresh ticket sets it to Rejected, shows the status tracker's rejected state, and hides the reject action afterward", async ({ page, browser }) => {
-  const citizenContext = await browser.newContext();
-  const citizenPage = await citizenContext.newPage();
-  await signupCitizen(citizenPage, "reject");
-  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
-  await citizenContext.close();
+test("rejecting a fresh ticket sets it to Rejected, shows the status tracker's rejected state, and hides the reject action afterward", async ({ page }) => {
+  // A fresh Reported fixture ticket (Phase 6, step 6a; no report posted).
+  const ticketId = ticketFixtures().rejectTicketId;
 
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto(`/admin/tickets/${ticketId}`);

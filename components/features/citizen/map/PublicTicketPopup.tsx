@@ -19,11 +19,13 @@ function formatDate(value: string): string {
   return new Date(value).toLocaleDateString(undefined, DATE_FMT);
 }
 
-// The manuscript's Appendix L "Selected report" panel (Citizen Web-GIS Map),
-// manuscript revision Phase 1, step 6d: a privacy-limited view of someone
-// else's report. The heading is the category, never a citizen's title, and
-// there is no photo — the API no longer sends either. A citizen's own report
-// keeps its full detail behind "View my report".
+// The manuscript's Appendix L "Selected report" panel (Citizen Web-GIS Map):
+// a privacy-limited view of someone else's report. Since manuscript revision
+// Phase 6, step 6a (handoff Decision 8) it shows only the status, the
+// category as the heading, the barangay, an approximate location and the
+// reported date — no title, photo, ticket number, last update or handling
+// office; the API sends none of them. A citizen's own report keeps its full
+// detail behind "View my report".
 export function PublicTicketPopup({ ticket }: { ticket: PublicTicketGeoRow }) {
   const pill = STATUS_STYLE[ticket.status] ?? FALLBACK_STATUS_STYLE;
 
@@ -45,10 +47,6 @@ export function PublicTicketPopup({ ticket }: { ticket: PublicTicketGeoRow }) {
         <dd className="text-ink-900">Approximate</dd>
         <dt className="text-ink-500">Reported</dt>
         <dd className="text-ink-900">{formatDate(ticket.reported_at)}</dd>
-        <dt className="text-ink-500">Last update</dt>
-        <dd className="text-ink-900">{formatDate(ticket.last_updated_at)}</dd>
-        <dt className="text-ink-500">Handled by</dt>
-        <dd className="text-ink-900">{ticket.assigned_office}</dd>
       </dl>
 
       <div>

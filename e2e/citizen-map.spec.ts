@@ -1,85 +1,72 @@
 
 import { expect, test, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
 import { E2E_CITIZEN_ACCOUNT, E2E_MEO_ADMIN } from "./test-credentials";
 import { loginAdmin as loginAs, loginCitizen } from "./helpers";
 
 test.setTimeout(60_000);
 
-// Same disposable-ticket approach as e2e/admin-tickets.spec.ts's
-// createThrowawayReport — "Pothole / Road Surface Damage" always routes to
-// MEO (api/src/common/utils/office.ts), so E2E_MEO_ADMIN can advance/reject
-// it without any additional reassignment.
-async function createThrowawayReport(citizenPage: Page, titleSuffix: string): Promise<{ reportId: number; ticketId: number }> {
-  const jitter = () => (Math.random() - 0.5) * 0.01;
-  const title = `E2E public-map ${titleSuffix}`;
-  const res = await citizenPage.request.post("/api/reports", {
-    multipart: {
-      title,
-      category: "Pothole / Road Surface Damage",
-      citizen_severity: "Low",
-      lat: String(15.0711 + jitter()),
-      lng: String(120.5401 + jitter()),
-      image: {
-        name: "01_poblacion.jpg",
-        mimeType: "image/jpeg",
-        buffer: readFileSync("public/uploads/reports/01_poblacion.jpg"),
-      },
-    },
-  });
-  if (!res.ok()) {
-    const bodyText = await res.text().catch((e) => `<failed to read body: ${e}>`);
-    throw new Error(
-      `createThrowawayReport: POST /api/reports failed for title "${title}" — status ${res.status()} ${res.statusText()}\nbody: ${bodyText}`,
-    );
-  }
-  return (await res.json()) as { reportId: number; ticketId: number };
+// The public map row since manuscript revision Phase 6, step 6a (handoff
+// Decision 8): category, status, barangay, rounded pin and reported date,
+// under an opaque per-response position key. own_report_id is set only on
+// the signed-in citizen's own tickets.
+const PUBLIC_MAP_ROW_KEYS = ["barangay_name", "category", "key", "lat", "lng", "own_report_id", "reported_at", "status"];
+
+interface PublicMapRow {
+  key: string;
+  status: string;
+  own_report_id: number | null;
+  [field: string]: unknown;
 }
 
-async function signupCitizen(page: Page, label: string): Promise<void> {
-  const email = `e2e-map-${label}-${Date.now()}@porac.ph`;
-  const password = "PoracDemo2026!";
-  await page.goto("/signup");
-  await page.getByLabel("First name").fill("Map");
-  await page.getByLabel("Last name").fill(label);
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Create Account" }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+// citizen1's public-map lifecycle fixture (Phase 6, step 6a): a Reported MEO
+// Pothole ticket with one citizen1 report, inserted by
+// api/scripts/seed/seed-e2e-grouping-fixtures.ts — no report is posted
+// (docs/testing.md §6). A missing fixture fails the test.
+function lifecycleFixture(): { ticketId: number; reportId: number } {
+  const parsed = process.env.E2E_GROUPING_FIXTURES
+    ? (JSON.parse(process.env.E2E_GROUPING_FIXTURES) as { citizen?: { publicMapLifecycle?: { ticketId: number; reportId: number } } })
+        .citizen?.publicMapLifecycle
+    : undefined;
+  if (!parsed) throw new Error("Missing the citizen fixtures e2e/global-setup.ts inserts (E2E_GROUPING_FIXTURES.citizen).");
+  return parsed;
 }
 
-async function publicMapStatuses(citizenPage: Page, ticketId: number): Promise<string | undefined> {
+async function publicMapRows(citizenPage: Page): Promise<PublicMapRow[]> {
   const res = await citizenPage.request.get("/api/public-map");
   expect(res.ok()).toBe(true);
-  const body = (await res.json()) as { tickets: { id: number; status: string }[] };
-  return body.tickets.find((t) => t.id === ticketId)?.status;
+  return ((await res.json()) as { tickets: PublicMapRow[] }).tickets;
+}
+
+// The response carries no ticket id, so the reporter finds their own ticket
+// by its own_report_id — which is also what proves own_report_id is set on
+// their own tickets.
+async function ownTicketStatus(citizenPage: Page, reportId: number): Promise<string | undefined> {
+  return (await publicMapRows(citizenPage)).find((t) => t.own_report_id === reportId)?.status;
 }
 
 // Phase 6 regression coverage for Phase 5's fix (public hazard map active-
-// status query previously omitted 'Under Review'). One report is created and
+// status query previously omitted 'Under Review'). One fixture ticket is
 // carried through Reported -> Under Review -> In Progress -> Rejected, with
-// the public map re-checked after each transition — a single disposable
-// fixture rather than five separate tickets, to stay well inside the
-// 20/hour report-submission budget (see docs/testing.md §6).
+// the public map re-checked after each transition.
 test("public hazard map includes a ticket through Reported/Under Review/In Progress and excludes it once Rejected (terminal)", async ({ page, browser }) => {
+  const { ticketId, reportId } = lifecycleFixture();
   const citizenContext = await browser.newContext();
   const citizenPage = await citizenContext.newPage();
-  await signupCitizen(citizenPage, "lifecycle");
-  const { ticketId } = await createThrowawayReport(citizenPage, `${Date.now()}`);
+  await loginCitizen(citizenPage, E2E_CITIZEN_ACCOUNT);
 
-  await expect.poll(() => publicMapStatuses(citizenPage, ticketId)).toBe("Reported");
+  await expect.poll(() => ownTicketStatus(citizenPage, reportId)).toBe("Reported");
 
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto(`/admin/tickets/${ticketId}`);
   await page.getByRole("button", { name: "Advance to Under Review" }).click();
   await expect(page.getByRole("button", { name: "Advance to In Progress" })).toBeVisible();
 
-  await expect.poll(() => publicMapStatuses(citizenPage, ticketId)).toBe("Under Review");
+  await expect.poll(() => ownTicketStatus(citizenPage, reportId)).toBe("Under Review");
 
   await page.getByRole("button", { name: "Advance to In Progress" }).click();
   await expect(page.getByRole("button", { name: "Advance to Resolved" })).toBeVisible();
 
-  await expect.poll(() => publicMapStatuses(citizenPage, ticketId)).toBe("In Progress");
+  await expect.poll(() => ownTicketStatus(citizenPage, reportId)).toBe("In Progress");
 
   await page.getByLabel("Rejection reason", { exact: true }).fill("Duplicate of an existing repair order.");
   await page.getByRole("button", { name: "Reject Ticket" }).click();
@@ -87,34 +74,39 @@ test("public hazard map includes a ticket through Reported/Under Review/In Progr
 
   // Terminal — excluded from the active public map entirely (undefined:
   // not present in the tickets array at all, not merely a different status).
-  await expect.poll(() => publicMapStatuses(citizenPage, ticketId)).toBeUndefined();
+  await expect.poll(() => ownTicketStatus(citizenPage, reportId)).toBeUndefined();
 
   await citizenContext.close();
 });
 
-// Manuscript revision Phase 1, step 6d (Appendix L, Citizen Web-GIS Map;
-// Table 12): the public map is a privacy-limited view of other citizens'
-// reports. Uses the seeded citizen account, so it creates no report and
-// costs nothing against the hourly submission limit.
+// Appendix L (Citizen Web-GIS Map), Table 12 and handoff Decision 8: the
+// public map is a privacy-limited view of other citizens' reports. Uses the
+// seeded citizen account, so it creates no report.
 test("public map sends and shows only privacy-limited details", async ({ page }) => {
   await loginCitizen(page, E2E_CITIZEN_ACCOUNT);
 
-  const res = await page.request.get("/api/public-map");
-  expect(res.ok()).toBe(true);
-  const body = (await res.json()) as { tickets: Record<string, unknown>[] };
-  for (const ticket of body.tickets) {
-    expect(ticket).not.toHaveProperty("title");
-    expect(ticket).not.toHaveProperty("image_url");
-    expect(ticket).not.toHaveProperty("description");
+  const rows = await publicMapRows(page);
+  const ownReportIds = new Set(
+    ((await (await page.request.get("/api/reports/mine")).json()) as { id: number }[]).map((r) => r.id),
+  );
+  rows.forEach((ticket, index) => {
+    // Exactly the public fields: no id, ticket number, tracking reference,
+    // title, photo, description, reporter, last update or office.
+    expect(Object.keys(ticket).sort()).toEqual(PUBLIC_MAP_ROW_KEYS);
+    // Opaque per-response position keys, in order.
+    expect(ticket.key).toBe(`p${index + 1}`);
     const lat = ticket.lat as number;
     const lng = ticket.lng as number;
     expect(Math.round(lat * 1000) / 1000).toBe(lat);
     expect(Math.round(lng * 1000) / 1000).toBe(lng);
-    expect(ticket).toHaveProperty("reported_at");
-    expect(ticket).toHaveProperty("last_updated_at");
-    expect(ticket).toHaveProperty("assigned_office");
-  }
-  test.skip(body.tickets.length === 0, "No active public tickets to open a popup for.");
+    expect(["Reported", "Under Review", "In Progress"]).toContain(ticket.status);
+    // own_report_id is only ever one of this citizen's own report ids.
+    if (ticket.own_report_id !== null) expect(ownReportIds.has(ticket.own_report_id)).toBe(true);
+  });
+  const serialized = JSON.stringify(rows);
+  expect(serialized).not.toMatch(/PRC-\d{4}-\d+/);
+  expect(serialized).not.toMatch(/last_updated_at|assigned_office|tracking_reference|"id"|ticket_id|title|image_url|description/);
+  test.skip(rows.length === 0, "No active public tickets to open a popup for.");
 
   await page.goto("/map");
   await expect(page.getByText("Public Report Map", { exact: true })).toBeVisible();
@@ -164,8 +156,16 @@ test("public map sends and shows only privacy-limited details", async ({ page })
   }
   await expect(popup).toBeVisible();
   await expect(popup.getByText("Approximate", { exact: true })).toBeVisible();
-  await expect(popup.getByText("Handled by", { exact: true })).toBeVisible();
+  // The field labels (the status pill can also read "Reported").
+  await expect(popup.locator("dt")).toHaveText(["Barangay", "Location", "Reported"]);
   await expect(popup.getByText("Public update", { exact: true })).toBeVisible();
   await expect(popup.getByText(/exact pins and internal records are not shown/)).toBeVisible();
+  // Dropped in step 6a: no last update, no handling office, no ticket number
+  // (the dt list above is already exact; these name the removed ones).
+  await expect(popup.getByText("Last update", { exact: true })).toHaveCount(0);
+  await expect(popup.getByText("Handled by", { exact: true })).toHaveCount(0);
+  const popupText = await popup.innerText();
+  expect(popupText).not.toMatch(/#\d+|Ticket\s*#?\d+|PRC-\d{4}-\d+/);
+  expect(popupText).not.toMatch(/\bMEO\b|\bMDRRMO\b/);
   await expect(popup.locator("img")).toHaveCount(0);
 });

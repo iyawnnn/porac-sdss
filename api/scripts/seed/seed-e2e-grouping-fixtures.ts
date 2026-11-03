@@ -16,12 +16,15 @@ import { sql } from '../db';
 // Operational Assessment / Work Order spec
 // (e2e/admin-assessment-work-orders.spec.ts; step 5b), and the resolution
 // outcome / return to Under Review spec (e2e/admin-resolution.spec.ts; step
-// 5c). Every fixture that
+// 5c), and (Phase 6, step 6a) report-free stand-ins for tests in
+// e2e/admin-tickets.spec.ts, e2e/citizen-map.spec.ts and
+// e2e/citizen-dispute.spec.ts that used to post a report only to get a fresh
+// active ticket. Every fixture that
 // carries a Work Order also carries an Operational Assessment, as step 5b
 // requires of new Work Orders. The tickets and reports
 // are inserted directly, never through POST /reports, so the specs post no
-// report: a full run already posts 20, the per-IP hourly limit
-// (docs/testing.md). Every fixture report belongs to citizen1 (the step 3g
+// report: the per-IP limit is 20 an hour and a full run is kept at 16 or
+// fewer (docs/testing.md §6). Every fixture report belongs to citizen1 (the step 3g
 // ticket also has one by citizen2) and its title starts with one of
 // TITLE_PATTERNS' prefixes. Each grouping scenario sits in its own
 // spot in Jalung, 80 m from the next (four times the 20 m Pothole radius),
@@ -52,6 +55,8 @@ const HAZARD_TITLE_PREFIX = 'E2E hazard fixture';
 const ROUTING_TITLE_PREFIX = 'E2E routing fixture';
 const WORK_ORDER_TITLE_PREFIX = 'E2E work order fixture';
 const RESOLUTION_TITLE_PREFIX = 'E2E resolution fixture';
+const TICKET_TITLE_PREFIX = 'E2E ticket fixture';
+const CITIZEN_TITLE_PREFIX = 'E2E citizen fixture';
 const TITLE_PATTERNS = [
   `${TITLE_PREFIX}%`,
   `${CORRECTION_TITLE_PREFIX}%`,
@@ -60,6 +65,8 @@ const TITLE_PATTERNS = [
   `${ROUTING_TITLE_PREFIX}%`,
   `${WORK_ORDER_TITLE_PREFIX}%`,
   `${RESOLUTION_TITLE_PREFIX}%`,
+  `${TICKET_TITLE_PREFIX}%`,
+  `${CITIZEN_TITLE_PREFIX}%`,
 ];
 // Closed fixture tickets a run may leave Resolved, retired like the active
 // ones: the step 3g feedback ticket and the step 5c resolution tickets.
@@ -864,7 +871,70 @@ async function create() {
       WHERE id = ${resolutionLegacyTicketId}
     `;
 
+    // Phase 6, step 6a: report-free stand-ins for tests that used to post a
+    // report through POST /reports only to get a fresh active MEO ticket
+    // (docs/testing.md §6: a full run must stay at 16 report posts or
+    // fewer). Reported Pothole tickets with one citizen1 report each, on the
+    // routing column 30 m past the last step 5c fixture (30 m apart, beyond
+    // the 20 m Pothole radius).
+    const pageFixtureTicket = async (
+      index: number,
+      prefix: string,
+      label: string,
+    ) => {
+      const at = {
+        lat: BASE.lat + ROUTING_START_DEG + index * ROUTING_STEP_DEG,
+        lng: BASE.lng,
+      };
+      const ticketId = await ticket(at, { ageDays: 0 });
+      const reportId = await report(ticketId, at, label, 0, prefix);
+      return { ticketId, reportId, title: `${prefix}: ${label}` };
+    };
+    // e2e/admin-tickets.spec.ts. The read-only ticket's title ends in this
+    // run's timestamp so a queue search by it matches this ticket alone
+    // (earlier runs' copies are retired, but status=all still lists them).
+    const sharedReadOnly = await pageFixtureTicket(
+      16,
+      TICKET_TITLE_PREFIX,
+      `shared read-only ${Date.now()}`,
+    );
+    const advanceStatus = await pageFixtureTicket(
+      17,
+      TICKET_TITLE_PREFIX,
+      'advance status',
+    );
+    const reject = await pageFixtureTicket(18, TICKET_TITLE_PREFIX, 'reject');
+    // e2e/citizen-map.spec.ts: carried Reported -> Under Review -> In
+    // Progress -> Rejected while citizen1 watches the public map.
+    const publicMapLifecycle = await pageFixtureTicket(
+      19,
+      CITIZEN_TITLE_PREFIX,
+      'public map lifecycle',
+    );
+    // e2e/citizen-dispute.spec.ts: an unresolved report of citizen1's that
+    // no spec changes (no Case Closure Summary on it).
+    const unresolved = await pageFixtureTicket(
+      20,
+      CITIZEN_TITLE_PREFIX,
+      'unresolved report',
+    );
+
     return {
+      tickets: {
+        sharedReadOnly: {
+          ticketId: sharedReadOnly.ticketId,
+          title: sharedReadOnly.title,
+        },
+        advanceStatusTicketId: advanceStatus.ticketId,
+        rejectTicketId: reject.ticketId,
+      },
+      citizen: {
+        publicMapLifecycle: {
+          ticketId: publicMapLifecycle.ticketId,
+          reportId: publicMapLifecycle.reportId,
+        },
+        unresolvedReportId: unresolved.reportId,
+      },
       resolution: {
         inputTicketId: resolutionInputTicketId,
         workOrderTicketId: resolutionWorkOrderTicketId,

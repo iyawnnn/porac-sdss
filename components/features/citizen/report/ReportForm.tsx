@@ -17,6 +17,7 @@ import {
   needsCriticalConfirmation,
 } from "@/lib/utils/severity-selection";
 import { Button } from "@/components/ui/button";
+import { EmergencyNotice } from "@/components/features/citizen/emergency/EmergencyNotice";
 import {
   Dialog,
   DialogContent,
@@ -454,6 +455,8 @@ export default function ReportForm() {
         </p>
       </header>
 
+      <EmergencyNotice className="mb-8" />
+
       <form
         ref={formRef}
         onSubmit={handleSubmit}
@@ -684,7 +687,8 @@ export default function ReportForm() {
                   Is that what you&apos;re seeing?
                 </p>
                 <p className="font-medium text-danger-ink">
-                  If someone is in immediate danger, call emergency hotlines. Submitting a report does not dispatch help.
+                  If you or someone else is in immediate danger, contact the appropriate emergency service right away.
+                  Submitting a report does not dispatch help.
                 </p>
               </div>
             </DialogDescription>

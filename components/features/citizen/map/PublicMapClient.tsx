@@ -73,7 +73,7 @@ export default function PublicMapClient({
         <GeoJSON data={barangays} style={styleBarangayFeature} onEachFeature={bindBarangayHoverTooltip} />
         <MarkerClusterGroup chunkedLoading iconCreateFunction={clusterIcon}>
           {tickets.map((ticket) => (
-            <Marker key={ticket.id} position={[ticket.lat, ticket.lng]} icon={neutralMarkerIcon()}>
+            <Marker key={ticket.key} position={[ticket.lat, ticket.lng]} icon={neutralMarkerIcon()}>
               <Popup>
                 <PublicTicketPopup ticket={ticket} />
               </Popup>

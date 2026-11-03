@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { E2E_MEO_ADMIN } from "./test-credentials";
-import { loginAdmin as sharedLoginAdmin } from "./helpers";
+import { E2E_CITIZEN_ACCOUNT, E2E_MEO_ADMIN } from "./test-credentials";
+import { loginAdmin as sharedLoginAdmin, loginCitizen as sharedLoginCitizen } from "./helpers";
 
 test.setTimeout(60_000);
 
@@ -31,6 +31,12 @@ async function submitAndResolveReport(
   adminPage: Page,
   titleSuffix: string,
 ): Promise<{ reportId: number; ticketId: number }> {
+  const submitted = await submitReport(citizenPage, titleSuffix);
+  await resolveTicket(adminPage, submitted.ticketId);
+  return submitted;
+}
+
+async function submitReport(citizenPage: Page, titleSuffix: string): Promise<{ reportId: number; ticketId: number }> {
   const jitter = () => (Math.random() - 0.5) * 0.01;
   const submitRes = await citizenPage.request.post("/api/reports", {
     multipart: {
@@ -47,19 +53,31 @@ async function submitAndResolveReport(
     },
   });
   expect(submitRes.ok()).toBe(true);
-  const { reportId, ticketId } = (await submitRes.json()) as { reportId: number; ticketId: number };
+  return (await submitRes.json()) as { reportId: number; ticketId: number };
+}
 
-  // Reported -> Under Review -> In Progress -> Resolved. Resolving needs an
-  // outcome and notes (manuscript revision Phase 5, step 5c); the earlier
-  // steps ignore both.
+// Reported -> Under Review -> In Progress -> Resolved. Resolving needs an
+// outcome and notes (manuscript revision Phase 5, step 5c); the earlier
+// steps ignore both.
+async function resolveTicket(adminPage: Page, ticketId: number): Promise<void> {
   for (let i = 0; i < 3; i++) {
     const res = await adminPage.request.post(`/api/admin/tickets/${ticketId}/status`, {
       multipart: { notes: "e2e", outcome: "MUNICIPAL_ACTION_COMPLETED" },
     });
     expect(res.ok()).toBe(true);
   }
+}
 
-  return { reportId, ticketId };
+// citizen1's unresolved fixture report (Phase 6, step 6a), inserted by
+// api/scripts/seed/seed-e2e-grouping-fixtures.ts — no report posted.
+function unresolvedFixtureReportId(): number {
+  const parsed = process.env.E2E_GROUPING_FIXTURES
+    ? (JSON.parse(process.env.E2E_GROUPING_FIXTURES) as { citizen?: { unresolvedReportId?: number } }).citizen
+    : undefined;
+  if (!parsed?.unresolvedReportId) {
+    throw new Error("Missing the citizen fixtures e2e/global-setup.ts inserts (E2E_GROUPING_FIXTURES.citizen).");
+  }
+  return parsed.unresolvedReportId;
 }
 
 test.describe("Citizen resolution feedback", () => {
@@ -69,25 +87,15 @@ test.describe("Citizen resolution feedback", () => {
     const adminPage = await adminContext.newPage();
     await loginAdmin(adminPage);
 
-    const submitRes = await page.request.post("/api/reports", {
-      multipart: {
-        title: "E2E not-yet-resolved check",
-        category: "Pothole / Road Surface Damage",
-        citizen_severity: "Low",
-        lat: "15.0711",
-        lng: "120.5401",
-        image: {
-          name: "01_poblacion.jpg",
-          mimeType: "image/jpeg",
-          buffer: readFileSync("public/uploads/reports/01_poblacion.jpg"),
-        },
-      },
-    });
-    const { reportId: unresolvedId } = (await submitRes.json()) as { reportId: number };
-    await page.goto(`/dashboard/reports/${unresolvedId}`);
+    // One report, checked before and after it is resolved (Phase 6, step
+    // 6a: this test used to post a second report just for the unresolved
+    // check; docs/testing.md §6).
+    const { reportId, ticketId } = await submitReport(page, `confirm-${citizen.email}`);
+    await page.goto(`/dashboard/reports/${reportId}`);
+    await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
     await expect(page.getByText("Resolution Feedback")).toHaveCount(0);
 
-    const { reportId } = await submitAndResolveReport(page, adminPage, `confirm-${citizen.email}`);
+    await resolveTicket(adminPage, ticketId);
     await adminContext.close();
 
     await page.goto(`/dashboard/reports/${reportId}`);
@@ -170,24 +178,17 @@ test.describe("Citizen resolution feedback", () => {
 });
 
 test.describe("Case Closure Summary", () => {
+  // Phase 6, step 6a: this test used to post a report with no citizen
+  // session (a 401), then open /dashboard/reports/undefined, so it passed
+  // without ever showing a report. It now signs in as citizen1 and opens
+  // their unresolved fixture report, and proves the page rendered first.
   test("does not appear on an unresolved report", async ({ page }) => {
-    const submitRes = await page.request.post("/api/reports", {
-      multipart: {
-        title: "E2E summary not-yet-resolved check",
-        category: "Pothole / Road Surface Damage",
-        citizen_severity: "Low",
-        lat: "15.0711",
-        lng: "120.5401",
-        image: {
-          name: "01_poblacion.jpg",
-          mimeType: "image/jpeg",
-          buffer: readFileSync("public/uploads/reports/01_poblacion.jpg"),
-        },
-      },
-    });
-    const { reportId } = (await submitRes.json()) as { reportId: number };
-    await page.goto(`/dashboard/reports/${reportId}`);
+    await sharedLoginCitizen(page, E2E_CITIZEN_ACCOUNT);
+    await page.goto(`/dashboard/reports/${unresolvedFixtureReportId()}`);
+    await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
+    await expect(page.locator('[data-status="Reported"]').first()).toBeVisible();
     await expect(page.getByText("Case Closure Summary")).toHaveCount(0);
+    await expect(page.getByText("Resolution Feedback")).toHaveCount(0);
   });
 
   test("appears on a resolved report with resolution notes and photo, and stays consistent with confirmed feedback", async ({ page, browser }) => {

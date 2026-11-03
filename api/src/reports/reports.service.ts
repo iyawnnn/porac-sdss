@@ -216,25 +216,51 @@ export interface StatusHistoryStep {
 }
 
 // The public map's privacy-limited row (manuscript Appendix L, Citizen
-// Web-GIS Map; Table 12; manuscript revision Phase 1, step 6d). It carries
-// only what the wireframe's "Selected report" panel shows. Deliberately
-// excluded, because Appendix L says "reporter identity, photos, exact pins
-// and internal records are not shown" (Decision 8): the citizen's title,
-// description and photo, the reporter, EXIF, integrity flags, any system
-// score (Hazard Urgency left in step 6c; Operational Priority is never
-// shown to citizens), staff notes and assessments. lat/lng are rounded
-// server-side, so exact coordinates never reach the browser.
+// Web-GIS Map; Table 12; handoff Decision 8; manuscript revision Phase 6,
+// step 6a). Another citizen's active report shows only its category,
+// status, barangay, map pin and reported date — nothing else. Deliberately
+// excluded: the ticket number and every tracking reference, the citizen's
+// title, description and photo, the reporter, EXIF, integrity flags, any
+// system score, the last-updated time and the assigned office (both dropped
+// in 6a), staff names and notes, assessments, Work Orders, routing and
+// audit records. lat/lng are rounded server-side (3 decimals, about 100 m),
+// so exact coordinates never reach the browser.
+//
+// key is an opaque per-response position key ("p1", "p2", ...): it is the
+// row's position in this one response, never derived from a database id,
+// and the same ticket can get a different key in the next response.
+// own_report_id is set only on the signed-in citizen's own tickets (it is
+// their own report id, for the "View my report" link) and null otherwise.
 export interface PublicTicketGeoRow {
-  id: number;
+  key: string;
   category: string;
   status: string;
   barangay_name: string;
   lat: number;
   lng: number;
   reported_at: string;
-  last_updated_at: string;
-  assigned_office: 'MEO' | 'MDRRMO';
   own_report_id: number | null;
+}
+
+// What the public map query returns, before the position keys are added.
+export type PublicTicketGeoDbRow = Omit<PublicTicketGeoRow, 'key'>;
+
+// Adds the opaque position keys, in the order the rows arrive, and copies
+// only the public fields by name — so a column added to the query later can
+// never reach the browser through this response by accident.
+export function withPublicMapPositionKeys(
+  rows: readonly PublicTicketGeoDbRow[],
+): PublicTicketGeoRow[] {
+  return rows.map((row, index) => ({
+    key: `p${index + 1}`,
+    category: row.category,
+    status: row.status,
+    barangay_name: row.barangay_name,
+    lat: row.lat,
+    lng: row.lng,
+    reported_at: row.reported_at,
+    own_report_id: row.own_report_id,
+  }));
 }
 
 @Injectable()
@@ -753,13 +779,17 @@ export class ReportsService {
       // to 3 decimal places (about 100 m) here, on the server — that
       // precision is our implementation choice for the wireframe's
       // "Approximate" location, not a manuscript-defined value.
-      sql<PublicTicketGeoRow[]>`
+      //
+      // Order: newest reported first, ties in random order — never id
+      // order, so the position keys added below reveal nothing the
+      // reported dates in the response don't already show.
+      sql<PublicTicketGeoDbRow[]>`
         SELECT
-          t.id, t.category, t.status, b.name AS barangay_name,
+          t.category, t.status, b.name AS barangay_name,
           ROUND(ST_Y(t.geom)::numeric, 3)::float8 AS lat,
           ROUND(ST_X(t.geom)::numeric, 3)::float8 AS lng,
-          t.created_at AS reported_at, t.updated_at AS last_updated_at,
-          t.assigned_office, own.id AS own_report_id
+          t.created_at AS reported_at,
+          own.id AS own_report_id
         FROM tickets t
         JOIN barangays b ON b.id = t.barangay_id
         LEFT JOIN LATERAL (
@@ -771,7 +801,7 @@ export class ReportsService {
         WHERE t.status IN ('Reported', 'Under Review', 'In Progress')
           AND COALESCE(t.flagged, false) = false
           AND t.merged_into_ticket_id IS NULL
-        ORDER BY t.created_at DESC
+        ORDER BY t.created_at DESC, random()
       `,
     ]);
 
@@ -784,7 +814,7 @@ export class ReportsService {
           geometry: JSON.parse(b.geojson),
         })),
       },
-      tickets,
+      tickets: withPublicMapPositionKeys(tickets),
     };
   }
 }

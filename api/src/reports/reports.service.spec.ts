@@ -9,6 +9,7 @@ import {
   STALE_EVIDENCE_HOURS,
   TIMESTAMP_ANOMALY_TOLERANCE_HOURS,
   evidenceCheckFlags,
+  withPublicMapPositionKeys,
 } from './reports.service';
 import type { BarangayService } from '../domain/barangay.service';
 import type { MediaService } from '../domain/media.service';
@@ -572,11 +573,25 @@ describe('citizen responses carry no system score (Phase 1, step 6c)', () => {
   });
 });
 
-// Manuscript revision Phase 1, step 6d (Appendix L, Citizen Web-GIS Map;
-// Table 12): the public map is a privacy-limited view. Other citizens'
-// reports send no title, photo or exact pin — coordinates are rounded on the
-// server — and only the fields the wireframe's "Selected report" panel shows.
-describe('public map privacy-limited view (Phase 1, step 6d)', () => {
+// The public map is a privacy-limited view (manuscript Appendix L, Citizen
+// Web-GIS Map; Table 12; handoff Decision 8). Since manuscript revision
+// Phase 6, step 6a another citizen's active report sends only its category,
+// status, barangay, rounded pin and reported date, under an opaque
+// per-response position key — no ticket number, tracking reference,
+// last-updated time or assigned office. own_report_id is the signed-in
+// citizen's own report id on their own tickets only.
+const PUBLIC_MAP_ROW_KEYS = [
+  'barangay_name',
+  'category',
+  'key',
+  'lat',
+  'lng',
+  'own_report_id',
+  'reported_at',
+  'status',
+];
+
+describe('public map privacy-limited view (Phase 6, step 6a)', () => {
   const reportsServiceSource = readFileSync(
     join(__dirname, 'reports.service.ts'),
     'utf8',
@@ -589,10 +604,53 @@ describe('public map privacy-limited view (Phase 1, step 6d)', () => {
     .split('\n')
     .filter((line) => !line.trim().startsWith('//'))
     .join('\n');
+  const ticketFrom = method.indexOf('FROM tickets t');
   const ticketSelect = method.slice(
-    method.indexOf('t.id, t.category'),
-    method.indexOf('FROM tickets t'),
+    method.lastIndexOf('SELECT', ticketFrom) + 'SELECT'.length,
+    ticketFrom,
   );
+
+  // The output column names of the ticket SELECT, in order: the alias after
+  // AS, or the bare column name. Commas inside ROUND(...) are not item
+  // separators.
+  function outputColumns(selectList: string): string[] {
+    const items: string[] = [];
+    let depth = 0;
+    let current = '';
+    for (const ch of selectList) {
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) {
+        items.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    items.push(current);
+    return items
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .map((item) => {
+        const alias = item.match(/\bAS\s+(\w+)$/i);
+        return alias ? alias[1] : item.slice(item.lastIndexOf('.') + 1);
+      });
+  }
+
+  it('selects exactly the public columns: no ticket id, updated_at or assigned_office as output', () => {
+    expect(outputColumns(ticketSelect)).toEqual([
+      'category',
+      'status',
+      'barangay_name',
+      'lat',
+      'lng',
+      'reported_at',
+      'own_report_id',
+    ]);
+    expect(ticketSelect).not.toMatch(
+      /\bt\.id\b|updated_at|assigned_office|tracking_reference/,
+    );
+  });
 
   it('rounds the coordinates to 3 decimal places on the server', () => {
     expect(method).toContain('ROUND(ST_Y(t.geom)::numeric, 3)');
@@ -603,15 +661,159 @@ describe('public map privacy-limited view (Phase 1, step 6d)', () => {
   it('never selects the title, photo, description, reporter, EXIF, flags, scores or notes', () => {
     expect(method).not.toMatch(/\btitle\b|image_url|description/);
     expect(ticketSelect).not.toMatch(
-      /citizen_id|exif|flags|urgency_|priority_|notes/,
+      /citizen_id|first_name|last_name|email|exif|flags|urgency_|priority_|notes|admin_name/,
     );
   });
 
-  it('still selects own_report_id, assigned_office, created_at and updated_at', () => {
-    expect(ticketSelect).toContain('own.id AS own_report_id');
-    expect(ticketSelect).toContain('t.assigned_office');
-    expect(ticketSelect).toContain('t.created_at AS reported_at');
-    expect(ticketSelect).toContain('t.updated_at AS last_updated_at');
+  it('keeps the active-status, flagged and merged-away filters', () => {
+    expect(method).toContain(
+      "WHERE t.status IN ('Reported', 'Under Review', 'In Progress')",
+    );
+    expect(method).toContain('AND COALESCE(t.flagged, false) = false');
+    expect(method).toContain('AND t.merged_into_ticket_id IS NULL');
+  });
+
+  it('orders by reported date with a random tiebreak, never by id', () => {
+    expect(method).toContain('ORDER BY t.created_at DESC, random()');
+    expect(method).not.toMatch(/ORDER BY[^\n]*\bt\.id\b/);
+  });
+
+  it('returns the rows only through withPublicMapPositionKeys', () => {
+    expect(method).toContain('tickets: withPublicMapPositionKeys(tickets)');
+  });
+
+  describe('the response, as actually returned', () => {
+    function fakeSql(ticketRows: Record<string, unknown>[]) {
+      return ((strings: TemplateStringsArray, ...values: unknown[]) => {
+        if (values.some((v) => v instanceof Date)) {
+          throw new Error('A JS Date was passed to raw SQL');
+        }
+        const text = strings.join('?');
+        const rows = text.includes('FROM barangays ORDER BY name')
+          ? [
+              {
+                id: 1,
+                name: 'Jalung',
+                geojson: '{"type":"Point","coordinates":[0,0]}',
+              },
+            ]
+          : ticketRows;
+        return {
+          then(resolve: (v: unknown) => void) {
+            void Promise.resolve(rows).then(resolve);
+          },
+        };
+      }) as unknown as Sql;
+    }
+
+    function serviceWith(sql: Sql): ReportsService {
+      return new ReportsService(
+        sql,
+        {} as BarangayService,
+        {} as MediaService,
+        {} as RateLimitService,
+        {} as OperationalPriorityService,
+        {} as NotificationsService,
+        {} as HazardInformationService,
+      );
+    }
+
+    // Each DB row also carries fields the query must never send, as if a
+    // column crept back in: the response still drops them.
+    function dbRow(id: number, ownReportId: number | null) {
+      return {
+        id,
+        ticket_id: id,
+        tracking_reference: `PRC-2026-${String(id).padStart(6, '0')}`,
+        title: `Report ${id}`,
+        assigned_office: 'MEO',
+        last_updated_at: '2026-11-02T00:00:00.000Z',
+        category: 'Pothole / Road Surface Damage',
+        status: 'Reported',
+        barangay_name: 'Jalung',
+        lat: 15.071,
+        lng: 120.542,
+        reported_at: `2026-11-0${id % 9}T00:00:00.000Z`,
+        own_report_id: ownReportId,
+      };
+    }
+
+    it('every row has exactly the public key set, and keys are positions, never ids', async () => {
+      const result = await serviceWith(
+        fakeSql([dbRow(41, null), dbRow(17, 905)]),
+      ).getPublicHazardMapData(3);
+
+      expect(result.tickets).toHaveLength(2);
+      for (const row of result.tickets) {
+        expect(Object.keys(row).sort()).toEqual(PUBLIC_MAP_ROW_KEYS);
+      }
+      expect(result.tickets.map((t) => t.key)).toEqual(['p1', 'p2']);
+      const serialized = JSON.stringify(result.tickets);
+      expect(serialized).not.toMatch(/"41"|"17"|\b41\b|\b17\b|PRC-/);
+      expect(result.tickets[0].own_report_id).toBeNull();
+      expect(result.tickets[1].own_report_id).toBe(905);
+      expect(result.barangays.features).toHaveLength(1);
+    });
+
+    it('the same ticket gets a different key in another response', async () => {
+      const first = await serviceWith(
+        fakeSql([dbRow(41, null), dbRow(17, null)]),
+      ).getPublicHazardMapData(3);
+      // A newer ticket arrived, so ticket 41 is now second.
+      const second = await serviceWith(
+        fakeSql([dbRow(52, null), dbRow(41, null), dbRow(17, null)]),
+      ).getPublicHazardMapData(3);
+
+      const keyOf = (
+        tickets: { key: string; reported_at: string }[],
+        reportedAt: string,
+      ) => tickets.find((t) => t.reported_at === reportedAt)?.key;
+      const ticket41ReportedAt = dbRow(41, null).reported_at;
+      expect(keyOf(first.tickets, ticket41ReportedAt)).toBe('p1');
+      expect(keyOf(second.tickets, ticket41ReportedAt)).toBe('p2');
+      // And p1 now names a different ticket.
+      expect(second.tickets[0].reported_at).toBe(dbRow(52, null).reported_at);
+    });
+  });
+});
+
+describe('withPublicMapPositionKeys', () => {
+  const base = {
+    category: 'Localized Flooding',
+    status: 'Under Review',
+    barangay_name: 'Jalung',
+    lat: 15.07,
+    lng: 120.54,
+    reported_at: '2026-11-01T00:00:00.000Z',
+    own_report_id: null,
+  };
+
+  it('numbers the rows p1, p2, ... in the order given', () => {
+    expect(
+      withPublicMapPositionKeys([base, base, base]).map((r) => r.key),
+    ).toEqual(['p1', 'p2', 'p3']);
+  });
+
+  it('returns an empty list for no rows', () => {
+    expect(withPublicMapPositionKeys([])).toEqual([]);
+  });
+
+  it('copies only the public fields, dropping anything else on the row', () => {
+    const leaky = { ...base, id: 7, title: 'secret', assigned_office: 'MEO' };
+    const [row] = withPublicMapPositionKeys([leaky]);
+    expect(Object.keys(row).sort()).toEqual(PUBLIC_MAP_ROW_KEYS);
+    expect(row).toEqual({ key: 'p1', ...base });
+  });
+
+  it('never derives the key from a database id', () => {
+    const rows = [
+      { ...base, own_report_id: 900 },
+      { ...base, own_report_id: 3 },
+    ];
+    expect(withPublicMapPositionKeys(rows).map((r) => r.key)).toEqual([
+      'p1',
+      'p2',
+    ]);
   });
 });
 // Manuscript revision Phase 1, step 7a: report submission no longer looks up
