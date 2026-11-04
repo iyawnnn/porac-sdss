@@ -1,7 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { TransactionSql } from 'postgres';
-import { NotificationsService, type NotificationPrincipal } from './notifications.service';
+import {
+  NotificationsService,
+  type NotificationPrincipal,
+} from './notifications.service';
 
 // drizzle-orm's named exports are non-configurable (jest.spyOn can't
 // redefine them in place), so wrapping them in a jest.mock module factory
@@ -59,7 +62,10 @@ function makeDb(overrides: {
   } as unknown as PostgresJsDatabase;
 }
 
-const citizenPrincipal: NotificationPrincipal = { type: 'citizen', citizenId: 1 };
+const citizenPrincipal: NotificationPrincipal = {
+  type: 'citizen',
+  citizenId: 1,
+};
 const adminPrincipal: NotificationPrincipal = {
   type: 'admin',
   adminId: 5,
@@ -91,7 +97,9 @@ const systemAdminPrincipal: NotificationPrincipal = {
 
 describe('NotificationsService.createInTx', () => {
   it('inserts via the provided raw-tx client, not the standalone Drizzle client', async () => {
-    const tx = jest.fn().mockResolvedValue(undefined) as unknown as TransactionSql;
+    const tx = jest
+      .fn()
+      .mockResolvedValue(undefined) as unknown as TransactionSql;
     const db = makeDb({});
     const service = new NotificationsService(db);
 
@@ -127,6 +135,71 @@ describe('NotificationsService.create', () => {
 });
 
 describe('NotificationsService.listForPrincipal', () => {
+  it('pins the citizen response and validates a legacy href against report ownership', async () => {
+    const readAt = null;
+    const createdAt = new Date('2026-11-04T00:00:00Z');
+    const row = {
+      id: 9,
+      recipientType: 'citizen',
+      recipientId: 1,
+      recipientOffice: 'MEO',
+      type: 'ticket_referred',
+      title: 'Report referred',
+      message: 'Your report has been referred to DPWH.',
+      href: '/dashboard/reports/11',
+      entityType: 'ticket',
+      entityId: 999,
+      readAt,
+      createdAt,
+      privateFutureField: 'must never leak',
+    };
+    const select = jest
+      .fn()
+      .mockReturnValueOnce(chain([row]))
+      .mockReturnValueOnce(chain([{ id: 11 }]));
+    const result = await new NotificationsService(
+      makeDb({ select }),
+    ).listForPrincipal(citizenPrincipal);
+    expect(result).toEqual({
+      items: [
+        {
+          id: 9,
+          type: row.type,
+          title: row.title,
+          message: row.message,
+          href: '/dashboard/reports/11',
+          readAt,
+          createdAt,
+        },
+      ],
+      nextCursor: null,
+    });
+  });
+
+  it.each([
+    '/admin/tickets/999',
+    '/dashboard/reports/999',
+    'https://example.test/999',
+  ])('drops an unsafe legacy citizen link: %s', async (href) => {
+    const select = jest
+      .fn()
+      .mockReturnValueOnce(chain([{ id: 9, href }]))
+      .mockReturnValue(chain([]));
+    const result = await new NotificationsService(
+      makeDb({ select }),
+    ).listForPrincipal(citizenPrincipal);
+    expect(result.items[0].href).toBeNull();
+    expect(Object.keys(result.items[0]).sort()).toEqual([
+      'createdAt',
+      'href',
+      'id',
+      'message',
+      'readAt',
+      'title',
+      'type',
+    ]);
+  });
+
   it('returns items and no nextCursor when fewer rows than the page size exist', async () => {
     const select = jest.fn().mockReturnValue(
       chain([
@@ -136,7 +209,9 @@ describe('NotificationsService.listForPrincipal', () => {
     );
     const service = new NotificationsService(makeDb({ select }));
 
-    const result = await service.listForPrincipal(citizenPrincipal, { limit: 10 });
+    const result = await service.listForPrincipal(citizenPrincipal, {
+      limit: 10,
+    });
     expect(result.items).toHaveLength(2);
     expect(result.nextCursor).toBeNull();
   });
@@ -146,7 +221,9 @@ describe('NotificationsService.listForPrincipal', () => {
     const select = jest.fn().mockReturnValue(chain(rows));
     const service = new NotificationsService(makeDb({ select }));
 
-    const result = await service.listForPrincipal(citizenPrincipal, { limit: 2 });
+    const result = await service.listForPrincipal(citizenPrincipal, {
+      limit: 2,
+    });
     expect(result.items).toHaveLength(2);
     expect(result.nextCursor).toBe(2);
   });
@@ -155,10 +232,14 @@ describe('NotificationsService.listForPrincipal', () => {
   // history across tests in this file — mockClear() right before exercising
   // the code under test keeps each assertion scoped to its own call.
   function readAtCalled(mock: jest.Mock): boolean {
-    return mock.mock.calls.some(([col]) => (col as { name?: string })?.name === 'read_at');
+    return mock.mock.calls.some(
+      ([col]) => (col as { name?: string })?.name === 'read_at',
+    );
   }
   function typeCalledWith(mock: jest.Mock, value: string): boolean {
-    return mock.mock.calls.some(([col, v]) => (col as { name?: string })?.name === 'type' && v === value);
+    return mock.mock.calls.some(
+      ([col, v]) => (col as { name?: string })?.name === 'type' && v === value,
+    );
   }
 
   it('applies no extra condition beyond scopeFilter when neither status nor type is passed', async () => {
@@ -174,7 +255,11 @@ describe('NotificationsService.listForPrincipal', () => {
     // — the assertion is that readAt/type conditions are never added.
     expect(readAtCalled(drizzleOrm.isNull)).toBe(false);
     expect(readAtCalled(drizzleOrm.isNotNull)).toBe(false);
-    expect(drizzleOrm.eq.mock.calls.some(([col]) => (col as { name?: string })?.name === 'type')).toBe(false);
+    expect(
+      drizzleOrm.eq.mock.calls.some(
+        ([col]) => (col as { name?: string })?.name === 'type',
+      ),
+    ).toBe(false);
   });
 
   it("status: 'unread' filters on readAt being null", async () => {
@@ -213,7 +298,10 @@ describe('NotificationsService.listForPrincipal', () => {
     const select = jest.fn().mockReturnValue(chain([]));
     const service = new NotificationsService(makeDb({ select }));
 
-    await service.listForPrincipal(adminPrincipal, { status: 'unread', type: 'work_order_assigned' });
+    await service.listForPrincipal(adminPrincipal, {
+      status: 'unread',
+      type: 'work_order_assigned',
+    });
 
     expect(readAtCalled(drizzleOrm.isNull)).toBe(true);
     expect(typeCalledWith(drizzleOrm.eq, 'work_order_assigned')).toBe(true);
@@ -298,16 +386,18 @@ describe('NotificationsService.markRead — authorization', () => {
     const update = jest.fn().mockReturnValue(chain([{ id: 7 }]));
     const service = new NotificationsService(makeDb({ update }));
 
-    await expect(service.markRead(citizenPrincipal, 7)).resolves.toBeUndefined();
+    await expect(
+      service.markRead(citizenPrincipal, 7),
+    ).resolves.toBeUndefined();
   });
 
   it('throws NotFoundException when the notification does not belong to the caller (or does not exist) — same error either way', async () => {
     const update = jest.fn().mockReturnValue(chain([]));
     const service = new NotificationsService(makeDb({ update }));
 
-    await expect(service.markRead(citizenPrincipal, 999)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.markRead(citizenPrincipal, 999),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('an admin can mark read a notification scoped to their office, not just their own adminId', async () => {
@@ -323,7 +413,9 @@ describe('NotificationsService.markAllRead', () => {
     const update = jest.fn().mockReturnValue(chain(undefined));
     const service = new NotificationsService(makeDb({ update }));
 
-    await expect(service.markAllRead(citizenPrincipal)).resolves.toBeUndefined();
+    await expect(
+      service.markAllRead(citizenPrincipal),
+    ).resolves.toBeUndefined();
     expect(update).toHaveBeenCalledTimes(1);
   });
 });

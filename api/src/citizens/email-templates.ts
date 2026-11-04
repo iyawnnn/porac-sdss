@@ -2,6 +2,9 @@
 // (and reviewable) independent of whichever EmailService implementation
 // sends them. Inline styles only: email clients strip <style> blocks and
 // external stylesheets unpredictably.
+import type { CitizenOutcome } from '../reports/citizen-report-view';
+import { resolvedMessage } from '../notifications/citizen-notices';
+
 const BRAND_COLOR = '#2563eb';
 
 // Only needed where a template interpolates admin/citizen-authored free
@@ -107,11 +110,14 @@ export function passwordResetConfirmationEmailHtml(): string {
   `);
 }
 
-export function reportResolvedEmailHtml(reportUrl: string): string {
+export function reportResolvedEmailHtml(
+  reportUrl: string,
+  outcome: CitizenOutcome | null = null,
+): string {
   return layout(`
     <h1 style="margin:0 0 16px;font-size:18px;color:#111827;">Your report was resolved</h1>
     <p style="margin:0 0 20px;">
-      Good news — the report you submitted has been marked resolved by the assigned office.
+      ${resolvedMessage(outcome) ?? 'Good news — the report you submitted has been marked resolved by the assigned office.'}
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
       <tr>

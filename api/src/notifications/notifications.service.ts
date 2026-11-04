@@ -1,9 +1,19 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, isNotNull, isNull, lt, lte, or } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  or,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { TransactionSql } from 'postgres';
 import { DB } from '../db/db.module';
-import { notifications } from '../db/schema';
+import { notifications, reports } from '../db/schema';
 import { isOperationalPersonnel } from '../common/authz/admin-scope';
 import type { AdminAccountType } from '../auth/session.service';
 
@@ -40,6 +50,12 @@ export interface CreateNotificationInput {
 const DEFAULT_PAGE_SIZE = 10;
 const RETENTION_DAYS = 30;
 
+type NotificationRow = typeof notifications.$inferSelect;
+export type CitizenNotificationItem = Pick<
+  NotificationRow,
+  'id' | 'type' | 'title' | 'message' | 'href' | 'readAt' | 'createdAt'
+>;
+
 @Injectable()
 export class NotificationsService {
   constructor(@Inject(DB) private readonly db: PostgresJsDatabase) {}
@@ -50,7 +66,10 @@ export class NotificationsService {
   // separate commit, no window where one could exist without the other.
   // notifications has no geometry column, so this is a plain tagged-
   // template INSERT alongside whatever else is already in that `tx`.
-  async createInTx(tx: TransactionSql, input: CreateNotificationInput): Promise<void> {
+  async createInTx(
+    tx: TransactionSql,
+    input: CreateNotificationInput,
+  ): Promise<void> {
     await tx`
       INSERT INTO notifications (
         recipient_type, recipient_id, recipient_office,
@@ -107,16 +126,26 @@ export class NotificationsService {
 
   async listForPrincipal(
     principal: NotificationPrincipal,
-    options: { before?: number; limit?: number; status?: 'all' | 'unread' | 'read'; type?: string } = {},
-  ): Promise<{ items: (typeof notifications.$inferSelect)[]; nextCursor: number | null }> {
+    options: {
+      before?: number;
+      limit?: number;
+      status?: 'all' | 'unread' | 'read';
+      type?: string;
+    } = {},
+  ): Promise<{
+    items: (NotificationRow | CitizenNotificationItem)[];
+    nextCursor: number | null;
+  }> {
     const limit = options.limit ?? DEFAULT_PAGE_SIZE;
     // Additive on top of scopeFilter — status/type only ever narrow an
     // already-scoped result set, never widen it, so a bad/unrecognized
     // `type` value just yields zero rows rather than a security concern.
     const conditions = [this.scopeFilter(principal)];
     if (options.before) conditions.push(lt(notifications.id, options.before));
-    if (options.status === 'unread') conditions.push(isNull(notifications.readAt));
-    if (options.status === 'read') conditions.push(isNotNull(notifications.readAt));
+    if (options.status === 'unread')
+      conditions.push(isNull(notifications.readAt));
+    if (options.status === 'read')
+      conditions.push(isNotNull(notifications.readAt));
     if (options.type) conditions.push(eq(notifications.type, options.type));
     const where = and(...conditions);
 
@@ -129,6 +158,37 @@ export class NotificationsService {
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
+    if (principal.type === 'citizen') {
+      const reportId = (href: string | null) => {
+        const match = href?.match(/^\/dashboard\/reports\/(\d+)$/);
+        return match ? Number(match[1]) : null;
+      };
+      const ids = items.flatMap((n) => reportId(n.href) ?? []);
+      const owned = ids.length
+        ? await this.db
+            .select({ id: reports.id })
+            .from(reports)
+            .where(
+              and(
+                eq(reports.citizenId, principal.citizenId),
+                inArray(reports.id, ids),
+              ),
+            )
+        : [];
+      const ownIds = new Set(owned.map((r) => r.id));
+      return {
+        items: items.map((n) => ({
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          href: ownIds.has(reportId(n.href) ?? -1) ? n.href : null,
+          readAt: n.readAt,
+          createdAt: n.createdAt,
+        })),
+        nextCursor: hasMore ? items[items.length - 1].id : null,
+      };
+    }
     return {
       items,
       nextCursor: hasMore ? items[items.length - 1].id : null,
@@ -145,11 +205,16 @@ export class NotificationsService {
 
   // Throws if the notification doesn't exist OR belongs to a different
   // principal — same "not found" either way, no distinction leaked.
-  async markRead(principal: NotificationPrincipal, notificationId: number): Promise<void> {
+  async markRead(
+    principal: NotificationPrincipal,
+    notificationId: number,
+  ): Promise<void> {
     const result = await this.db
       .update(notifications)
       .set({ readAt: new Date() })
-      .where(and(eq(notifications.id, notificationId), this.scopeFilter(principal)))
+      .where(
+        and(eq(notifications.id, notificationId), this.scopeFilter(principal)),
+      )
       .returning({ id: notifications.id });
     if (result.length === 0) {
       throw new NotFoundException('Notification not found.');

@@ -49,6 +49,7 @@ interface State {
   reports: Report[];
   feedback: Feedback[];
   notifications: { recipientOffice: string; type: string; entityId: number }[];
+  receipts: Record<string, unknown>[];
 }
 
 const CITIZEN_A = 101;
@@ -129,6 +130,7 @@ function seed(): State {
     ],
     feedback: [],
     notifications: [],
+    receipts: [],
   };
 }
 
@@ -189,6 +191,10 @@ function makeService(state: State) {
           has_report: state.reports.some(
             (r) => ids.includes(r.ticket_id) && r.citizen_id === citizenId,
           ),
+          receipt_report_id:
+            state.reports.find(
+              (r) => ids.includes(r.ticket_id) && r.citizen_id === citizenId,
+            )?.id ?? null,
         },
       ]);
     }
@@ -222,6 +228,16 @@ function makeService(state: State) {
           created_at: row.created_at,
         },
       ]);
+    }
+    if (q.startsWith('SELECT r.id FROM reports r JOIN citizens c')) {
+      const [ticketId, reportId, citizenId] = values as number[];
+      const t = state.tickets.find(
+        (t) => t.id === ticketId && t.merged_into_ticket_id === null,
+      );
+      const r = state.reports.find(
+        (r) => r.id === reportId && r.citizen_id === citizenId,
+      );
+      return Promise.resolve(t && r ? [{ id: r.id }] : []);
     }
     if (
       q.startsWith('UPDATE tickets SET disputed_at = now(), dispute_reason = ?')
@@ -264,6 +280,10 @@ function makeService(state: State) {
       _tx: unknown,
       n: State['notifications'][number] & Record<string, unknown>,
     ) => {
+      if (n.recipientType === 'citizen') {
+        state.receipts.push(n);
+        return Promise.resolve();
+      }
       state.notifications.push({
         recipientOffice: n.recipientOffice,
         type: n.type,
@@ -272,6 +292,9 @@ function makeService(state: State) {
       return Promise.resolve();
     },
   };
+  Object.assign(sql, {
+    savepoint: async (cb: (tx: unknown) => Promise<unknown>) => cb(sql),
+  });
   return new ReportsService(
     sql as unknown as Sql,
     {} as BarangayService,
@@ -291,6 +314,36 @@ describe('per-citizen resolution feedback (Phase 3, step 3g)', () => {
     service = makeService(state);
   });
   const ticket1 = () => state.tickets.find((t) => t.id === 1)!;
+
+  it('sends one generic receipt only to the answering citizen, including an ancestor owner', async () => {
+    await service.confirmResolution(CITIZEN_A, 11);
+    expect(state.receipts).toEqual([
+      {
+        recipientType: 'citizen',
+        recipientId: CITIZEN_A,
+        type: 'resolution_feedback_received',
+        title: 'Feedback received',
+        message: 'Thank you. Your feedback was received.',
+        href: '/dashboard/reports/11',
+        entityType: 'report',
+        entityId: 11,
+      },
+    ]);
+    await expect(service.confirmResolution(CITIZEN_A, 11)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(state.receipts).toHaveLength(1);
+    await service.disputeReport(CITIZEN_B, 12, 'Private citizen reason');
+    expect(state.receipts.map((n) => n.recipientId)).toEqual([
+      CITIZEN_A,
+      CITIZEN_B,
+    ]);
+    expect(state.receipts[1].message).toBe(
+      'Thank you. Your feedback was received.',
+    );
+    await service.confirmResolution(CITIZEN_C, 21);
+    expect(state.receipts.at(-1)?.recipientId).toBe(CITIZEN_C);
+  });
 
   it('two citizens on one ticket answer independently', async () => {
     const a = await service.confirmResolution(CITIZEN_A, 11);

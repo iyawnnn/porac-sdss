@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useNotifications } from "@/hooks/use-notifications";
-import type { CitizenNotification } from "@/lib/types/citizens-notifications";
+import { CITIZEN_NOTIFICATION_TYPES, type CitizenNotification } from "@/lib/types/citizens-notifications";
 import { timeAgo } from "@/lib/utils/time-ago";
 import {
   DropdownMenu,
@@ -73,7 +73,7 @@ export function CitizenNotificationBell() {
             >
               <span className="flex w-full items-center gap-1.5">
                 {!notification.readAt && <span className="size-1.5 shrink-0 rounded-full bg-brand-600" />}
-                <span className="truncate font-medium text-ink-900">{notification.title}</span>
+                <span className="truncate font-medium text-ink-900">{notification.title || CITIZEN_NOTIFICATION_TYPES[notification.type as keyof typeof CITIZEN_NOTIFICATION_TYPES] || "Report update"}</span>
               </span>
               <span className="line-clamp-2 text-xs text-ink-500">{notification.message}</span>
               <span className="text-xs text-ink-400">{timeAgo(notification.createdAt)}</span>

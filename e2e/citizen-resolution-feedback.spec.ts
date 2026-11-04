@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { E2E_CITIZEN_ACCOUNT, E2E_MEO_ADMIN, E2E_SECOND_CITIZEN_ACCOUNT } from "./test-credentials";
 import { loginAdmin, loginCitizen, settleAdminPage } from "./helpers";
+import { expectCitizenNotice } from "./citizen-notification-checks";
 
 // Per-citizen resolution feedback (manuscript revision Phase 3, step 3g;
 // Appendix H RESOLUTION_FEEDBACK). Posts no report: the Resolved ticket, with
@@ -52,6 +53,7 @@ test.describe.serial("Per-citizen resolution feedback", () => {
       data: { reason: "Changed my mind." },
     });
     expect(again.status()).toBe(409);
+    await expectCitizenNotice(page, { reportId: citizenAReportId, type: "resolution_feedback_received", message: "Thank you. Your feedback was received.", forbidden: [REASON] });
   });
 
   test("citizen B on the same ticket can still answer, sees only their own answer, and disputes", async ({ page }) => {
@@ -92,6 +94,7 @@ test.describe.serial("Per-citizen resolution feedback", () => {
 
     const again = await page.request.post(`/api/reports/mine/${citizenBReportId}/confirm-resolution`);
     expect(again.status()).toBe(409);
+    await expectCitizenNotice(page, { reportId: citizenBReportId, type: "resolution_feedback_received", message: "Thank you. Your feedback was received.", forbidden: [REASON] });
   });
 
   test("staff Ticket Detail shows both answers in the Citizen feedback block", async ({ page }) => {

@@ -175,6 +175,9 @@ function makeService(rows: unknown[][]) {
       begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
     }
   ).begin = (cb) => cb(sql);
+  Object.assign(sql, {
+    savepoint: (cb: (sp: Sql) => Promise<unknown>) => cb(sql),
+  });
 
   const logInPgTx = jest.fn().mockResolvedValue(undefined);
   const audit = { logInPgTx } as unknown as AdminAuditService;
@@ -260,7 +263,8 @@ describe('FocalIntakeService.acknowledge', () => {
     const { service, logInPgTx, createInTx } = makeService([
       [{ id: 1, citizen_id: 5, ticket_id: 100, title: 'Pothole' }], // report lookup
       [{}], // INSERT report_acknowledgments
-      [{}], // INSERT acknowledgments (ticket-level, Phase 2 step 2d)
+      Object.assign([], { count: 1 }), // first ticket acknowledgment
+      [{ citizen_id: 5, report_id: 1, email: 'citizen@example.test' }],
       // getIntakeDetail's two queries:
       [
         {
@@ -294,7 +298,7 @@ describe('FocalIntakeService.acknowledge', () => {
     expect(createInTx.mock.calls[0][1]).toMatchObject({
       recipientType: 'citizen',
       recipientId: 5,
-      type: 'report_acknowledged',
+      type: 'ticket_acknowledged',
       title: 'Report acknowledged',
     });
     expect(createInTx.mock.calls[0][1].message).not.toMatch(/under review/i);
@@ -1138,6 +1142,9 @@ describe('ticket-level acknowledgments dual-write (Phase 2, step 2d)', () => {
         },
       };
     }) as unknown as Sql;
+    Object.assign(sql, {
+      savepoint: (cb: (sp: Sql) => Promise<unknown>) => cb(sql),
+    });
     (
       sql as unknown as {
         begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
@@ -1173,6 +1180,7 @@ describe('ticket-level acknowledgments dual-write (Phase 2, step 2d)', () => {
       [{ id: 1, citizen_id: 5, ticket_id: 100, title: 'Pothole' }], // report lookup
       [{}], // INSERT report_acknowledgments
       Object.assign([], { count: 1 }), // INSERT acknowledgments: new row
+      [{ citizen_id: 5, report_id: 1, email: 'citizen@example.test' }],
       [DETAIL_ROW], // getIntakeDetail
       [], // activity
     ]);

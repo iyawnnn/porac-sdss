@@ -37,6 +37,16 @@ import {
   type SeverityScreeningStatus,
 } from '../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  BACK_UNDER_REVIEW,
+  bestEffortNotifications,
+  notifyTicketCitizens,
+  reassignedNotice,
+  referredNotice,
+  resolvedNotice,
+  ticketReporters,
+} from '../notifications/citizen-notices';
+import type { CitizenOutcome } from '../reports/citizen-report-view';
 import { EMAIL_SERVICE, type EmailService } from '../citizens/email.service';
 import type { Env } from '../config/env';
 import { AdminAuditService } from './admin-audit.service';
@@ -1236,7 +1246,7 @@ export class TicketsService {
           targetSummary: `Ticket #${ticketId} (${category})`,
           metadata: { from: 'In Progress', to: 'Resolved', outcome },
         });
-        return this.notifyCitizensOfStatus(tx, ticketId, 'Resolved');
+        return this.notifyCitizensOfStatus(tx, ticketId, 'Resolved', outcome);
       });
     } catch (err) {
       throw checkViolationAsConflict(
@@ -1245,7 +1255,12 @@ export class TicketsService {
       );
     }
 
-    await this.sendResolvedEmails(emailRecipients);
+    await this.sendResolvedEmails(
+      emailRecipients,
+      outcome === 'EXTERNAL_REFERRAL'
+        ? 'REFERRED_OUTSIDE'
+        : 'HANDLED_BY_MUNICIPALITY',
+    );
     return { status: 'Resolved' };
   }
 
@@ -1323,7 +1338,7 @@ export class TicketsService {
   // UPDATE (so the 0046 CHECKs hold), a status_history row with the reason
   // (the earlier Resolved row keeps its snapshot, and the referral stays in
   // routing_actions — nothing earlier is touched), the audit event and the
-  // ticket's Operational Priority. No notification and no email. The
+  // ticket's Operational Priority and a generic citizen notice. No email. The
   // reason is staff-only.
   async returnToReview(
     ticketId: number,
@@ -1408,6 +1423,12 @@ export class TicketsService {
         });
         // Active again: its priority commits with the return.
         await this.operationalPriority.recalculateTickets(tx, [ticketId]);
+        await notifyTicketCitizens(
+          tx,
+          this.notifications,
+          ticketId,
+          BACK_UNDER_REVIEW,
+        );
       });
     } catch (err) {
       throw checkViolationAsConflict(
@@ -1432,7 +1453,8 @@ export class TicketsService {
   }
 
   // The in-app status notification for each distinct citizen reporter
-  // (STATUS_NOTIFICATION), inside the caller's transaction. Returns the
+  // (STATUS_NOTIFICATION), inside a savepoint in the caller's transaction.
+  // A notification failure never rolls back the action. Returns the
   // email recipients: only Resolved warrants an email through this ladder
   // (the rest stay in-app-only), per PLAN.md's notification-system design
   // decision. Rejected is a separate terminal outcome reached via
@@ -1442,31 +1464,24 @@ export class TicketsService {
     tx: TransactionSql,
     ticketId: number,
     status: TicketStatus,
+    outcome?: ResolutionOutcome,
   ): Promise<{ email: string; reportId: number }[]> {
-    const notice = STATUS_NOTIFICATION[status];
+    const notice =
+      status === 'Resolved'
+        ? resolvedNotice({
+            status,
+            resolvedAt: outcome ? 'recorded' : null,
+            outcomeCode: outcome ?? null,
+          })
+        : STATUS_NOTIFICATION[status];
     if (!notice) return [];
 
-    const citizenRows = await tx<
-      { citizen_id: number; report_id: number; email: string }[]
-    >`
-      SELECT DISTINCT ON (r.citizen_id) r.citizen_id, r.id AS report_id, c.email
-      FROM reports r
-      JOIN citizens c ON c.id = r.citizen_id
-      WHERE r.ticket_id = ${ticketId}
-      ORDER BY r.citizen_id, r.id ASC
-    `;
-    for (const row of citizenRows) {
-      await this.notifications.createInTx(tx, {
-        recipientType: 'citizen',
-        recipientId: row.citizen_id,
-        type: notice.type,
-        title: notice.title,
-        message: notice.message,
-        href: `/dashboard/reports/${row.report_id}`,
-        entityType: 'ticket',
-        entityId: ticketId,
-      });
-    }
+    const citizenRows = await notifyTicketCitizens(
+      tx,
+      this.notifications,
+      ticketId,
+      notice,
+    );
     return status === 'Resolved'
       ? citizenRows.map((row) => ({
           email: row.email,
@@ -1483,13 +1498,18 @@ export class TicketsService {
   // committed.
   private async sendResolvedEmails(
     recipients: { email: string; reportId: number }[],
+    outcome: CitizenOutcome | null = null,
   ): Promise<void> {
     if (recipients.length === 0) return;
     const webOrigin = this.config.get('WEB_ORIGIN', { infer: true });
     for (const recipient of recipients) {
       try {
         const reportUrl = `${webOrigin}/dashboard/reports/${recipient.reportId}`;
-        await this.email.sendReportResolved(recipient.email, reportUrl);
+        await this.email.sendReportResolved(
+          recipient.email,
+          reportUrl,
+          outcome,
+        );
       } catch {
         // Never let an email failure surface to the caller — the status
         // change and in-app notification already committed.
@@ -1638,6 +1658,12 @@ export class TicketsService {
       targetSummary: `Ticket #${ticketId} (${params.category})`,
       metadata: { from: fromOffice, to: toOffice, reason },
     });
+    await notifyTicketCitizens(
+      tx,
+      this.notifications,
+      ticketId,
+      reassignedNotice(toOffice),
+    );
   }
 
   // Manual Refer (manuscript pp. 43–44, Appendix H ROUTING_ACTIONS;
@@ -1718,6 +1744,12 @@ export class TicketsService {
           ${admin.adminId}, left(${admin.adminName}::text, ${ROUTING_ADMIN_NAME_MAX_LENGTH}::int), now()
         )
       `;
+      await notifyTicketCitizens(
+        tx,
+        this.notifications,
+        ticketId,
+        referredNotice(referralTarget),
+      );
     });
   }
 
@@ -1788,27 +1820,22 @@ export class TicketsService {
         },
       });
 
-      const citizenRows = await tx<
-        { citizen_id: number; report_id: number; email: string }[]
-      >`
-        SELECT DISTINCT ON (r.citizen_id) r.citizen_id, r.id AS report_id, c.email
-        FROM reports r
-        JOIN citizens c ON c.id = r.citizen_id
-        WHERE r.ticket_id = ${ticketId}
-        ORDER BY r.citizen_id, r.id ASC
-      `;
-      for (const row of citizenRows) {
-        await this.notifications.createInTx(tx, {
-          recipientType: 'citizen',
-          recipientId: row.citizen_id,
-          type: 'ticket_rejected',
-          title: 'Report not accepted',
-          message: `Your report was not accepted: ${trimmedReason}`,
-          href: `/dashboard/reports/${row.report_id}`,
-          entityType: 'ticket',
-          entityId: ticketId,
-        });
-      }
+      let citizenRows: Awaited<ReturnType<typeof ticketReporters>> = [];
+      await bestEffortNotifications(tx, async (sp) => {
+        citizenRows = await ticketReporters(sp, ticketId);
+        for (const row of citizenRows) {
+          await this.notifications.createInTx(sp, {
+            recipientType: 'citizen',
+            recipientId: row.citizen_id,
+            type: 'ticket_rejected',
+            title: 'Report not accepted',
+            message: `Your report was not accepted: ${trimmedReason}`,
+            href: `/dashboard/reports/${row.report_id}`,
+            entityType: 'ticket',
+            entityId: ticketId,
+          });
+        }
+      });
 
       return citizenRows.map((row) => ({
         email: row.email,
