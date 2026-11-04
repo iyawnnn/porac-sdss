@@ -263,6 +263,12 @@ Work-order fields — **especially `notes`** — moderation notes, and citizen d
 
 ### 7.2 Citizens see only their own reports
 
+**Citizen notifications (Phase 6, step 6c).** `NotificationsService.listForPrincipal` retains recipient scoping and projects citizen items to exactly `id`, `type`, `title`, `message`, `href`, `readAt`, `createdAt` (plus list-level `nextCursor`). No `recipientType`, `recipientId`, `recipientOffice`, `entityType` or `entityId`, including on legacy rows. The notification's own `id` supports mark-read; `href` may identify only a report owned by that session, checked before returning it. Invalid/internal/other-owner links become null. Admin responses retain their existing fields and office scoping.
+
+Reassign (including category-driven office changes), Refer, return to review and first ticket acknowledgment notify distinct existing citizen reporters once per event. Feedback receipt goes only to its author. All new recipient queries exclude a merged-away target. Citizens have no disabled/deleted flag; joining `citizens` excludes missing accounts. Referral targets reuse step 6b's agency allowlist; free-text/Other/unrecorded targets are generic. Notification builders and the resolved email exclude names, remarks, resolution notes, routing/return reasons, audit, Work Order, assessment, screening, Hazard Information and rainfall data. Rejection reason remains the sole staff-authored text in notifications/email. This restriction does **not** remove resolution notes/photo or the feedback line from the citizen report page. Resolved copy distinguishes municipal completion and referral (with the agency-completion caveat); legacy copy stays generic.
+
+Notification writes use a savepoint inside the action transaction. An insert failure rolls back the notification batch and logs a generic warning, allowing the action and its load-bearing audit to commit. Resolved/rejection emails remain post-commit; no new email path, no relaxed guard, rate limit or audit contract. Tests use mocked email methods or a disposable PGlite database, never a provider.
+
 `GET /reports/mine` and every per-report route check ownership and existence in a **single clause** (`WHERE r.id = ... AND r.citizen_id = ...`), so a wrong id and someone else's id are indistinguishable to the caller — no probing an id space for existence.
 
 ### 7.2b Citizen report page and tracking-reference lookup

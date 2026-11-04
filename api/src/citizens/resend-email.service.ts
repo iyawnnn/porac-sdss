@@ -121,11 +121,15 @@ export class ResendEmailService implements EmailService {
     );
   }
 
-  async sendReportResolved(email: string, reportUrl: string): Promise<void> {
+  async sendReportResolved(
+    email: string,
+    reportUrl: string,
+    outcome?: import('../reports/citizen-report-view').CitizenOutcome | null,
+  ): Promise<void> {
     await this.send(
       email,
       'Your report was resolved — PORAC-SDSS',
-      reportResolvedEmailHtml(reportUrl),
+      reportResolvedEmailHtml(reportUrl, outcome),
     );
   }
 

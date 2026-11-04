@@ -135,7 +135,7 @@ describe('notification wiring stays inside the submit transaction', () => {
     // + dispute + notifyFocalIntake's own single createInTx call site. The
     // automatic-merge citizen notification went away in Phase 1, step 3.
     const matches = reportsServiceSource.match(
-      /this\.notifications\.createInTx\(tx,/g,
+      /this\.notifications\.createInTx\((?:tx|sp),/g,
     );
     expect(matches).toHaveLength(4);
   });
@@ -153,7 +153,9 @@ describe('new-report admin notification wiring', () => {
 
   it('creates exactly one citizen acknowledgement and one office-targeted admin notification for a new ticket', () => {
     expect(
-      reportsServiceSource.match(/this\.notifications\.createInTx\(tx,/g),
+      reportsServiceSource.match(
+        /this\.notifications\.createInTx\((?:tx|sp),/g,
+      ),
     ).toHaveLength(4);
     expect(reportsServiceSource).toMatch(
       /recipientType: 'admin',[\s\S]*?recipientOffice: office,[\s\S]*?type: 'new_citizen_report',[\s\S]*?title: 'New citizen report'/,
@@ -598,7 +600,9 @@ describe('resolution feedback wiring (citizen resolution-feedback loop)', () => 
   });
 
   it('the dispute notification links to the admin ticket detail, inside the same transaction', () => {
-    expect(answerResolution).toMatch(/this\.notifications\.createInTx\(tx,/);
+    expect(answerResolution).toMatch(
+      /bestEffortNotifications\(tx,[\s\S]*?this\.notifications\.createInTx\(sp,/,
+    );
     expect(answerResolution).toMatch(
       /recipientType: 'admin',[\s\S]*?recipientOffice: ticket\.assigned_office,[\s\S]*?type: 'ticket_disputed'/,
     );

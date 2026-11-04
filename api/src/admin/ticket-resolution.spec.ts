@@ -55,6 +55,9 @@ function makeDb(respond: Responder) {
     }) as unknown as Sql;
   const sql = make(false);
   const tx = make(true);
+  Object.assign(tx, {
+    savepoint: (cb: (sp: Sql) => Promise<unknown>) => cb(tx),
+  });
   (
     sql as unknown as {
       begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
@@ -431,6 +434,7 @@ describe('resolving a ticket (Phase 5, step 5c)', () => {
     expect(t.sendReportResolved).toHaveBeenCalledWith(
       'a@example.test',
       'https://porac.example/dashboard/reports/21',
+      'HANDLED_BY_MUNICIPALITY',
     );
   });
 
@@ -584,7 +588,7 @@ describe('returning a ticket to Under Review (Phase 5, step 5c)', () => {
     },
   );
 
-  it('returns it: one locked transaction clearing the resolution record with the status, a reasoned history row, the audit event and the priority; no notification or email', async () => {
+  it('returns it: one locked transaction clearing the resolution record with the status, a reasoned history row, the audit event and the priority; no recipients or email', async () => {
     const t = build(returnResponder({ latestReferralId: 33 }));
     const result = await t.service.returnToReview(
       9,

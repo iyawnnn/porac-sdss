@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { E2E_FOCAL_ADMIN, E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
 import { loginAdmin as loginAs } from "./helpers";
+import { expectCitizenNoticeForAccount } from "./citizen-notification-checks";
 
 test.setTimeout(60_000);
 
@@ -127,19 +128,19 @@ test("MEO/MDRRMO operational staff cannot reach Focal Intake", async ({ page }) 
   await expect(page.getByRole("heading", { name: "Intake Queue" })).toHaveCount(0);
 });
 
-test("acknowledging a report does not change the ticket's Reported status", async ({ page, request }) => {
+test("acknowledging a report does not change the ticket's Reported status", async ({ page, request, browser }) => {
   await loginAs(page, E2E_FOCAL_ADMIN);
   const cookies = await page.context().cookies();
   const cookieHeader = sessionCookieHeader(cookies);
 
-  const intakeRes = await request.get("/api/admin/intake", { headers: cookieHeader });
-  const rows: { reportId: number; ticketStatus: string; intakeState: string }[] = await intakeRes.json();
-  const target = rows.find((r) => r.ticketStatus === "Reported" && r.intakeState === "New");
-  test.skip(!target, "No unacknowledged Reported-status report available in this environment's seed data.");
+  const target = process.env.E2E_GROUPING_FIXTURES
+    ? (JSON.parse(process.env.E2E_GROUPING_FIXTURES) as { routing: { focalWorkOrder: { reportId: number } } }).routing.focalWorkOrder
+    : null;
+  test.skip(!target, "Needs the test-owned Reported routing fixture.");
 
   const ackRes = await request.post(`/api/admin/intake/${target!.reportId}/acknowledge`, {
     headers: cookieHeader,
-    data: {},
+    data: { remarks: "E2E acknowledgment staff-only remarks" },
   });
   expect(ackRes.ok()).toBe(true);
   const detail = await ackRes.json();
@@ -153,6 +154,7 @@ test("acknowledging a report does not change the ticket's Reported status", asyn
     data: {},
   });
   expect(second.status()).toBe(409);
+  await expectCitizenNoticeForAccount(browser, { reportId: target!.reportId, type: "ticket_acknowledged", message: "Your report has been acknowledged by municipal monitoring.", forbidden: ["E2E acknowledgment staff-only remarks", `${E2E_FOCAL_ADMIN.firstName} ${E2E_FOCAL_ADMIN.lastName}`] });
 });
 
 test("Work Order assignee directory excludes Focal even when querying MDRRMO (focal's own office column)", async ({ page, request }) => {

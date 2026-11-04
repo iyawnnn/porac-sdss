@@ -21,6 +21,10 @@ import type { ALL_CATEGORIES, ReportInput } from '../contracts/schemas';
 import { TICKET_DISPUTE_REASON_MAX_LENGTH } from '../contracts/schemas';
 import type { CitizenSession } from '../auth/session.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  bestEffortNotifications,
+  notifyFeedbackReceived,
+} from '../notifications/citizen-notices';
 import type { ResolutionFeedbackType } from '../db/schema';
 import {
   citizenOutcome,
@@ -826,6 +830,7 @@ export class ReportsService {
           merged_into_ticket_id: number | null;
           title: string;
           has_report: boolean;
+          receipt_report_id: number | null;
         }[]
       >`
         WITH RECURSIVE family AS (
@@ -840,7 +845,10 @@ export class ReportsService {
           EXISTS (
             SELECT 1 FROM reports r3
             WHERE r3.ticket_id IN (SELECT id FROM family) AND r3.citizen_id = ${citizenId}
-          ) AS has_report
+          ) AS has_report,
+          (SELECT r4.id FROM reports r4
+            WHERE r4.ticket_id IN (SELECT id FROM family) AND r4.citizen_id = ${citizenId}
+            ORDER BY r4.id LIMIT 1) AS receipt_report_id
         FROM tickets t
         WHERE t.id = ${survivor.id}
         FOR UPDATE OF t
@@ -883,15 +891,17 @@ export class ReportsService {
           SET disputed_at = now(), dispute_reason = ${reason}
           WHERE id = ${ticket.ticket_id} AND disputed_at IS NULL
         `;
-        await this.notifications.createInTx(tx, {
-          recipientType: 'admin',
-          recipientOffice: ticket.assigned_office,
-          type: 'ticket_disputed',
-          title: 'Citizen reports issue not fixed',
-          message: `A citizen reported that "${ticket.title}" (Ticket #${ticket.ticket_id}) is not actually fixed.`,
-          href: `/admin/tickets/${ticket.ticket_id}`,
-          entityType: 'ticket',
-          entityId: ticket.ticket_id,
+        await bestEffortNotifications(tx, async (sp) => {
+          await this.notifications.createInTx(sp, {
+            recipientType: 'admin',
+            recipientOffice: ticket.assigned_office,
+            type: 'ticket_disputed',
+            title: 'Citizen reports issue not fixed',
+            message: `A citizen reported that "${ticket.title}" (Ticket #${ticket.ticket_id}) is not actually fixed.`,
+            href: `/admin/tickets/${ticket.ticket_id}`,
+            entityType: 'ticket',
+            entityId: ticket.ticket_id,
+          });
         });
       } else {
         await tx`
@@ -901,6 +911,13 @@ export class ReportsService {
         `;
       }
 
+      await notifyFeedbackReceived(
+        tx,
+        this.notifications,
+        ticket.ticket_id,
+        citizenId,
+        ticket.receipt_report_id,
+      );
       return { ticket_id: ticket.ticket_id, feedback };
     });
   }

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { E2E_FOCAL_ADMIN, E2E_MDRRMO_ADMIN, E2E_MEO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
 import { loginAdmin, settleAdminPage } from "./helpers";
+import { expectCitizenNoticeForAccount } from "./citizen-notification-checks";
 
 // Manual routing (manuscript pp. 43–44, Appendix H ROUTING_ACTIONS;
 // manuscript revision Phase 5, step 5a): Reassign and Refer only, each with
@@ -81,6 +82,11 @@ test.describe.serial("Manual routing: Reassign and Refer", () => {
     await timelineTab.click();
     await expect(mdrrmoPage.getByText("Reassigned from MEO to MDRRMO. Reason: E2E: flooding belongs to MDRRMO.")).toBeVisible();
     await mdrrmoContext.close();
+    await expectCitizenNoticeForAccount(browser, {
+      reportId, type: "ticket_reassigned",
+      message: "Your report has been routed to the Municipal Disaster Risk Reduction and Management Office.",
+      forbidden: ["E2E: flooding belongs to MDRRMO.", `${E2E_FOCAL_ADMIN.firstName} ${E2E_FOCAL_ADMIN.lastName}`],
+    });
   });
 
   test("Focal cannot reassign or refer once the ticket has left Reported or has an active Work Order", async ({ page }) => {
@@ -114,7 +120,7 @@ test.describe.serial("Manual routing: Reassign and Refer", () => {
     }
   });
 
-  test("MEO refers a referral ticket with a required reason; a repeat to the same agency and a no-op Reassign are refused", async ({ page }) => {
+  test("MEO refers a referral ticket with a required reason; a repeat to the same agency and a no-op Reassign are refused", async ({ page, browser }) => {
     const { ticketId } = fixtures!.meoReferral;
     await loginAdmin(page, E2E_MEO_ADMIN);
     await page.goto(`/admin/tickets/${ticketId}`);
@@ -133,6 +139,11 @@ test.describe.serial("Manual routing: Reassign and Refer", () => {
 
     await page.getByRole("tab", { name: "Timeline" }).click();
     await expect(page.getByText("Referral recorded — MENRO: E2E: the leak is on a riverbank easement.")).toBeVisible();
+    await expectCitizenNoticeForAccount(browser, {
+      reportId: fixtures!.meoReferral.reportId, type: "ticket_referred",
+      message: "Your report has been referred to MENRO.",
+      forbidden: ["E2E: the leak is on a riverbank easement.", `${E2E_MEO_ADMIN.firstName} ${E2E_MEO_ADMIN.lastName}`],
+    });
 
     const base = `/api/admin/tickets/${ticketId}`;
     await expectRefusal(page, `${base}/refer`, { agency: "menro", reason: "E2E: again" }, 400, `Ticket #${ticketId} is already referred to MENRO.`);

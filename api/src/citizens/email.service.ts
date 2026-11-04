@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env';
+import type { CitizenOutcome } from '../reports/citizen-report-view';
 
 // DI token — EmailService is an interface (erased at runtime), so
 // consumers inject by this token rather than the type itself.
@@ -14,7 +15,11 @@ export interface EmailService {
   sendPasswordReset(email: string, resetUrl: string): Promise<void>;
   sendOAuthOnlyNotice(email: string): Promise<void>;
   sendPasswordResetConfirmation(email: string): Promise<void>;
-  sendReportResolved(email: string, reportUrl: string): Promise<void>;
+  sendReportResolved(
+    email: string,
+    reportUrl: string,
+    outcome?: CitizenOutcome | null,
+  ): Promise<void>;
   sendReportRejected(
     email: string,
     reportUrl: string,

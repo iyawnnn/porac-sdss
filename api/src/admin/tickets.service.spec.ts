@@ -48,14 +48,15 @@ describe('parseTicketQuery category filter', () => {
     {} as OperationalPriorityService,
   );
 
-  it.each(['Localized Flooding', 'Pothole / Road Surface Damage', 'Other Minor Infrastructure Hazard'])(
-    'accepts a known current category %s',
-    (category) => {
-      expect(service.parseTicketQuery({ category }, MEO_OFFICER).category).toBe(
-        category,
-      );
-    },
-  );
+  it.each([
+    'Localized Flooding',
+    'Pothole / Road Surface Damage',
+    'Other Minor Infrastructure Hazard',
+  ])('accepts a known current category %s', (category) => {
+    expect(service.parseTicketQuery({ category }, MEO_OFFICER).category).toBe(
+      category,
+    );
+  });
 
   it.each(['Flooding', 'Pothole', 'Other'])(
     'still accepts a legacy category %s, so historical tickets stay filterable',
@@ -213,6 +214,9 @@ describe('cross-office access to single-resource ticket endpoints', () => {
         begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
       }
     ).begin = (cb) => cb(sql);
+    Object.assign(sql, {
+      savepoint: (cb: (sp: Sql) => Promise<unknown>) => cb(sql),
+    });
     return new TicketsService(
       sql,
       {} as MediaService,
@@ -472,6 +476,9 @@ describe('admin audit logging for ticket mutations', () => {
         begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
       }
     ).begin = (cb) => cb(sql);
+    Object.assign(sql, {
+      savepoint: (cb: (sp: Sql) => Promise<unknown>) => cb(sql),
+    });
     const logInPgTx = jest.fn().mockResolvedValue(undefined);
     const audit = { logInPgTx } as unknown as AdminAuditService;
     const createInTx = jest.fn();
@@ -481,7 +488,9 @@ describe('admin audit logging for ticket mutations', () => {
       {} as MediaService,
       { createInTx } as unknown as NotificationsService,
       { sendReportRejected } as unknown as EmailService,
-      { get: jest.fn().mockReturnValue('https://porac.example') } as unknown as ConfigService<Env, true>,
+      {
+        get: jest.fn().mockReturnValue('https://porac.example'),
+      } as unknown as ConfigService<Env, true>,
       audit,
       {} as OperationalPriorityService,
     );
@@ -903,13 +912,23 @@ describe('admin audit logging for ticket mutations', () => {
 
   it('rejects a Reported ticket: status Rejected, status_history + ticket_rejected audit + citizen notification + email, all with the reason', async () => {
     const { service, logInPgTx, createInTx, sendReportRejected } = makeService([
-      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }], // ticket lookup
+      [
+        {
+          status: 'Reported',
+          assigned_office: 'MEO',
+          category: 'Pothole / Road Surface Damage',
+        },
+      ], // ticket lookup
       [{}], // UPDATE tickets
       [{}], // INSERT status_history
       [{ citizen_id: 1, report_id: 10, email: 'citizen@example.com' }], // citizenRows
     ]);
 
-    const result = await service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Not within city limits.');
+    const result = await service.rejectTicket(
+      9,
+      MEO_OFFICER as AdminSession,
+      'Not within city limits.',
+    );
 
     expect(result).toEqual({ status: 'Rejected' });
 
@@ -943,19 +962,35 @@ describe('admin audit logging for ticket mutations', () => {
     'allows rejecting a %s ticket (any active status, not just Reported)',
     async (status) => {
       const { service } = makeService([
-        [{ status, assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }],
+        [
+          {
+            status,
+            assigned_office: 'MEO',
+            category: 'Pothole / Road Surface Damage',
+          },
+        ],
         [{}],
         [{}],
         [],
       ]);
-      const result = await service.rejectTicket(9, MEO_OFFICER as AdminSession, 'No longer applicable.');
+      const result = await service.rejectTicket(
+        9,
+        MEO_OFFICER as AdminSession,
+        'No longer applicable.',
+      );
       expect(result).toEqual({ status: 'Rejected' });
     },
   );
 
   it('rejects rejecting a ticket on another office', async () => {
     const { service } = makeService([
-      [{ status: 'Reported', assigned_office: 'MDRRMO', category: 'Localized Flooding' }],
+      [
+        {
+          status: 'Reported',
+          assigned_office: 'MDRRMO',
+          category: 'Localized Flooding',
+        },
+      ],
     ]);
     await expect(
       service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
@@ -964,7 +999,13 @@ describe('admin audit logging for ticket mutations', () => {
 
   it('rejects rejecting an already-Resolved ticket', async () => {
     const { service } = makeService([
-      [{ status: 'Resolved', assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }],
+      [
+        {
+          status: 'Resolved',
+          assigned_office: 'MEO',
+          category: 'Pothole / Road Surface Damage',
+        },
+      ],
     ]);
     await expect(
       service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
@@ -973,7 +1014,13 @@ describe('admin audit logging for ticket mutations', () => {
 
   it('rejects rejecting an already-Rejected ticket (no double-reject)', async () => {
     const { service } = makeService([
-      [{ status: 'Rejected', assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }],
+      [
+        {
+          status: 'Rejected',
+          assigned_office: 'MEO',
+          category: 'Pothole / Road Surface Damage',
+        },
+      ],
     ]);
     await expect(
       service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
@@ -982,7 +1029,13 @@ describe('admin audit logging for ticket mutations', () => {
 
   it('rejects an empty reason', async () => {
     const { service } = makeService([
-      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }],
+      [
+        {
+          status: 'Reported',
+          assigned_office: 'MEO',
+          category: 'Pothole / Road Surface Damage',
+        },
+      ],
     ]);
     await expect(
       service.rejectTicket(9, MEO_OFFICER as AdminSession, '   '),
@@ -991,7 +1044,13 @@ describe('admin audit logging for ticket mutations', () => {
 
   it('rejects a reason over TICKET_REJECTION_REASON_MAX_LENGTH', async () => {
     const { service } = makeService([
-      [{ status: 'Reported', assigned_office: 'MEO', category: 'Pothole / Road Surface Damage' }],
+      [
+        {
+          status: 'Reported',
+          assigned_office: 'MEO',
+          category: 'Pothole / Road Surface Damage',
+        },
+      ],
     ]);
     await expect(
       service.rejectTicket(9, MEO_OFFICER as AdminSession, 'x'.repeat(1001)),
@@ -1162,7 +1221,7 @@ describe('ticket-status notification email selection', () => {
       /return status === 'Resolved'\s*\n\s*\? citizenRows/,
     );
     expect(ticketsServiceSource).toMatch(
-      /emailRecipients = await this\.pg\.begin[\s\S]*?await this\.sendResolvedEmails\(emailRecipients\)/,
+      /emailRecipients = await this\.pg\.begin[\s\S]*?await this\.sendResolvedEmails\(\s*emailRecipients,/,
     );
     expect(ticketsServiceSource).toMatch(
       /private async sendResolvedEmails[\s\S]*?this\.email\.sendReportResolved/,
@@ -1208,6 +1267,9 @@ describe('resolution_outcome on status changes (Phase 2, step 2b)', () => {
         begin: (cb: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
       }
     ).begin = (cb) => cb(sql);
+    Object.assign(sql, {
+      savepoint: (cb: (sp: Sql) => Promise<unknown>) => cb(sql),
+    });
     const service = new TicketsService(
       sql,
       {} as MediaService,

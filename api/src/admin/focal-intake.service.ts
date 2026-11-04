@@ -14,6 +14,10 @@ import { isFocalPersonnel } from '../common/authz/admin-scope';
 import { AdminAuditService } from './admin-audit.service';
 import { TicketsService } from './tickets.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  ACKNOWLEDGED,
+  notifyTicketCitizens,
+} from '../notifications/citizen-notices';
 import { routingBlock, type RoutingActor } from './ticket-routing.rules';
 
 // Central Monitoring / Focal Personnel's municipality-wide intake surface —
@@ -516,7 +520,10 @@ export class FocalIntakeService {
         const [report] = await tx<
           { id: number; citizen_id: number; ticket_id: number; title: string }[]
         >`
-          SELECT id, citizen_id, ticket_id, title FROM reports WHERE id = ${reportId}
+          SELECT r.id, r.citizen_id, r.ticket_id, r.title FROM reports r
+          JOIN tickets t ON t.id = r.ticket_id
+          WHERE r.id = ${reportId} AND t.merged_into_ticket_id IS NULL
+          FOR UPDATE OF t
         `;
         if (!report) throw new NotFoundException('Report not found.');
 
@@ -532,7 +539,7 @@ export class FocalIntakeService {
         // Acknowledging the same report twice never reaches this insert — the
         // report_acknowledgments UNIQUE above raises first, which is the 409.
         // Every read stays on report_acknowledgments for now.
-        await tx`
+        const acknowledgment = await tx`
           INSERT INTO acknowledgments (ticket_id, acknowledged_by_admin_id, remarks, acknowledged_at)
           VALUES (${report.ticket_id}, ${admin.adminId}, ${trimmedRemarks}, now())
           ON CONFLICT (ticket_id) DO NOTHING
@@ -552,16 +559,14 @@ export class FocalIntakeService {
           targetSummary: `${report.title} (Report #${reportId})`,
         });
 
-        await this.notifications.createInTx(tx, {
-          recipientType: 'citizen',
-          recipientId: report.citizen_id,
-          type: 'report_acknowledged',
-          title: 'Report acknowledged',
-          message: 'Your report has been acknowledged by municipal monitoring.',
-          href: `/dashboard/reports/${reportId}`,
-          entityType: 'ticket',
-          entityId: report.ticket_id,
-        });
+        if (acknowledgment.count === 1) {
+          await notifyTicketCitizens(
+            tx,
+            this.notifications,
+            report.ticket_id,
+            ACKNOWLEDGED,
+          );
+        }
       });
     } catch (err) {
       if (isUniqueViolation(err)) {

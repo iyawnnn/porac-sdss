@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { E2E_CITIZEN_ACCOUNT, E2E_FOCAL_ADMIN, E2E_MEO_ADMIN } from "./test-credentials";
 import { loginAdmin, loginCitizen, settleAdminPage } from "./helpers";
+import { expectCitizenNotice, expectCitizenNoticeForAccount } from "./citizen-notification-checks";
 
 // Resolution outcome and return to Under Review (manuscript revision Phase
 // 5, step 5c; migration 0046): resolving needs an outcome and resolution
@@ -148,6 +149,7 @@ test.describe.serial("Resolution outcome and return to Under Review", () => {
     await dialog.getByRole("button", { name: "Mark resolved" }).click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByTestId("resolution-outcome")).toHaveText("Outcome: External referral");
+    await expectCitizenNoticeForAccount(browser, { reportId: referredReportId, type: "ticket_resolved", message: "Your report has been referred to an outside agency. The municipality's handling is complete. The agency may not have resolved the issue yet.", forbidden: ["E2E: referred to the water district for the main line.", RETURN_REASON, referralAgency] });
 
     // A reason is required.
     await expectReturnRefusal(page, id, "   ", 400, "A reason is required to return a ticket to Under Review.");
@@ -184,6 +186,9 @@ test.describe.serial("Resolution outcome and return to Under Review", () => {
     const citizenText = await citizenPage.locator("main").innerText();
     expect(citizenText).not.toContain(fixtures!.referralAgency);
     expect(citizenText).not.toContain(`${E2E_MEO_ADMIN.firstName} ${E2E_MEO_ADMIN.lastName}`);
+    await expectCitizenNotice(citizenPage, { reportId: referredReportId, type: "ticket_returned_to_review", message: "Your report is back under review by the assigned office.", forbidden: [RETURN_REASON, "E2E: referred to the water district for the main line."] });
+    const ladder = await citizenPage.request.get("/api/notifications?type=ticket_under_review&limit=100");
+    expect(((await ladder.json()) as { items: { href: string }[] }).items.filter((n) => n.href === `/dashboard/reports/${referredReportId}`)).toHaveLength(0);
     await citizenContext.close();
 
     // Resolved again, as Municipal action completed.
@@ -197,6 +202,7 @@ test.describe.serial("Resolution outcome and return to Under Review", () => {
     await expect(page.getByText("Resolved — External referral: E2E: referred to the water district for the main line.")).toBeVisible();
     await expect(page.getByText(`Returned to Under Review: ${RETURN_REASON}`, { exact: false })).toBeVisible();
     await expect(page.getByText("Resolved — Municipal action completed: E2E: the office repaired the line itself.")).toBeVisible();
+    await expectCitizenNoticeForAccount(browser, { reportId: referredReportId, type: "ticket_resolved", message: "Your report has been handled by the municipality.", count: 2, forbidden: ["E2E: the office repaired the line itself.", RETURN_REASON] });
   });
 
   test("a legacy Resolved ticket shows Not recorded (legacy) and offers no return", async ({ page }) => {
