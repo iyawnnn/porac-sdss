@@ -237,13 +237,14 @@ System Administrators cannot reassign a ticket, view one, or reach `/admin/ticke
 Exclusive to this account type:
 
 - **Create** an admin — email, name, account type, office. **Personnel** needs an office (MEO or MDRRMO); **Focal Personnel** is always MDRRMO (organizational, not operational — see The five user types above); the **System Administrator** has none. An invalid combination is rejected (400), and the database enforces the same rule.
-- **Change** account type or office.
+- **Change** another staff member's account type, office or Focal responsibility using the same separate fields as create. Account type is Personnel / System Administrator; Office is MEO / MDRRMO (empty and disabled for System Administrator); the Focal checkbox is enabled only for Personnel on MDRRMO and cleared otherwise. Each real change ends the target's sessions immediately and writes one audit event. Saving unchanged fields writes nothing. Names/emails cannot be edited.
 - **Deactivate / reactivate.** Deactivation is immediate and total: the admin cannot log in, and **any session they currently hold dies within the request cycle** rather than lingering until its 8-hour expiry. Reactivation restores access with the same password.
 - **Reset another admin's password**, which takes effect immediately and invalidates that admin's other sessions.
 
-Two guardrails worth knowing:
+Account guardrails:
 
-- **The last active System Administrator cannot be deactivated.** The system refuses to lock itself out of its own administration.
+- **The last active System Administrator cannot be demoted or deactivated.** Both checks run under transaction row locks; inactive System Administrators do not count. Reactivating or editing an inactive account is allowed. The lockout refusal is 409.
+- **A System Administrator cannot change their own account settings or deactivate themselves.** Another System Administrator must do it (403, or 409 for last-active deactivation); own-row controls are disabled with that explanation.
 - **A System Administrator cannot reset their own password through Admin Management.** They use their own Account & Security page, which requires the current password.
 
 ### 4.4 Activity Log (`/admin/activity-log`)

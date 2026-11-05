@@ -119,6 +119,9 @@ export class SessionService {
         .select({
           sessionValidAfter: admins.sessionValidAfter,
           isActive: admins.isActive,
+          accountType: admins.accountType,
+          office: admins.office,
+          isFocal: admins.isFocal,
         })
         .from(admins)
         .where(eq(admins.id, session.adminId));
@@ -129,6 +132,16 @@ export class SessionService {
       // token fail even if some future code path ever bumps
       // session_valid_after without also flipping isActive.
       if (admin && !admin.isActive) {
+        return null;
+      }
+      // iat has whole-second precision. Reject changed authority even in
+      // the bump's second, without breaking same-second password rotation.
+      if (
+        admin &&
+        (admin.accountType !== session.accountType ||
+          admin.office !== session.office ||
+          admin.isFocal !== session.isFocal)
+      ) {
         return null;
       }
       if (

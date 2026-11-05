@@ -144,7 +144,15 @@ Both `admins` and `citizens` carry `password_changed_at` and `session_valid_afte
 
 Setting `admins.is_active = false` does two things in the **same write**: it blocks future logins, and it bumps `session_valid_after` — so an already-issued token dies within the request cycle rather than lingering up to 8 hours. Reactivation only flips the flag back; the admin logs in fresh.
 
-A lockout guard prevents deactivating the last active System Administrator, so the system cannot be locked out of its own administration.
+Staff edits (Phase 7, step 7a) that change `account_type`, `office` or `is_focal` also bump `session_valid_after` in the same transaction as the edit and its one audit event (metadata adds only `sessionsEnded: true`). An unchanged save returns the current safe account with no write, audit or bump. Name/email editing is not provided.
+
+Admin JWT `iat` uses whole seconds: the existing timestamp check rejects `iat < floor(session_valid_after / 1000)`, preserving same-second password-cookie rotation. To end stale authority immediately even in that boundary second, verification also compares the token's account type, office and Focal responsibility with the stored account and rejects any mismatch. Deactivation continues to reject via `is_active` as well.
+
+Both edit and status transactions first select **active** System Administrators in id order with `FOR UPDATE`, then lock the target. Demoting or deactivating the last active System Administrator returns **409** ("Cannot remove the last active System Administrator." / "Cannot deactivate the last active System Administrator."). Inactive accounts do not count; their reactivation or edits are not blocked by this rule. The common lock order serializes concurrent removals without locking opposing targets first.
+
+A System Administrator cannot change their own account type, office or Focal responsibility (**403**, "Another System Administrator must change your own account.") or deactivate themselves (**403**, "Another System Administrator must deactivate your own account."). Deactivation of the last active administrator returns the **409** last-active refusal first, including for the caller's own account. Own-row edit/deactivate controls are disabled with an explanation. The existing self-password-reset refusal is unchanged.
+
+New audit inserts take both `actor_role` and `actor_account_type` from the stored actor row in the same INSERT, for Drizzle, raw-PG and login writes; previously account type came from the session and could disagree with the stored role during an in-flight edit. No historical audit value is rewritten.
 
 There is deliberately **no** `citizens.is_active` equivalent — citizens are self-service accounts and no staff-style deactivation workflow exists in the product.
 

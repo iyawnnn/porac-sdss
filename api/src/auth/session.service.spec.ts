@@ -23,13 +23,17 @@ function chain(result: unknown) {
 function makeSessionService(
   sessionValidAfter: Date | null = null,
   isActive = true,
+  fields: Pick<
+    AdminSession,
+    'accountType' | 'office' | 'isFocal'
+  > = adminPayload,
 ): SessionService {
   const config = {
     get: () => 'a-test-secret-that-is-at-least-32-bytes-long',
   } as unknown as ConfigService<Env, true>;
   const select = jest
     .fn()
-    .mockReturnValue(chain([{ sessionValidAfter, isActive }]));
+    .mockReturnValue(chain([{ sessionValidAfter, isActive, ...fields }]));
   const db = { select } as unknown as PostgresJsDatabase;
   return new SessionService(config, db);
 }
@@ -206,13 +210,19 @@ describe('SessionService', () => {
       } as unknown as ConfigService<Env, true>;
       const select = jest
         .fn()
-        .mockReturnValue(chain([{ sessionValidAfter: null, isActive: true }]));
+        .mockReturnValue(
+          chain([{ sessionValidAfter: null, isActive: true, ...adminPayload }]),
+        );
       const db = { select } as unknown as PostgresJsDatabase;
       return { sessions: new SessionService(config, db), select };
     }
 
     it('a valid session carries accountType, isFocal and office, and no role', async () => {
-      const sessions = makeSessionService();
+      const sessions = makeSessionService(null, true, {
+        accountType: 'PERSONNEL',
+        isFocal: true,
+        office: 'MDRRMO',
+      });
       const token = await sessions.signAdminSession({
         ...adminPayload,
         accountType: 'PERSONNEL',
@@ -282,5 +292,33 @@ describe('SessionService', () => {
         adminPayload,
       );
     });
+  });
+});
+
+describe('staff edit session invalidation', () => {
+  it.each([
+    { accountType: 'SYSTEM_ADMIN' as const, office: null, isFocal: false },
+    {
+      accountType: 'PERSONNEL' as const,
+      office: 'MDRRMO' as const,
+      isFocal: false,
+    },
+    {
+      accountType: 'PERSONNEL' as const,
+      office: 'MEO' as const,
+      isFocal: true,
+    },
+  ])(
+    'rejects old claims immediately, even in the bump second: %j',
+    async (fields) => {
+      const sessions = makeSessionService(new Date(), true, fields);
+      const token = await sessions.signAdminSession(adminPayload);
+      await expect(sessions.verifyAdminSession(token)).resolves.toBeNull();
+    },
+  );
+  it('rejects a token issued before the staff-edit bump after fields are changed back', async () => {
+    const sessions = makeSessionService(new Date(Date.now() + 1000));
+    const token = await sessions.signAdminSession(adminPayload);
+    await expect(sessions.verifyAdminSession(token)).resolves.toBeNull();
   });
 });

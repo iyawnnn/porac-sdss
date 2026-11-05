@@ -2,7 +2,11 @@ import { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { TransactionSql } from 'postgres';
-import { AdminAuditService, type AdminAuditActor, type LogAdminAuditInput } from './admin-audit.service';
+import {
+  AdminAuditService,
+  type AdminAuditActor,
+  type LogAdminAuditInput,
+} from './admin-audit.service';
 
 const ACTOR: AdminAuditActor = {
   adminId: 5,
@@ -22,7 +26,9 @@ function rendered(value: unknown) {
   return new PgDialect().sqlToQuery(value as SQL);
 }
 
-function baseInput(overrides: Partial<LogAdminAuditInput> = {}): LogAdminAuditInput {
+function baseInput(
+  overrides: Partial<LogAdminAuditInput> = {},
+): LogAdminAuditInput {
   return {
     actor: ACTOR,
     actionType: 'ticket_status_advanced',
@@ -46,7 +52,10 @@ describe('AdminAuditService.logInPgTx', () => {
     await service.logInPgTx(tx, baseInput());
 
     expect(calls).toHaveLength(1);
-    const [strings, ...values] = calls[0] as [TemplateStringsArray, ...unknown[]];
+    const [strings, ...values] = calls[0] as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
     expect(strings.join('')).toContain('INSERT INTO admin_audit_events');
     expect(values).toContain(ACTOR.adminId);
     expect(values).toContain('ticket_status_advanced');
@@ -54,7 +63,7 @@ describe('AdminAuditService.logInPgTx', () => {
   });
 
   // Manuscript revision Phase 2, step 2e.
-  it("sets actor_account_type from the actor and actor_role from the actor's stored admins.role", async () => {
+  it("sets actor_account_type and actor_role from the actor's stored admins.role", async () => {
     const calls: [TemplateStringsArray, ...unknown[]][] = [];
     const tx = ((strings: TemplateStringsArray, ...values: unknown[]) => {
       calls.push([strings, ...values]);
@@ -70,12 +79,13 @@ describe('AdminAuditService.logInPgTx', () => {
     // actor_role is read from the admins row in the same INSERT, never
     // taken from the caller (the session has no role).
     expect(text).toContain('(SELECT role FROM admins WHERE id = ?)');
+    expect(text).toContain('(SELECT account_type FROM admins WHERE id = ?)');
     expect(values.slice(0, 5)).toEqual([
       5,
       'System Admin',
       'sysadmin@example.com',
       5,
-      'SYSTEM_ADMIN',
+      5,
     ]);
     // Append-only: nothing here can rewrite an existing row's actor_role.
     expect(calls).toHaveLength(1);
@@ -90,7 +100,14 @@ describe('AdminAuditService.logInTx', () => {
     const tx = { insert } as unknown as PostgresJsDatabase;
     const service = new AdminAuditService({} as PostgresJsDatabase);
 
-    await service.logInTx(tx, baseInput({ actionType: 'admin_created', targetType: 'admin', targetId: 42 }));
+    await service.logInTx(
+      tx,
+      baseInput({
+        actionType: 'admin_created',
+        targetType: 'admin',
+        targetId: 42,
+      }),
+    );
 
     expect(insert).toHaveBeenCalledTimes(1);
     expect(values).toHaveBeenCalledWith(
@@ -98,7 +115,7 @@ describe('AdminAuditService.logInTx', () => {
         actorAdminId: ACTOR.adminId,
         actorName: ACTOR.adminName,
         actorEmail: ACTOR.email,
-        actorAccountType: 'SYSTEM_ADMIN',
+        actorAccountType: expect.any(SQL) as unknown,
         actorOffice: ACTOR.office,
         actionType: 'admin_created',
         targetType: 'admin',
@@ -128,10 +145,12 @@ describe('AdminAuditService.logInTx', () => {
       );
     }
 
-    expect([0, 1].map((i) => valuesArg(values, i).actorAccountType)).toEqual([
-      'PERSONNEL',
-      'PERSONNEL',
-    ]);
+    for (const i of [0, 1]) {
+      expect(rendered(valuesArg(values, i).actorAccountType)).toMatchObject({
+        sql: '(SELECT account_type FROM admins WHERE id = $1)',
+        params: [8],
+      });
+    }
     expect(rendered(valuesArg(values).actorRole).params).toEqual([8]);
   });
 });
@@ -144,14 +163,18 @@ describe('AdminAuditService.logBestEffort', () => {
     const service = new AdminAuditService(db);
 
     await service.logBestEffort(
-      baseInput({ actionType: 'admin_login', targetType: 'admin', targetId: 5 }),
+      baseInput({
+        actionType: 'admin_login',
+        targetType: 'admin',
+        targetId: 5,
+      }),
     );
 
     expect(insert).toHaveBeenCalledTimes(1);
     expect(values).toHaveBeenCalledWith(
       expect.objectContaining({
         actorAdminId: ACTOR.adminId,
-        actorAccountType: 'SYSTEM_ADMIN',
+        actorAccountType: expect.any(SQL) as unknown,
         actionType: 'admin_login',
         targetType: 'admin',
         targetId: 5,
@@ -172,7 +195,9 @@ describe('AdminAuditService.logBestEffort', () => {
     const service = new AdminAuditService(db);
 
     await expect(
-      service.logBestEffort(baseInput({ actionType: 'admin_login_failed', targetType: 'admin' })),
+      service.logBestEffort(
+        baseInput({ actionType: 'admin_login_failed', targetType: 'admin' }),
+      ),
     ).resolves.toBeUndefined();
   });
 });
@@ -181,13 +206,19 @@ describe('AdminAuditService.parseFilters', () => {
   const service = new AdminAuditService({} as PostgresJsDatabase);
 
   it('accepts a known action type and target type', () => {
-    const filters = service.parseFilters({ actionType: 'ticket_reassigned', targetType: 'ticket' });
+    const filters = service.parseFilters({
+      actionType: 'ticket_reassigned',
+      targetType: 'ticket',
+    });
     expect(filters.actionType).toBe('ticket_reassigned');
     expect(filters.targetType).toBe('ticket');
   });
 
   it('drops an unknown action type or target type', () => {
-    const filters = service.parseFilters({ actionType: 'bogus', targetType: 'bogus' });
+    const filters = service.parseFilters({
+      actionType: 'bogus',
+      targetType: 'bogus',
+    });
     expect(filters.actionType).toBeUndefined();
     expect(filters.targetType).toBeUndefined();
   });

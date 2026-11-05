@@ -214,7 +214,7 @@ Every export reuses the list endpoint's own filter parsing — `parseTicketQuery
 
 ### 3.10 System Administrator only
 
-- **Admin Management** (`/admin/admins`) — create, edit account type/office, deactivate and reactivate admin accounts. The account type is one of Personnel (office MEO or MDRRMO), Focal Personnel (office fixed to MDRRMO) or System Administrator (no office). Lockout guards prevent deactivating the last active System Administrator and changing the last System Administrator to Personnel.
+- **Admin Management** (`/admin/admins`) — create staff, edit account type/office/Focal responsibility, deactivate and reactivate. Create and edit share separate Account type (Personnel / System Administrator), Office (MEO / MDRRMO), and Focal responsibility fields. System Administrator clears/disables office and Focal; Focal is available only for Personnel on MDRRMO and clears otherwise. Real edits end the target's sessions and write one audit event; no-op saves write nothing. Transactional row locks protect the last **active** System Administrator from demotion/deactivation; inactive administrators do not count. Self-edit and self-deactivation return 403 (409 for last-active deactivation) and own-row controls explain that another System Administrator must make the change. Name/email editing is absent. MIS gains no operational access.
 - **Activity Log** (`/admin/activity-log`) — the `admin_audit_events` trail, filterable by target type. See [`security.md`](security.md) §6.
 - **Own account** (`/admin/account`) — password management.
 

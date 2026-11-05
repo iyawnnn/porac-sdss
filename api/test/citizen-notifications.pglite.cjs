@@ -53,7 +53,7 @@ async function main() {
   await memory.exec(`
     CREATE TYPE resolution_outcome AS ENUM ('MUNICIPAL_ACTION_COMPLETED', 'EXTERNAL_REFERRAL');
     CREATE TABLE citizens (id serial PRIMARY KEY, email text NOT NULL);
-    CREATE TABLE admins (id int PRIMARY KEY, role text);
+    CREATE TABLE admins (id int PRIMARY KEY, role text, account_type text DEFAULT 'PERSONNEL');
     CREATE TABLE barangays (id int PRIMARY KEY, name text);
     CREATE TABLE tickets (id int PRIMARY KEY, category text, status text, assigned_office text,
       barangay_id int DEFAULT 1, geom text DEFAULT '', category_review_required boolean DEFAULT false,
@@ -81,7 +81,7 @@ async function main() {
       actor_role text, actor_account_type text, actor_office text, action_type text, target_type text,
       target_id int, target_summary text, metadata jsonb);
     INSERT INTO citizens VALUES (1, 'a@example.test'), (2, 'b@example.test'), (3, 'ancestor@example.test');
-    INSERT INTO admins VALUES (1, 'officer');
+    INSERT INTO admins (id, role) VALUES (1, 'officer');
     INSERT INTO barangays VALUES (1, 'Fixture barangay');
     INSERT INTO tickets (id, category, status, assigned_office) VALUES
       (1, 'Localized Flooding', 'Reported', 'MEO'), (2, 'Localized Flooding', 'Reported', 'MEO'),
