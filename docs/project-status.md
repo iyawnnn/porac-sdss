@@ -78,6 +78,12 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 7, step 7.0 — CSV formula-injection fix — **implemented; no migration; Playwright not run; production still to do**
+
+- The central CSV writer (`api/src/common/utils/csv.ts`, `neutraliseFormula` / `toCsv`) now prefixes one apostrophe to any **text** cell whose first character is `=`, `+`, `-`, `@`, tab or CR, then applies the normal quoting. Numbers, bigints and booleans are never prefixed (every export already passes ids, counts, Operational Priority and metres as JS numbers); empty, `null` and `undefined` stay empty; nothing is prefixed twice. Covers `tickets.csv`, `flagged.csv` and `work-orders.csv` — the only CSV in the app. See `docs/security.md` §7.6.
+- Only cell escaping changed: no column, filter, scoping, row limit, permission or export was added, removed or changed. Exports are still not audited (`docs/security.md` §6.3; a later Phase 7 step).
+- New source scan (`csv-writer-only.spec.ts`) fails if a second CSV path appears. Verified: API 73 suites / 1,717 tests, API build, root type-check, root 34 tests; the mutations failed and were reverted; no new lint findings in touched files. Details: `docs/testing.md`.
+
 ### Manuscript revision Phase 6, step 6c — citizen notifications — **implemented; no migration; Playwright not run; production still to do**
 
 - Distinct-reporter notices for office reassignment (including category correction), Refer (step 6b agency mapping), return to review, and first ticket acknowledgment; author-only feedback receipt. Merged-away targets receive none. The per-report acknowledgment notice is replaced, and return uses one dedicated notice. Resolved notice/existing email distinguish municipal completion and outside referral with the agency-completion caveat; legacy and rejection wording stay unchanged. No new emails. The 6b report page's notes/photo/feedback line and the staff resolve label remain unchanged.

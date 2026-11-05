@@ -245,7 +245,7 @@ A separate trail for the citizen's own Account & Security actions: provider link
 
 ### 6.3 Not audited
 
-Read-only CSV exports are **not** audited. This was evaluated and skipped: the audit schema requires a concrete `targetId`/`targetType` per event, and a filter-driven export has no single target to attach one to. Revisit if a real "who exported what" compliance requirement appears.
+Read-only CSV exports are **not** audited. This was evaluated and skipped: the audit schema requires a concrete `targetId`/`targetType` per event, and a filter-driven export has no single target to attach one to. Revisit if a real "who exported what" compliance requirement appears. Still true after Phase 7, step 7.0 (which only changed how CSV cells are escaped, §7.6); a later Phase 7 step is planned to change it.
 
 ---
 
@@ -310,6 +310,15 @@ Five-role Batch 2/3 additions follow the same structural rule as §7.1:
 - No `api/src/citizens/*` response type includes `report_intake_actions`, `operational_assessments`, or intake-state fields — the citizen-visible `acknowledged_at` is the one exception, sourced directly from `report_acknowledgments.acknowledged_at`, never derived from an intake action.
 - `FocalIntakeService`'s responses never include Operational Assessment content, Work Order internals, or staff assignment data — only report reference, category, barangay, coordinates, routed office, Operational Priority, and derived intake state.
 - MIS (`system_admin`) gains no Focal Intake or Operational Assessment access merely by being an administrator — `FocalGuard`/`OperationalStaffGuard` reject it exactly as they reject each other's role. MIS's Activity Log shows that an acknowledgment/screening/reassignment/referral/assessment action (or a historical forward/escalation) *occurred* (via the existing `admin_audit_events` action-type/summary fields every other audit entry already has). The acknowledgment, escalation and assessment events carry no remarks or assessment text — no second, richer audit path exists for them. **Exception: severity screening** (manuscript revision Phase 3, step 3f). Its `report_severity_screened` event stores the screening remarks in `metadata` (`{ oldStatus, newStatus, remarks }`), and the System Administrator can read them through the Activity Log API (`GET /admin/activity-log` returns `metadata`); the Activity Log page itself does not display metadata. Other events' metadata (e.g. moderation notes, grouping and correction reasons) is readable the same way.
+
+### 7.6 CSV exports neutralise spreadsheet formulas
+
+Phase 7, step 7.0. The three CSV exports (`tickets.csv`, `flagged.csv`, `work-orders.csv`) carry text people typed — citizen report titles and names, work order titles, assignee names, category and barangay text. A spreadsheet (Excel, Sheets, LibreOffice) runs a cell as a formula when its first character is `=`, `+`, `-` or `@`, a tab (0x09) or a carriage return (0x0D) — CSV formula injection.
+
+- **Rule.** Any **text** cell whose **first** character is one of those six gets a single apostrophe (`'`) in front, so the spreadsheet shows it as text. Only the first character is checked (a leading space before a trigger is left as it is). The normal CSV quoting rules (commas, quotes, newlines, CR) then apply to the prefixed value. A prefixed value starts with `'`, which is not a trigger, so nothing is ever prefixed twice. Empty strings, `null` and `undefined` stay empty.
+- **Numbers stay numbers.** Only JS `string` values are neutralised. Numbers (ids, counts, Operational Priority, metres — including negatives and 0), bigints and booleans are written in their plain form, never turned into text. Every export already passes its numeric columns as JS numbers; dates are passed as ISO strings, which start with a digit and so are never prefixed. The header row goes through the same rule (no header starts with a trigger).
+- **Where.** Once, centrally, in `neutraliseFormula` / `toCsv` in `api/src/common/utils/csv.ts` — the only place the app builds CSV. `api/src/common/utils/csv-writer-only.spec.ts` fails if a second CSV path appears (another `text/csv` response, CSV quote-doubling or CRLF joining outside `csv.ts`, a CSV library import, or a browser-built CSV download), so a new export can't skip the rule.
+- **Not changed by this step:** columns, filters, office scoping, row limits, permissions and which exports exist.
 
 ---
 
