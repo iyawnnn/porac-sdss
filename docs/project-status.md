@@ -20,9 +20,9 @@ This file replaced two earlier documents that split the same material and each c
 
 **Phase: five-role architecture implemented and integration-verified; not yet deployed.** The system now has five roles, not three — see §2A for the full shipped inventory.
 
-- **The five-role production architecture (Focal Personnel + Operational Assessment) is implemented, unit-tested, and integration-verified** — five batches of work (RBAC foundation, Focal Intake, Operational Assessment, decision-support/navigation alignment, final integration QA), detailed in §2A. This supersedes the older "no new product feature is currently queued" framing below, which predates all five of those batches.
+- **The five-role production architecture (Focal Personnel + Operational Assessment) is implemented, unit-tested, and integration-verified** — five batches of work (RBAC foundation, Focal Intake, Operational Assessment, decision-support/navigation alignment, final integration QA), detailed in §2A.
 - **Not yet deployed to the shared/demo database.** The four schema migrations this work requires (`migrate:admin-focal-role`, `migrate:report-acknowledgments`, `migrate:report-intake-actions`, `migrate:operational-assessments`) have been verified additive/safe and exercised end-to-end against a disposable Neon branch (see §2A), but deliberately **not** run against the shared `api/.env` database — see §4.0 for the exact deployment order.
-- Outside the five-role work, no other new product feature is currently queued — the pipeline that Barangay Insights and then Notification Center filled remains clear. The most recent non-five-role shipped work is the Flagged Reports rebuild (§3), a redesign of an existing surface, not a new one.
+- **Manuscript Phase 7 is in progress:** step 7.0 CSV hardening and step 7a staff account management are implemented; browser verification remains a separate step.
 - **Current work should focus on** running the outstanding migrations in a real deployment, reliability hardening, security hardening, test coverage, documentation accuracy, and deployment readiness — all of which are enumerated in §4.
 - **Do not treat this as licence to start a sixth feature batch.** Read §6 before proposing a feature. If a genuinely new feature is justified, it belongs in §4 with a stated reason, not started directly.
 - **Nothing has been deployed.** No hosting platform, production database, domain, or verified email sending domain exists yet — see [`deployment-readiness.md`](deployment-readiness.md).
@@ -77,6 +77,11 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 ---
 
 ## 3. Recently Completed Operational Features
+
+### Manuscript revision Phase 7, step 7a — staff account management — **implemented; no migration; Playwright not run; production still to do**
+
+- Separate account type, office and Focal fields shared by create/edit; own-row controls disabled. Real edits atomically end sessions and audit once; no-op saves write nothing. Active-only last-System-Administrator checks use ordered row locks in edit/status transactions. Self-edit and self-deactivation return 403 (409 for last-active deactivation); inactive account edits/reactivation remain allowed. Audit actor account type now uses the stored actor, matching actor role; history and the legacy role mirror are preserved. No operational authority added to MIS.
+- Verification and mutation results: `docs/testing.md`. No migrations, seeds or Playwright executed. No report posts or sign-ups added; full-run citizen-report POST count remains 15.
 
 ### Manuscript revision Phase 7, step 7.0 — CSV formula-injection fix — **implemented; no migration; Playwright not run; production still to do**
 

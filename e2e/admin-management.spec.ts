@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
-import { loginAdmin as loginAs } from "./helpers";
+import { loginAdmin as loginAs, settleAdminPage } from "./helpers";
 
 test.setTimeout(60_000);
 
@@ -46,7 +46,7 @@ for (const [name, account] of [["MEO", E2E_MEO_ADMIN], ["MDRRMO", E2E_MDRRMO_ADM
   });
 }
 
-test("system admin can create a new office admin account and it appears in the list", async ({ page }) => {
+test("system admin creates staff, separate fields enforce the combinations, and office edits end old sessions", async ({ page, browser }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/admins");
 
@@ -60,12 +60,26 @@ test("system admin can create a new office admin account and it appears in the l
   await dialog.getByLabel("Email").fill(email);
   await dialog.getByLabel("Temporary password").fill("longenoughpassword");
   await dialog.getByLabel("Account type").click();
-  // The three Phase 2, step 2e choices; "Supervisor" is gone from the UI.
-  await expect(page.getByRole("option")).toHaveText(["Personnel", "Focal Personnel", "System Administrator"]);
+  await expect(page.getByRole("option")).toHaveText(["Personnel", "System Administrator"]);
   await page.getByRole("option", { name: "Personnel", exact: true }).click();
   await dialog.getByLabel("Office").click();
   await page.getByRole("option", { name: "MDRRMO", exact: true }).click();
 
+  const focal = dialog.getByRole("checkbox", { name: "Focal responsibility" });
+  await expect(focal).toBeEnabled();
+  await focal.check();
+  await dialog.getByLabel("Office", { exact: true }).click();
+  await page.getByRole("option", { name: "MEO", exact: true }).click();
+  await expect(focal).not.toBeChecked();
+  await expect(focal).toBeDisabled();
+  await dialog.getByLabel("Account type", { exact: true }).click();
+  await page.getByRole("option", { name: "System Administrator", exact: true }).click();
+  await expect(dialog.getByLabel("Office", { exact: true })).toBeDisabled();
+  await expect(dialog.getByLabel("Office", { exact: true })).not.toContainText("MEO");
+  await expect(focal).toBeDisabled();
+  await dialog.getByLabel("Account type", { exact: true }).click();
+  await page.getByRole("option", { name: "Personnel", exact: true }).click();
+  await expect(dialog.getByLabel("Office", { exact: true })).toBeEnabled();
   await dialog.getByRole("button", { name: "Create admin" }).click();
   await expect(dialog).toHaveCount(0);
   // Both the desktop table and the mobile card list render in the DOM
@@ -73,6 +87,31 @@ test("system admin can create a new office admin account and it appears in the l
   // first match rather than asserting a single element exists.
   await expect(page.getByText(email).first()).toBeVisible();
   await expect(page.getByText("Created ByTest").first()).toBeVisible();
+  const row = page.getByRole("row").filter({ hasText: email });
+  const staffContext = await browser.newContext();
+  try {
+    const staffPage = await staffContext.newPage();
+    await loginAs(staffPage, { email, password: "longenoughpassword" });
+    const oldCookie = (await staffContext.cookies()).find((c) => c.name === "ac_admin_session")!;
+    const headers = { cookie: oldCookie.name + "=" + oldCookie.value };
+    expect((await page.request.get("/api/admin/tickets", { headers })).status()).toBe(200);
+    await row.getByLabel("Office", { exact: true }).click();
+    await page.getByRole("option", { name: "MDRRMO", exact: true }).click();
+    await expect(row.getByRole("checkbox", { name: "Focal responsibility" })).toBeEnabled();
+    const saved = page.waitForResponse((res) => res.request().method() === "PATCH" && /\/api\/admin\/admins\/\d+$/.test(res.url()));
+    await row.getByRole("button", { name: "Save", exact: true }).click();
+    expect((await saved).status()).toBe(200);
+    await expect(row.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+    expect((await page.request.get("/api/admin/tickets", { headers })).status()).toBe(401);
+    await row.getByRole("checkbox", { name: "Focal responsibility" }).check();
+    await row.getByLabel("Account type", { exact: true }).click();
+    await page.getByRole("option", { name: "System Administrator", exact: true }).click();
+    await expect(row.getByLabel("Office", { exact: true })).toBeDisabled();
+    await expect(row.getByRole("checkbox", { name: "Focal responsibility" })).toBeDisabled();
+    await expect(row.getByRole("checkbox", { name: "Focal responsibility" })).not.toBeChecked();
+  } finally {
+    await staffContext.close();
+  }
 });
 
 test("system admin cannot save an invalid account type/office combination from the inline editor", async ({ page, request }) => {
@@ -165,7 +204,7 @@ test("deactivated admin cannot log in or access admin pages", async ({ page, req
   expect(login.status()).toBe(401);
 });
 
-test("cannot deactivate the last active System Administrator (server-side)", async ({ page, request }) => {
+test("the last active System Administrator has disabled own-row controls and cannot deactivate themselves", async ({ page, request }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   const cookies = await page.context().cookies();
   const sessionCookie = cookies.find((c) => c.name === "ac_admin_session");
@@ -181,4 +220,18 @@ test("cannot deactivate the last active System Administrator (server-side)", asy
 
   const deactivate = await request.post(`/api/admin/admins/${activeSystemAdmins[0].id}/deactivate`, { headers });
   expect(deactivate.status()).toBe(409);
+  expect((await deactivate.json()).message).toBe("Cannot deactivate the last active System Administrator.");
+  await page.goto("/admin/admins");
+  await settleAdminPage(page, page.getByRole("heading", { name: "Admin Management" }));
+  const row = page.getByRole("row").filter({ hasText: E2E_SYSTEM_ADMIN.email });
+  await expect(row.getByLabel("Account type", { exact: true })).toBeDisabled();
+  await expect(row.getByLabel("Office", { exact: true })).toBeDisabled();
+  await expect(row.getByRole("checkbox", { name: "Focal responsibility" })).toBeDisabled();
+  await expect(row.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await expect(row.getByRole("button", { name: "Deactivate", exact: true })).toBeDisabled();
+  await expect(row.getByText("Another System Administrator must change your own account", { exact: true })).toBeVisible();
+  const edit = await request.patch("/api/admin/admins/" + activeSystemAdmins[0].id, {
+    headers, data: { accountType: "PERSONNEL", office: "MEO", isFocal: false },
+  });
+  expect(edit.status()).toBe(403);
 });

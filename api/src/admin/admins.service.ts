@@ -1,11 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, count, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
@@ -134,11 +135,29 @@ export class AdminsService {
     private readonly audit: AdminAuditService,
   ) {}
 
+  // Always lock the active administrator set in id order before the target.
+  // Both edit and status writes use this order, so concurrent removals cannot
+  // both pass the last-active check or deadlock by locking their targets first.
+  private lockActiveSystemAdmins(tx: PostgresJsDatabase) {
+    return tx
+      .select({ id: admins.id })
+      .from(admins)
+      .where(
+        and(eq(admins.accountType, 'SYSTEM_ADMIN'), eq(admins.isActive, true)),
+      )
+      .orderBy(asc(admins.id))
+      .for('update');
+  }
+
+  private currentAccount(tx: PostgresJsDatabase, id: number) {
+    return tx.select(SAFE_COLUMNS).from(admins).where(eq(admins.id, id));
+  }
+
   async list(): Promise<AdminAccountRow[]> {
     return this.db
       .select(SAFE_COLUMNS)
       .from(admins)
-      .orderBy(desc(admins.createdAt)) as Promise<AdminAccountRow[]>;
+      .orderBy(desc(admins.createdAt));
   }
 
   // Office-scoped read used by the Work Orders assignment picker — distinct
@@ -214,9 +233,7 @@ export class AdminsService {
       );
     }
     if (typeof password !== 'string' || password.length < 8) {
-      throw new BadRequestException(
-        'password must be at least 8 characters.',
-      );
+      throw new BadRequestException('password must be at least 8 characters.');
     }
     const fields = assertAccountFields(
       input.accountType,
@@ -269,7 +286,7 @@ export class AdminsService {
       });
       return created;
     });
-    return row as AdminAccountRow;
+    return row;
   }
 
   async update(
@@ -277,42 +294,53 @@ export class AdminsService {
     input: { accountType: unknown; isFocal: unknown; office: unknown },
     actor: AdminSession,
   ): Promise<AdminAccountRow> {
-    const [existing] = await this.db
-      .select()
-      .from(admins)
-      .where(eq(admins.id, id));
-    if (!existing) throw new NotFoundException('Admin not found.');
-
-    const fields = assertAccountFields(
-      input.accountType,
-      input.isFocal,
-      input.office,
-    );
-
-    // Prevent locking every System Administrator out: only blocks the
-    // transition when this row is currently the last System Administrator
-    // (active or not, as before) and the change would make it Personnel.
-    // Changing a Personnel row, or a System Administrator staying one, is
-    // unaffected.
-    if (
-      existing.accountType === 'SYSTEM_ADMIN' &&
-      fields.accountType !== 'SYSTEM_ADMIN'
-    ) {
-      const [{ systemAdminCount }] = await this.db
-        .select({ systemAdminCount: count() })
+    return this.db.transaction(async (tx) => {
+      const activeSystemAdmins = await this.lockActiveSystemAdmins(tx);
+      const [existing] = await tx
+        .select()
         .from(admins)
-        .where(eq(admins.accountType, 'SYSTEM_ADMIN'));
-      if (systemAdminCount <= 1) {
-        throw new ConflictException(
-          'Cannot remove the last System Administrator.',
+        .where(eq(admins.id, id))
+        .for('update');
+      if (!existing) throw new NotFoundException('Admin not found.');
+
+      const fields = assertAccountFields(
+        input.accountType,
+        input.isFocal,
+        input.office,
+      );
+
+      if (
+        existing.accountType === fields.accountType &&
+        existing.office === fields.office &&
+        existing.isFocal === fields.isFocal
+      ) {
+        const [current] = await this.currentAccount(tx, id);
+        return current;
+      }
+      if (id === actor.adminId) {
+        throw new ForbiddenException(
+          'Another System Administrator must change your own account.',
         );
       }
-    }
+      if (
+        existing.isActive &&
+        existing.accountType === 'SYSTEM_ADMIN' &&
+        fields.accountType !== 'SYSTEM_ADMIN'
+      ) {
+        if (activeSystemAdmins.length <= 1) {
+          throw new ConflictException(
+            'Cannot remove the last active System Administrator.',
+          );
+        }
+      }
 
-    const row = await this.db.transaction(async (tx) => {
       const [updated] = await tx
         .update(admins)
-        .set({ ...fields, role: roleMirror(fields, existing.role) })
+        .set({
+          ...fields,
+          role: roleMirror(fields, existing.role),
+          sessionValidAfter: new Date(),
+        })
         .where(eq(admins.id, id))
         .returning(SAFE_COLUMNS);
       await this.audit.logInTx(tx, {
@@ -328,6 +356,7 @@ export class AdminsService {
         targetId: updated.id,
         targetSummary: `${updated.first_name} ${updated.last_name} <${updated.email}>`,
         metadata: {
+          sessionsEnded: true,
           from: {
             accountType: existing.accountType,
             isFocal: existing.isFocal,
@@ -342,45 +371,45 @@ export class AdminsService {
       });
       return updated;
     });
-    return row as AdminAccountRow;
   }
 
-  // Deactivation/reactivation. Mirrors update()'s last-System-Administrator
-  // lockout above, scoped to *active* System Administrators — losing login
-  // access is functionally equivalent to losing the account type, so
-  // removing the last active System Administrator must be blocked here too
-  // (this also covers a System Administrator deactivating themselves when
-  // they're the only one left, since they're still counted as active at the
-  // time of this check).
   async setActive(
     id: number,
     active: boolean,
     actor: AdminSession,
   ): Promise<AdminAccountRow> {
-    const [existing] = await this.db
-      .select()
-      .from(admins)
-      .where(eq(admins.id, id));
-    if (!existing) throw new NotFoundException('Admin not found.');
-
-    if (existing.accountType === 'SYSTEM_ADMIN' && !active) {
-      const [{ systemAdminCount }] = await this.db
-        .select({ systemAdminCount: count() })
+    return this.db.transaction(async (tx) => {
+      const activeSystemAdmins = await this.lockActiveSystemAdmins(tx);
+      const [existing] = await tx
+        .select()
         .from(admins)
-        .where(
-          and(
-            eq(admins.accountType, 'SYSTEM_ADMIN'),
-            eq(admins.isActive, true),
-          ),
-        );
-      if (systemAdminCount <= 1) {
-        throw new ConflictException(
-          'Cannot deactivate the last active System Administrator.',
+        .where(eq(admins.id, id))
+        .for('update');
+      if (!existing) throw new NotFoundException('Admin not found.');
+
+      if (existing.isActive === active) {
+        const [current] = await this.currentAccount(tx, id);
+        return current;
+      }
+
+      if (
+        existing.isActive &&
+        existing.accountType === 'SYSTEM_ADMIN' &&
+        !active
+      ) {
+        if (activeSystemAdmins.length <= 1) {
+          throw new ConflictException(
+            'Cannot deactivate the last active System Administrator.',
+          );
+        }
+      }
+
+      if (id === actor.adminId && !active) {
+        throw new ForbiddenException(
+          'Another System Administrator must deactivate your own account.',
         );
       }
-    }
 
-    const row = await this.db.transaction(async (tx) => {
       const [updated] = await tx
         .update(admins)
         // Deactivation also bumps session_valid_after so an already-issued
@@ -407,12 +436,12 @@ export class AdminsService {
         targetId: updated.id,
         targetSummary: `${updated.first_name} ${updated.last_name} <${updated.email}>`,
         metadata: {
+          sessionsEnded: !active,
           from: { active: existing.isActive },
           to: { active },
         },
       });
       return updated;
     });
-    return row as AdminAccountRow;
   }
 }

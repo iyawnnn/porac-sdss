@@ -61,7 +61,8 @@ export type AdminAuditTargetType = 'admin' | 'ticket' | 'report' | 'work_order';
 
 // actor_role is not passed in: every write takes it from the actor's
 // stored admins.role mirror (a subquery in the INSERT), since the session
-// no longer carries a role. actor_account_type comes from accountType here.
+// no longer carries a role. actor_account_type uses the same stored row,
+// so an in-flight request's older session cannot produce a mixed snapshot.
 export interface AdminAuditActor {
   adminId: number;
   adminName: string;
@@ -148,7 +149,12 @@ const ACTION_TYPES: AdminAuditActionType[] = [
   'report_removed_from_ticket',
   'report_regrouped',
 ];
-const TARGET_TYPES: AdminAuditTargetType[] = ['admin', 'ticket', 'report', 'work_order'];
+const TARGET_TYPES: AdminAuditTargetType[] = [
+  'admin',
+  'ticket',
+  'report',
+  'work_order',
+];
 
 const SAFE_COLUMNS = {
   id: adminAuditEvents.id,
@@ -179,7 +185,7 @@ function values(input: LogAdminAuditInput) {
     actorName: input.actor.adminName,
     actorEmail: input.actor.email,
     actorRole: actorRoleOf(input.actor.adminId),
-    actorAccountType: input.actor.accountType,
+    actorAccountType: dsql<AdminAccountType>`(SELECT account_type FROM admins WHERE id = ${input.actor.adminId})`,
     actorOffice: input.actor.office,
     actionType: input.actionType,
     targetType: input.targetType,
@@ -205,7 +211,10 @@ export class AdminAuditService {
   // whole transaction — the audit trail for admin actions is treated as
   // load-bearing, not best-effort, so a broken audit write blocks the
   // action rather than silently going missing.
-  async logInPgTx(tx: TransactionSql, input: LogAdminAuditInput): Promise<void> {
+  async logInPgTx(
+    tx: TransactionSql,
+    input: LogAdminAuditInput,
+  ): Promise<void> {
     const v = values(input);
     await tx`
       INSERT INTO admin_audit_events (
@@ -213,7 +222,8 @@ export class AdminAuditService {
         action_type, target_type, target_id, target_summary, metadata
       ) VALUES (
         ${v.actorAdminId}, ${v.actorName}, ${v.actorEmail},
-        (SELECT role FROM admins WHERE id = ${v.actorAdminId}), ${v.actorAccountType}, ${v.actorOffice ?? null},
+        (SELECT role FROM admins WHERE id = ${v.actorAdminId}),
+        (SELECT account_type FROM admins WHERE id = ${v.actorAdminId}), ${v.actorOffice ?? null},
         ${v.actionType}, ${v.targetType}, ${v.targetId}, ${v.targetSummary},
         ${v.metadata ? JSON.stringify(v.metadata) : null}::jsonb
       )
@@ -222,7 +232,10 @@ export class AdminAuditService {
 
   // Same atomicity contract as logInPgTx, for the one call site that uses
   // a Drizzle transaction instead of a raw-PG one (admins.service.ts).
-  async logInTx(tx: PostgresJsDatabase, input: LogAdminAuditInput): Promise<void> {
+  async logInTx(
+    tx: PostgresJsDatabase,
+    input: LogAdminAuditInput,
+  ): Promise<void> {
     await tx.insert(adminAuditEvents).values(values(input));
   }
 
@@ -241,17 +254,25 @@ export class AdminAuditService {
   }
 
   parseFilters(query: Record<string, string | undefined>): AdminAuditFilters {
-    const actionType = ACTION_TYPES.includes(query.actionType as AdminAuditActionType)
+    const actionType = ACTION_TYPES.includes(
+      query.actionType as AdminAuditActionType,
+    )
       ? (query.actionType as AdminAuditActionType)
       : undefined;
-    const targetType = TARGET_TYPES.includes(query.targetType as AdminAuditTargetType)
+    const targetType = TARGET_TYPES.includes(
+      query.targetType as AdminAuditTargetType,
+    )
       ? (query.targetType as AdminAuditTargetType)
       : undefined;
-    const actorAdminId = query.actorAdminId ? Number(query.actorAdminId) : undefined;
+    const actorAdminId = query.actorAdminId
+      ? Number(query.actorAdminId)
+      : undefined;
     const from = query.from?.trim() || undefined;
     const to = query.to?.trim() || undefined;
     const page = Math.max(1, Number(query.page) || 1);
-    const limit = PAGE_LIMITS.includes(Number(query.limit) as (typeof PAGE_LIMITS)[number])
+    const limit = PAGE_LIMITS.includes(
+      Number(query.limit) as (typeof PAGE_LIMITS)[number],
+    )
       ? Number(query.limit)
       : DEFAULT_PAGE_LIMIT;
     return { actionType, targetType, actorAdminId, from, to, page, limit };
@@ -259,16 +280,30 @@ export class AdminAuditService {
 
   async list(filters: AdminAuditFilters = {}): Promise<PaginatedAdminAudit> {
     const page = Math.max(1, filters.page ?? 1);
-    const limit = Math.max(1, Math.min(100, filters.limit ?? DEFAULT_PAGE_LIMIT));
+    const limit = Math.max(
+      1,
+      Math.min(100, filters.limit ?? DEFAULT_PAGE_LIMIT),
+    );
     const conditions = [
-      filters.actionType ? eq(adminAuditEvents.actionType, filters.actionType) : undefined,
-      filters.targetType ? eq(adminAuditEvents.targetType, filters.targetType) : undefined,
-      filters.actorAdminId ? eq(adminAuditEvents.actorAdminId, filters.actorAdminId) : undefined,
-      filters.from ? gte(adminAuditEvents.createdAt, new Date(filters.from)) : undefined,
+      filters.actionType
+        ? eq(adminAuditEvents.actionType, filters.actionType)
+        : undefined,
+      filters.targetType
+        ? eq(adminAuditEvents.targetType, filters.targetType)
+        : undefined,
+      filters.actorAdminId
+        ? eq(adminAuditEvents.actorAdminId, filters.actorAdminId)
+        : undefined,
+      filters.from
+        ? gte(adminAuditEvents.createdAt, new Date(filters.from))
+        : undefined,
       // Exclusive upper bound at the start of the next day, so `to` is
       // inclusive of the whole calendar day a caller picks.
       filters.to
-        ? lte(adminAuditEvents.createdAt, new Date(`${filters.to}T23:59:59.999Z`))
+        ? lte(
+            adminAuditEvents.createdAt,
+            new Date(`${filters.to}T23:59:59.999Z`),
+          )
         : undefined,
     ].filter((c) => c !== undefined);
     const where = conditions.length > 0 ? and(...conditions) : undefined;

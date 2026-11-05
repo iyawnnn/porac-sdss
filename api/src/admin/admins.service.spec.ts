@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import bcrypt from 'bcryptjs';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminsService, roleMirror } from './admins.service';
@@ -32,6 +37,7 @@ function chain(rowOrRows: Record<string, unknown> | Record<string, unknown>[]) {
   obj.from = self;
   obj.where = self;
   obj.orderBy = self;
+  obj.for = self;
   obj.values = (arg: unknown) => {
     obj.valuesArg = arg;
     return obj;
@@ -75,6 +81,7 @@ function fullAdminRow(
     email: 'jane@example.com',
     passwordHash: 'super-secret-hash',
     role: 'officer',
+    isActive: true,
     accountType: 'PERSONNEL' as const,
     isFocal: false,
     office: 'MEO' as 'MEO' | 'MDRRMO' | null,
@@ -85,7 +92,11 @@ function fullAdminRow(
 }
 
 function makeDb() {
-  const db: Record<string, unknown> = { select: jest.fn(), insert: jest.fn(), update: jest.fn() };
+  const db: Record<string, unknown> = {
+    select: jest.fn(),
+    insert: jest.fn(),
+    update: jest.fn(),
+  };
   // create()/update() run their insert/update + audit write inside
   // db.transaction() — the fake `tx` is just the same mock db, so
   // tx.insert(...)/tx.update(...) reuse the already-queued responses.
@@ -99,7 +110,9 @@ function makeDb() {
 }
 
 function makeAudit() {
-  const logInTx = jest.fn().mockResolvedValue(undefined);
+  const logInTx = jest
+    .fn<Promise<void>, [PostgresJsDatabase, LogAdminAuditInput]>()
+    .mockResolvedValue(undefined);
   return { audit: { logInTx } as unknown as AdminAuditService, logInTx };
 }
 
@@ -128,7 +141,7 @@ describe('AdminsService', () => {
           ACTOR,
         ),
       ).rejects.toThrow(BadRequestException);
-      expect(db.select).not.toHaveBeenCalled();
+      expect(db.select.mock.calls).toHaveLength(0);
     });
 
     // Manuscript revision Phase 2, step 2e: the API side of the CHECK
@@ -183,9 +196,9 @@ describe('AdminsService', () => {
     ])(
       'rejects %s with a 400 and touches nothing',
       async (_label, fields, message) => {
-      const db = makeDb();
+        const db = makeDb();
         const { audit, logInTx } = makeAudit();
-      const service = new AdminsService(db, audit);
+        const service = new AdminsService(db, audit);
         const input = {
           accountType: undefined,
           isFocal: undefined,
@@ -199,7 +212,8 @@ describe('AdminsService', () => {
         expect(db.select.mock.calls).toHaveLength(0);
         expect(db.insert.mock.calls).toHaveLength(0);
         expect(logInTx).not.toHaveBeenCalled();
-    });
+      },
+    );
 
     it('creates Focal Personnel pinned to MDRRMO, with the role mirror focal', async () => {
       const db = makeDb();
@@ -312,7 +326,7 @@ describe('AdminsService', () => {
           ACTOR,
         ),
       ).rejects.toThrow(ConflictException);
-      expect(db.insert).not.toHaveBeenCalled();
+      expect(db.insert.mock.calls).toHaveLength(0);
       expect(logInTx).not.toHaveBeenCalled();
     });
 
@@ -365,213 +379,225 @@ describe('AdminsService', () => {
     });
   });
 
-  describe('update', () => {
-    it('404s when the admin does not exist', async () => {
+  describe('staff account changes', () => {
+    const personnel = {
+      accountType: 'PERSONNEL',
+      isFocal: false,
+      office: 'MEO',
+    };
+    const system = {
+      accountType: 'SYSTEM_ADMIN',
+      isFocal: false,
+      office: null,
+    };
+    function setup(existing = fullAdminRow(), activeIds = [3, 99]) {
       const db = makeDb();
-      db.select.mockReturnValueOnce(chain([]));
-      const { audit } = makeAudit();
-      const service = new AdminsService(db, audit);
-      await expect(
-        service.update(
-          999,
-          { accountType: 'PERSONNEL', isFocal: false, office: 'MEO' },
-          ACTOR,
-        ),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it.each([
-      [
-        'a System Administrator with an office',
-        { accountType: 'SYSTEM_ADMIN', isFocal: false, office: 'MEO' },
-      ],
-      [
-        'Personnel with no office',
-        { accountType: 'PERSONNEL', isFocal: false, office: null },
-      ],
-      [
-        'Focal Personnel on MEO',
-        { accountType: 'PERSONNEL', isFocal: true, office: 'MEO' },
-      ],
-    ])('rejects %s with a 400 and writes nothing', async (_label, fields) => {
-      const db = makeDb();
-      db.select.mockReturnValueOnce(chain(fullAdminRow()));
+      db.select
+        .mockReturnValueOnce(chain(activeIds.map((id) => ({ id }))))
+        .mockReturnValueOnce(chain(existing));
+      const updated = chain(fullAdminRow({ id: existing.id }));
+      db.update.mockReturnValue(updated);
       const { audit, logInTx } = makeAudit();
-      const service = new AdminsService(db, audit);
+      return { db, updated, logInTx, service: new AdminsService(db, audit) };
+    }
+    it.each([
+      ['office', fullAdminRow(), { ...personnel, office: 'MDRRMO' }],
+      ['type', fullAdminRow(), system],
+      [
+        'Focal',
+        fullAdminRow({ office: 'MDRRMO' }),
+        { ...personnel, office: 'MDRRMO', isFocal: true },
+      ],
+      [
+        'remove Focal',
+        fullAdminRow({ office: 'MDRRMO', isFocal: true, role: 'focal' }),
+        { ...personnel, office: 'MDRRMO' },
+      ],
+    ])(
+      'ends sessions on a real %s edit with exactly one audit event',
+      async (_label, existing, fields) => {
+        const { service, updated, logInTx, db } = setup(existing);
+        await service.update(existing.id, fields, ACTOR);
+        expect(updated.setArg).toMatchObject({
+          ...fields,
+          sessionValidAfter: expect.any(Date) as unknown,
+        });
+        expect(logInTx).toHaveBeenCalledTimes(1);
+        expect(logInTx.mock.calls[0][1].metadata).toMatchObject({
+          sessionsEnded: true,
+        });
+        expect(db.transaction.mock.calls).toHaveLength(1);
+      },
+    );
+    it('returns a safe current account without write, audit or session bump on no-op', async () => {
+      const { service, db, logInTx } = setup();
+      db.select.mockReturnValueOnce(
+        chain({
+          id: 1,
+          account_type: 'PERSONNEL',
+          office: 'MEO',
+          is_focal: false,
+        }),
+      );
+      const result = await service.update(1, personnel, ACTOR);
+      expect(result.account_type).toBe('PERSONNEL');
+      expect(result).not.toHaveProperty('passwordHash');
+      expect(db.update.mock.calls).toHaveLength(0);
+      expect(logInTx).not.toHaveBeenCalled();
+    });
+    it.each([
+      { ...system, office: 'MEO' },
+      { ...system, isFocal: true },
+      { ...personnel, office: null },
+      { ...personnel, isFocal: true },
+      { ...personnel, accountType: 'officer' },
+      { ...personnel, isFocal: 'yes' },
+    ])('rejects invalid fields without writes: %j', async (fields) => {
+      const { service, db, logInTx } = setup();
       await expect(service.update(1, fields, ACTOR)).rejects.toThrow(
         BadRequestException,
       );
       expect(db.update.mock.calls).toHaveLength(0);
       expect(logInTx).not.toHaveBeenCalled();
     });
-
-    it('blocks demoting the last remaining System Administrator', async () => {
-      const db = makeDb();
-      db.select
-        .mockReturnValueOnce(
-          chain(
-            fullAdminRow({
-              id: 3,
-              role: 'system_admin',
-              accountType: 'SYSTEM_ADMIN',
-              office: null,
-            }),
+    it.each(['edit', 'deactivate'])(
+      'blocks the last active System Administrator %s',
+      async (action) => {
+        const { service, db, logInTx } = setup(
+          fullAdminRow({ id: 3, accountType: 'SYSTEM_ADMIN', office: null }),
+          [3],
+        );
+        await expect(
+          action === 'edit'
+            ? service.update(3, personnel, ACTOR)
+            : service.setActive(3, false, ACTOR),
+        ).rejects.toThrow(ConflictException);
+        expect(db.update.mock.calls).toHaveLength(0);
+        expect(logInTx).not.toHaveBeenCalled();
+      },
+    );
+    it.each(['type', 'office', 'Focal'])(
+      'blocks a self %s edit with 403',
+      async (change) => {
+        const existing = fullAdminRow({ id: 99, office: 'MDRRMO' });
+        const { service, db, logInTx } = setup(existing);
+        const fields =
+          change === 'type'
+            ? system
+            : {
+                ...personnel,
+                office: change === 'office' ? 'MEO' : 'MDRRMO',
+                isFocal: change === 'Focal',
+              };
+        await expect(service.update(99, fields, ACTOR)).rejects.toThrow(
+          new ForbiddenException(
+            'Another System Administrator must change your own account.',
           ),
-        )
-        .mockReturnValueOnce(chain([{ systemAdminCount: 1 }]));
-      const { audit, logInTx } = makeAudit();
-      const service = new AdminsService(db, audit);
-      await expect(
-        service.update(
-          3,
-          { accountType: 'PERSONNEL', isFocal: false, office: 'MEO' },
-          ACTOR,
+        );
+        expect(db.update.mock.calls).toHaveLength(0);
+        expect(logInTx).not.toHaveBeenCalled();
+      },
+    );
+    it('blocks self deactivation with 403 even with other administrators', async () => {
+      const { service, db, logInTx } = setup();
+      await expect(service.setActive(99, false, ACTOR)).rejects.toThrow(
+        new ForbiddenException(
+          'Another System Administrator must deactivate your own account.',
         ),
-      ).rejects.toThrow(
-        new ConflictException('Cannot remove the last System Administrator.'),
       );
-      expect(db.update).not.toHaveBeenCalled();
+      expect(db.update.mock.calls).toHaveLength(0);
       expect(logInTx).not.toHaveBeenCalled();
     });
-
-    it('allows demoting a System Administrator when another one still exists, writes role officer, and logs an audit event', async () => {
-      const db = makeDb();
-      db.select
-        .mockReturnValueOnce(
-          chain(
-            fullAdminRow({
-              id: 3,
-              role: 'system_admin',
-              accountType: 'SYSTEM_ADMIN',
-              office: null,
-            }),
-          ),
-        )
-        .mockReturnValueOnce(chain([{ systemAdminCount: 2 }]));
-      const updated = chain(fullAdminRow({ id: 3, office: 'MEO' }));
-      db.update.mockReturnValueOnce(updated);
-      const { audit, logInTx } = makeAudit();
-      const service = new AdminsService(db, audit);
-
-      const result = await service.update(
-        3,
-        { accountType: 'PERSONNEL', isFocal: false, office: 'MEO' },
-        ACTOR,
-      );
-      expect(updated.setArg).toEqual({
-        accountType: 'PERSONNEL',
-        isFocal: false,
-        office: 'MEO',
-        role: 'officer',
-      });
-      expect(result.account_type).toBe('PERSONNEL');
-      expect(result).not.toHaveProperty('passwordHash');
-      expect(result).not.toHaveProperty('role');
-
-      expect(logInTx).toHaveBeenCalledTimes(1);
-      const [, input] = logInTx.mock.calls[0] as [unknown, LogAdminAuditInput];
-      expect(input.actionType).toBe('admin_role_updated');
-      expect(input.targetId).toBe(3);
-      expect(input.metadata).toEqual({
-        from: { accountType: 'SYSTEM_ADMIN', isFocal: false, office: null },
-        to: { accountType: 'PERSONNEL', isFocal: false, office: 'MEO' },
-      });
-    });
-
-    it('allows a System Administrator staying one without re-checking the last-admin count', async () => {
-      const db = makeDb();
-      db.select.mockReturnValueOnce(
-        chain(
-          fullAdminRow({
-            id: 3,
-            role: 'system_admin',
-            accountType: 'SYSTEM_ADMIN',
-            office: null,
-          }),
-        ),
-      );
-      const updated = chain(
+    it('allows editing another System Administrator and keeps the mirror', async () => {
+      const { service, updated } = setup(
         fullAdminRow({
           id: 3,
-          role: 'system_admin',
           accountType: 'SYSTEM_ADMIN',
+          role: 'system_admin',
           office: null,
         }),
       );
-      db.update.mockReturnValueOnce(updated);
-      const { audit } = makeAudit();
-      const service = new AdminsService(db, audit);
-
-      const result = await service.update(
-        3,
-        { accountType: 'SYSTEM_ADMIN', isFocal: false, office: null },
-        ACTOR,
-      );
-      expect(result.account_type).toBe('SYSTEM_ADMIN');
-      expect(updated.setArg).toEqual({
-        accountType: 'SYSTEM_ADMIN',
-        isFocal: false,
-        office: null,
-        role: 'system_admin',
+      await service.update(3, personnel, ACTOR);
+      expect(updated.setArg).toMatchObject({
+        role: 'officer',
+        sessionValidAfter: expect.any(Date) as unknown,
       });
-      // Only the initial existence-check select ran — no count query.
-      expect(db.select).toHaveBeenCalledTimes(1);
     });
-
-    // The admins.role sync mirror on update: Personnel that isn't Focal
-    // keeps an existing officer/supervisor value, else becomes officer.
-    it.each([
-      [
-        'a supervisor moved to MEO stays supervisor',
-        'supervisor',
-        false,
-        { accountType: 'PERSONNEL', isFocal: false, office: 'MEO' },
-        'supervisor',
-      ],
-      [
-        'an officer moved to MDRRMO stays officer',
-        'officer',
-        false,
-        { accountType: 'PERSONNEL', isFocal: false, office: 'MDRRMO' },
-        'officer',
-      ],
-      [
-        'a Focal account made plain Personnel becomes officer',
-        'focal',
-        true,
-        { accountType: 'PERSONNEL', isFocal: false, office: 'MDRRMO' },
-        'officer',
-      ],
-      [
-        'a supervisor made Focal becomes focal',
-        'supervisor',
-        false,
-        { accountType: 'PERSONNEL', isFocal: true, office: 'MDRRMO' },
-        'focal',
-      ],
-    ])('%s', async (_label, existingRole, existingFocal, fields, mirror) => {
-      const db = makeDb();
-      db.select.mockReturnValueOnce(
-        chain(
-          fullAdminRow({
-            id: 7,
-            role: existingRole,
-            isFocal: existingFocal,
-            office: 'MDRRMO',
-          }),
+    it('preserves a Personnel supervisor mirror on an office edit', async () => {
+      const { service, updated } = setup(fullAdminRow({ role: 'supervisor' }));
+      await service.update(1, { ...personnel, office: 'MDRRMO' }, ACTOR);
+      expect(updated.setArg).toMatchObject({ role: 'supervisor' });
+    });
+    it('returns the last-active 409 before the self-deactivation refusal', async () => {
+      const { service, db, logInTx } = setup(
+        fullAdminRow({ id: 99, accountType: 'SYSTEM_ADMIN', office: null }),
+        [99],
+      );
+      await expect(service.setActive(99, false, ACTOR)).rejects.toThrow(
+        new ConflictException(
+          'Cannot deactivate the last active System Administrator.',
         ),
       );
-      const updated = chain(fullAdminRow({ id: 7 }));
-      db.update.mockReturnValueOnce(updated);
-      const { audit } = makeAudit();
-      const service = new AdminsService(db, audit);
-
-      await service.update(7, fields, ACTOR);
-
-      expect(updated.setArg).toEqual({ ...fields, role: mirror });
-      // Personnel changes never look at the System Administrator count.
-      expect(db.select.mock.calls).toHaveLength(1);
+      expect(db.update.mock.calls).toHaveLength(0);
+      expect(logInTx).not.toHaveBeenCalled();
     });
+    it('does not block editing an inactive System Administrator', async () => {
+      const { service } = setup(
+        fullAdminRow({
+          id: 3,
+          accountType: 'SYSTEM_ADMIN',
+          isActive: false,
+          office: null,
+        }),
+        [99],
+      );
+      await expect(service.update(3, personnel, ACTOR)).resolves.toBeDefined();
+    });
+    it('reactivates an inactive System Administrator without bumping sessions', async () => {
+      const { service, updated, logInTx } = setup(
+        fullAdminRow({
+          id: 3,
+          accountType: 'SYSTEM_ADMIN',
+          isActive: false,
+          office: null,
+        }),
+        [99],
+      );
+      await service.setActive(3, true, ACTOR);
+      expect(updated.setArg).toEqual({ isActive: true });
+      expect(logInTx).toHaveBeenCalledTimes(1);
+    });
+    it('deactivates another account with one audit event and a session bump', async () => {
+      const { service, updated, logInTx } = setup();
+      await service.setActive(1, false, ACTOR);
+      expect(updated.setArg).toEqual({
+        isActive: false,
+        sessionValidAfter: expect.any(Date) as unknown,
+      });
+      expect(logInTx).toHaveBeenCalledTimes(1);
+    });
+    it('does not audit or bump an unchanged status', async () => {
+      const { service, db, logInTx } = setup();
+      db.select.mockReturnValueOnce(chain({ id: 1, is_active: true }));
+      await service.setActive(1, true, ACTOR);
+      expect(db.update.mock.calls).toHaveLength(0);
+      expect(logInTx).not.toHaveBeenCalled();
+    });
+    it.each(['edit', 'status'])(
+      '404s for a missing target on %s',
+      async (action) => {
+        const { service, db } = setup();
+        db.select
+          .mockReset()
+          .mockReturnValueOnce(chain([{ id: 99 }]))
+          .mockReturnValueOnce(chain([]));
+        await expect(
+          action === 'edit'
+            ? service.update(123, personnel, ACTOR)
+            : service.setActive(123, false, ACTOR),
+        ).rejects.toThrow(NotFoundException);
+      },
+    );
   });
 
   describe('roleMirror', () => {
@@ -637,143 +663,6 @@ describe('AdminsService', () => {
     });
   });
 
-  describe('setActive', () => {
-    it('404s when the admin does not exist', async () => {
-      const db = makeDb();
-      db.select.mockReturnValueOnce(chain([]));
-      const { audit } = makeAudit();
-      const service = new AdminsService(db, audit);
-      await expect(service.setActive(999, false, ACTOR)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('blocks deactivating the last active System Administrator', async () => {
-      const db = makeDb();
-      db.select
-        .mockReturnValueOnce(
-          chain(
-            fullAdminRow({
-              id: 3,
-              role: 'system_admin',
-              accountType: 'SYSTEM_ADMIN',
-              office: null,
-              isActive: true,
-            }),
-          ),
-        )
-        .mockReturnValueOnce(chain([{ systemAdminCount: 1 }]));
-      const { audit, logInTx } = makeAudit();
-      const service = new AdminsService(db, audit);
-      await expect(service.setActive(3, false, ACTOR)).rejects.toThrow(
-        new ConflictException(
-          'Cannot deactivate the last active System Administrator.',
-        ),
-      );
-      expect(db.update).not.toHaveBeenCalled();
-      expect(logInTx).not.toHaveBeenCalled();
-    });
-
-    it('allows deactivating a System Administrator when another active one still exists, bumps session_valid_after, and logs admin_deactivated', async () => {
-      const db = makeDb();
-      db.select
-        .mockReturnValueOnce(
-          chain(
-            fullAdminRow({
-              id: 3,
-              role: 'system_admin',
-              accountType: 'SYSTEM_ADMIN',
-              office: null,
-              isActive: true,
-            }),
-          ),
-        )
-        .mockReturnValueOnce(chain([{ systemAdminCount: 2 }]));
-      // .returning(SAFE_COLUMNS)'s fake projects by literal target key name
-      // (is_active), not the camelCase drizzle field fullAdminRow otherwise
-      // uses — so the *updated* row needs the snake_case key to survive it.
-      const updated = chain(
-        fullAdminRow({
-          id: 3,
-          role: 'system_admin',
-          accountType: 'SYSTEM_ADMIN',
-          office: null,
-          is_active: false,
-        }),
-      );
-      db.update.mockReturnValueOnce(updated);
-      const { audit, logInTx } = makeAudit();
-      const service = new AdminsService(db, audit);
-
-      const result = await service.setActive(3, false, ACTOR);
-      expect(result.is_active).toBe(false);
-      expect(result).not.toHaveProperty('passwordHash');
-      expect(updated.setArg).toMatchObject({ isActive: false });
-      expect(
-        (updated.setArg as { sessionValidAfter: unknown }).sessionValidAfter,
-      ).toBeInstanceOf(Date);
-
-      expect(logInTx).toHaveBeenCalledTimes(1);
-      const [, input] = logInTx.mock.calls[0];
-      expect(input.actionType).toBe('admin_deactivated');
-      expect(input.targetId).toBe(3);
-      expect(input.metadata.from.active).toBe(true);
-      expect(input.metadata.to.active).toBe(false);
-    });
-
-    it.each([
-      ['Personnel', false],
-      ['Focal Personnel', true],
-    ])(
-      'deactivating %s never checks the System Administrator count',
-      async (_label, isFocal) => {
-      const db = makeDb();
-      db.select.mockReturnValueOnce(
-          chain(
-            fullAdminRow({ id: 5, isFocal, office: 'MDRRMO', isActive: true }),
-          ),
-      );
-        const updatedRow = fullAdminRow({
-          id: 5,
-          isFocal,
-          office: 'MDRRMO',
-          is_active: false,
-        });
-      db.update.mockReturnValueOnce(chain(updatedRow));
-      const { audit } = makeAudit();
-      const service = new AdminsService(db, audit);
-
-      const result = await service.setActive(5, false, ACTOR);
-      expect(result.is_active).toBe(false);
-      // Only the initial existence-check select ran — no count query.
-      expect(db.select).toHaveBeenCalledTimes(1);
-    });
-
-    it('reactivates a deactivated admin and logs admin_reactivated', async () => {
-      const db = makeDb();
-      db.select.mockReturnValueOnce(
-        chain(fullAdminRow({ id: 5, office: 'MEO', isActive: false })),
-      );
-      const updatedRow = fullAdminRow({
-        id: 5,
-        office: 'MEO',
-        is_active: true,
-      });
-      db.update.mockReturnValueOnce(chain(updatedRow));
-      const { audit, logInTx } = makeAudit();
-      const service = new AdminsService(db, audit);
-
-      const result = await service.setActive(5, true, ACTOR);
-      expect(result.is_active).toBe(true);
-
-      expect(logInTx).toHaveBeenCalledTimes(1);
-      const [, input] = logInTx.mock.calls[0];
-      expect(input.actionType).toBe('admin_reactivated');
-      expect(input.metadata.from.active).toBe(false);
-      expect(input.metadata.to.active).toBe(true);
-    });
-  });
-
   it('bcrypt-hashes the stored password (sanity check on the shared hashing pattern)', async () => {
     const hash = await bcrypt.hash('longenoughpassword', 10);
     expect(await bcrypt.compare('longenoughpassword', hash)).toBe(true);
@@ -832,10 +721,10 @@ describe('AdminsService', () => {
       const { audit } = makeAudit();
       const service = new AdminsService(db, audit);
 
-      await expect(service.listDirectory(SYSTEM_ADMIN, undefined)).rejects.toThrow(
-        ForbiddenException,
-      );
-      expect(db.select).not.toHaveBeenCalled();
+      await expect(
+        service.listDirectory(SYSTEM_ADMIN, undefined),
+      ).rejects.toThrow(ForbiddenException);
+      expect(db.select.mock.calls).toHaveLength(0);
     });
 
     // Focal carries office: 'MDRRMO' but is not operational staff — it must
@@ -854,7 +743,7 @@ describe('AdminsService', () => {
       await expect(service.listDirectory(FOCAL, undefined)).rejects.toThrow(
         ForbiddenException,
       );
-      expect(db.select).not.toHaveBeenCalled();
+      expect(db.select.mock.calls).toHaveLength(0);
     });
 
     it('MEO Personnel is clamped to MEO regardless of the office query param', async () => {
@@ -871,7 +760,9 @@ describe('AdminsService', () => {
 
     it('MDRRMO Personnel is clamped to MDRRMO regardless of the office query param', async () => {
       const db = makeDb();
-      db.select.mockReturnValueOnce(chain([directoryRow({ office: 'MDRRMO' })]));
+      db.select.mockReturnValueOnce(
+        chain([directoryRow({ office: 'MDRRMO' })]),
+      );
       const { audit } = makeAudit();
       const service = new AdminsService(db, audit);
 

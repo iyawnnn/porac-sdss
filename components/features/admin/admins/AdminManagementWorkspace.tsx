@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { KeyRound, UserCheck, UserPlus, UserX } from "lucide-react";
 import type { AdminAccountRow, AdminAccountType, AdminOffice } from "@/lib/types/admin-admins";
+import { apiErrorMessage } from "@/lib/utils/api-error-message";
+import { Checkbox } from "@/components/ui/checkbox";
 import { accountLabel } from "@/lib/utils/adminScope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,45 +19,52 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "../shared/EmptyState";
 
-// The three account choices (manuscript revision Phase 2, step 2e), mapped
-// to the API's accountType / isFocal / office. The full staff form with
-// separate fields arrives in Phase 7.
-type AccountKind = "PERSONNEL" | "FOCAL" | "SYSTEM_ADMIN";
-const ACCOUNT_KINDS: { value: AccountKind; label: string }[] = [
-  { value: "PERSONNEL", label: "Personnel" },
-  { value: "FOCAL", label: "Focal Personnel" },
-  { value: "SYSTEM_ADMIN", label: "System Administrator" },
-];
+type AccountFields = { accountType: AdminAccountType; office: AdminOffice | null; isFocal: boolean };
+const OWN_ACCOUNT_REASON = "Another System Administrator must change your own account";
 
-function kindOf(admin: Pick<AdminAccountRow, "account_type" | "is_focal">): AccountKind {
-  if (admin.account_type === "SYSTEM_ADMIN") return "SYSTEM_ADMIN";
-  return admin.is_focal ? "FOCAL" : "PERSONNEL";
-}
-
-// Focal Personnel's office is fixed to MDRRMO (organizationally MDRRMO/QRT)
-// and the System Administrator's to null — neither is a free choice, unlike
-// Personnel. Mirrors AdminsService's assertAccountFields on the backend,
-// which (with the database CHECK) remains the authoritative check
-// regardless of what this picks. `hasFixedOffice` distinguishes "fixed to
-// null" from "not fixed" — a plain `?? draft.office` fallback would wrongly
-// treat the System Administrator's fixed null as "no fixed value" and fall
-// through.
-function hasFixedOffice(kind: AccountKind): boolean {
-  return kind !== "PERSONNEL";
-}
-function fixedOfficeFor(kind: AccountKind): AdminOffice | null {
-  return kind === "FOCAL" ? "MDRRMO" : null;
-}
-function accountFields(kind: AccountKind, office: AdminOffice): { accountType: AdminAccountType; isFocal: boolean; office: AdminOffice | null } {
-  return {
-    accountType: kind === "SYSTEM_ADMIN" ? "SYSTEM_ADMIN" : "PERSONNEL",
-    isFocal: kind === "FOCAL",
-    office: hasFixedOffice(kind) ? fixedOfficeFor(kind) : office,
-  };
+function StaffAccountFields({ value, onChange, disabled = false }: {
+  value: AccountFields; onChange: (value: AccountFields) => void; disabled?: boolean;
+}) {
+  const id = useId();
+  const personnel = value.accountType === "PERSONNEL";
+  return (
+    <fieldset className="flex flex-wrap items-end gap-3" disabled={disabled}>
+      <legend className="sr-only">Staff account settings</legend>
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-muted-foreground" htmlFor={id + "-type"}>Account type</label>
+        <Select disabled={disabled} value={value.accountType} onValueChange={(accountType: AdminAccountType) => onChange({
+          accountType, office: accountType === "SYSTEM_ADMIN" ? null : (value.office ?? "MEO"), isFocal: false,
+        })}>
+          <SelectTrigger id={id + "-type"} className="h-8 w-44" size="sm"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectGroup>
+            <SelectItem value="PERSONNEL">Personnel</SelectItem>
+            <SelectItem value="SYSTEM_ADMIN">System Administrator</SelectItem>
+          </SelectGroup></SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-muted-foreground" htmlFor={id + "-office"}>Office</label>
+        <Select disabled={disabled || !personnel} value={value.office ?? ""} onValueChange={(office: AdminOffice) => onChange({
+          ...value, office, isFocal: office === "MDRRMO" && value.isFocal,
+        })}>
+          <SelectTrigger id={id + "-office"} className="h-8 w-28" size="sm"><SelectValue placeholder="" /></SelectTrigger>
+          <SelectContent><SelectGroup>
+            <SelectItem value="MEO">MEO</SelectItem>
+            <SelectItem value="MDRRMO">MDRRMO</SelectItem>
+          </SelectGroup></SelectContent>
+        </Select>
+      </div>
+      <label className="flex h-8 items-center gap-2 text-xs" htmlFor={id + "-focal"}>
+        <Checkbox id={id + "-focal"} checked={value.isFocal} disabled={disabled || !personnel || value.office !== "MDRRMO"}
+          onCheckedChange={(checked) => onChange({ ...value, isFocal: checked === true })} />
+        Focal responsibility
+      </label>
+    </fieldset>
+  );
 }
 
 function formatCreatedDate(value: string): string {
@@ -63,7 +72,7 @@ function formatCreatedDate(value: string): string {
 }
 
 function emptyDraft() {
-  return { firstName: "", lastName: "", email: "", password: "", kind: "PERSONNEL" as AccountKind, office: "MEO" as AdminOffice };
+  return { firstName: "", lastName: "", email: "", password: "", accountType: "PERSONNEL" as AdminAccountType, isFocal: false, office: "MEO" as AdminOffice | null };
 }
 
 function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) => void }) {
@@ -91,7 +100,7 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
         lastName: draft.lastName,
         email: draft.email,
         password: draft.password,
-        ...accountFields(draft.kind, draft.office),
+        accountType: draft.accountType, office: draft.office, isFocal: draft.isFocal,
       }),
     });
 
@@ -101,7 +110,7 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
       resetAndClose();
     } else {
       const data = await res.json().catch(() => null);
-      setError(data?.message ?? "Could not create admin account.");
+      setError(apiErrorMessage(data, "Could not create admin account."));
     }
     setSubmitting(false);
   }
@@ -144,33 +153,7 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
               value={draft.password}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-account-type">Account type</label>
-              <Select onValueChange={(v) => setDraft((d) => ({ ...d, kind: v as AccountKind }))} value={draft.kind}>
-                <SelectTrigger aria-label="Account type" id="admin-account-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ACCOUNT_KINDS.map(({ value, label }) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-office">Office</label>
-              <Select
-                disabled={hasFixedOffice(draft.kind)}
-                onValueChange={(v) => setDraft((d) => ({ ...d, office: v as AdminOffice }))}
-                value={hasFixedOffice(draft.kind) ? (fixedOfficeFor(draft.kind) ?? "") : draft.office}
-              >
-                <SelectTrigger aria-label="Office" id="admin-office"><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MEO">MEO</SelectItem>
-                  <SelectItem value="MDRRMO">MDRRMO</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <StaffAccountFields value={draft} onChange={(fields) => setDraft((d) => ({ ...d, ...fields }))} />
           {error && <p className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
             <Button disabled={submitting} type="submit">{submitting ? "Creating…" : "Create admin"}</Button>
@@ -181,57 +164,37 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
   );
 }
 
-function AccountOfficeEditor({ admin, onUpdated }: { admin: AdminAccountRow; onUpdated: (admin: AdminAccountRow) => void }) {
-  const [kind, setKind] = useState<AccountKind>(kindOf(admin));
-  const [office, setOffice] = useState<AdminOffice>(admin.office ?? "MEO");
+function AccountOfficeEditor({ admin, onUpdated, disabled = false }: { admin: AdminAccountRow; onUpdated: (admin: AdminAccountRow) => void; disabled?: boolean }) {
+  const [fields, setFields] = useState<AccountFields>({ accountType: admin.account_type, office: admin.office, isFocal: admin.is_focal });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const dirty = kind !== kindOf(admin) || (!hasFixedOffice(kind) && office !== (admin.office ?? "MEO"));
+  const dirty = fields.accountType !== admin.account_type || fields.office !== admin.office || fields.isFocal !== admin.is_focal;
 
   async function handleSave() {
     setSaving(true);
     setError("");
-    const res = await fetch(`/api/admin/admins/${admin.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(accountFields(kind, office)),
-    });
-    if (res.ok) {
-      onUpdated((await res.json()) as AdminAccountRow);
-    } else {
-      const data = await res.json().catch(() => null);
-      setError(data?.message ?? "Update failed");
+    try {
+      const res = await fetch("/api/admin/admins/" + admin.id, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fields),
+      });
+      if (res.ok) {
+        onUpdated((await res.json()) as AdminAccountRow);
+      } else {
+        setError(apiErrorMessage(await res.json().catch(() => null), "Could not update this account."));
+      }
+    } catch {
+      setError("Could not reach the server. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Select onValueChange={(v) => setKind(v as AccountKind)} value={kind}>
-          <SelectTrigger aria-label={`Account type for ${admin.first_name} ${admin.last_name}`} className="h-8 w-40" size="sm"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {ACCOUNT_KINDS.map(({ value, label }) => (
-              <SelectItem key={value} value={value}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          disabled={hasFixedOffice(kind)}
-          onValueChange={(v) => setOffice(v as AdminOffice)}
-          value={hasFixedOffice(kind) ? (fixedOfficeFor(kind) ?? "") : office}
-        >
-          <SelectTrigger aria-label={`Office for ${admin.first_name} ${admin.last_name}`} className="h-8 w-28" size="sm"><SelectValue placeholder="—" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="MEO">MEO</SelectItem>
-            <SelectItem value="MDRRMO">MDRRMO</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button disabled={!dirty || saving} onClick={handleSave} size="sm" variant="outline">
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      <StaffAccountFields value={fields} onChange={setFields} disabled={disabled || saving} />
+      <Button disabled={disabled || !dirty || saving} onClick={handleSave} size="sm" variant="outline">{saving ? "Saving..." : "Save"}</Button>
+      {disabled && <p className="text-xs text-muted-foreground">{OWN_ACCOUNT_REASON}</p>}
+      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
@@ -268,7 +231,7 @@ function ResetPasswordDialog({ admin }: { admin: AdminAccountRow }) {
       setDone(true);
     } else {
       const data = await res.json().catch(() => null);
-      setError(data?.message ?? "Could not reset the password.");
+      setError(apiErrorMessage(data, "Could not reset the password."));
     }
     setSubmitting(false);
   }
@@ -356,7 +319,7 @@ function DeactivateDialog({
       resetAndClose();
     } else {
       const data = await res.json().catch(() => null);
-      setError(data?.message ?? "Could not deactivate this admin.");
+      setError(apiErrorMessage(data, "Could not deactivate this admin."));
     }
     setSubmitting(false);
   }
@@ -410,7 +373,7 @@ function ReactivateButton({ admin, onUpdated }: { admin: AdminAccountRow; onUpda
       onUpdated((await res.json()) as AdminAccountRow);
     } else {
       const data = await res.json().catch(() => null);
-      setError(data?.message ?? "Could not reactivate this admin.");
+      setError(apiErrorMessage(data, "Could not reactivate this admin."));
     }
     setSubmitting(false);
   }
@@ -442,6 +405,7 @@ export function AdminManagementWorkspace({
     setAdmins((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
   }
   function deactivateDisabledReason(admin: AdminAccountRow): string | undefined {
+    if (admin.id === currentAdminId) return OWN_ACCOUNT_REASON;
     if (admin.account_type === "SYSTEM_ADMIN" && admin.is_active && activeSystemAdminCount <= 1) {
       return "Cannot deactivate the last active System Administrator.";
     }
@@ -480,7 +444,7 @@ export function AdminManagementWorkspace({
                   <TableRow key={admin.id}>
                     <TableCell className="font-medium">{admin.first_name} {admin.last_name}</TableCell>
                     <TableCell className="text-muted-foreground">{admin.email}</TableCell>
-                    <TableCell><AccountOfficeEditor admin={admin} onUpdated={handleUpdated} /></TableCell>
+                    <TableCell><AccountOfficeEditor admin={admin} disabled={admin.id === currentAdminId} onUpdated={handleUpdated} /></TableCell>
                     <TableCell><StatusBadge active={admin.is_active} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatCreatedDate(admin.created_at)}</TableCell>
                     <TableCell>
@@ -516,7 +480,7 @@ export function AdminManagementWorkspace({
                   </div>
                   <p className="text-sm text-muted-foreground">{admin.email}</p>
                   <p className="text-xs text-muted-foreground">Created {formatCreatedDate(admin.created_at)}</p>
-                  <AccountOfficeEditor admin={admin} onUpdated={handleUpdated} />
+                  <AccountOfficeEditor admin={admin} disabled={admin.id === currentAdminId} onUpdated={handleUpdated} />
                   {admin.id === currentAdminId ? (
                     <p className="text-xs text-muted-foreground">Use Account &amp; Security to change your own password.</p>
                   ) : (
