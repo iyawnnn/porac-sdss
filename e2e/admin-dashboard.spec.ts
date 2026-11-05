@@ -207,22 +207,37 @@ test("range filters, tables, and chart labels remain intact", async ({ page }) =
   // affordance). The KPI sparkline is still an AreaChart, hence scoping to
   // the trend card rather than the first [data-slot="chart"] on the page.
   //
-  // A day with no reports renders a zero-height bar, which Playwright treats
-  // as not visible, so hover the first bar that actually has height. If the
-  // whole 7-day window is empty there is nothing to hover; only the tooltip
-  // check is skipped then — the label assertions below still run.
-  const bars = page.getByTestId("incident-trend-chart").locator(".recharts-bar-rectangle");
-  let barWithHeight = null;
-  for (const candidate of await bars.all()) {
-    const box = await candidate.boundingBox();
-    if (box && box.height > 0) {
-      barWithHeight = candidate;
-      break;
+  // The response can finish before the transition commits the new bars.
+  // Recharts omits zero-size bars, so wait for a stable visible count rather
+  // than equating rectangles with daily buckets.
+  const hasReports = data.incidentTrend.some((row: { report_count: number }) => Number(row.report_count) > 0);
+  let previousVisibleCount = -1;
+  let stableSince = 0;
+  await expect.poll(async () => {
+    const count = await page.getByTestId("incident-trend-chart").locator(".recharts-bar-rectangle:visible").count();
+    if (count !== previousVisibleCount) {
+      previousVisibleCount = count;
+      stableSince = Date.now();
     }
-  }
-  if (barWithHeight) {
-    await barWithHeight.hover({ force: true });
-    await expect(page.getByTestId("incident-chart-tooltip")).toBeVisible();
+    return (!hasReports || count > 0) && Date.now() - stableSince >= 500;
+  }, { intervals: [100], timeout: 10_000 }).toBe(true);
+  // Zero-height days cannot be hovered. Skip only for an all-zero response,
+  // never because a nonzero bar has not finished rendering yet.
+  if (hasReports) {
+    await expect(async () => {
+      const bars = page.getByTestId("incident-trend-chart").locator(".recharts-bar-rectangle");
+      let barWithHeight = null;
+      for (const candidate of await bars.all()) {
+        const box = await candidate.boundingBox();
+        if (box && box.height > 0) {
+          barWithHeight = candidate;
+          break;
+        }
+      }
+      if (!barWithHeight) throw new Error("The nonzero incident trend has no visible bar yet.");
+      await barWithHeight.hover({ timeout: 1_000 });
+      await expect(page.getByTestId("incident-chart-tooltip")).toBeVisible();
+    }).toPass({ timeout: 10_000 });
   }
 
   expect(data.leaderboard.length).toBeLessThanOrEqual(5);
