@@ -363,3 +363,117 @@ describe('ReportsService.flaggedCsv', () => {
     expect(row).toContain('pending');
   });
 });
+
+// Phase 7, step 7.0: every export goes through the central CSV writer, so a
+// hostile text value (a citizen-written title or name, a staff-entered work
+// order title, assignee name, category or barangay text) can never reach a
+// spreadsheet as a live formula. The hostile values below carry no comma, so
+// a row splits cleanly on ','. Numeric columns stay plain numbers.
+describe('ReportsService exports neutralise CSV formula injection', () => {
+  it('tickets.csv: category, barangay and Hazard Information cells start with an apostrophe; numbers stay numeric', async () => {
+    const getTicketsForExport = jest.fn().mockResolvedValue([
+      {
+        id: 42,
+        status: 'Reported',
+        assigned_office: 'MEO',
+        category: '=HYPERLINK("http://evil.example")',
+        barangay_name: '+Poblacion',
+        priority_index: 64,
+        member_count: 3,
+        created_at: '2026-01-05T00:00:00.000Z',
+        updated_at: '2026-01-06T00:00:00.000Z',
+        merged_into_ticket_id: 7,
+        hazard_summary: '@SUM(1+1)',
+        resolution_outcome: null,
+        resolved_at: null,
+      },
+    ]);
+    const { service } = makeService({ getTicketsForExport });
+
+    const csv = await service.ticketsCsv({ status: 'all' }, MEO_OFFICER);
+    const [, row] = csv.trim().split('\r\n');
+
+    expect(row).toBe(
+      `42,Reported,MEO,64,"'=HYPERLINK(""http://evil.example"")",'@SUM(1+1),'+Poblacion,3,2026-01-05T00:00:00.000Z,2026-01-06T00:00:00.000Z,7,,`,
+    );
+  });
+
+  it('flagged.csv: title, citizen name, category, barangay, flags and moderator cells start with an apostrophe; the distance stays numeric', async () => {
+    const getModerationForExport = jest.fn().mockResolvedValue([
+      {
+        id: 211,
+        ticket_id: 1036,
+        title: '=cmd|/C calc!A0',
+        category: '-Lahar',
+        barangay_name: '@Sapang Uwak',
+        assigned_office: 'MDRRMO',
+        citizen_name: '+Maria Santos',
+        citizen_severity: 'Critical',
+        flags: ['=FLAG'],
+        location_mismatch_m: 412,
+        moderation_status: 'dismissed',
+        moderated_by: '\tJane Doe',
+        moderated_at: '2026-08-21T08:12:00.000Z',
+        created_at: '2026-08-20T08:12:00.000Z',
+      },
+    ]);
+    const { service } = makeService({ getModerationForExport });
+
+    const csv = await service.flaggedCsv({}, MEO_OFFICER);
+    const [, row] = csv.trim().split('\r\n');
+
+    expect(row.split(',')).toEqual([
+      '211',
+      '1036',
+      "'=cmd|/C calc!A0",
+      "'-Lahar",
+      "'@Sapang Uwak",
+      'MDRRMO',
+      "'+Maria Santos",
+      'Critical',
+      "'=FLAG",
+      '412',
+      'dismissed',
+      "'\tJane Doe",
+      '2026-08-21T08:12:00.000Z',
+      '2026-08-20T08:12:00.000Z',
+    ]);
+  });
+
+  it('work-orders.csv: title, assignee name and email cells start with an apostrophe; ids stay numeric', async () => {
+    const getWorkOrdersForExport = jest.fn().mockResolvedValue([
+      {
+        id: 7,
+        ticket_id: 42,
+        title: '-2+3',
+        assigned_office: 'MEO',
+        assigned_admin_name: '=Jane Doe',
+        assigned_admin_email: '@jane',
+        status: 'completed',
+        due_date: null,
+        completed_at: new Date('2026-01-03T00:00:00.000Z'),
+        created_at: new Date('2026-01-01T00:00:00.000Z'),
+        updated_at: new Date('2026-01-02T00:00:00.000Z'),
+      },
+    ]);
+    const { service } = makeService({ getWorkOrdersForExport });
+
+    const csv = await service.workOrdersCsv({}, MEO_OFFICER);
+    const [, row] = csv.trim().split('\r\n');
+
+    expect(row.split(',')).toEqual([
+      '7',
+      '42',
+      "'-2+3",
+      'MEO',
+      "'=Jane Doe",
+      "'@jane",
+      'completed',
+      'false',
+      '',
+      '2026-01-03T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-02T00:00:00.000Z',
+    ]);
+  });
+});
