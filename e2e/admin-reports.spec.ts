@@ -53,6 +53,8 @@ for (const account of [E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN]) {
     expect(scopedRows).toHaveLength(1);
     expect(scopedRows[0][0]).toBe(String(own.reportId));
 
+    // The login page redirects an existing staff session to its dashboard.
+    await page.context().clearCookies();
     await loginAs(page, E2E_SYSTEM_ADMIN);
     await page.goto("/admin/activity-log?actionType=report_exported&targetType=export");
     await settleAdminPage(page, page.getByRole("heading", { name: "Activity Log" }));
@@ -299,6 +301,9 @@ test("work order CSV export respects office scope", async ({ page, request }) =>
     "Overdue",
     "Due Date",
     "Completed At",
+    "Cancelled At",
+    "Cancellation Reason",
+    "Replacement Work Order ID",
     "Created At",
     "Updated At",
   ]);

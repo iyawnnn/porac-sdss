@@ -82,6 +82,8 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+**7c-1 Playwright follow-up (2026-11-06):** one full run completed with 292 passed / 4 failed / 0 skipped and exactly 15 citizen report submission events. Failures were the new audit action invalidating a fixed fixture count, the two new export tests retaining a staff session before MIS login, and an old Work Order CSV header expectation. Those test expectations/session transitions are corrected without application, shared helper or timeout changes. Export fixtures also join the existing ticket retirement prefix list after two were found active post-teardown. The dirty disposable copy was left intact; reset phase2-test before a rerun. Activity Log export-detail assertions remain pending that rerun. See docs/testing.md for evidence; no push.
+
 ### Manuscript revision Phase 7, step 7b-2 - audit view - **implemented; browser verification is a separate user-run step**
 
 - System-Administrator-only privacy projection, shared exhaustive action labels, primitive per-action details allow-list, stored actor Focal/office snapshots, Manila day filters, actor/typed target-id filters and compact desktop/mobile changes. No guard expansion, operational authority, text search or export audit added. actor_role is retained permanently, including Phase 8.

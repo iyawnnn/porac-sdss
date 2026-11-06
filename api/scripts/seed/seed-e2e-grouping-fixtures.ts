@@ -69,6 +69,8 @@ const TITLE_PATTERNS = [
   `${RESOLUTION_TITLE_PREFIX}%`,
   `${TICKET_TITLE_PREFIX}%`,
   `${CITIZEN_TITLE_PREFIX}%`,
+  // Export fixtures use the same ticket retirement; audit rows stay intact.
+  'E2E export private title%',
 ];
 // Closed fixture tickets a run may leave Resolved, retired like the active
 // ones: the step 3g feedback ticket, the step 5c resolution tickets and
