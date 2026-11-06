@@ -11,7 +11,9 @@ import { TABLE_HEAD_CLASS } from "@/components/features/admin/shared/tableHead";
 import { KpiCard } from "@/components/features/admin/shared/KpiCard";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
-import type { FocalIntakeRow } from "@/lib/types/admin-focal-intake";
+import type { FocalDashboardCounts, FocalDashboardReports } from "@/lib/types/admin-focal-dashboard";
+import { metricDuration } from "@/lib/utils/metric-duration";
+import { Button } from "@/components/ui/button";
 
 function formatSubmittedAgo(at: string): string {
   const hours = (Date.now() - new Date(at).getTime()) / (1000 * 60 * 60);
@@ -26,17 +28,10 @@ function formatSubmittedAgo(at: string): string {
 // screened, and where was it routed," not work-order/resolved stats. No
 // SLA/overdue-timer language: the manuscript does not establish an
 // acknowledgment SLA.
-export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
-  const reports = [...rows].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
-  const newReports = reports.length;
-  const unacknowledged = reports.filter((r) => r.intakeState === "New").length;
-  // Every unscreened report on an active ticket, acknowledged or not:
-  // acknowledgment and screening are parallel (manuscript revision Phase 3,
-  // step 3f).
-  const needsScreening = reports.filter((r) => r.needsScreening).length;
-  // History only: nothing has been forwarded or escalated since manuscript
-  // revision Phase 5, step 5a (Focal routes with Reassign / Refer).
-  const forwardedOrEscalated = reports.filter((r) => r.intakeState === "Forwarded" || r.intakeState === "Escalated").length;
+export function FocalDashboard({ counts, reportsPage }: { counts: FocalDashboardCounts; reportsPage: FocalDashboardReports }) {
+  const { newReports, unacknowledged, needsScreening, forwardedOrEscalated } = counts;
+  const reports = reportsPage.items;
+  const pageHref = (page: number) => `/admin/focal?page=${page}&pageSize=${reportsPage.pageSize}`;
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -52,6 +47,8 @@ export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
         <KpiCard icon={SendIcon} label="Forwarded / Escalated (history)" value={forwardedOrEscalated.toLocaleString()} />
       </div>
 
+      <p className="text-sm text-muted-foreground">Median time to acknowledge (last 30 days): <strong>{metricDuration(counts.medianAcknowledgmentHours30d)}</strong></p>
+
       <Card className="@container gap-0 rounded-xl bg-muted pt-2 pb-5">
         <CardHeader className="px-4 pb-2">
           <CardHeaderRow>
@@ -61,7 +58,7 @@ export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
         </CardHeader>
         <CardBodyPanel>
           <Table className="text-[13px]">
-            <TableCaption className="sr-only">Most recently submitted reports, with routing and Operational Priority.</TableCaption>
+            <TableCaption className="sr-only">Incoming reports, newest first, with routing and Operational Priority.</TableCaption>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className={TABLE_HEAD_CLASS + " pl-4"} scope="col">Report</TableHead>
@@ -77,7 +74,7 @@ export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
               {reports.length === 0 ? (
                 <TableRow className="hover:bg-transparent"><TableCell className="p-0" colSpan={7}><EmptyState className="p-6" title="No incoming reports right now." /></TableCell></TableRow>
               ) : (
-                reports.slice(0, 6).map((report) => {
+                reports.map((report) => {
                   return (
                     <TableRow className="hover:bg-[var(--brand-subtle)]" key={report.reportId}>
                       <TableCell className="max-w-56 py-2.5 pl-4">
@@ -113,6 +110,13 @@ export function FocalDashboard({ rows }: { rows: FocalIntakeRow[] }) {
               )}
             </TableBody>
           </Table>
+          <nav aria-label="Incoming reports pages" className="flex items-center justify-between gap-3 p-4">
+            <span className="text-sm text-muted-foreground">{reportsPage.total.toLocaleString()} reports / Page {reportsPage.page} of {Math.max(1, Math.ceil(reportsPage.total / reportsPage.pageSize))}</span>
+            <div className="flex gap-2">
+              {reportsPage.page > 1 && <Button asChild size="sm" variant="outline"><Link href={pageHref(reportsPage.page - 1)}>Previous</Link></Button>}
+              {reportsPage.page * reportsPage.pageSize < reportsPage.total && <Button asChild size="sm" variant="outline"><Link href={pageHref(reportsPage.page + 1)}>Next</Link></Button>}
+            </div>
+          </nav>
         </CardBodyPanel>
       </Card>
     </div>

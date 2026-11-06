@@ -65,13 +65,13 @@ describe('merged-away tickets are left out of lists, counts and recalculation', 
 
   // Phase 7d-1 also covers merged parents of report/Work Order aggregates
   // and the new operational ticket metrics.
-  it('the dashboard (active count, barangays, categories, trends, status, workload, deltas, operational metrics and median resolution time)', () => {
+  it('the dashboard (active count, categories, trends, status, deltas, operational metrics and median resolution time)', () => {
     expect(
       count(
         read('admin', 'dashboard.service.ts'),
         'merged_into_ticket_id IS NULL',
       ),
-    ).toBe(15);
+    ).toBe(13);
   });
 
   it('Barangay Insights (list, top category, KPIs, categories, trend, recent)', () => {

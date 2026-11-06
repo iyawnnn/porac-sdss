@@ -125,20 +125,7 @@ test("Highest Priority Actions renders at most 5 rows and its View all link uses
   await expect(card.getByRole("columnheader", { name: "Op. Priority" })).toBeVisible();
 });
 
-// Batch 6 (five-role E2E reconciliation): this used to log in as
-// system_admin by this file's own default (see loginAdmin above) to check
-// the "MEO vs. MDRRMO" comparison and "Department Workload" widgets —
-// content that only ever rendered for system_admin's city-wide dashboard
-// view. Batch 1 of the five-role architecture removed system_admin's
-// operational Dashboard access entirely (OperationalStaffGuard denies it;
-// app/admin/page.tsx redirects it to /admin/admins before this route's own
-// data-fetching component ever runs), so those two widgets are now
-// unreachable by ANY role — not a regression to fix, just dead UI this
-// spec can no longer exercise. The rest of this test (generic dashboard
-// sections, the Map presets region, the click-through interaction) is
-// still real, reachable behavior — verified here as an office admin
-// (MEO), whose own map-preset links omit the office query param entirely
-// (session-scoped already, confirmed live against the real API).
+// Operational dashboards expose office-only summaries and map presets.
 test("restored dashboard sections render from the existing dashboard response", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
@@ -240,7 +227,9 @@ test("range filters, tables, and chart labels remain intact", async ({ page }) =
     }).toPass({ timeout: 10_000 });
   }
 
-  expect(data.leaderboard.length).toBeLessThanOrEqual(5);
+  expect(data).not.toHaveProperty("leaderboard");
+  expect(data).not.toHaveProperty("departmentWorkload");
+  expect(data.officePerformanceSummary).not.toHaveProperty("byOffice");
   expect(data.categories.length).toBeLessThanOrEqual(5);
 });
 

@@ -4,9 +4,9 @@ import { OperationalMetricsPanels } from "./OperationalMetricsPanels";
 import type { OperationalMetrics } from "@/lib/types/admin-dashboard";
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
-import { BarChart3, Building2, ChartPie, ClipboardList, FileText, Gauge, Inbox, MapPinned, Shapes, Ticket } from "lucide-react";
+import { BarChart3, ChartPie, ClipboardList, FileText, Gauge, Inbox, MapPinned, Shapes, Ticket } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, XAxis, YAxis } from "recharts";
-import { DASHBOARD_RANGES, type BarangayRiskRow, type CategoryDistributionRow, type CountTrendRow, type DashboardDeltas, type DashboardKpis, type DashboardRange, type DistributionRow, type IncidentTrendRow, type OfficePerformanceSummary as OfficePerformanceSummaryData, type NeedsAttention as NeedsAttentionData } from "@/lib/types/admin-dashboard";
+import { DASHBOARD_RANGES, type CategoryDistributionRow, type CountTrendRow, type DashboardDeltas, type DashboardKpis, type DashboardRange, type DistributionRow, type IncidentTrendRow, type OfficePerformanceSummary as OfficePerformanceSummaryData, type NeedsAttention as NeedsAttentionData } from "@/lib/types/admin-dashboard";
 import type { AdminTicketRow } from "@/lib/types/admin-tickets";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,6 @@ import { StatusPill } from "../shared/StatusPill";
 import { DeltaIndicator, KpiCard } from "../shared/KpiCard";
 import { EmptyState } from "../shared/EmptyState";
 import type { DistributionChartItem } from "./DistributionChartUtils";
-import { DepartmentWorkloadComparison } from "./DepartmentWorkloadComparison";
 import { DistributionDonutChart } from "./DistributionDonutChart";
 import { MapPresets } from "./MapPresets";
 import { NeedsAttention } from "./NeedsAttention";
@@ -33,7 +32,6 @@ import { SeverityRadialChart } from "./SeverityRadialChart";
 const SEP = "·";
 const STATUS_ORDER = ["Reported", "Under Review", "In Progress", "Resolved", "Rejected"] as const;
 const SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"] as const;
-const DEPARTMENT_ORDER = ["MEO", "MDRRMO"] as const;
 // Neutral by design — see the --chart-* block in app/globals.css for why the
 // trend series does not use brand orange (or the legacy brand blue it read
 // before): brand is chrome, never data.
@@ -59,15 +57,8 @@ const severityChartConfig = {
   medium: { label: "Medium", color: "var(--color-severity-medium)" },
   low: { label: "Low", color: "var(--color-severity-low)" },
 } satisfies ChartConfig;
-const departmentChartConfig = {
-  meo: { label: "MEO", color: "var(--color-office-meo)" },
-  mdrrmo: { label: "MDRRMO", color: "var(--color-office-mdrrmo)" },
-} satisfies ChartConfig;
 
-// leaderboard remains in the response for compatibility even though the
-// landing page does not currently render it. The restored sections below
-// continue to consume every other distribution field from this same payload.
-type DashboardData = { operationalMetrics: OperationalMetrics; kpis: DashboardKpis; leaderboard: BarangayRiskRow[]; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; activeTicketTrend: CountTrendRow[]; pendingWorkOrderTrend: CountTrendRow[]; statusDistribution: DistributionRow[]; departmentWorkload: DistributionRow[] | null; citizenSeverityDistribution: DistributionRow[]; officePerformanceSummary: OfficePerformanceSummaryData; needsAttention: NeedsAttentionData; deltas?: DashboardDeltas; range?: DashboardRange };
+type DashboardData = { operationalMetrics: OperationalMetrics; kpis: DashboardKpis; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; activeTicketTrend: CountTrendRow[]; pendingWorkOrderTrend: CountTrendRow[]; statusDistribution: DistributionRow[]; citizenSeverityDistribution: DistributionRow[]; officePerformanceSummary: OfficePerformanceSummaryData; needsAttention: NeedsAttentionData; deltas?: DashboardDeltas; range?: DashboardRange };
 
 function numeric(value: number | string | null | undefined): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function formatShortDate(value: string): string { const date = new Date(value + "T00:00:00"); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
@@ -280,9 +271,7 @@ export function DashboardClient({ initialData, topPriorityTickets, adminName }: 
   const categories = categoryItems(data.categories);
   const statuses = distributionItems(data.statusDistribution, STATUS_ORDER);
   const severities = distributionItems(data.citizenSeverityDistribution, SEVERITY_ORDER);
-  const departments = data.departmentWorkload ? distributionItems(data.departmentWorkload, DEPARTMENT_ORDER) : null;
-  const isSystemAdmin = data.officePerformanceSummary.scope === "ALL";
-  const office = data.officePerformanceSummary.scope === "ALL" ? undefined : data.officePerformanceSummary.scope;
+  const office = data.officePerformanceSummary.scope;
   async function updateRange(nextRange: DashboardRange) { if (nextRange === range) return; const id = requestId.current + 1; requestId.current = id; setRange(nextRange); setRangeError(null); try { const response = await fetch("/api/admin/dashboard?range=" + nextRange, { cache: "no-store" }); if (!response.ok) throw new Error(); const nextData = await response.json() as DashboardData; if (requestId.current === id) startTransition(() => setData(nextData)); } catch { if (requestId.current === id) { setRange(initialData.range ?? 30); setRangeError("Unable to update the incident report range. Showing the previous range."); } } }
   return <div className="flex min-w-0 flex-col gap-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -349,11 +338,6 @@ export function DashboardClient({ initialData, topPriorityTickets, adminName }: 
         <AnalyticsCard icon={Gauge} title="Reports by Citizen Severity">
           <SeverityRadialChart ariaLabel="Reports by citizen severity" config={severityChartConfig} description="Citizen-selected severity in the latest 30 days; not a system score." items={severities} />
         </AnalyticsCard>
-        {departments && (
-          <AnalyticsCard icon={Building2} title="Department Workload">
-            <DepartmentWorkloadComparison ariaLabel="Department workload" config={departmentChartConfig} description="Active tickets assigned to MEO and MDRRMO." items={departments} />
-          </AnalyticsCard>
-        )}
       </section>
 
       <Card className="gap-0 rounded-xl bg-muted pt-2 pb-5">
@@ -364,7 +348,7 @@ export function DashboardClient({ initialData, topPriorityTickets, adminName }: 
           </CardHeaderRow>
         </CardHeader>
         <CardBodyPanel className="p-4">
-          <MapPresets isSystemAdmin={isSystemAdmin} office={office} />
+          <MapPresets office={office} />
         </CardBodyPanel>
       </Card>
     </div>

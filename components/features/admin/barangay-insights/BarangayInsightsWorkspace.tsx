@@ -150,7 +150,7 @@ export function BarangayInsightsWorkspace({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-0.5">
           <h1 className="font-heading text-base font-semibold">Barangay Insights</h1>
-          <p className="text-xs text-muted-foreground">Office-scoped ticket activity across every barangay. Total excludes Rejected and merged-away tickets.</p>
+          <p className="text-xs text-muted-foreground">Office-scoped ticket activity across every barangay. Total excludes Rejected and merged-away tickets. Terrain (informational) is available in each barangay profile.</p>
         </div>
       </div>
 

@@ -171,7 +171,7 @@ test("clicking a barangay opens its profile page with KPIs, category breakdown, 
   // convention for asserting on it (see admin-dashboard-performance-summary.spec.ts).
   await expect(page.getByText("Category Breakdown", { exact: true })).toBeVisible();
   await expect(page.getByText("Incident Trend", { exact: true })).toBeVisible();
-  await expect(page.getByText("Elevation Summary", { exact: true })).toBeVisible();
+  await expect(page.getByText("Terrain (informational)", { exact: true })).toBeVisible();
   await expect(page.getByText("Recent Tickets", { exact: true })).toBeVisible();
 });
 

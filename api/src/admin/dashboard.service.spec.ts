@@ -121,13 +121,7 @@ describe('dashboard ranges', () => {
   });
 });
 
-// The Office Performance Summary is assembled from two already-scoped
-// service methods (WorkOrdersService, ModerationService) — these tests
-// verify the assembly itself (which office each sub-call receives, when the
-// MEO/MDRRMO comparison is computed) rather than re-testing those services'
-// own SQL, which have their own spec files. The High-Urgency Open Tickets
-// count (read from DashboardService.getDashboardKpis) was removed in
-// manuscript revision Phase 1, step 6a.
+// Office summaries assemble only the caller's office counts.
 describe('DashboardController office performance summary assembly', () => {
   function officePerformanceController(
     counts: Record<string, { pending: number; flagged: number }>,
@@ -136,14 +130,14 @@ describe('DashboardController office performance summary assembly', () => {
       getDashboardKpis: jest.fn(),
     } as unknown as DashboardService;
     const moderation = {
-      getModerationStats: jest.fn((office?: 'MEO' | 'MDRRMO') =>
-        Promise.resolve({ pending: counts[office ?? 'ALL'].flagged }),
+      getModerationStats: jest.fn((office: 'MEO' | 'MDRRMO') =>
+        Promise.resolve({ pending: counts[office].flagged }),
       ),
     } as unknown as ModerationService;
     const workOrders = {
-      getOfficePerformanceCounts: jest.fn((office?: 'MEO' | 'MDRRMO') =>
+      getOfficePerformanceCounts: jest.fn((office: 'MEO' | 'MDRRMO') =>
         Promise.resolve({
-          pendingWorkOrders: counts[office ?? 'ALL'].pending,
+          pendingWorkOrders: counts[office].pending,
           inProgressWorkOrders: 0,
           overdueWorkOrders: 0,
           completedWorkOrdersThisWeek: 0,
@@ -160,11 +154,10 @@ describe('DashboardController office performance summary assembly', () => {
     );
     return {
       controller: controller as unknown as {
-        getOfficePerformanceSummary: (office?: 'MEO' | 'MDRRMO') => Promise<{
+        getOfficePerformanceSummary: (office: 'MEO' | 'MDRRMO') => Promise<{
           scope: string;
           pendingWorkOrders: number;
           flaggedReportsPending: number;
-          byOffice: { MEO: { pendingWorkOrders: number } } | null;
         }>;
       },
       dashboard,
@@ -173,7 +166,7 @@ describe('DashboardController office performance summary assembly', () => {
     };
   }
 
-  it('an office-scoped admin (MEO) gets scope MEO, MEO-only counts, and no byOffice comparison', async () => {
+  it('an office-scoped admin (MEO) gets scope MEO, MEO-only counts, without cross-office comparison', async () => {
     const { controller, dashboard, workOrders } = officePerformanceController({
       MEO: { pending: 2, flagged: 1 },
       MDRRMO: { pending: 99, flagged: 99 },
@@ -186,7 +179,6 @@ describe('DashboardController office performance summary assembly', () => {
     expect(summary.flaggedReportsPending).toBe(1);
     expect(summary).not.toHaveProperty('highUrgencyOpenTickets');
     expect(dashboard.getDashboardKpis).not.toHaveBeenCalled();
-    expect(summary.byOffice).toBeNull();
     // Never touches MDRRMO's data for an MEO-scoped request.
     expect(workOrders.getOfficePerformanceCounts).toHaveBeenCalledTimes(1);
     expect(workOrders.getOfficePerformanceCounts).toHaveBeenCalledWith('MEO');
@@ -202,32 +194,10 @@ describe('DashboardController office performance summary assembly', () => {
 
     expect(summary.scope).toBe('MDRRMO');
     expect(summary.pendingWorkOrders).toBe(6);
-    expect(summary.byOffice).toBeNull();
     expect(workOrders.getOfficePerformanceCounts).toHaveBeenCalledTimes(1);
     expect(workOrders.getOfficePerformanceCounts).toHaveBeenCalledWith(
       'MDRRMO',
     );
-  });
-
-  it('a system admin (office undefined) gets scope ALL plus a MEO vs MDRRMO comparison', async () => {
-    const { controller, workOrders } = officePerformanceController({
-      ALL: { pending: 8, flagged: 3 },
-      MEO: { pending: 2, flagged: 1 },
-      MDRRMO: { pending: 6, flagged: 2 },
-    });
-
-    const summary = await controller.getOfficePerformanceSummary(undefined);
-
-    expect(summary.scope).toBe('ALL');
-    expect(summary.pendingWorkOrders).toBe(8);
-    expect(summary.byOffice).toEqual(
-      expect.objectContaining({
-        MEO: expect.objectContaining({ pendingWorkOrders: 2 }),
-        MDRRMO: expect.objectContaining({ pendingWorkOrders: 6 }),
-      }),
-    );
-    // City-wide + MEO + MDRRMO = 3 calls total for a system admin.
-    expect(workOrders.getOfficePerformanceCounts).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -306,7 +276,7 @@ describe('toKpiDelta', () => {
 });
 
 describe('getKpiDeltas', () => {
-  function queriesFor(office?: 'MEO' | 'MDRRMO') {
+  function queriesFor(office: 'MEO' | 'MDRRMO') {
     const sql = jest.fn().mockResolvedValue([]) as unknown as Sql;
     const service = new DashboardService(sql);
     return service
