@@ -27,7 +27,9 @@ async function ActivityLogData({ query }: { query: Record<string, string | undef
     );
   }
   if (!data) notFound();
-  return <ActivityLogWorkspace initialData={data} initialQuery={query} />;
+  const staff = await apiGetOptional<{ id: number; first_name: string; last_name: string }[]>("/admin/admins", [401, 403]);
+  const actors = (staff ?? []).map(row => ({ id: row.id, name: [row.first_name, row.last_name].filter(Boolean).join(" ") }));
+  return <ActivityLogWorkspace initialData={data} initialQuery={query} actors={actors} />;
 }
 
 export default async function AdminActivityLogPage({

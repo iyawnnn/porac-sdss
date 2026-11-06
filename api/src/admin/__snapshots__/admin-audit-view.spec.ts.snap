@@ -1,0 +1,212 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`audit response privacy boundary strictly pins the complete allow-list 1`] = `
+{
+  "admin_created": {
+    "accountType": [
+      "PERSONNEL",
+      "SYSTEM_ADMIN",
+    ],
+    "isFocal": "boolean",
+    "office": [
+      "MEO",
+      "MDRRMO",
+    ],
+  },
+  "admin_deactivated": {
+    "from.active": "boolean",
+    "sessionsEnded": "boolean",
+    "to.active": "boolean",
+  },
+  "admin_login": {},
+  "admin_login_failed": {},
+  "admin_password_changed": {},
+  "admin_password_reset": {},
+  "admin_reactivated": {
+    "from.active": "boolean",
+    "sessionsEnded": "boolean",
+    "to.active": "boolean",
+  },
+  "admin_role_updated": {
+    "from.accountType": [
+      "PERSONNEL",
+      "SYSTEM_ADMIN",
+    ],
+    "from.isFocal": "boolean",
+    "from.office": [
+      "MEO",
+      "MDRRMO",
+    ],
+    "sessionsEnded": "boolean",
+    "to.accountType": [
+      "PERSONNEL",
+      "SYSTEM_ADMIN",
+    ],
+    "to.isFocal": "boolean",
+    "to.office": [
+      "MEO",
+      "MDRRMO",
+    ],
+  },
+  "operational_assessment_created": {},
+  "operational_assessment_updated": {},
+  "report_acknowledged": {},
+  "report_escalated": {},
+  "report_moderated": {
+    "action": [
+      "dismiss",
+      "quarantine",
+      "duplicate",
+    ],
+  },
+  "report_regrouped": {},
+  "report_removed_from_ticket": {},
+  "report_screened": {},
+  "report_severity_screened": {
+    "newStatus": [
+      "NOT_REVIEWED",
+      "NO_CONCERN_NOTED",
+      "REQUIRES_OPERATIONAL_VALIDATION",
+    ],
+    "oldStatus": [
+      "NOT_REVIEWED",
+      "NO_CONCERN_NOTED",
+      "REQUIRES_OPERATIONAL_VALIDATION",
+    ],
+  },
+  "ticket_category_corrected": {
+    "fromOffice": [
+      "MEO",
+      "MDRRMO",
+    ],
+    "newValue": "category",
+    "officeChanged": "boolean",
+    "oldValue": "category",
+    "toOffice": [
+      "MEO",
+      "MDRRMO",
+    ],
+  },
+  "ticket_location_corrected": {},
+  "ticket_merged": {
+    "movedReportIds": "array_count",
+  },
+  "ticket_reassigned": {
+    "from": [
+      "MEO",
+      "MDRRMO",
+    ],
+    "to": [
+      "MEO",
+      "MDRRMO",
+    ],
+  },
+  "ticket_referral_noted": {},
+  "ticket_rejected": {
+    "from": [
+      "Reported",
+      "Under Review",
+      "In Progress",
+      "Resolved",
+      "Rejected",
+    ],
+    "to": [
+      "Reported",
+      "Under Review",
+      "In Progress",
+      "Resolved",
+      "Rejected",
+    ],
+  },
+  "ticket_returned_to_review": {
+    "from": [
+      "Reported",
+      "Under Review",
+      "In Progress",
+      "Resolved",
+      "Rejected",
+    ],
+    "previousOutcome": [
+      "MUNICIPAL_ACTION_COMPLETED",
+      "EXTERNAL_REFERRAL",
+    ],
+    "to": [
+      "Reported",
+      "Under Review",
+      "In Progress",
+      "Resolved",
+      "Rejected",
+    ],
+  },
+  "ticket_status_advanced": {
+    "from": [
+      "Reported",
+      "Under Review",
+      "In Progress",
+      "Resolved",
+      "Rejected",
+    ],
+    "outcome": [
+      "MUNICIPAL_ACTION_COMPLETED",
+      "EXTERNAL_REFERRAL",
+    ],
+    "to": [
+      "Reported",
+      "Under Review",
+      "In Progress",
+      "Resolved",
+      "Rejected",
+    ],
+  },
+  "work_order_cancelled": {
+    "from": [
+      "pending",
+      "in_progress",
+      "completed",
+      "cancelled",
+    ],
+    "to": [
+      "pending",
+      "in_progress",
+      "completed",
+      "cancelled",
+    ],
+  },
+  "work_order_completed": {
+    "from": [
+      "pending",
+      "in_progress",
+      "completed",
+      "cancelled",
+    ],
+    "to": [
+      "pending",
+      "in_progress",
+      "completed",
+      "cancelled",
+    ],
+  },
+  "work_order_created": {
+    "assignedOffice": [
+      "MEO",
+      "MDRRMO",
+    ],
+    "hasDueDate": "boolean",
+  },
+  "work_order_status_changed": {
+    "from": [
+      "pending",
+      "in_progress",
+      "completed",
+      "cancelled",
+    ],
+    "to": [
+      "pending",
+      "in_progress",
+      "completed",
+      "cancelled",
+    ],
+  },
+  "work_order_updated": {},
+}
+`;

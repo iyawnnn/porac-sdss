@@ -1,4 +1,5 @@
 import { sql } from '../db';
+import { insertAuditViewFixtures } from '../lib/audit-view-fixtures';
 
 // Playwright fixtures for the staff Merge / Remove / Regroup spec
 // (e2e/admin-ticket-grouping.spec.ts; manuscript revision Phase 3, step 3d),
@@ -849,11 +850,11 @@ async function create() {
     `;
     await tx`
       INSERT INTO admin_audit_events (
-        actor_admin_id, actor_name, actor_email, actor_role, actor_account_type, actor_office,
+        actor_admin_id, actor_name, actor_email, actor_role, actor_account_type, actor_is_focal, actor_office,
         action_type, target_type, target_id, target_summary, metadata, created_at
       )
       VALUES (
-        ${meo.id}, ${meo.name}, ${MEO_EMAIL}, (SELECT role FROM admins WHERE id = ${meo.id}), 'PERSONNEL', 'MEO',
+        ${meo.id}, ${meo.name}, ${MEO_EMAIL}, (SELECT role FROM admins WHERE id = ${meo.id}), (SELECT account_type FROM admins WHERE id = ${meo.id}), (SELECT is_focal FROM admins WHERE id = ${meo.id}), (SELECT office FROM admins WHERE id = ${meo.id}),
         'ticket_referral_noted', 'ticket', ${resolutionReferredTicketId},
         ${`Ticket #${resolutionReferredTicketId} (Leaking Pipe / Water Supply Concern)`},
         ${JSON.stringify({ agency: referralAgency, reason: referralReason })}::jsonb,
@@ -1054,11 +1055,11 @@ async function create() {
     await tx`UPDATE tickets SET member_count = 2 WHERE id = ${survivorTicketId}`;
     await tx`
       INSERT INTO admin_audit_events (
-        actor_admin_id, actor_name, actor_email, actor_role, actor_account_type, actor_office,
+        actor_admin_id, actor_name, actor_email, actor_role, actor_account_type, actor_is_focal, actor_office,
         action_type, target_type, target_id, target_summary, metadata, created_at
       )
       VALUES (
-        ${meo.id}, ${meo.name}, ${MEO_EMAIL}, (SELECT role FROM admins WHERE id = ${meo.id}), 'PERSONNEL', 'MEO',
+        ${meo.id}, ${meo.name}, ${MEO_EMAIL}, (SELECT role FROM admins WHERE id = ${meo.id}), (SELECT account_type FROM admins WHERE id = ${meo.id}), (SELECT is_focal FROM admins WHERE id = ${meo.id}), (SELECT office FROM admins WHERE id = ${meo.id}),
         'ticket_merged', 'ticket', ${survivorTicketId},
         ${`Ticket #${survivorTicketId} (${CATEGORY})`},
         ${JSON.stringify({
@@ -1165,7 +1166,9 @@ async function create() {
       ownTrackingReference: await trackingReferenceOf(referredReportId),
     };
 
+    const auditView = await insertAuditViewFixtures(tx);
     return {
+      auditView,
       tickets: {
         sharedReadOnly: {
           ticketId: sharedReadOnly.ticketId,

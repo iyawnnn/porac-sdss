@@ -24,6 +24,9 @@ Five-role architecture (Batches 1–5) — Citizen plus four distinct admin-side
 
 **A note on the System Administrator's scope:** it was city-wide operational plus administration until Batch 1 of the five-role architecture, which removed the operational half entirely — a genuine authority reduction, not a rename. The System Administrator today reaches *only* Admin Management, the Activity Log, and its own Account & Security — see §4 below, rewritten to match.
 
+Phase 7, step 7b: the Activity Log shows the recorded actor name and responsibility, action, Manila time, neutral entity label (live staff name for account targets) and compact structured changes. It never exposes audit summaries, metadata, emails, reasons, remarks, notes, citizen text, exact coordinates or assignee ids. Choose action, target type, staff actor, numeric target id with type, and Manila from/to days; reset clears filters. Missing values say "Not recorded". Focal status uses the recorded boolean, with legacy recorded-role fallback; Personnel with no recorded office stays "office not recorded". This oversight view gives MIS no operational permissions. Audit history cannot be updated/deleted; actor_role stays permanently.
+
+
 ---
 
 ## 1. Citizen flow

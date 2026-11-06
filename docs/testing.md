@@ -8,6 +8,131 @@ This file does not repeat setup instructions; see [`README.md`](../README.md) §
 
 ---
 
+
+## Phase 7, step 7b-2: audit view verification and contract
+
+No migrations, seed runner, Playwright, real database or push. The user reports 0047 applied to their disposable copy only. MIS guards/operational permissions are unchanged; actor_role and its enum remain permanently, including Phase 8.
+
+**Files changed (29):**
+
+- `CLAUDE.md`
+- `api/scripts/lib/audit-view-fixtures.ts`
+- `api/scripts/lib/demo-audit.ts`
+- `api/scripts/seed/seed-demo-presentation.ts`
+- `api/scripts/seed/seed-e2e-grouping-fixtures.ts`
+- `api/src/admin/__snapshots__/admin-audit-view.spec.ts.snap`
+- `api/src/admin/admin-audit-source.spec.ts`
+- `api/src/admin/admin-audit-view.spec.ts`
+- `api/src/admin/admin-audit-view.ts`
+- `api/src/admin/admin-audit.service.spec.ts`
+- `api/src/admin/admin-audit.service.ts`
+- `api/src/admin/admins.service.ts`
+- `api/src/contracts/admin-audit.ts`
+- `api/src/db/schema.ts`
+- `api/test/audit-view.pglite.cjs`
+- `api/test/citizen-notifications.pglite.cjs`
+- `api/test/staff-accounts.pglite.cjs`
+- `app/admin/activity-log/page.tsx`
+- `components/features/admin/activity-log/ActivityLogWorkspace.tsx`
+- `docs/database.md`
+- `docs/features.md`
+- `docs/project-status.md`
+- `docs/security.md`
+- `docs/testing.md`
+- `docs/user-flows.md`
+- `e2e/admin-activity-log.spec.ts`
+- `e2e/admin-tickets.spec.ts`
+- `e2e/admin-work-orders.spec.ts`
+- `lib/types/admin-audit.ts`
+
+**Before:** envelope `{ events, total, page, limit, totalPages }`; event keys exactly `id, actor_admin_id, actor_name, actor_email, actor_role, actor_account_type, actor_office, action_type, target_type, target_id, target_summary, metadata, created_at`. Metadata was unfiltered and summaries could contain operational/citizen text.
+
+**After:** same envelope; event exactly `{ id, created_at, action, target_type, target_id, target_label, actor: { id, name, account_type, is_focal, display_label }, details }`. created_at is ISO. details is a flat primitive-only object. No target_summary/raw metadata/email/reason/remark/note/title/description/citizen text/coordinate/assignee id/cancellation reason is serialized. Neutral Ticket/Report/Work order #id labels; staff target name is a live lookup without email (or a not-recorded fallback). Unknown action codes have empty details; malformed action/target strings become unknown.
+
+**Actor labels:** every new service insert reads role, account type, Focal and office from the stored actor in its INSERT, for raw-PG/Drizzle/login paths. True Focal means Focal Personnel; false uses recorded account type/office (System Administrator/MIS, MEO Personnel, MDRRMO Personnel). Legacy NULL uses recorded actor_role: focal=Focal Personnel, system_admin=System Administrator/MIS, officer/supervisor=Personnel. Recorded actor_office alone supplies MEO/MDRRMO. Missing office stays Personnel - office not recorded; never inferred from current staff or old role. No historical row changes.
+
+**Exact per-action allow-list:** source paths below flatten dot to underscore (from.office becomes from_office). movedReportIds becomes only moved_reports_count. Category names map from the explicit current/legacy vocabulary to uppercase short codes; unknown names are omitted. Other strings must match a strict pattern, length <=40 and the field's pinned enum. Booleans must be booleans, counts nonnegative integers, explicit NULL remains NULL. Unknown keys/actions and invalid values are omitted. No speculative member-count field is exposed because writers do not currently record one.
+
+| Action | Allowed source metadata paths |
+|---|---|
+| `admin_created` | `accountType`, `isFocal`, `office` |
+| `admin_role_updated` | `from.accountType`, `to.accountType`, `from.isFocal`, `to.isFocal`, `from.office`, `to.office`, `sessionsEnded` |
+| `admin_password_changed` | None |
+| `admin_password_reset` | None |
+| `admin_deactivated` | `from.active`, `to.active`, `sessionsEnded` |
+| `admin_reactivated` | `from.active`, `to.active`, `sessionsEnded` |
+| `admin_login` | None |
+| `admin_login_failed` | None |
+| `ticket_status_advanced` | `from`, `to`, `outcome` |
+| `ticket_reassigned` | `from`, `to` |
+| `ticket_referral_noted` | None |
+| `ticket_rejected` | `from`, `to` |
+| `ticket_returned_to_review` | `from`, `to`, `previousOutcome` |
+| `ticket_category_corrected` | `oldValue`, `newValue`, `officeChanged`, `fromOffice`, `toOffice` |
+| `ticket_location_corrected` | None |
+| `report_moderated` | `action` |
+| `work_order_created` | `assignedOffice`, `hasDueDate` |
+| `work_order_updated` | None |
+| `work_order_status_changed` | `from`, `to` |
+| `work_order_completed` | `from`, `to` |
+| `work_order_cancelled` | `from`, `to` |
+| `report_acknowledged` | None |
+| `report_screened` | None |
+| `report_severity_screened` | `oldStatus`, `newStatus` |
+| `report_escalated` | None |
+| `operational_assessment_created` | None |
+| `operational_assessment_updated` | None |
+| `ticket_merged` | `movedReportIds` |
+| `report_removed_from_ticket` | None |
+| `report_regrouped` | None |
+
+Codes: ticket status Reported/Under Review/In Progress/Resolved/Rejected; Work Order pending/in_progress/completed/cancelled; office MEO/MDRRMO; account PERSONNEL/SYSTEM_ADMIN; outcome MUNICIPAL_ACTION_COMPLETED/EXTERNAL_REFERRAL; moderation dismiss/quarantine/duplicate; screening NOT_REVIEWED/NO_CONCERN_NOTED/REQUIRES_OPERATIONAL_VALIDATION. Full validators and known-category code mapping: api/src/admin/admin-audit-view.ts; strict allow-list snapshot: api/src/admin/__snapshots__/admin-audit-view.spec.ts.snap.
+
+**Full shared action/label list:** api/src/contracts/admin-audit.ts is shared by API/web; its map satisfies an exhaustive Record type. Retired events remain filterable.
+
+| Action | Label |
+|---|---|
+| `admin_created` | Admin created |
+| `admin_role_updated` | Account type/office/Focal updated |
+| `admin_password_changed` | Password changed |
+| `admin_password_reset` | Password reset |
+| `admin_deactivated` | Admin deactivated |
+| `admin_reactivated` | Admin reactivated |
+| `admin_login` | Admin login |
+| `admin_login_failed` | Admin login failed |
+| `ticket_status_advanced` | Ticket status advanced |
+| `ticket_reassigned` | Ticket reassigned |
+| `ticket_referral_noted` | Referral recorded |
+| `ticket_rejected` | Ticket rejected |
+| `ticket_returned_to_review` | Ticket returned to Under Review |
+| `ticket_category_corrected` | Ticket category corrected |
+| `ticket_location_corrected` | Ticket location corrected |
+| `report_moderated` | Report moderated |
+| `work_order_created` | Work order created |
+| `work_order_updated` | Work order updated |
+| `work_order_status_changed` | Work order status changed |
+| `work_order_completed` | Work order completed |
+| `work_order_cancelled` | Work order cancelled |
+| `report_acknowledged` | Report acknowledged |
+| `report_screened` | Report screened (retired) |
+| `report_severity_screened` | Report severity screened |
+| `report_escalated` | Report escalated (retired) |
+| `operational_assessment_created` | Operational assessment created |
+| `operational_assessment_updated` | Operational assessment updated |
+| `ticket_merged` | Tickets merged |
+| `report_removed_from_ticket` | Report removed from ticket |
+| `report_regrouped` | Report moved to another ticket |
+
+**Seed:** presentation audit DELETE removed. No audit TRUNCATE or trigger disabling added; existing operational resets are unchanged. DemoAuditService takes a per-target transaction advisory lock and skips an existing event with identical actor/action/target type/id/JSONB metadata (NULL metadata equals empty object). This also recognizes untagged old demo events. Different transitions/actors/metadata remain distinct. Both transaction-client paths pass PGlite checks. Source scan covers app/scripts/E2E and finds no audit UPDATE/DELETE. Historical migration SQL is excluded: 0039's unchanged WHERE actor_account_type IS NULL backfill matches no row after its NOT NULL constraint.
+
+**E2E fixture design (not run):** grouping setup calls an INSERT-only helper. Each run reserves an audit sequence value plus 1,000,000,000 as a distinctive soft ticket target id, inserts all 30 actions at 2026-11-05T15:59Z and an extra login at 16:00Z, then exposes ids through E2E_GROUPING_FIXTURES.auditView. Rows may accumulate forever; no real ticket/report or citizen creation. November 5 Manila returns 30, November 6 returns one. The activity spec checks every filter label, nine formerly blank badges, a real distinctive staff create/edit with from-to and no reason/email, actor/target-id and date inputs. Existing ticket/work-order specs query their own ids and use safe actor/details/action fields. Zero added citizen-report POSTs. Playwright remains a separate user-run step.
+
+**Final verification:** API 75 suites / 1,783 tests and one allow-list snapshot pass; API build, root type-check, root 34 unit tests and pnpm web production build pass. Audit PGlite 5 groups; staff-account PGlite 8; citizen-notification PGlite 24. The new harness matches DbModule with drizzle(postgresClient), rejects raw JS Date parameters, and runs all three actors across all three audit insert paths, real filters/count/pagination/live-name queries, Manila midnight split, seed dedupe with old-row preservation, and accumulating E2E fixture inserts under an append-only trigger. Build API first, set PGLITE_MODULE_ROOT to the scratch PGlite/socket project and TSX_TSCONFIG_PATH=api/tsconfig.json, then run node api/test/audit-view.pglite.cjs. It imports helper functions only, never a seed runner, scripts/db.ts or .env. No external email.
+
+**Mutations:** a planted SECRET_REASON response field failed 31 privacy tests; removing Manila's eight-hour offset failed its boundary test; removing admin_login's label failed exhaustive label coverage. A temporary Jest config disabled diagnostics for mutation runs so the missing-label runtime assertion executed; normal checks retain type checking. Original source buffers restored byte-for-byte, final tests/build pass, no mutation remains.
+
+**Lint:** touched web/E2E/types files, new/changed audit TypeScript/helpers and all touched CJS harnesses pass. The presentation seed retains 18 prettier findings and schema.ts one, matched at unchanged lines against main (19 total); no new findings. No wholesale reformatting. Web build ran in a temporary source copy with only its Turbopack root widened to resolve linked dependencies and automatic pnpm install disabled. Sandbox dependency access required escalation; build passed. Original .next existed and remains; next-env.d.ts, api/pnpm-workspace.yaml and api/.env untouched.
+
 ## 1. Test types
 
 **Phase 7, step 7a staff account management.** `admins.service.spec.ts` covers type/office/Focal session bumps, no-op edit/status writes, invalid combinations, last-active removal/deactivation, self-edit/deactivation, inactive account edits/reactivation, another administrator's edit, the unchanged legacy role mirror and one audit event per real change. `session.service.spec.ts` checks rejection before the bump and same-second authority mismatches. Audit specs pin both actor fields to the stored account rather than mixing the session with the role mirror.

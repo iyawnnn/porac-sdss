@@ -4,41 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 import type { AdminAuditActionType, AdminAuditTargetType, PaginatedAdminAudit } from "@/lib/types/admin-audit";
-import { actorDescription } from "@/lib/utils/adminScope";
+import { AUDIT_ACTION_LABELS as ACTION_LABELS } from "@/lib/types/admin-audit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { AdminErrorCard } from "../shared/AdminErrorCard";
 import { EmptyState } from "../shared/EmptyState";
 
-const ACTION_LABELS: Record<AdminAuditActionType, string> = {
-  admin_created: "Admin created",
-  admin_role_updated: "Role/office updated",
-  admin_password_changed: "Password changed",
-  admin_password_reset: "Password reset",
-  ticket_status_advanced: "Ticket status advanced",
-  ticket_reassigned: "Ticket reassigned",
-  ticket_referral_noted: "Referral recorded",
-  ticket_rejected: "Ticket rejected",
-  ticket_returned_to_review: "Ticket returned to Under Review",
-  ticket_merged: "Tickets merged",
-  report_removed_from_ticket: "Report removed from ticket",
-  report_regrouped: "Report moved to another ticket",
-  ticket_category_corrected: "Ticket category corrected",
-  ticket_location_corrected: "Ticket location corrected",
-  report_moderated: "Report moderated",
-  report_severity_screened: "Report severity screened",
-  work_order_created: "Work order created",
-  work_order_updated: "Work order updated",
-  work_order_status_changed: "Work order status changed",
-  work_order_completed: "Work order completed",
-  work_order_cancelled: "Work order cancelled",
-};
 const TARGET_LABELS: Record<AdminAuditTargetType, string> = {
   admin: "Admin",
   ticket: "Ticket",
@@ -50,6 +27,8 @@ const PAGE_LIMITS = [10, 25, 50, 100] as const;
 interface QueryState {
   actionType: string;
   targetType: string;
+  actorAdminId: string;
+  targetId: string;
   from: string;
   to: string;
   page: number;
@@ -61,6 +40,8 @@ function initialQueryState(query: Record<string, string | undefined>): QueryStat
   return {
     actionType: query.actionType ?? "",
     targetType: query.targetType ?? "",
+    actorAdminId: query.actorAdminId ?? "",
+    targetId: query.targetId ?? "",
     from: query.from ?? "",
     to: query.to ?? "",
     page: Math.max(1, Number(query.page) || 1),
@@ -74,6 +55,8 @@ function buildParams(state: QueryState): URLSearchParams {
   params.set("limit", String(state.limit));
   if (state.actionType) params.set("actionType", state.actionType);
   if (state.targetType) params.set("targetType", state.targetType);
+  if (state.actorAdminId) params.set("actorAdminId", state.actorAdminId);
+  if (state.targetType && state.targetId) params.set("targetId", state.targetId);
   if (state.from) params.set("from", state.from);
   if (state.to) params.set("to", state.to);
   return params;
@@ -94,23 +77,34 @@ function getPageNumbers(current: number, total: number): (number | "ellipsis")[]
 }
 
 function formatTime(value: string): string {
-  return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return new Date(value).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" });
 }
 
-// Batch 4: never "All Offices" for a System Administrator actor — an
-// Activity Log entry reads the same unambiguous way as anywhere else an
-// admin is described. Phase 2, step 2e: every event, old or new, shows the
-// Personnel / Focal Personnel / System Administrator label mapped from its
-// stored actor_role (see lib/utils/adminScope.ts's actorDescription); the
-// stored values are never touched.
-function actorOfficeLine(actorOffice: string | null, actorRole: string): string {
-  return actorDescription(actorRole, actorOffice);
+function actionLabel(action: string) {
+  return ACTION_LABELS[action as AdminAuditActionType] ?? "Not recorded";
+}
+
+function detailsText(details: PaginatedAdminAudit["events"][number]["details"]) {
+  const show = (value: string | number | boolean | null | undefined) => value == null ? "Not recorded" : String(value);
+  const entries: string[] = [];
+  const used = new Set<string>();
+  for (const [from, to, label] of [["from", "to", ""], ["from_accountType", "to_accountType", "Account type"], ["from_office", "to_office", "Office"], ["from_isFocal", "to_isFocal", "Focal"], ["from_active", "to_active", "Active"], ["oldValue", "newValue", "Category"], ["oldStatus", "newStatus", "Screening"]]) {
+    if (from in details || to in details) {
+      entries.push((label ? label + ": " : "") + show(details[from]) + " → " + show(details[to]));
+      used.add(from); used.add(to);
+    }
+  }
+  const labels: Record<string, string> = { sessionsEnded: "Sessions ended", office: "Office", accountType: "Account type", isFocal: "Focal", officeChanged: "Office changed", outcome: "Outcome", previousOutcome: "Previous outcome", action: "Decision", assignedOffice: "Assigned office", hasDueDate: "Has due date", moved_reports_count: "Reports moved" };
+  for (const [key, value] of Object.entries(details)) if (!used.has(key) && key in labels) entries.push(labels[key] + ": " + show(value));
+  return entries.join("; ") || "Not recorded";
 }
 
 export function ActivityLogWorkspace({
   initialData,
   initialQuery,
+  actors,
 }: {
+  actors: { id: number; name: string }[];
   initialData: PaginatedAdminAudit;
   initialQuery: Record<string, string | undefined>;
 }) {
@@ -136,9 +130,10 @@ export function ActivityLogWorkspace({
     setLoading(true);
     setError(null);
     fetch(`/api/admin/activity-log?${params.toString()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed (${res.status})`);
-        return res.json();
+      .then(async (res) => {
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.message || `Request failed (${res.status})`);
+        return body;
       })
       .then((json) => {
         if (!cancelled) setData(json);
@@ -159,14 +154,14 @@ export function ActivityLogWorkspace({
   }
 
   function resetFilters() {
-    setQuery({ actionType: "", targetType: "", from: "", to: "", page: 1, limit: query.limit });
+    setQuery({ actionType: "", targetType: "", actorAdminId: "", targetId: "", from: "", to: "", page: 1, limit: query.limit });
   }
 
   function retry() {
     setRefetchNonce((n) => n + 1);
   }
 
-  const hasActiveFilters = query.actionType !== "" || query.targetType !== "" || query.from !== "" || query.to !== "";
+  const hasActiveFilters = query.actorAdminId !== "" || query.targetId !== "" || query.actionType !== "" || query.targetType !== "" || query.from !== "" || query.to !== "";
   const from = data.total === 0 ? 0 : (data.page - 1) * data.limit + 1;
   const to = Math.min(data.total, data.page * data.limit);
 
@@ -181,22 +176,32 @@ export function ActivityLogWorkspace({
         <CardContent className="flex flex-wrap items-center gap-3 border-b p-3">
           <Select onValueChange={(v) => updateFilter({ actionType: v === "all" ? "" : v })} value={query.actionType || "all"}>
             <SelectTrigger aria-label="Action type"><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent><SelectGroup>
               <SelectItem value="all">All actions</SelectItem>
               {Object.entries(ACTION_LABELS).map(([value, label]) => (
                 <SelectItem key={value} value={value}>{label}</SelectItem>
               ))}
-            </SelectContent>
+            </SelectGroup></SelectContent>
           </Select>
-          <Select onValueChange={(v) => updateFilter({ targetType: v === "all" ? "" : v })} value={query.targetType || "all"}>
+          <Select onValueChange={(v) => updateFilter({ targetType: v === "all" ? "" : v, targetId: "" })} value={query.targetType || "all"}>
             <SelectTrigger aria-label="Target type"><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent><SelectGroup>
               <SelectItem value="all">All targets</SelectItem>
               {Object.entries(TARGET_LABELS).map(([value, label]) => (
                 <SelectItem key={value} value={value}>{label}</SelectItem>
               ))}
-            </SelectContent>
+            </SelectGroup></SelectContent>
           </Select>
+          <Select value={query.actorAdminId || "all"} onValueChange={(v) => updateFilter({ actorAdminId: v === "all" ? "" : v })}>
+            <SelectTrigger aria-label="Actor"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectGroup>
+              <SelectItem value="all">All staff</SelectItem>
+              {actors.map(actor => <SelectItem key={actor.id} value={String(actor.id)}>{actor.name} (#{actor.id})</SelectItem>)}
+            </SelectGroup></SelectContent>
+          </Select>
+          <Input aria-label="Target id" type="number" min={1} step={1} placeholder="Target id" className="w-32"
+            disabled={!query.targetType} value={query.targetId} onChange={e => updateFilter({ targetId: e.target.value })} />
+          <span className="text-xs text-muted-foreground">Dates: Asia/Manila</span>
           <Input
             aria-label="From date"
             className="w-auto"
@@ -249,7 +254,7 @@ export function ActivityLogWorkspace({
                     <TableHead>Actor</TableHead>
                     <TableHead>Action</TableHead>
                     <TableHead>Target</TableHead>
-                    <TableHead className="pr-6">Summary</TableHead>
+                    <TableHead className="pr-6">Details</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -257,12 +262,12 @@ export function ActivityLogWorkspace({
                     <TableRow key={event.id}>
                       <TableCell className="pl-6 text-xs text-muted-foreground whitespace-nowrap">{formatTime(event.created_at)}</TableCell>
                       <TableCell>
-                        <p className="font-medium">{event.actor_name}</p>
-                        <p className="text-xs text-muted-foreground">{actorOfficeLine(event.actor_office, event.actor_role)}</p>
+                        <p className="font-medium">{event.actor.name}</p>
+                        <p className="text-xs text-muted-foreground">{event.actor.display_label}</p>
                       </TableCell>
-                      <TableCell><Badge variant="outline">{ACTION_LABELS[event.action_type]}</Badge></TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{TARGET_LABELS[event.target_type]} #{event.target_id}</TableCell>
-                      <TableCell className="pr-6 max-w-72 truncate text-sm" title={event.target_summary}>{event.target_summary}</TableCell>
+                      <TableCell><Badge variant="outline">{actionLabel(event.action)}</Badge></TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{event.target_label}</TableCell>
+                      <TableCell className="pr-6 max-w-96 whitespace-normal text-sm" >{detailsText(event.details)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -275,12 +280,12 @@ export function ActivityLogWorkspace({
                 <Card key={event.id}>
                   <CardContent className="flex flex-col gap-1 p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <Badge variant="outline">{ACTION_LABELS[event.action_type]}</Badge>
+                      <Badge variant="outline">{actionLabel(event.action)}</Badge>
                       <span className="text-xs text-muted-foreground">{formatTime(event.created_at)}</span>
                     </div>
-                    <p className="text-sm font-medium">{event.actor_name} <span className="text-xs font-normal text-muted-foreground">({actorOfficeLine(event.actor_office, event.actor_role)})</span></p>
-                    <p className="text-xs text-muted-foreground">{TARGET_LABELS[event.target_type]} #{event.target_id}</p>
-                    <p className="text-sm">{event.target_summary}</p>
+                    <p className="text-sm font-medium">{event.actor.name} <span className="text-xs font-normal text-muted-foreground">({event.actor.display_label})</span></p>
+                    <p className="text-xs text-muted-foreground">{event.target_label}</p>
+                    <p className="text-sm">{detailsText(event.details)}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -295,11 +300,11 @@ export function ActivityLogWorkspace({
           <div className="flex flex-wrap items-center gap-3">
             <Select onValueChange={(v) => setQuery((q) => ({ ...q, limit: Number(v), page: 1 }))} value={String(query.limit)}>
               <SelectTrigger aria-label="Rows per page" size="sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectContent><SelectGroup>
                 {PAGE_LIMITS.map((n) => (
                   <SelectItem key={n} value={String(n)}>{n} / page</SelectItem>
                 ))}
-              </SelectContent>
+              </SelectGroup></SelectContent>
             </Select>
             <Pagination className="mx-0 w-auto">
               <PaginationContent>

@@ -55,7 +55,7 @@ import { WorkOrdersService } from '../../src/admin/work-orders.service';
 import { OperationalAssessmentService } from '../../src/admin/operational-assessment.service';
 import { ReportsService } from '../../src/reports/reports.service';
 import { NotificationsService } from '../../src/notifications/notifications.service';
-import { AdminAuditService } from '../../src/admin/admin-audit.service';
+import { DemoAuditService } from '../lib/demo-audit';
 import { ConsoleEmailService } from '../../src/citizens/email.service';
 import { recalculateActivePriority } from '../lib/recompute';
 import type { AdminSession } from '../../src/auth/session.service';
@@ -1070,7 +1070,7 @@ async function resetOperationalData() {
   // FK-less by design (soft entity_id) — TRUNCATE CASCADE above cannot
   // reach these; clear explicitly so nothing points at a deleted ticket.
   await sql`TRUNCATE notifications RESTART IDENTITY`;
-  await sql`DELETE FROM admin_audit_events WHERE target_type IN ('ticket', 'report', 'work_order')`;
+  // Audit history is immutable; DemoAuditService skips identical demo events on rerun.
 }
 
 // ---------------------------------------------------------------------
@@ -1483,7 +1483,7 @@ async function createClusterTicket({
 // ---------------------------------------------------------------------
 function buildTicketsService(): TicketsService {
   const notifications = new NotificationsService(db);
-  const audit = new AdminAuditService(db);
+  const audit = new DemoAuditService(db);
   const email = new ConsoleEmailService({
     get: () => 'development',
   } as unknown as ConfigService<Env, true>);
@@ -1522,7 +1522,7 @@ function buildReportsService(): ReportsService {
 
 function buildWorkOrdersService(): WorkOrdersService {
   const notifications = new NotificationsService(db);
-  const audit = new AdminAuditService(db);
+  const audit = new DemoAuditService(db);
   return new WorkOrdersService(db, notifications, audit);
 }
 
@@ -1591,7 +1591,7 @@ async function seedWorkOrders(
   const workOrdersService = buildWorkOrdersService();
   const assessmentService = new OperationalAssessmentService(
     sql,
-    new AdminAuditService(db),
+    new DemoAuditService(db),
   );
   const ids: number[] = [];
 

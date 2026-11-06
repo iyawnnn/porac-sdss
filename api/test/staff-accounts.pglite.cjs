@@ -24,7 +24,7 @@ async function main() {
       is_active boolean DEFAULT true, created_at timestamptz DEFAULT now(),
       password_changed_at timestamptz, session_valid_after timestamptz);
     CREATE TABLE admin_audit_events (id serial PRIMARY KEY, actor_admin_id int, actor_name text,
-      actor_email text, actor_role text NOT NULL, actor_account_type text NOT NULL, actor_office text,
+      actor_email text, actor_role text NOT NULL, actor_account_type text NOT NULL, actor_is_focal boolean, actor_office text,
       action_type text, target_type text, target_id int, target_summary text, metadata jsonb,
       created_at timestamptz DEFAULT now());
     INSERT INTO admins (id,email,first_name,last_name,password_hash,role,account_type,office,is_active)

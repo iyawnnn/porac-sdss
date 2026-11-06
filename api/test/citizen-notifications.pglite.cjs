@@ -53,7 +53,7 @@ async function main() {
   await memory.exec(`
     CREATE TYPE resolution_outcome AS ENUM ('MUNICIPAL_ACTION_COMPLETED', 'EXTERNAL_REFERRAL');
     CREATE TABLE citizens (id serial PRIMARY KEY, email text NOT NULL);
-    CREATE TABLE admins (id int PRIMARY KEY, role text, account_type text DEFAULT 'PERSONNEL');
+    CREATE TABLE admins (id int PRIMARY KEY, role text, account_type text DEFAULT 'PERSONNEL', is_focal boolean DEFAULT false, office text DEFAULT 'MEO');
     CREATE TABLE barangays (id int PRIMARY KEY, name text);
     CREATE TABLE tickets (id int PRIMARY KEY, category text, status text, assigned_office text,
       barangay_id int DEFAULT 1, geom text DEFAULT '', category_review_required boolean DEFAULT false,
@@ -78,7 +78,7 @@ async function main() {
     CREATE TABLE notifications (id serial PRIMARY KEY, recipient_type text, recipient_id int, recipient_office text,
       type text, title text, message text, href text, entity_type text, entity_id int, read_at timestamptz, created_at timestamptz DEFAULT now());
     CREATE TABLE admin_audit_events (id serial PRIMARY KEY, actor_admin_id int, actor_name text, actor_email text,
-      actor_role text, actor_account_type text, actor_office text, action_type text, target_type text,
+      actor_role text, actor_account_type text, actor_is_focal boolean, actor_office text, action_type text, target_type text,
       target_id int, target_summary text, metadata jsonb);
     INSERT INTO citizens VALUES (1, 'a@example.test'), (2, 'b@example.test'), (3, 'ancestor@example.test');
     INSERT INTO admins (id, role) VALUES (1, 'officer');
