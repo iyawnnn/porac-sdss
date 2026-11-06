@@ -18,6 +18,7 @@ const {
 } = require('../src/admin/report-export-queries.ts');
 const { ReportsService } = require('../src/admin/reports.service.ts');
 const { AdminAuditService } = require('../dist/admin/admin-audit.service');
+const { DashboardService } = require('../dist/admin/dashboard.service');
 const {
   insertNewExportFixtures,
 } = require('../scripts/lib/new-export-fixtures.ts');
@@ -62,8 +63,13 @@ async function main() {
       assessed_at timestamptz DEFAULT '2026-01-01T16:00:00Z',updated_by_admin_id int,updated_by_name text);
     INSERT INTO operational_assessments(ticket_id) VALUES (1),(2),(3),(5);
     CREATE TABLE work_orders(id serial PRIMARY KEY,ticket_id int,title text,notes text,assigned_office office,status text,created_by_admin_id int,
-      completed_at timestamptz,cancelled_at timestamptz,cancelled_by_admin_id int,cancellation_reason text);
+      completed_at timestamptz,cancelled_at timestamptz,cancelled_by_admin_id int,cancellation_reason text,
+      created_at timestamptz DEFAULT '2026-01-01',updated_at timestamptz DEFAULT '2026-01-02');
     INSERT INTO work_orders(ticket_id,status) VALUES (1,'pending'),(1,'in_progress'),(1,'completed'),(1,'cancelled'),(5,'cancelled');
+    CREATE TABLE status_history(id serial PRIMARY KEY,ticket_id int,status ticket_status,admin_id int,admin_name text,changed_at timestamptz);
+    INSERT INTO status_history(ticket_id,status,changed_at) SELECT id,status,created_at FROM tickets WHERE status <> 'Reported';
+    CREATE TABLE work_order_status_history(id serial PRIMARY KEY,work_order_id int,status text,admin_id int,admin_name text,changed_at timestamptz);
+    INSERT INTO work_order_status_history(work_order_id,status,changed_at) SELECT id,status,created_at FROM work_orders;
     -- Only geometry equality is a stand-in. All export SQL/Drizzle paths are real.
     CREATE FUNCTION ST_Equals(text,text) RETURNS boolean LANGUAGE SQL IMMUTABLE AS 'SELECT $1=$2';
     CREATE TABLE hazard_information(id int,ticket_id int,hazard_context_type text,lookup_status text,susceptibility_code text,
@@ -296,6 +302,21 @@ async function main() {
     ok(
       'insert-only E2E fixture writer also checked on drizzle-wrapped client, unique assessment, merged-away rows and completed/cancelled records',
     );
+    const dashboard = Object.assign(Object.create(DashboardService.prototype), { pg: raw });
+    const deltas = [];
+    for (const { office } of fixtures) {
+      const active = await dashboard.getActiveTicketTrend(7, office);
+      const pending = await dashboard.getPendingWorkOrderTrend(7, office);
+      const [headline] = await raw`
+        SELECT
+          (SELECT count(*)::int FROM tickets WHERE assigned_office=${office}::office
+            AND merged_into_ticket_id IS NULL AND status IN ('Reported','Under Review','In Progress')) AS active,
+          (SELECT count(*)::int FROM work_orders WHERE assigned_office=${office}::office AND status='pending') AS pending
+      `;
+      deltas.push({ office, active: active.at(-1).count - headline.active, pending: pending.at(-1).count - headline.pending });
+    }
+    assert.deepEqual(deltas, fixtures.map(({ office }) => ({ office, active: 0, pending: 0 })));
+    ok('export fixtures preserve real dashboard active-ticket and pending-work-order trend/headline agreement in both offices');
     console.log(`${checks} new export PGlite check groups passed`);
   } finally {
     await raw.end();

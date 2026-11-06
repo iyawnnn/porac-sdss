@@ -36,6 +36,15 @@ export async function insertNewExportFixtures(tx: TransactionSql) {
       `;
       if (!ticket)
         throw new Error('New export fixture needs an existing location.');
+      // Dashboard trends replay history; a non-Reported fixture needs its
+      // initial transition just as tickets created by the main fixture helper do.
+      if (status !== 'Reported') {
+        await tx`
+          INSERT INTO status_history (ticket_id,status,admin_id,admin_name,changed_at)
+          VALUES (${ticket.id},${status}::ticket_status,${staff.id},${staff.name},
+            '2001-01-01T17:00:00.000Z'::timestamptz)
+        `;
+      }
       const [report] = await tx<{ id: number; tracking_reference: string }[]>`
         INSERT INTO reports (ticket_id,citizen_id,title,description,citizen_severity,image_url,submitted_category,
           geom,pin_geom,flags,created_at)
@@ -65,14 +74,26 @@ export async function insertNewExportFixtures(tx: TransactionSql) {
       'completed',
       'cancelled',
     ] as const) {
-      await tx`
+      const [workOrder] = await tx<{ id: number }[]>`
         INSERT INTO work_orders (ticket_id,title,notes,assigned_office,status,created_by_admin_id,
-          completed_at,cancelled_at,cancelled_by_admin_id,cancellation_reason)
+          completed_at,cancelled_at,cancelled_by_admin_id,cancellation_reason,created_at,updated_at)
         VALUES (${ticketIds[0]},'E2E reporting fixture work','PRIVATE_WORK_ORDER_NOTE',${office}::office,${status},${staff.id},
           ${status === 'completed' ? '2001-01-02T00:00:00.000Z' : null}::timestamptz,
           ${status === 'cancelled' ? '2001-01-02T00:00:00.000Z' : null}::timestamptz,
-          ${status === 'cancelled' ? staff.id : null},${status === 'cancelled' ? 'Fixture cancellation' : null})
+          ${status === 'cancelled' ? staff.id : null},${status === 'cancelled' ? 'Fixture cancellation' : null},
+          '2001-01-01T16:00:00.000Z'::timestamptz,'2001-01-02T00:00:00.000Z'::timestamptz)
+        RETURNING id
       `;
+      await tx`
+        INSERT INTO work_order_status_history (work_order_id,status,admin_id,admin_name,changed_at)
+        VALUES (${workOrder.id},'pending',${staff.id},${staff.name},'2001-01-01T16:00:00.000Z'::timestamptz)
+      `;
+      if (status !== 'pending') {
+        await tx`
+          INSERT INTO work_order_status_history (work_order_id,status,admin_id,admin_name,changed_at)
+          VALUES (${workOrder.id},${status},${staff.id},${staff.name},'2001-01-02T00:00:00.000Z'::timestamptz)
+        `;
+      }
     }
     result.push({
       office,
