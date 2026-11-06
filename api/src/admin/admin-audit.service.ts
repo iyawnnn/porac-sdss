@@ -1,5 +1,10 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, desc, eq, gte, lte, sql as dsql } from 'drizzle-orm';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
+import { and, desc, eq, sql as dsql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { TransactionSql } from 'postgres';
 import { DB } from '../db/db.module';
@@ -12,52 +17,18 @@ import type { AdminRole } from './admins.service';
 // success/failure (admin_login/admin_login_failed) via logBestEffort below —
 // see AuthService.adminLogin for the write sites and the nonexistent-email
 // decision.
-export type AdminAuditActionType =
-  | 'admin_created'
-  | 'admin_role_updated'
-  | 'admin_password_changed'
-  | 'admin_password_reset'
-  | 'admin_deactivated'
-  | 'admin_reactivated'
-  | 'admin_login'
-  | 'admin_login_failed'
-  | 'ticket_status_advanced'
-  | 'ticket_reassigned'
-  | 'ticket_referral_noted'
-  | 'ticket_rejected'
-  // Manuscript revision Phase 5, step 5c.
-  | 'ticket_returned_to_review'
-  // Manuscript revision Phase 3, step 3e: staff corrections.
-  | 'ticket_category_corrected'
-  | 'ticket_location_corrected'
-  | 'report_moderated'
-  | 'work_order_created'
-  | 'work_order_updated'
-  | 'work_order_status_changed'
-  | 'work_order_completed'
-  | 'work_order_cancelled'
-  // There never was a report_forwarded: Focal's old Forward was audited by
-  // reassignOffice's own 'ticket_reassigned' event (actor=focal), as Focal's
-  // Reassign is since manuscript revision Phase 5, step 5a.
-  | 'report_acknowledged'
-  // History only since manuscript revision Phase 3, step 3f: the old
-  // general screening action, never written again.
-  | 'report_screened'
-  // Focal severity screening (step 3f), metadata { oldStatus, newStatus,
-  // remarks }.
-  | 'report_severity_screened'
-  // History only since manuscript revision Phase 5, step 5a: Focal's old
-  // Escalate, removed (manual routing is only Reassign or Refer). Old
-  // events stay readable and filterable.
-  | 'report_escalated'
-  | 'operational_assessment_created'
-  | 'operational_assessment_updated'
-  // Manuscript revision Phase 3, step 3d (TicketGroupingService).
-  | 'ticket_merged'
-  | 'report_removed_from_ticket'
-  | 'report_regrouped';
-
-export type AdminAuditTargetType = 'admin' | 'ticket' | 'report' | 'work_order';
+import {
+  AUDIT_ACTIONS,
+  type AdminAuditActionType,
+  type AdminAuditTargetType,
+  type PaginatedAdminAudit,
+} from '../contracts/admin-audit';
+import { auditItem } from './admin-audit-view';
+export type {
+  AdminAuditActionType,
+  AdminAuditTargetType,
+  PaginatedAdminAudit,
+} from '../contracts/admin-audit';
 
 // actor_role is not passed in: every write takes it from the actor's
 // stored admins.role mirror (a subquery in the INSERT), since the session
@@ -80,75 +51,20 @@ export interface LogAdminAuditInput {
   metadata?: Record<string, unknown>;
 }
 
-export interface AdminAuditRow {
-  id: number;
-  actor_admin_id: number;
-  actor_name: string;
-  actor_email: string;
-  // History: the role the event was written with (never rewritten).
-  actor_role: AdminRole;
-  actor_account_type: AdminAccountType;
-  actor_office: 'MEO' | 'MDRRMO' | null;
-  action_type: AdminAuditActionType;
-  target_type: AdminAuditTargetType;
-  target_id: number;
-  target_summary: string;
-  metadata: Record<string, unknown> | null;
-  created_at: Date;
-}
-
 export interface AdminAuditFilters {
   actionType?: AdminAuditActionType;
   targetType?: AdminAuditTargetType;
   actorAdminId?: number;
+  targetId?: number;
   from?: string;
   to?: string;
   page?: number;
   limit?: number;
 }
 
-export interface PaginatedAdminAudit {
-  events: AdminAuditRow[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
-
 const PAGE_LIMITS = [10, 25, 50, 100] as const;
 const DEFAULT_PAGE_LIMIT = 25;
-const ACTION_TYPES: AdminAuditActionType[] = [
-  'admin_created',
-  'admin_role_updated',
-  'admin_password_changed',
-  'admin_password_reset',
-  'admin_deactivated',
-  'admin_reactivated',
-  'admin_login',
-  'admin_login_failed',
-  'ticket_status_advanced',
-  'ticket_reassigned',
-  'ticket_referral_noted',
-  'ticket_rejected',
-  'ticket_returned_to_review',
-  'ticket_category_corrected',
-  'ticket_location_corrected',
-  'report_moderated',
-  'work_order_created',
-  'work_order_updated',
-  'work_order_status_changed',
-  'work_order_completed',
-  'work_order_cancelled',
-  'report_acknowledged',
-  'report_screened',
-  'report_severity_screened',
-  'report_escalated',
-  'operational_assessment_created',
-  'operational_assessment_updated',
-  'ticket_merged',
-  'report_removed_from_ticket',
-  'report_regrouped',
-];
+const ACTION_TYPES: readonly string[] = AUDIT_ACTIONS;
 const TARGET_TYPES: AdminAuditTargetType[] = [
   'admin',
   'ticket',
@@ -156,23 +72,25 @@ const TARGET_TYPES: AdminAuditTargetType[] = [
   'work_order',
 ];
 
-const SAFE_COLUMNS = {
+const VIEW_COLUMNS = {
   id: adminAuditEvents.id,
   actor_admin_id: adminAuditEvents.actorAdminId,
   actor_name: adminAuditEvents.actorName,
-  actor_email: adminAuditEvents.actorEmail,
   actor_role: adminAuditEvents.actorRole,
   actor_account_type: adminAuditEvents.actorAccountType,
+  actor_is_focal: adminAuditEvents.actorIsFocal,
+  target_name: dsql<
+    string | null
+  >`(SELECT concat_ws(' ', first_name, last_name) FROM admins WHERE id = ${adminAuditEvents.targetId} AND ${adminAuditEvents.targetType} = 'admin')`,
   actor_office: adminAuditEvents.actorOffice,
   action_type: adminAuditEvents.actionType,
   target_type: adminAuditEvents.targetType,
   target_id: adminAuditEvents.targetId,
-  target_summary: adminAuditEvents.targetSummary,
   metadata: adminAuditEvents.metadata,
   created_at: adminAuditEvents.createdAt,
 };
 
-// actor_role still has to be written (NOT NULL until Phase 8): it is the
+// actor_role is permanently retained as immutable history: it is the
 // actor's stored admins.role mirror, read in the same INSERT so it can't
 // drift from what the admins row says.
 function actorRoleOf(adminId: number) {
@@ -186,7 +104,10 @@ function values(input: LogAdminAuditInput) {
     actorEmail: input.actor.email,
     actorRole: actorRoleOf(input.actor.adminId),
     actorAccountType: dsql<AdminAccountType>`(SELECT account_type FROM admins WHERE id = ${input.actor.adminId})`,
-    actorOffice: input.actor.office,
+    actorIsFocal: dsql<boolean>`(SELECT is_focal FROM admins WHERE id = ${input.actor.adminId})`,
+    actorOffice: dsql<
+      'MEO' | 'MDRRMO' | null
+    >`(SELECT office FROM admins WHERE id = ${input.actor.adminId})`,
     actionType: input.actionType,
     targetType: input.targetType,
     targetId: input.targetId,
@@ -218,12 +139,14 @@ export class AdminAuditService {
     const v = values(input);
     await tx`
       INSERT INTO admin_audit_events (
-        actor_admin_id, actor_name, actor_email, actor_role, actor_account_type, actor_office,
+        actor_admin_id, actor_name, actor_email, actor_role, actor_account_type, actor_is_focal, actor_office,
         action_type, target_type, target_id, target_summary, metadata
       ) VALUES (
         ${v.actorAdminId}, ${v.actorName}, ${v.actorEmail},
         (SELECT role FROM admins WHERE id = ${v.actorAdminId}),
-        (SELECT account_type FROM admins WHERE id = ${v.actorAdminId}), ${v.actorOffice ?? null},
+        (SELECT account_type FROM admins WHERE id = ${v.actorAdminId}),
+        (SELECT is_focal FROM admins WHERE id = ${v.actorAdminId}),
+        (SELECT office FROM admins WHERE id = ${v.actorAdminId}),
         ${v.actionType}, ${v.targetType}, ${v.targetId}, ${v.targetSummary},
         ${v.metadata ? JSON.stringify(v.metadata) : null}::jsonb
       )
@@ -264,26 +187,38 @@ export class AdminAuditService {
     )
       ? (query.targetType as AdminAuditTargetType)
       : undefined;
-    const actorAdminId = query.actorAdminId
-      ? Number(query.actorAdminId)
-      : undefined;
-    const from = query.from?.trim() || undefined;
-    const to = query.to?.trim() || undefined;
+    const actorAdminId = positiveId(query.actorAdminId, 'Actor id');
+    const from = query.from || undefined;
+    const to = query.to || undefined;
+    auditDateBounds(from, to);
+    const targetId = positiveId(query.targetId, 'Target id');
+    if (targetId && !targetType)
+      throw new BadRequestException('Choose a target type with the target id.');
     const page = Math.max(1, Number(query.page) || 1);
     const limit = PAGE_LIMITS.includes(
       Number(query.limit) as (typeof PAGE_LIMITS)[number],
     )
       ? Number(query.limit)
       : DEFAULT_PAGE_LIMIT;
-    return { actionType, targetType, actorAdminId, from, to, page, limit };
+    return {
+      actionType,
+      targetType,
+      actorAdminId,
+      targetId,
+      from,
+      to,
+      page,
+      limit,
+    };
   }
 
   async list(filters: AdminAuditFilters = {}): Promise<PaginatedAdminAudit> {
-    const page = Math.max(1, filters.page ?? 1);
+    const page = Math.max(1, Math.floor(filters.page ?? 1));
     const limit = Math.max(
-      1,
-      Math.min(100, filters.limit ?? DEFAULT_PAGE_LIMIT),
+      10,
+      Math.min(100, Math.floor(filters.limit ?? DEFAULT_PAGE_LIMIT)),
     );
+    const { from, until } = auditDateBounds(filters.from, filters.to);
     const conditions = [
       filters.actionType
         ? eq(adminAuditEvents.actionType, filters.actionType)
@@ -294,26 +229,23 @@ export class AdminAuditService {
       filters.actorAdminId
         ? eq(adminAuditEvents.actorAdminId, filters.actorAdminId)
         : undefined,
-      filters.from
-        ? gte(adminAuditEvents.createdAt, new Date(filters.from))
+      filters.targetId
+        ? eq(adminAuditEvents.targetId, filters.targetId)
         : undefined,
-      // Exclusive upper bound at the start of the next day, so `to` is
-      // inclusive of the whole calendar day a caller picks.
-      filters.to
-        ? lte(
-            adminAuditEvents.createdAt,
-            new Date(`${filters.to}T23:59:59.999Z`),
-          )
+      from
+        ? dsql`${adminAuditEvents.createdAt} >= ${from}::timestamptz`
+        : undefined,
+      until
+        ? dsql`${adminAuditEvents.createdAt} < ${until}::timestamptz`
         : undefined,
     ].filter((c) => c !== undefined);
-    const where = conditions.length > 0 ? and(...conditions) : undefined;
-
+    const where = conditions.length ? and(...conditions) : undefined;
     const [events, [{ total }]] = await Promise.all([
       this.db
-        .select(SAFE_COLUMNS)
+        .select(VIEW_COLUMNS)
         .from(adminAuditEvents)
         .where(where)
-        .orderBy(desc(adminAuditEvents.createdAt))
+        .orderBy(desc(adminAuditEvents.createdAt), desc(adminAuditEvents.id))
         .limit(limit)
         .offset((page - 1) * limit),
       this.db
@@ -321,13 +253,56 @@ export class AdminAuditService {
         .from(adminAuditEvents)
         .where(where),
     ]);
-
     return {
-      events: events as AdminAuditRow[],
+      events: events.map(auditItem),
       total,
       page,
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     };
   }
+}
+
+function positiveId(value: string | undefined, label: string) {
+  if (!value) return undefined;
+  if (
+    !/^[1-9]\d*$/.test(value) ||
+    !Number.isSafeInteger(Number(value)) ||
+    Number(value) > 2147483647
+  )
+    throw new BadRequestException(label + ' must be a positive integer.');
+  return Number(value);
+}
+
+// Manila has UTC+08:00, with no DST. Exclusive next-day bound includes
+// every PostgreSQL microsecond of the requested final calendar day.
+export function auditDateBounds(from?: string, to?: string) {
+  const day = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value))
+      throw new BadRequestException(
+        'Dates must be valid YYYY-MM-DD calendar days.',
+      );
+    const parsed = new Date(value + 'T00:00:00.000Z');
+    if (
+      !Number.isFinite(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== value
+    )
+      throw new BadRequestException(
+        'Dates must be valid YYYY-MM-DD calendar days.',
+      );
+    return parsed.getTime();
+  };
+  const first = from ? day(from) : undefined;
+  const last = to ? day(to) : undefined;
+  if (first !== undefined && last !== undefined && first > last)
+    throw new BadRequestException('From date must be on or before to date.');
+  const offset = 8 * 60 * 60 * 1000;
+  return {
+    from:
+      first === undefined ? undefined : new Date(first - offset).toISOString(),
+    until:
+      last === undefined
+        ? undefined
+        : new Date(last + 86400000 - offset).toISOString(),
+  };
 }

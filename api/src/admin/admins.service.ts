@@ -20,7 +20,7 @@ import { AdminAuditService } from './admin-audit.service';
 
 // The old role values. Since manuscript revision Phase 2, step 2e this is
 // only the type of the admins.role sync mirror and of the historical
-// admin_audit_events.actor_role — never read for access (Phase 8 drops both).
+// admin_audit_events.actor_role — never read for access. actor_role is retained permanently.
 export type AdminRole = 'officer' | 'supervisor' | 'focal' | 'system_admin';
 export type AdminOffice = 'MEO' | 'MDRRMO';
 

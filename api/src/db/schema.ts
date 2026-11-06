@@ -124,7 +124,7 @@ export const rainfallContextStatusEnum = pgEnum(
 );
 // History / sync mirror only since manuscript revision Phase 2, step 2e
 // (migration 0039): admins.role and admin_audit_events.actor_role keep this
-// type until both are dropped in Phase 8, and NOTHING may read either for
+// type permanently for audit history; admins.role may retire in Phase 8. Nothing reads either for
 // access — access is decided by admins.account_type / office / is_focal
 // (adminAccountTypeEnum below, api/src/common/authz/admin-scope.ts). The app
 // keeps admins.role in sync on create/update (see AdminsService) so the NOT
@@ -951,8 +951,8 @@ export const adminAuditEvents = pgTable('admin_audit_events', {
   actorName: text('actor_name').notNull(),
   actorEmail: text('actor_email').notNull(),
   // History only: the role the event was written with, never rewritten;
-  // new events take it from the actor's stored admins.role mirror. Dropped
-  // in Phase 8.
+  // new events take it from the actor's stored admins.role mirror. Kept
+  // permanently, including after Phase 8.
   actorRole: adminRoleEnum('actor_role').notNull(),
   // Appendix H actor account type (Phase 2, step 2e). Keeping it beside the
   // historical actor_role is an implementation extension. 0039 filled it

@@ -75,7 +75,9 @@ describe('AdminAuditService.logInPgTx', () => {
 
     const [strings, ...values] = calls[0];
     const text = strings.join('?');
-    expect(text).toContain('actor_role, actor_account_type, actor_office');
+    expect(text).toContain(
+      'actor_role, actor_account_type, actor_is_focal, actor_office',
+    );
     // actor_role is read from the admins row in the same INSERT, never
     // taken from the caller (the session has no role).
     expect(text).toContain('(SELECT role FROM admins WHERE id = ?)');
@@ -116,7 +118,8 @@ describe('AdminAuditService.logInTx', () => {
         actorName: ACTOR.adminName,
         actorEmail: ACTOR.email,
         actorAccountType: expect.any(SQL) as unknown,
-        actorOffice: ACTOR.office,
+        actorOffice: expect.any(SQL) as unknown,
+        actorIsFocal: expect.any(SQL) as unknown,
         actionType: 'admin_created',
         targetType: 'admin',
         targetId: 42,

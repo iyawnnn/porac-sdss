@@ -432,13 +432,13 @@ test("audit events are written for work order creation and status changes", asyn
   const cookies = await page.context().cookies();
   const headers = { ...sessionCookieHeader(cookies), "content-type": "application/json" };
 
-  const auditRes = await request.get(`/api/admin/activity-log?targetType=work_order&limit=50`, { headers });
+  const auditRes = await request.get(`/api/admin/activity-log?targetType=work_order&targetId=${created.id}&limit=50`, { headers });
   const auditBody = await auditRes.json();
-  const summaries = auditBody.events.map((e: { target_summary: string }) => e.target_summary);
-  expect(summaries.some((s: string) => s.includes(`Work order #${created.id}`))).toBe(true);
+  expect(auditBody.events.every((e: { target_label: string }) => e.target_label === `Work order #${created.id}`)).toBe(true);
+  expect(JSON.stringify(auditBody)).not.toContain("E2E: audit check");
   const actionTypes = auditBody.events
     .filter((e: { target_id: number }) => e.target_id === created.id)
-    .map((e: { action_type: string }) => e.action_type);
+    .map((e: { action: string }) => e.action);
   expect(actionTypes).toEqual(expect.arrayContaining(["work_order_created", "work_order_cancelled"]));
 });
 

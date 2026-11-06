@@ -593,12 +593,13 @@ test.describe.serial("MEO-initiated reassignment security", () => {
     await loginAs(page, E2E_SYSTEM_ADMIN);
     const sysHeaders = sessionCookieHeader(await page.context().cookies());
     const audit = await (
-      await request.get("/api/admin/activity-log?actionType=ticket_reassigned&targetType=ticket&limit=25", { headers: sysHeaders })
+      await request.get(`/api/admin/activity-log?actionType=ticket_reassigned&targetType=ticket&targetId=${ticketId}&limit=25`, { headers: sysHeaders })
     ).json();
     const event = audit.events.find((e: { target_id: number }) => e.target_id === ticketId);
     expect(event).toBeTruthy();
-    expect(event.actor_admin_id).toBe(meoAdmin.id);
-    expect(event.metadata).toMatchObject({ from: "MEO", to: "MDRRMO", reason: "E2E: reassignment security check." });
+    expect(event.actor.id).toBe(meoAdmin.id);
+    expect(event.details).toEqual({ from: "MEO", to: "MDRRMO" });
+    expect(JSON.stringify(event)).not.toContain("E2E: reassignment security check.");
   });
 });
 

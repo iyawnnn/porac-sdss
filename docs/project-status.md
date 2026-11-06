@@ -78,10 +78,15 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+### Manuscript revision Phase 7, step 7b-2 - audit view - **implemented; browser verification is a separate user-run step**
+
+- System-Administrator-only privacy projection, shared exhaustive action labels, primitive per-action details allow-list, stored actor Focal/office snapshots, Manila day filters, actor/typed target-id filters and compact desktop/mobile changes. No guard expansion, operational authority, text search or export audit added. actor_role is retained permanently, including Phase 8.
+- Presentation audit deletion removed; identical actor/action/target/metadata events are skipped under a per-target transaction lock. E2E setup only inserts audit fixtures with a fresh distinctive soft target id per run; no citizen-report POSTs. No migrations, seeds or Playwright run by the agent; production unchanged. User reports 0047 applied to their disposable copy only. Verification results: docs/testing.md.
+
 ### Manuscript revision Phase 7, step 7b-1 — audit migration — **implemented; throwaway PGlite verification only; not applied to a real database**
 
 - Migration `0047_audit_append_only.sql` adds nullable `admin_audit_events.actor_is_focal` without default/backfill and an enabled row-level BEFORE UPDATE OR DELETE rejection trigger. INSERT and dev/test TRUNCATE stay allowed; historical values stay untouched. Includes the two-query check file, transactional migrate script/command and Drizzle column.
-- Inventory: no audit FKs in either direction; no runtime UPDATE/DELETE except the known presentation-seed audit DELETE, deferred to step 2. Historical 0039 account-type backfill matches zero rows after its NOT NULL constraint. Step 2 still owns actor snapshot writes, read models/UI and the seed fix. No real migrations, seeds or Playwright run. Phase 8 wording is intentionally left for the next step.
+- Inventory: no audit FKs in either direction; no runtime UPDATE/DELETE except the known presentation-seed audit DELETE, deferred to step 2. Historical 0039 account-type backfill matches zero rows after its NOT NULL constraint. Step 2 still owns actor snapshot writes, read models/UI and the seed fix. No real migrations, seeds or Playwright run. Phase 8 audit-role wording was corrected in step 7b-2: actor_role is permanent.
 - Verification: throwaway in-memory PGlite through `drizzle()` passed 7 check groups (initial/repeated apply, all historical values and NULLs unchanged, INSERT omitted/true/false/NULL with 0039 trigger compatibility, UPDATE/no-op UPDATE/DELETE rejection, unrelated-table writes, recorded-value rerun preservation, allowed TRUNCATE). API unit tests: 73 suites / 1,730 tests passed. API build and root type-check passed. Reproduce with `api/test/audit-append-only.pglite.cjs`, using scratch PGlite dependencies via `PGLITE_MODULE_ROOT` and `NODE_PATH`; it never imports the real DB client or reads `.env`.
 
 ### Manuscript revision Phase 7, step 7a — staff account management — **implemented; no migration; Playwright not run; production still to do**
