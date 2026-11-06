@@ -1,5 +1,18 @@
 # Testing
 
+### Phase 7, step 7d-1 dashboard metric verification
+
+Dashboard metric shaping and duration tests cover explicit zero/null behavior, citizen-style outcome/state wording and hours/days rounding. api/test/dashboard-metrics.pglite.cjs runs real DashboardService, BarangayInsightsService and related dashboard read queries in isolated in-memory PGlite through a drizzle-wrapped postgres client. It never reads .env or connects to the development/production database; text geometry equality/containment stand in for PostGIS. Cases cover both offices, merged-away and Rejected rules, status/outcome/acknowledgment/hazard buckets, empty data, even/odd medians versus means, exact 30-day and future boundaries, current/context/location hazard selection, existing report/Work Order counts, and the insert-only metric fixture helper.
+
+The dashboard and Barangay Insights Playwright specs gain zero-citizen-POST coverage for both offices, panel/advisory labels, status-count reconciliation, category/total exclusions and Focal/System Administrator refusals. They are extended but deliberately NOT run in this implementation step.
+
+**Fixture lessons:** non-Reported ticket fixtures must insert status_history or dashboard trends disagree with headlines. New Resolved fixtures need resolved_at, outcome, resolver and notes plus matching history (an explicitly designated legacy fixture alone may omit the record). Acknowledged fixtures need ticket-level acknowledgments rows; report acknowledgments alone do not qualify. The E2E dashboard metrics prefix joins both active and Resolved retirement lists. Teardown changes status and clears resolution fields atomically; audit rows remain append-only. No live seeds, migrations or audit cleanup are run here.
+
+
+7d-1 verification: **78 API suites / 1,835 tests**, API build, root type-check, **37 root unit tests**, production web build and web/E2E/harness lint passed. **6 dashboard PGlite groups** and **7 existing new-export/fixture-history regression groups** passed. Mutations adding Rejected to the Barangay total, dropping a metric's merged-away filter and replacing the resolution median with AVG each failed the real-query harness as expected; every source was restored byte-for-byte and the final harness passed. The first API run caught the old source scan's pinned count of eight merged exclusions; it now pins fifteen, with the real-query harness covering semantics. The root-unit command initially used the API tsconfig and could not resolve a root alias; running from root passed. These were corrected verification assumptions, not main failures.
+
+API lint on touched files retains **44 existing findings**: 11 unsafe-mock findings in barangay-insights.service.spec.ts and 33 unsafe-mock/unbound-method findings in dashboard.service.spec.ts, identical by rule to main. No new findings; existing formatting findings in touched services/specs were corrected. The production web build uses pnpm build in a temporary working-source copy with linked dependencies (only that copy's Turbopack root widened), preserving protected next-env.d.ts and the pre-existing workspace .next. No schema/index, database.md or security.md change: access and exposure are unchanged. No real database, migration, seed runner, Playwright or push.
+
 ### Phase 7, step 7c-2 additional exports
 
 `report-exports.spec.ts` pins the three column lists, submitted forbidden-data boundary, assessment text and manuscript labels, heavy-export 5,000/5,001 boundaries, strict Top N/filter/date validation, safe audit metadata and fail-closed errors. Controller tests cover attachment refusal for all six endpoints. The audit allow-list snapshot includes the three new kinds and top; the central-writer source scan remains unchanged.

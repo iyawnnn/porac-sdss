@@ -4,7 +4,7 @@ export type DashboardRange = (typeof DASHBOARD_RANGES)[number];
 export interface DashboardKpis {
   active_count: number;
   reports_this_month_count: number;
-  avg_resolution_hours_30d: number | null;
+  median_resolution_hours_30d: number | null;
 }
 
 export interface IncidentTrendRow {
@@ -90,4 +90,10 @@ export interface NeedsAttentionWorkOrder {
 export interface NeedsAttention {
   overdueWorkOrders: NeedsAttentionWorkOrder[];
   dueTodayWorkOrders: NeedsAttentionWorkOrder[];
+}
+export interface OperationalMetrics {
+ ticketCounts: { pending: number; resolved: number; rejected: number };
+ resolutionOutcomes: DistributionRow[];
+ acknowledgments: { acknowledged: number; awaiting: number; medianHours30d: number | null };
+ hazardInformation: DistributionRow[];
 }

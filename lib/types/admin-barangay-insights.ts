@@ -4,6 +4,7 @@ export interface BarangayInsightRow {
   total_tickets: number;
   active_tickets: number;
   resolved_tickets: number;
+  rejected_tickets: number;
   top_category: string | null;
   last_activity_at: string | null;
 }
@@ -17,6 +18,7 @@ export interface BarangayInsightKpis {
   total_tickets: number;
   active_tickets: number;
   resolved_tickets: number;
+  rejected_tickets: number;
 }
 
 export interface BarangayCategoryRow {

@@ -5,15 +5,15 @@ import { OperationalStaffGuard } from '../common/guards/operational-staff.guard'
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
 import { isSystemAdmin, resolveOfficeScope } from '../common/authz/admin-scope';
-import {
-  DashboardService,
-  parseDashboardRange,
-} from './dashboard.service';
+import { DashboardService, parseDashboardRange } from './dashboard.service';
 import { TicketsService } from './tickets.service';
 import { BarangaysGeoService } from './barangays-geo.service';
 import { ModerationService } from './moderation.service';
 import { WorkOrdersService } from './work-orders.service';
-import type { OfficePerformanceCounts, OfficePerformanceSummary } from './dashboard.service';
+import type {
+  OfficePerformanceCounts,
+  OfficePerformanceSummary,
+} from './dashboard.service';
 
 @UseGuards(AdminSessionGuard, OperationalStaffGuard)
 @Controller('admin')
@@ -58,9 +58,10 @@ export class DashboardController {
       this.officeCounts(office),
       office
         ? Promise.resolve(null)
-        : Promise.all([this.officeCounts('MEO'), this.officeCounts('MDRRMO')]).then(
-            ([MEO, MDRRMO]) => ({ MEO, MDRRMO }),
-          ),
+        : Promise.all([
+            this.officeCounts('MEO'),
+            this.officeCounts('MDRRMO'),
+          ]).then(([MEO, MDRRMO]) => ({ MEO, MDRRMO })),
     ]);
 
     return { scope: office ?? 'ALL', ...scoped, byOffice };
@@ -97,6 +98,7 @@ export class DashboardController {
       officePerformanceSummary,
       needsAttention,
       deltas,
+      operationalMetrics,
     ] = await Promise.all([
       this.dashboard.getDashboardKpis(office),
       this.dashboard.getBarangayRiskRanking(5, office),
@@ -124,6 +126,7 @@ export class DashboardController {
       // Week-over-week KPI comparison. Fixed 7-day baseline, deliberately
       // independent of `range` — see DashboardService.getKpiDeltas.
       this.dashboard.getKpiDeltas(office),
+      this.dashboard.getOperationalMetrics(office),
     ]);
 
     return {
@@ -136,6 +139,7 @@ export class DashboardController {
       statusDistribution,
       departmentWorkload,
       citizenSeverityDistribution,
+      operationalMetrics,
       // Top active tickets by Operational Priority (priority_index). Was
       // topUrgencyQueue, ranked by Hazard Urgency, until manuscript revision
       // Phase 1, step 4.

@@ -1,5 +1,7 @@
 "use client";
 
+import { OperationalMetricsPanels } from "./OperationalMetricsPanels";
+import type { OperationalMetrics } from "@/lib/types/admin-dashboard";
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { BarChart3, Building2, ChartPie, ClipboardList, FileText, Gauge, Inbox, MapPinned, Shapes, Ticket } from "lucide-react";
@@ -65,7 +67,7 @@ const departmentChartConfig = {
 // leaderboard remains in the response for compatibility even though the
 // landing page does not currently render it. The restored sections below
 // continue to consume every other distribution field from this same payload.
-type DashboardData = { kpis: DashboardKpis; leaderboard: BarangayRiskRow[]; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; activeTicketTrend: CountTrendRow[]; pendingWorkOrderTrend: CountTrendRow[]; statusDistribution: DistributionRow[]; departmentWorkload: DistributionRow[] | null; citizenSeverityDistribution: DistributionRow[]; officePerformanceSummary: OfficePerformanceSummaryData; needsAttention: NeedsAttentionData; deltas?: DashboardDeltas; range?: DashboardRange };
+type DashboardData = { operationalMetrics: OperationalMetrics; kpis: DashboardKpis; leaderboard: BarangayRiskRow[]; categories: CategoryDistributionRow[]; incidentTrend: IncidentTrendRow[]; activeTicketTrend: CountTrendRow[]; pendingWorkOrderTrend: CountTrendRow[]; statusDistribution: DistributionRow[]; departmentWorkload: DistributionRow[] | null; citizenSeverityDistribution: DistributionRow[]; officePerformanceSummary: OfficePerformanceSummaryData; needsAttention: NeedsAttentionData; deltas?: DashboardDeltas; range?: DashboardRange };
 
 function numeric(value: number | string | null | undefined): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function formatShortDate(value: string): string { const date = new Date(value + "T00:00:00"); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
@@ -226,7 +228,7 @@ function HighestPriorityActionsTable({ tickets }: { tickets: AdminTicketRow[] | 
                           to rank this card; covered categories only. */}
                       {ticket.hazard_applicability && ticket.hazard_applicability !== "not_applicable" && (
                         <div className="truncate text-xs text-muted-foreground" data-testid={`dashboard-hazard-${ticket.id}`} title={`Hazard Information (advisory): ${ticket.hazard_summary}`}>
-                          {ticket.hazard_summary}
+                          Advisory: {ticket.hazard_summary}
                         </div>
                       )}
                     </TableCell>
@@ -308,6 +310,7 @@ export function DashboardClient({ initialData, topPriorityTickets, adminName }: 
           <KpiCard delta={data.deltas?.reports} icon={FileText} label="Reports This Month" sparkline={reportSeries} value={numeric(data.kpis.reports_this_month_count).toLocaleString()} />
         </div>
 
+        <OperationalMetricsPanels metrics={data.operationalMetrics} medianResolutionHours={data.kpis.median_resolution_hours_30d} />
         <Card className="gap-0 rounded-xl bg-muted pt-2 pb-5">
           <CardHeader className="px-4 pb-2">
             <CardHeaderRow>

@@ -18,6 +18,7 @@ import { DashboardClient } from "@/components/features/admin/dashboard/Dashboard
 import { DashboardError, DashboardSkeleton } from "@/components/features/admin/dashboard/DashboardStates";
 
 interface DashboardResponse {
+  operationalMetrics: import("@/lib/types/admin-dashboard").OperationalMetrics;
   kpis: DashboardKpis;
   leaderboard: BarangayRiskRow[];
   categories: CategoryDistributionRow[];

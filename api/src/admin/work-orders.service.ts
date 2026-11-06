@@ -932,7 +932,13 @@ export class WorkOrdersService {
       this.db
         .select({ count: dsql<number>`count(*)::int` })
         .from(workOrders)
-        .where(and(officeFilter, ...conditions));
+        .where(
+          and(
+            officeFilter,
+            dsql`EXISTS (SELECT 1 FROM tickets t WHERE t.id=${workOrders.ticketId} AND t.merged_into_ticket_id IS NULL)`,
+            ...conditions,
+          ),
+        );
 
     const [[pending], [inProgress], [overdue], [completedThisWeek]] =
       await Promise.all([
@@ -982,6 +988,7 @@ export class WorkOrdersService {
         .where(
           and(
             officeFilter,
+            dsql`EXISTS (SELECT 1 FROM tickets t WHERE t.id=${workOrders.ticketId} AND t.merged_into_ticket_id IS NULL)`,
             isNotNull(workOrders.dueDate),
             lt(workOrders.dueDate, now),
             openStatus,
@@ -995,6 +1002,7 @@ export class WorkOrdersService {
         .where(
           and(
             officeFilter,
+            dsql`EXISTS (SELECT 1 FROM tickets t WHERE t.id=${workOrders.ticketId} AND t.merged_into_ticket_id IS NULL)`,
             isNotNull(workOrders.dueDate),
             gte(workOrders.dueDate, todayStart),
             lt(workOrders.dueDate, tomorrowStart),

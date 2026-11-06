@@ -1,3 +1,4 @@
+import { insertDashboardMetricFixtures } from '../lib/dashboard-metric-fixtures';
 import { sql } from '../db';
 import { insertNewExportFixtures } from '../lib/new-export-fixtures';
 import { insertExportFixtures } from '../lib/export-fixtures';
@@ -61,6 +62,7 @@ const RESOLUTION_TITLE_PREFIX = 'E2E resolution fixture';
 const TICKET_TITLE_PREFIX = 'E2E ticket fixture';
 const CITIZEN_TITLE_PREFIX = 'E2E citizen fixture';
 const TITLE_PATTERNS = [
+  'E2E dashboard metrics fixture%',
   `${TITLE_PREFIX}%`,
   `${CORRECTION_TITLE_PREFIX}%`,
   `${FEEDBACK_TITLE_PREFIX}%`,
@@ -78,6 +80,7 @@ const TITLE_PATTERNS = [
 // ones: the step 3g feedback ticket, the step 5c resolution tickets and
 // (Phase 6, step 6b) the citizen report page's Resolved tickets.
 const RESOLVED_TITLE_PATTERNS = [
+  'E2E dashboard metrics fixture%',
   'E2E reporting fixture%',
   `${FEEDBACK_TITLE_PREFIX}%`,
   `${RESOLUTION_TITLE_PREFIX}%`,
@@ -1173,12 +1176,14 @@ async function create() {
     };
 
     const newExports = await insertNewExportFixtures(tx);
+    const dashboardMetrics = await insertDashboardMetricFixtures(tx);
     const exportHardening = await insertExportFixtures(tx);
     const auditView = await insertAuditViewFixtures(tx);
     return {
       auditView,
       exportHardening,
       newExports,
+      dashboardMetrics,
       tickets: {
         sharedReadOnly: {
           ticketId: sharedReadOnly.ticketId,

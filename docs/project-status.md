@@ -1,5 +1,8 @@
 # Project Status
 
+**Phase 7, step 7d-1:** operational dashboard ticket counts, plain-language resolution outcomes, active acknowledgment split and fixed-30-day acknowledgment/resolution medians; advisory-only Hazard Information state totals and visible top-five advisory wording. Barangay totals/categories exclude Rejected with a separate count. Report and Work Order units remain explicit; all dashboard counts exclude merged-away parents. Guards, Focal intake/dashboard, dead compatibility fields, notification filters and terrain labels remain unchanged. No migration or exposure change; browser verification is separate. Verification evidence is recorded in docs/testing.md.
+
+
 **Purpose.** This is the **active project status and roadmap file** for Porac SDSS. Read it before proposing or starting any work. It answers five questions:
 
 - **What has shipped** — §2 (foundation) and §3 (recently completed operational features).

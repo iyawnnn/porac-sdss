@@ -12,12 +12,13 @@ import type { WorkOrdersService } from './work-orders.service';
 import type { Sql } from 'postgres';
 
 describe('dashboard ranges', () => {
-  it.each([['7', 7], ['30', 30], ['90', 90]])(
-    'accepts %s days',
-    (value, expected) => {
-      expect(parseDashboardRange(value)).toBe(expected);
-    },
-  );
+  it.each([
+    ['7', 7],
+    ['30', 30],
+    ['90', 90],
+  ])('accepts %s days', (value, expected) => {
+    expect(parseDashboardRange(value)).toBe(expected);
+  });
 
   it.each(['0', '31', '91', 'seven', '7.5'])(
     'rejects unsupported range %s',
@@ -114,7 +115,9 @@ describe('dashboard ranges', () => {
       {} as never,
       {} as never,
     );
-    await expect(controller.getDashboard('31')).rejects.toThrow(BadRequestException);
+    await expect(controller.getDashboard('31')).rejects.toThrow(
+      BadRequestException,
+    );
   });
 });
 
@@ -157,9 +160,7 @@ describe('DashboardController office performance summary assembly', () => {
     );
     return {
       controller: controller as unknown as {
-        getOfficePerformanceSummary: (
-          office?: 'MEO' | 'MDRRMO',
-        ) => Promise<{
+        getOfficePerformanceSummary: (office?: 'MEO' | 'MDRRMO') => Promise<{
           scope: string;
           pendingWorkOrders: number;
           flaggedReportsPending: number;
@@ -203,7 +204,9 @@ describe('DashboardController office performance summary assembly', () => {
     expect(summary.pendingWorkOrders).toBe(6);
     expect(summary.byOffice).toBeNull();
     expect(workOrders.getOfficePerformanceCounts).toHaveBeenCalledTimes(1);
-    expect(workOrders.getOfficePerformanceCounts).toHaveBeenCalledWith('MDRRMO');
+    expect(workOrders.getOfficePerformanceCounts).toHaveBeenCalledWith(
+      'MDRRMO',
+    );
   });
 
   it('a system admin (office undefined) gets scope ALL plus a MEO vs MDRRMO comparison', async () => {
@@ -306,11 +309,13 @@ describe('getKpiDeltas', () => {
   function queriesFor(office?: 'MEO' | 'MDRRMO') {
     const sql = jest.fn().mockResolvedValue([]) as unknown as Sql;
     const service = new DashboardService(sql);
-    return service.getKpiDeltas(office).then(() =>
-      (sql as unknown as jest.Mock).mock.calls.map((call) =>
-        Array.isArray(call[0]) ? call[0].join('') : String(call[0]),
-      ),
-    );
+    return service
+      .getKpiDeltas(office)
+      .then(() =>
+        (sql as unknown as jest.Mock).mock.calls.map((call) =>
+          Array.isArray(call[0]) ? call[0].join('') : String(call[0]),
+        ),
+      );
   }
 
   // The whole reason this lives server-side rather than being derived from
@@ -333,7 +338,9 @@ describe('getKpiDeltas', () => {
 
   it('guards the work-order baseline against missing history', async () => {
     const queries = await queriesFor();
-    const workOrders = queries.find((q) => q.includes('work_order_status_history'));
+    const workOrders = queries.find((q) =>
+      q.includes('work_order_status_history'),
+    );
     expect(workOrders).toContain('baseline_covered');
   });
 
@@ -349,28 +356,18 @@ describe('getKpiDeltas', () => {
   });
 });
 
-// Manuscript revision Phase 5, step 5c (decision 10): the 30-day average
-// resolution time measures each currently Resolved ticket to its LATEST
-// resolution (tickets.resolved_at), falling back to the first Resolved
-// status_history row only for a legacy ticket with no resolved_at. A ticket
-// returned to Under Review is not Resolved, so it is left out.
-describe('average resolution time (Phase 5, step 5c)', () => {
-  it('uses resolved_at, the first Resolved history row only as the legacy fallback, and only current Resolved tickets', async () => {
+describe('median resolution time', () => {
+  it('uses latest recorded resolution only, with a fixed 30-day window and no legacy fallback', async () => {
     const sql = jest.fn().mockResolvedValue([{}]) as unknown as Sql;
-    const service = new DashboardService(sql);
-    await service.getDashboardKpis('MEO');
-
-    const query = (sql as unknown as jest.Mock).mock.calls
-      .map((call: [string[]]) => call[0].join('?'))
-      .find((text: string) => text.includes('resolved_events'))!;
-    expect(query).toContain(
-      'COALESCE(t.resolved_at, MIN(sh.changed_at)) AS resolved_at',
-    );
-    expect(query).toContain(
-      "WHERE t.status = 'Resolved' AND t.merged_into_ticket_id IS NULL",
-    );
-    expect(query).toContain(
-      "LEFT JOIN status_history sh ON sh.ticket_id = t.id AND sh.status = 'Resolved'",
-    );
+    await new DashboardService(sql).getDashboardKpis('MEO');
+    const call = (sql as unknown as jest.Mock).mock.calls.at(-1) as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
+    const query = call[0].join('?');
+    expect(query).toContain('percentile_cont(0.5)');
+    expect(query).toContain("resolved_at >= now() - interval '30 days'");
+    expect(query).not.toContain('status_history');
+    expect(query).not.toContain('AVG(');
   });
 });
