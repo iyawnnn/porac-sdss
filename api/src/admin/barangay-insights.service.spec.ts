@@ -67,7 +67,8 @@ describe('BarangayInsightsService.getProfile', () => {
       calls.push(strings.join(''));
       // First call is the barangay existence check; return a row for it,
       // empty arrays for everything else (KPIs destructure with a fallback).
-      if (calls.length === 1) return Promise.resolve([{ id: 5, name: 'Test Barangay' }]);
+      if (calls.length === 1)
+        return Promise.resolve([{ id: 5, name: 'Test Barangay' }]);
       return Promise.resolve([]);
     }) as unknown as Sql;
     const service = new BarangayInsightsService(sql);
@@ -85,12 +86,14 @@ describe('BarangayInsightsService.getProfile', () => {
   });
 
   it('defaults kpis and elevation to zero/null shapes when the underlying queries return no row', async () => {
-    const sql = jest.fn().mockImplementation((strings: TemplateStringsArray) => {
-      if (strings.join('').includes('FROM barangays WHERE id')) {
-        return Promise.resolve([{ id: 1, name: 'Empty Barangay' }]);
-      }
-      return Promise.resolve([]);
-    }) as unknown as Sql;
+    const sql = jest
+      .fn()
+      .mockImplementation((strings: TemplateStringsArray) => {
+        if (strings.join('').includes('FROM barangays WHERE id')) {
+          return Promise.resolve([{ id: 1, name: 'Empty Barangay' }]);
+        }
+        return Promise.resolve([]);
+      }) as unknown as Sql;
     const service = new BarangayInsightsService(sql);
 
     const profile = await service.getProfile(1);
@@ -99,8 +102,13 @@ describe('BarangayInsightsService.getProfile', () => {
       total_tickets: 0,
       active_tickets: 0,
       resolved_tickets: 0,
+      rejected_tickets: 0,
     });
-    expect(profile.elevation).toEqual({ elevation_min: null, elevation_avg: null, elevation_max: null });
+    expect(profile.elevation).toEqual({
+      elevation_min: null,
+      elevation_avg: null,
+      elevation_max: null,
+    });
   });
 });
 
@@ -109,7 +117,10 @@ describe('BarangayInsightsService.getProfile', () => {
 // not a re-derived or bypassable rule.
 describe('BarangayInsightsController office scoping', () => {
   function controllerWith(spy: jest.Mock) {
-    const service = { listInsights: spy, getProfile: jest.fn() } as unknown as BarangayInsightsService;
+    const service = {
+      listInsights: spy,
+      getProfile: jest.fn(),
+    } as unknown as BarangayInsightsService;
     return new BarangayInsightsController(service);
   }
 

@@ -150,7 +150,7 @@ export function BarangayInsightsWorkspace({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-0.5">
           <h1 className="font-heading text-base font-semibold">Barangay Insights</h1>
-          <p className="text-xs text-muted-foreground">Office-scoped ticket activity across every barangay.</p>
+          <p className="text-xs text-muted-foreground">Office-scoped ticket activity across every barangay. Total excludes Rejected and merged-away tickets.</p>
         </div>
       </div>
 
@@ -194,6 +194,7 @@ export function BarangayInsightsWorkspace({
                   <SortableHead className="text-center" label="Total" onSort={handleSort} sort={sort} sortKey="total_tickets" />
                   <SortableHead className="text-center" label="Active" onSort={handleSort} sort={sort} sortKey="active_tickets" />
                   <TableHead className={`${HEAD_CLASS} text-center`}>Resolved</TableHead>
+                  <TableHead className={`${HEAD_CLASS} text-center`}>Rejected</TableHead>
                   <TableHead className={HEAD_CLASS}>Top Category</TableHead>
                   <SortableHead className="pr-6" label="Last Activity" onSort={handleSort} sort={sort} sortKey="last_activity_at" />
                 </TableRow>
@@ -203,7 +204,7 @@ export function BarangayInsightsWorkspace({
                   <SkeletonRows />
                 ) : filtered.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell className="p-0" colSpan={6}>
+                    <TableCell className="p-0" colSpan={7}>
                       <EmptyState icon={SearchXIcon} title="No barangays match this search." />
                     </TableCell>
                   </TableRow>
@@ -218,6 +219,7 @@ export function BarangayInsightsWorkspace({
                       <TableCell className="text-center font-mono tabular-nums">{b.total_tickets}</TableCell>
                       <TableCell className="text-center font-mono tabular-nums">{b.active_tickets}</TableCell>
                       <TableCell className="text-center font-mono tabular-nums">{b.resolved_tickets}</TableCell>
+                      <TableCell className="text-center font-mono tabular-nums">{b.rejected_tickets}</TableCell>
                       <TableCell>{b.top_category ?? "—"}</TableCell>
                       <TableCell className="pr-6 text-xs text-muted-foreground">{formatDate(b.last_activity_at)}</TableCell>
                     </TableRow>
@@ -237,7 +239,7 @@ function SkeletonRows() {
     <>
       {Array.from({ length: 8 }).map((_, i) => (
         <TableRow className="hover:bg-transparent" key={i}>
-          {Array.from({ length: 6 }).map((__, j) => (
+          {Array.from({ length: 7 }).map((__, j) => (
             <TableCell key={j}>
               <Skeleton className="h-4 w-full max-w-24" />
             </TableCell>

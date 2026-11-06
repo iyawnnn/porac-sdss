@@ -14,6 +14,7 @@ export interface BarangayInsightRow {
   total_tickets: number;
   active_tickets: number;
   resolved_tickets: number;
+  rejected_tickets: number;
   top_category: string | null;
   last_activity_at: string | null;
 }
@@ -22,6 +23,7 @@ export interface BarangayInsightKpis {
   total_tickets: number;
   active_tickets: number;
   resolved_tickets: number;
+  rejected_tickets: number;
 }
 
 export interface BarangayCategoryRow {
@@ -83,14 +85,15 @@ export class BarangayInsightsService {
     const sql = this.pg;
     return sql<BarangayInsightRow[]>`
       SELECT b.id AS barangay_id, b.name AS barangay_name,
-        COUNT(t.id)::int AS total_tickets,
+        COUNT(t.id) FILTER (WHERE t.status <> 'Rejected')::int AS total_tickets,
         COUNT(t.id) FILTER (WHERE t.status IN ${this.activeStatuses()})::int AS active_tickets,
         COUNT(t.id) FILTER (WHERE t.status = 'Resolved')::int AS resolved_tickets,
+        COUNT(t.id) FILTER (WHERE t.status = 'Rejected')::int AS rejected_tickets,
         MAX(t.updated_at) AS last_activity_at,
         (
           SELECT t2.category FROM tickets t2
           WHERE t2.barangay_id = b.id
-            AND t2.merged_into_ticket_id IS NULL
+            AND t2.merged_into_ticket_id IS NULL AND t2.status <> 'Rejected'
             AND (${office ?? null}::text IS NULL OR t2.assigned_office = ${office ?? null}::office)
           GROUP BY t2.category
           ORDER BY COUNT(*) DESC, t2.category ASC
@@ -105,19 +108,29 @@ export class BarangayInsightsService {
     `;
   }
 
-  async getProfile(barangayId: number, office?: 'MEO' | 'MDRRMO'): Promise<BarangayProfile> {
+  async getProfile(
+    barangayId: number,
+    office?: 'MEO' | 'MDRRMO',
+  ): Promise<BarangayProfile> {
     const sql = this.pg;
     const [barangay] = await sql<{ id: number; name: string }[]>`
       SELECT id, name FROM barangays WHERE id = ${barangayId}
     `;
     if (!barangay) throw new NotFoundException('Barangay not found.');
 
-    const [[kpis], categoryBreakdown, incidentTrend, [elevation], recentTickets] = await Promise.all([
+    const [
+      [kpis],
+      categoryBreakdown,
+      incidentTrend,
+      [elevation],
+      recentTickets,
+    ] = await Promise.all([
       sql<BarangayInsightKpis[]>`
         SELECT
-          COUNT(*)::int AS total_tickets,
+          COUNT(*) FILTER (WHERE status <> 'Rejected')::int AS total_tickets,
           COUNT(*) FILTER (WHERE status IN ${this.activeStatuses()})::int AS active_tickets,
-          COUNT(*) FILTER (WHERE status = 'Resolved')::int AS resolved_tickets
+          COUNT(*) FILTER (WHERE status = 'Resolved')::int AS resolved_tickets,
+          COUNT(*) FILTER (WHERE status = 'Rejected')::int AS rejected_tickets
         FROM tickets
         WHERE barangay_id = ${barangayId}
           AND merged_into_ticket_id IS NULL
@@ -126,7 +139,7 @@ export class BarangayInsightsService {
       sql<BarangayCategoryRow[]>`
         SELECT category, COUNT(*)::int AS count
         FROM tickets
-        WHERE barangay_id = ${barangayId}
+        WHERE status <> 'Rejected' AND barangay_id = ${barangayId}
           AND merged_into_ticket_id IS NULL
           AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office)
         GROUP BY category
@@ -183,10 +196,19 @@ export class BarangayInsightsService {
     return {
       barangay_id: barangay.id,
       barangay_name: barangay.name,
-      kpis: kpis ?? { total_tickets: 0, active_tickets: 0, resolved_tickets: 0 },
+      kpis: kpis ?? {
+        total_tickets: 0,
+        active_tickets: 0,
+        resolved_tickets: 0,
+        rejected_tickets: 0,
+      },
       categoryBreakdown,
       incidentTrend,
-      elevation: elevation ?? { elevation_min: null, elevation_avg: null, elevation_max: null },
+      elevation: elevation ?? {
+        elevation_min: null,
+        elevation_avg: null,
+        elevation_max: null,
+      },
       recentTickets,
     };
   }

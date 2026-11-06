@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { formatDistributionPercent, normalizeDistribution } from "@/components/features/admin/dashboard/DistributionChartUtils";
-import { E2E_MDRRMO_ADMIN, E2E_MEO_ADMIN, type E2EAdminAccount } from "./test-credentials";
+import { E2E_MDRRMO_ADMIN, E2E_MEO_ADMIN, E2E_FOCAL_ADMIN, E2E_SYSTEM_ADMIN, type E2EAdminAccount } from "./test-credentials";
 import { loginAdmin as sharedLoginAdmin } from "./helpers";
 
 test.setTimeout(60_000);
@@ -259,5 +259,45 @@ for (const [name, width, height] of [
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
     );
     expect(overflows).toBe(false);
+  });
+}
+
+for (const account of [E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN]) {
+  test(account.office + " operational ticket metrics render with consistent counting units", async ({ page }) => {
+    await loginAdmin(page, account);
+    const region = page.getByRole("region", { name: "Operational ticket metrics" });
+    for (const title of ["Pending vs resolved", "Resolution outcomes", "Acknowledgments", "Median resolution time", "Hazard Information (advisory)"]) {
+      await expect(region.getByText(title, { exact: true })).toBeVisible();
+    }
+    await expect(region.getByText("Advisory only, not a risk score", { exact: true })).toBeVisible();
+    for (const label of ["Handled by the municipality", "Referred to an outside agency", "Not recorded (legacy)", "Awaiting acknowledgment", "Classified", "No classification found", "Unavailable", "Pending/not yet checked"]) {
+      await expect(region.getByText(label, { exact: true })).toBeVisible();
+    }
+    const response = await page.request.get("/api/admin/dashboard");
+    expect(response.ok()).toBe(true);
+    const data = await response.json();
+    const metrics = data.operationalMetrics;
+    expect(metrics.ticketCounts.pending + metrics.ticketCounts.resolved + metrics.ticketCounts.rejected)
+      .toBe(data.statusDistribution.reduce((sum: number, row: { count: number }) => sum + row.count, 0));
+    expect(metrics.ticketCounts.pending).toBe(data.kpis.active_count);
+    expect(metrics.acknowledgments.acknowledged + metrics.acknowledgments.awaiting).toBe(metrics.ticketCounts.pending);
+    expect(metrics.resolutionOutcomes.reduce((sum: number, row: { count: number }) => sum + row.count, 0)).toBe(metrics.ticketCounts.resolved);
+    expect(data.kpis).not.toHaveProperty("avg_resolution_hours_30d");
+    const fixtures = JSON.parse(process.env.E2E_GROUPING_FIXTURES ?? "{}").dashboardMetrics as Array<{ office: string; ticketIds: number[] }>;
+    expect(fixtures.find(f => f.office === account.office)?.ticketIds).toHaveLength(8);
+    expect(metrics.ticketCounts.resolved).toBeGreaterThanOrEqual(3);
+    expect(metrics.acknowledgments.acknowledged).toBeGreaterThanOrEqual(1);
+    const foreignOffice = account.office === "MEO" ? "MDRRMO" : "MEO";
+    const clamped = await (await page.request.get("/api/admin/dashboard?office=" + foreignOffice)).json();
+    expect(clamped.operationalMetrics).toEqual(metrics);
+    for (const line of await page.locator('[data-testid^="dashboard-hazard-"]').all()) await expect(line).toContainText("Advisory:");
+  });
+}
+
+for (const account of [E2E_FOCAL_ADMIN, E2E_SYSTEM_ADMIN]) {
+  test(account.email + " retains refusal of operational dashboard and Barangay analytics", async ({ page }) => {
+    await loginAdmin(page, account);
+    expect((await page.request.get("/api/admin/dashboard")).status()).toBe(403);
+    expect((await page.request.get("/api/admin/barangay-insights")).status()).toBe(403);
   });
 }

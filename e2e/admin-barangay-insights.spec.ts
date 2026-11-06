@@ -217,3 +217,23 @@ test("no editing, export, or CSV controls appear anywhere on Barangay Insights",
   await expect(main.getByRole("button", { name: /edit/i })).toHaveCount(0);
   await expect(main.getByRole("link", { name: /export/i })).toHaveCount(0);
 });
+
+for (const account of [E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN]) {
+  test(account.office + " Barangay totals and categories exclude Rejected tickets", async ({ page }) => {
+    await loginAs(page, account);
+    await page.goto("/admin/barangay-insights");
+    await expect(page.getByRole("columnheader", { name: "Rejected", exact: true })).toBeVisible();
+    const response = await page.request.get("/api/admin/barangay-insights");
+    expect(response.ok()).toBe(true);
+    const data = await response.json();
+    expect(data.office).toBe(account.office);
+    for (const row of data.barangays) expect(row.total_tickets).toBe(row.active_tickets + row.resolved_tickets);
+    const populated = data.barangays.find((row: { rejected_tickets: number }) => row.rejected_tickets > 0);
+    expect(populated).toBeTruthy();
+    const profile = await (await page.request.get("/api/admin/barangay-insights/" + populated.barangay_id)).json();
+    expect(profile.kpis.total_tickets).toBe(profile.kpis.active_tickets + profile.kpis.resolved_tickets);
+    expect(profile.categoryBreakdown.reduce((sum: number, row: { count: number }) => sum + row.count, 0)).toBe(profile.kpis.total_tickets);
+    await page.goto("/admin/barangay-insights/" + populated.barangay_id);
+    await expect(page.getByText("Rejected Tickets", { exact: true })).toBeVisible();
+  });
+}

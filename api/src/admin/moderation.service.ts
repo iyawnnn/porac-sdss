@@ -318,7 +318,7 @@ export class ModerationService {
           FILTER (WHERE r.moderated_at IS NOT NULL) AS avg_hours
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
-      WHERE r.flags IS NOT NULL AND array_length(r.flags, 1) > 0
+      WHERE t.merged_into_ticket_id IS NULL AND r.flags IS NOT NULL AND array_length(r.flags, 1) > 0
         AND (${office ?? null}::text IS NULL OR t.assigned_office = ${office ?? null}::office)
     `;
     return {

@@ -1,6 +1,14 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
+import {
+  HAZARD_APPLICABLE_CATEGORIES,
+  hazardContextForCategory,
+} from '../common/utils/hazard-information';
+import {
+  shapeOperationalMetrics,
+  type OperationalMetricRow,
+} from './dashboard-metrics';
 import type { WorkOrderPerformanceCounts } from './work-orders.service';
 
 export const DASHBOARD_RANGE_DAYS = [7, 30, 90] as const;
@@ -9,7 +17,10 @@ export type DashboardRangeDays = (typeof DASHBOARD_RANGE_DAYS)[number];
 export function parseDashboardRange(value?: string): DashboardRangeDays {
   if (value === undefined) return 30;
   const days = Number(value);
-  if (!Number.isInteger(days) || !DASHBOARD_RANGE_DAYS.includes(days as DashboardRangeDays)) {
+  if (
+    !Number.isInteger(days) ||
+    !DASHBOARD_RANGE_DAYS.includes(days as DashboardRangeDays)
+  ) {
     throw new BadRequestException('range must be one of: 7, 30, 90');
   }
   return days as DashboardRangeDays;
@@ -18,7 +29,7 @@ export function parseDashboardRange(value?: string): DashboardRangeDays {
 export interface DashboardKpis {
   active_count: number;
   reports_this_month_count: number;
-  avg_resolution_hours_30d: number | null;
+  median_resolution_hours_30d: number | null;
 }
 
 export interface IncidentTrendRow {
@@ -84,7 +95,10 @@ export interface OfficePerformanceSummary extends OfficePerformanceCounts {
   scope: 'MEO' | 'MDRRMO' | 'ALL';
   // Only populated for a system admin viewing city-wide (scope: 'ALL') —
   // same rule as the existing departmentWorkload dashboard card.
-  byOffice: { MEO: OfficePerformanceCounts; MDRRMO: OfficePerformanceCounts } | null;
+  byOffice: {
+    MEO: OfficePerformanceCounts;
+    MDRRMO: OfficePerformanceCounts;
+  } | null;
 }
 
 @Injectable()
@@ -103,34 +117,60 @@ export class DashboardService {
     const sql = this.pg;
     const activeStatuses = this.activeStatuses();
     const [row] = await sql<DashboardKpis[]>`
-      -- Tickets currently Resolved, measured to their LATEST resolution
-      -- (tickets.resolved_at, manuscript revision Phase 5, step 5c); a
-      -- legacy Resolved ticket (no resolved_at) falls back to its first
-      -- Resolved status_history row. A ticket returned to Under Review is
-      -- not Resolved, so it is left out until it is resolved again.
-      WITH resolved_events AS (
-        SELECT t.id, t.created_at, t.assigned_office,
-          COALESCE(t.resolved_at, MIN(sh.changed_at)) AS resolved_at
-        FROM tickets t
-        LEFT JOIN status_history sh ON sh.ticket_id = t.id AND sh.status = 'Resolved'
-        WHERE t.status = 'Resolved' AND t.merged_into_ticket_id IS NULL
-        GROUP BY t.id, t.created_at, t.assigned_office, t.resolved_at
-      )
       SELECT
         (SELECT COUNT(*) FROM tickets WHERE status IN ${activeStatuses}
           AND merged_into_ticket_id IS NULL
           AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office))::int AS active_count,
         (SELECT COUNT(*) FROM reports r
           WHERE r.created_at >= date_trunc('month', now())
+          AND EXISTS (SELECT 1 FROM tickets parent WHERE parent.id=r.ticket_id AND parent.merged_into_ticket_id IS NULL)
           AND (${office ?? null}::text IS NULL OR EXISTS (
             SELECT 1 FROM tickets t WHERE t.id = r.ticket_id AND t.assigned_office = ${office ?? null}::office
           )))::int AS reports_this_month_count,
-        (SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600)
-          FROM resolved_events
-          WHERE resolved_at > now() - interval '30 days'
-          AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office)) AS avg_resolution_hours_30d
+        (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600)
+          FROM tickets WHERE status = 'Resolved' AND merged_into_ticket_id IS NULL
+          AND resolved_at >= now() - interval '30 days' AND resolved_at <= now()
+          AND (${office ?? null}::text IS NULL OR assigned_office = ${office ?? null}::office))::float8 AS median_resolution_hours_30d
     `;
     return row;
+  }
+
+  /** Ticket units, all-time buckets; fixed rolling 30-day acknowledgment sample. */
+  async getOperationalMetrics(office?: 'MEO' | 'MDRRMO') {
+    const sql = this.pg;
+    const floodCategories = HAZARD_APPLICABLE_CATEGORIES.filter(
+      (c) => hazardContextForCategory(c).contextType === 'FLOOD',
+    );
+    const [row] = await sql<OperationalMetricRow[]>`
+      WITH scoped AS (
+        SELECT * FROM tickets WHERE merged_into_ticket_id IS NULL
+          AND (${office ?? null}::text IS NULL OR assigned_office=${office ?? null}::office)
+      ), facts AS (
+        SELECT t.*, a.ticket_id AS acknowledged_ticket, a.acknowledged_at,
+          h.lookup_status, t.category = ANY(${HAZARD_APPLICABLE_CATEGORIES}::text[]) AS applicable
+        FROM scoped t LEFT JOIN acknowledgments a ON a.ticket_id=t.id
+        LEFT JOIN hazard_information h ON h.ticket_id=t.id AND h.superseded_at IS NULL
+          AND h.hazard_context_type::text = CASE WHEN t.category=ANY(${floodCategories}::text[]) THEN 'FLOOD' ELSE 'RAIN_INDUCED_LANDSLIDE' END
+          AND ST_Equals(h.query_geom,t.geom)
+      )
+      SELECT
+        count(*) FILTER (WHERE status IN ('Reported','Under Review','In Progress'))::int AS pending,
+        count(*) FILTER (WHERE status='Resolved')::int AS resolved,
+        count(*) FILTER (WHERE status='Rejected')::int AS rejected,
+        count(*) FILTER (WHERE status='Resolved' AND resolved_at IS NOT NULL AND resolution_outcome='MUNICIPAL_ACTION_COMPLETED')::int AS municipal,
+        count(*) FILTER (WHERE status='Resolved' AND resolved_at IS NOT NULL AND resolution_outcome='EXTERNAL_REFERRAL')::int AS referred,
+        count(*) FILTER (WHERE status='Resolved' AND (resolved_at IS NULL OR resolution_outcome IS NULL))::int AS legacy,
+        count(*) FILTER (WHERE status IN ('Reported','Under Review','In Progress') AND acknowledged_ticket IS NOT NULL)::int AS acknowledged,
+        count(*) FILTER (WHERE status IN ('Reported','Under Review','In Progress') AND acknowledged_ticket IS NULL)::int AS awaiting,
+        (percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (acknowledged_at-created_at))/3600)
+          FILTER (WHERE acknowledged_at >= now()-interval '30 days' AND acknowledged_at <= now()))::float8 AS median_ack_hours,
+        count(*) FILTER (WHERE applicable AND lookup_status='CLASSIFIED')::int AS classified,
+        count(*) FILTER (WHERE applicable AND lookup_status='NO_CLASSIFICATION')::int AS no_classification,
+        count(*) FILTER (WHERE applicable AND lookup_status='TEMPORARILY_UNAVAILABLE')::int AS unavailable,
+        count(*) FILTER (WHERE applicable AND lookup_status IS NULL)::int AS unchecked
+      FROM facts
+    `;
+    return shapeOperationalMetrics(row);
   }
 
   async getBarangayRiskRanking(
@@ -191,6 +231,7 @@ export class DashboardService {
         SELECT created_at::date AS date, COUNT(*)::int AS report_count
         FROM reports r
         WHERE r.created_at >= (SELECT start_date FROM date_range)
+          AND EXISTS (SELECT 1 FROM tickets parent WHERE parent.id=r.ticket_id AND parent.merged_into_ticket_id IS NULL)
           AND (${office ?? null}::text IS NULL OR EXISTS (
             SELECT 1 FROM tickets t WHERE t.id = r.ticket_id AND t.assigned_office = ${office ?? null}::office
           ))
@@ -306,7 +347,7 @@ export class DashboardService {
       ), scoped_orders AS (
         SELECT wo.id, wo.created_at
         FROM work_orders wo
-        WHERE (${office ?? null}::text IS NULL OR wo.assigned_office = ${office ?? null}::office)
+        WHERE EXISTS (SELECT 1 FROM tickets t WHERE t.id=wo.ticket_id AND t.merged_into_ticket_id IS NULL) AND (${office ?? null}::text IS NULL OR wo.assigned_office = ${office ?? null}::office)
       ), status_on_date AS (
         SELECT dates.date,
           so.id,
@@ -333,7 +374,9 @@ export class DashboardService {
     `;
   }
 
-  async getStatusDistribution(office?: 'MEO' | 'MDRRMO'): Promise<DistributionRow[]> {
+  async getStatusDistribution(
+    office?: 'MEO' | 'MDRRMO',
+  ): Promise<DistributionRow[]> {
     const sql = this.pg;
     return sql<DistributionRow[]>`
       SELECT status::text AS label, COUNT(*)::int AS count
@@ -381,7 +424,8 @@ export class DashboardService {
       SELECT citizen_severity AS label, COUNT(*)::int AS count
       FROM reports r
       WHERE r.created_at >= current_date - interval '29 days'
-        AND (${office ?? null}::text IS NULL OR EXISTS (
+        AND EXISTS (SELECT 1 FROM tickets parent WHERE parent.id=r.ticket_id AND parent.merged_into_ticket_id IS NULL)
+          AND (${office ?? null}::text IS NULL OR EXISTS (
           SELECT 1 FROM tickets t WHERE t.id = r.ticket_id AND t.assigned_office = ${office ?? null}::office
         ))
       GROUP BY citizen_severity
@@ -456,7 +500,7 @@ export class DashboardService {
         scoped AS (
           SELECT wo.id, wo.created_at
           FROM work_orders wo
-          WHERE (${scope}::text IS NULL OR wo.assigned_office = ${scope}::office)
+          WHERE EXISTS (SELECT 1 FROM tickets t WHERE t.id=wo.ticket_id AND t.merged_into_ticket_id IS NULL) AND (${scope}::text IS NULL OR wo.assigned_office = ${scope}::office)
         ), status_on AS (
           SELECT d.date, s.id,
             (
@@ -489,6 +533,7 @@ export class DashboardService {
             AND r.created_at < current_date - 6)::int AS previous
         FROM reports r
         WHERE r.created_at >= current_date - 13
+          AND EXISTS (SELECT 1 FROM tickets parent WHERE parent.id=r.ticket_id AND parent.merged_into_ticket_id IS NULL)
           AND (${scope}::text IS NULL OR EXISTS (
             SELECT 1 FROM tickets t WHERE t.id = r.ticket_id AND t.assigned_office = ${scope}::office
           ))
@@ -497,11 +542,17 @@ export class DashboardService {
 
     const workOrder = workOrderRows[0];
     return {
-      activeTickets: toKpiDelta(ticketRows[0]?.current ?? 0, ticketRows[0]?.previous ?? 0),
+      activeTickets: toKpiDelta(
+        ticketRows[0]?.current ?? 0,
+        ticketRows[0]?.previous ?? 0,
+      ),
       pendingWorkOrders: workOrder?.baseline_covered
         ? toKpiDelta(workOrder.current, workOrder.previous)
         : null,
-      reports: toKpiDelta(reportRows[0]?.current ?? 0, reportRows[0]?.previous ?? 0),
+      reports: toKpiDelta(
+        reportRows[0]?.current ?? 0,
+        reportRows[0]?.previous ?? 0,
+      ),
     };
   }
 }
@@ -514,6 +565,7 @@ export function toKpiDelta(current: number, previous: number): KpiDelta {
     changeAbs,
     // Rounded here rather than in the UI so every consumer (card, future
     // CSV export, tests) reads the same number.
-    changePct: previous === 0 ? null : Math.round((changeAbs / previous) * 1000) / 10,
+    changePct:
+      previous === 0 ? null : Math.round((changeAbs / previous) * 1000) / 10,
   };
 }

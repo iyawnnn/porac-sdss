@@ -1,5 +1,12 @@
 # User Flows
 
+### Operational dashboard metrics (Phase 7, step 7d-1)
+
+MEO and MDRRMO Personnel open their own office dashboard to compare pending, resolved and separately rejected tickets; read resolution outcomes in plain language; and compare acknowledged versus awaiting active tickets. Median acknowledgment and resolution durations cover the fixed last 30 days and show No data yet when no observations exist. Counts remain visible as 0 when empty. Report-submission panels explicitly continue counting reports.
+
+Hazard Information (advisory) summarizes only applicable flood/landslide tickets by lookup state, with visible Advisory only, not a risk score wording. The top-five hazard line also visibly says Advisory. No rainfall or retired Hazard Urgency values are introduced. Barangay Insights separates Rejected from total/category counts and shows it on the index and profile. Focal intake/dashboard, System Administrator access and citizen surfaces stay unchanged. Detailed units, exclusions and windows: features.md, operational dashboard counting rules.
+
+
 **Additional Reports & Exports (7c-2).** MEO/MDRRMO operational Personnel open Reports & Exports and choose Submitted Reports or Operational Assessments, set ticket status/category and an optional submitted/assessed Manila date range, then download CSV. Submitted reports expose references and structured evidence signals, without citizen identity or submission content. Assessments export the office's own current assessment text with the manuscript labels Assessed Conditions and Interim Mitigation, plus staff assessor and Work Order counts; notes on Work Orders stay excluded. The schema permits only one assessment per ticket.
 
 For Priority Incidents, enter Top N (default 20, bounds 1-200) and download the active tickets in priority order. Ties show oldest creation first, then ticket id. Invalid input is explained inline using the server message. Exports never cross the office boundary or include merged-away tickets; Focal and System Administrator cannot export. More than 5,000 rows is refused, never truncated. Every generated file requires a Report export audit event before release; MIS can see its kind, count and safe applied filter codes/dates/Top N, never assessment text. The original export flows remain unchanged.
