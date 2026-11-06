@@ -35,7 +35,7 @@ async function main() {
  CREATE TABLE acknowledgments(ticket_id int UNIQUE,acknowledged_at timestamptz,acknowledged_by_admin_id int);
  CREATE TABLE hazard_information(id serial PRIMARY KEY,ticket_id int,hazard_context_type text,lookup_status hazard_lookup_status,susceptibility_code text,susceptibility_label text,looked_up_at timestamptz,superseded_at timestamptz,query_geom text DEFAULT 'point');
  CREATE TABLE status_history(id serial PRIMARY KEY,ticket_id int,status ticket_status,changed_at timestamptz,admin_id int,admin_name text,resolution_outcome resolution_outcome,resolution_notes text);
- CREATE TABLE reports(id serial PRIMARY KEY,ticket_id int,title text,citizen_id int,description text,submitted_category text,geom text,pin_geom text,created_at timestamptz DEFAULT now(),citizen_severity text DEFAULT 'High',flags text[] DEFAULT ARRAY['MISSING_METADATA'],moderation_status text,moderated_at timestamptz);
+ CREATE TABLE reports(id serial PRIMARY KEY,ticket_id int,title text,citizen_id int,description text,submitted_category text,image_url text NOT NULL,geom text,pin_geom text,created_at timestamptz DEFAULT now(),citizen_severity text DEFAULT 'High',flags text[] DEFAULT ARRAY['MISSING_METADATA'],moderation_status text,moderated_at timestamptz);
  CREATE TABLE work_orders(id serial PRIMARY KEY,ticket_id int,title text DEFAULT 'Fixture',notes text,assigned_office office,status text DEFAULT 'pending',due_date timestamptz DEFAULT now()-interval '1 day',assigned_admin_id int,created_by_admin_id int,created_at timestamptz DEFAULT now()-interval '10 days',updated_at timestamptz DEFAULT now(),completed_at timestamptz,cancellation_reason text,cancelled_by_admin_id int,cancelled_at timestamptz,replacement_work_order_id int);
  CREATE TABLE admins(id int,first_name text,last_name text,office office,account_type text,is_focal boolean,is_active boolean);
  INSERT INTO admins VALUES (1,'MEO','Staff','MEO','PERSONNEL',false,true),(2,'MDRRMO','Staff','MDRRMO','PERSONNEL',false,true);
@@ -95,7 +95,7 @@ async function main() {
         VALUES(20,'Resolved','MUNICIPAL_ACTION_COMPLETED',now(),now()-interval '1000 hours',1)`;
       await sql`INSERT INTO acknowledgments(ticket_id,acknowledged_at) VALUES (1,now()-interval '3 hours'),(2,now()-interval '3 hours'),(3,now()-interval '4 hours'),(8,now()),(9,now())`;
       await sql`INSERT INTO status_history(ticket_id,status,changed_at) SELECT id,status,created_at FROM tickets WHERE status <> 'Reported'`;
-      await sql`INSERT INTO reports(ticket_id,title) SELECT id,'Fixture' FROM tickets`;
+      await sql`INSERT INTO reports(ticket_id,title,image_url) SELECT id,'Fixture','/uploads/reports/01_poblacion.jpg' FROM tickets`;
       await sql`INSERT INTO hazard_information(ticket_id,hazard_context_type,lookup_status,superseded_at) VALUES
     (1,'FLOOD','CLASSIFIED',NULL),(1,'FLOOD','TEMPORARILY_UNAVAILABLE',now()),
     (2,'FLOOD','NO_CLASSIFICATION',NULL),(3,'FLOOD','TEMPORARILY_UNAVAILABLE',NULL),

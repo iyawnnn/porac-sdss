@@ -40,8 +40,8 @@ export async function insertDashboardMetricFixtures(tx: TransactionSql) {
         throw new Error('Dashboard fixture needs an existing location.');
       ids.push(ticket.id);
       await tx`
-        INSERT INTO reports(ticket_id,citizen_id,title,description,citizen_severity,submitted_category,geom,pin_geom,created_at)
-        SELECT id,${citizen.id},${`E2E dashboard metrics fixture ${office} ${ticket.id}`},'Fixture','High',category,geom,geom,created_at
+        INSERT INTO reports(ticket_id,citizen_id,title,description,citizen_severity,submitted_category,image_url,geom,pin_geom,created_at)
+        SELECT id,${citizen.id},${`E2E dashboard metrics fixture ${office} ${ticket.id}`},'Fixture','High',category,'/uploads/reports/01_poblacion.jpg',geom,geom,created_at
         FROM tickets WHERE id=${ticket.id}
       `;
       if (status !== 'Reported')
