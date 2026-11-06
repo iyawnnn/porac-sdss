@@ -1386,7 +1386,7 @@ describe('Needs Screening count (Phase 3, step 3f)', () => {
       'utf8',
     );
     expect(dashboard).toContain(
-      'reports.filter((r) => r.needsScreening).length',
+      'const { newReports, unacknowledged, needsScreening, forwardedOrEscalated } = counts',
     );
     expect(dashboard).not.toMatch(
       /needsScreening = reports\.filter\(\(r\) => r\.intakeState === "Acknowledged"\)/,

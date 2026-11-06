@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
 import { isFocalPersonnel, isSystemAdmin } from "@/lib/utils/adminScope";
 import type {
-  BarangayRiskRow,
   CategoryDistributionRow,
   CountTrendRow,
   DashboardKpis,
@@ -20,15 +19,11 @@ import { DashboardError, DashboardSkeleton } from "@/components/features/admin/d
 interface DashboardResponse {
   operationalMetrics: import("@/lib/types/admin-dashboard").OperationalMetrics;
   kpis: DashboardKpis;
-  leaderboard: BarangayRiskRow[];
   categories: CategoryDistributionRow[];
   incidentTrend: IncidentTrendRow[];
   activeTicketTrend: CountTrendRow[];
   pendingWorkOrderTrend: CountTrendRow[];
   statusDistribution: DistributionRow[];
-  // null for office-scoped admins — cross-office comparison is System
-  // Administrator only, see api/src/admin/dashboard.controller.ts.
-  departmentWorkload: DistributionRow[] | null;
   citizenSeverityDistribution: DistributionRow[];
   officePerformanceSummary: OfficePerformanceSummary;
   needsAttention: NeedsAttention;

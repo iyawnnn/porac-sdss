@@ -1,10 +1,16 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { OperationalPriorityService } from '../domain/operational-priority.service';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
-import { isSystemAdmin, resolveOfficeScope } from '../common/authz/admin-scope';
+import { resolveOfficeScope } from '../common/authz/admin-scope';
 import { DashboardService, parseDashboardRange } from './dashboard.service';
 import { TicketsService } from './tickets.service';
 import { BarangaysGeoService } from './barangays-geo.service';
@@ -34,7 +40,7 @@ export class DashboardController {
   // the getDashboardKpis call that supplied it) was removed in manuscript
   // revision Phase 1, step 6a.
   private async officeCounts(
-    scopedOffice: 'MEO' | 'MDRRMO' | undefined,
+    scopedOffice: 'MEO' | 'MDRRMO',
   ): Promise<OfficePerformanceCounts> {
     const [workOrderCounts, moderationStats] = await Promise.all([
       this.workOrders.getOfficePerformanceCounts(scopedOffice),
@@ -47,24 +53,10 @@ export class DashboardController {
   }
 
   private async getOfficePerformanceSummary(
-    office: 'MEO' | 'MDRRMO' | undefined,
+    office: 'MEO' | 'MDRRMO',
   ): Promise<OfficePerformanceSummary> {
-    // office is undefined only for a system admin viewing city-wide
-    // (resolveOfficeScope always resolves a concrete office for MEO/MDRRMO
-    // admins) — see api/src/common/authz/admin-scope.ts. The MEO/MDRRMO
-    // breakdown is the same "only for a system admin, city-wide" rule the
-    // existing departmentWorkload card already follows.
-    const [scoped, byOffice] = await Promise.all([
-      this.officeCounts(office),
-      office
-        ? Promise.resolve(null)
-        : Promise.all([
-            this.officeCounts('MEO'),
-            this.officeCounts('MDRRMO'),
-          ]).then(([MEO, MDRRMO]) => ({ MEO, MDRRMO })),
-    ]);
-
-    return { scope: office ?? 'ALL', ...scoped, byOffice };
+    if (!office) throw new ForbiddenException('Office scope required.');
+    return { scope: office, ...(await this.officeCounts(office)) };
   }
 
   @Get('dashboard')
@@ -86,13 +78,11 @@ export class DashboardController {
 
     const [
       kpis,
-      leaderboard,
       categories,
       incidentTrend,
       activeTicketTrend,
       pendingWorkOrderTrend,
       statusDistribution,
-      departmentWorkload,
       citizenSeverityDistribution,
       topPriorityQueueData,
       officePerformanceSummary,
@@ -101,7 +91,6 @@ export class DashboardController {
       operationalMetrics,
     ] = await Promise.all([
       this.dashboard.getDashboardKpis(office),
-      this.dashboard.getBarangayRiskRanking(5, office),
       this.dashboard.getCategoryDistribution(5, office),
       this.dashboard.getIncidentTrend(range, office),
       // Point-in-time histories backing the two KPI sparklines. Same range
@@ -110,9 +99,6 @@ export class DashboardController {
       this.dashboard.getActiveTicketTrend(range, office),
       this.dashboard.getPendingWorkOrderTrend(range, office),
       this.dashboard.getStatusDistribution(office),
-      // Cross-office comparison — only meaningful (and only shown) to a
-      // system admin; an office admin's own KPIs above already cover them.
-      isSystemAdmin(admin) ? this.dashboard.getDepartmentWorkload() : null,
       this.dashboard.getCitizenSeverityDistribution(office),
       this.tickets.getTicketsForAdmin({
         office,
@@ -131,13 +117,11 @@ export class DashboardController {
 
     return {
       kpis,
-      leaderboard,
       categories,
       incidentTrend,
       activeTicketTrend,
       pendingWorkOrderTrend,
       statusDistribution,
-      departmentWorkload,
       citizenSeverityDistribution,
       operationalMetrics,
       // Top active tickets by Operational Priority (priority_index). Was

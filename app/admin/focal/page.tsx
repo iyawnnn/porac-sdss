@@ -1,12 +1,22 @@
 import { apiGet } from "@/lib/api-client";
-import type { FocalIntakeRow } from "@/lib/types/admin-focal-intake";
+import type { FocalDashboardCounts, FocalDashboardReports } from "@/lib/types/admin-focal-dashboard";
 import { FocalDashboard } from "@/components/features/admin/focal/FocalDashboard";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
 
-export default async function FocalDashboardPage() {
-  let rows: FocalIntakeRow[];
+export default async function FocalDashboardPage({ searchParams }: {
+  searchParams: Promise<{ page?: string; pageSize?: string }>;
+}) {
+  const query = await searchParams;
+  const params = new URLSearchParams();
+  if (query.page) params.set("page", query.page);
+  if (query.pageSize) params.set("pageSize", query.pageSize);
+  let counts: FocalDashboardCounts;
+  let reports: FocalDashboardReports;
   try {
-    rows = await apiGet<FocalIntakeRow[]>("/admin/intake");
+    [counts, reports] = await Promise.all([
+      apiGet<FocalDashboardCounts>("/admin/focal-dashboard"),
+      apiGet<FocalDashboardReports>(`/admin/focal-dashboard/reports?${params}`),
+    ]);
   } catch (err) {
     return (
       <AdminErrorCard
@@ -17,5 +27,5 @@ export default async function FocalDashboardPage() {
     );
   }
 
-  return <FocalDashboard rows={rows} />;
+  return <FocalDashboard counts={counts} reportsPage={reports} />;
 }

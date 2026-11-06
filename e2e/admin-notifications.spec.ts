@@ -152,6 +152,9 @@ test("/admin/notifications page loads for an authenticated admin", async ({ page
   await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Status" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Type" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Type" }).click();
+  await expect(page.getByRole("option", { name: /Ticket Urgency Became High/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 });
 
 test("MEO admin sees an MEO office-wide notification, MDRRMO admin never sees it", async ({ page, browser }) => {

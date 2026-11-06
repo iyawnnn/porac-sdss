@@ -117,7 +117,7 @@ export function BarangayProfile({
 
       <Card className="gap-0">
         <CardHeader className="border-b pb-3">
-          <CardTitle className="flex items-center gap-2"><MountainIcon aria-hidden="true" className="size-4" />Elevation Summary</CardTitle>
+          <CardTitle className="flex items-center gap-2"><MountainIcon aria-hidden="true" className="size-4" />Terrain (informational)</CardTitle>
           <CardDescription>DEM-derived elevation for this barangay (display only — not a filter).</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-6 p-4">

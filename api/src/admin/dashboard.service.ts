@@ -68,13 +68,6 @@ export interface DistributionRow {
   count: number;
 }
 
-export interface BarangayRiskRow {
-  barangay_id: number;
-  barangay_name: string;
-  active_count: number;
-  avg_priority: number | null;
-}
-
 export interface CategoryDistributionRow {
   category: string;
   active_count: number;
@@ -92,13 +85,7 @@ export interface OfficePerformanceCounts extends WorkOrderPerformanceCounts {
 }
 
 export interface OfficePerformanceSummary extends OfficePerformanceCounts {
-  scope: 'MEO' | 'MDRRMO' | 'ALL';
-  // Only populated for a system admin viewing city-wide (scope: 'ALL') —
-  // same rule as the existing departmentWorkload dashboard card.
-  byOffice: {
-    MEO: OfficePerformanceCounts;
-    MDRRMO: OfficePerformanceCounts;
-  } | null;
+  scope: 'MEO' | 'MDRRMO';
 }
 
 @Injectable()
@@ -171,26 +158,6 @@ export class DashboardService {
       FROM facts
     `;
     return shapeOperationalMetrics(row);
-  }
-
-  async getBarangayRiskRanking(
-    limit = 5,
-    office?: 'MEO' | 'MDRRMO',
-  ): Promise<BarangayRiskRow[]> {
-    const sql = this.pg;
-    return sql<BarangayRiskRow[]>`
-      SELECT b.id AS barangay_id, b.name AS barangay_name,
-        COUNT(*)::int AS active_count,
-        AVG(t.priority_index)::float8 AS avg_priority
-      FROM tickets t
-      JOIN barangays b ON b.id = t.barangay_id
-      WHERE t.status IN ${this.activeStatuses()}
-        AND t.merged_into_ticket_id IS NULL
-        AND (${office ?? null}::text IS NULL OR t.assigned_office = ${office ?? null}::office)
-      GROUP BY b.id, b.name
-      ORDER BY active_count DESC, avg_priority DESC NULLS LAST, b.name ASC
-      LIMIT ${limit}
-    `;
   }
 
   async getCategoryDistribution(
@@ -392,27 +359,6 @@ export class DashboardService {
         WHEN 'Rejected' THEN 5
         ELSE 6
       END
-    `;
-  }
-
-  // Deliberately never office-scoped — this is the cross-office comparison
-  // itself. dashboard.controller.ts only includes it in the response for
-  // system admins. assigned_office is NOT NULL. VALUES deliberately
-  // includes both supported offices so a temporarily empty queue is
-  // represented as zero rather than silently disappearing from the
-  // workload card.
-  async getDepartmentWorkload(): Promise<DistributionRow[]> {
-    const sql = this.pg;
-    return sql<DistributionRow[]>`
-      WITH offices(label) AS (VALUES ('MEO'::text), ('MDRRMO'::text))
-      SELECT offices.label, COUNT(t.id)::int AS count
-      FROM offices
-      LEFT JOIN tickets t
-        ON t.assigned_office::text = offices.label
-        AND t.status IN ${this.activeStatuses()}
-        AND t.merged_into_ticket_id IS NULL
-      GROUP BY offices.label
-      ORDER BY CASE offices.label WHEN 'MEO' THEN 1 ELSE 2 END
     `;
   }
 

@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { E2E_FOCAL_ADMIN, E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
 import { loginAdmin as loginAs } from "./helpers";
 import { expectCitizenNoticeForAccount } from "./citizen-notification-checks";
+import type { FocalDashboardCounts, FocalDashboardReports } from "../lib/types/admin-focal-dashboard";
+import { metricDuration } from "../lib/utils/metric-duration";
 
 test.setTimeout(60_000);
 
@@ -32,6 +34,40 @@ test("Focal Dashboard and Intake Queue load, and Intake spans both offices", asy
   // filter/param).
   await expect(page.getByText("MEO", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("MDRRMO", { exact: true }).first()).toBeVisible();
+});
+
+test("Focal dashboard uses server counts and paged municipality-wide intake summaries", async ({ page }) => {
+  await loginAs(page, E2E_FOCAL_ADMIN);
+  const headers = sessionCookieHeader(await page.context().cookies());
+  const countResponse = await page.request.get("/api/admin/focal-dashboard", { headers });
+  expect(countResponse.ok()).toBe(true);
+  const counts: FocalDashboardCounts = await countResponse.json();
+  expect(Object.keys(counts).sort()).toEqual(["newReports", "unacknowledged", "needsScreening", "forwardedOrEscalated", "medianAcknowledgmentHours30d"].sort());
+  const response = await page.request.get("/api/admin/focal-dashboard/reports?page=1&pageSize=2", { headers });
+  expect(response.ok()).toBe(true);
+  const first: FocalDashboardReports = await response.json();
+  expect(first.total).toBe(counts.newReports);
+  expect(first.items.length).toBeLessThanOrEqual(2);
+  expect(first).toMatchObject({ page: 1, pageSize: 2 });
+  const secondResponse = await page.request.get("/api/admin/focal-dashboard/reports?page=2&pageSize=2", { headers });
+  expect(secondResponse.ok()).toBe(true);
+  const second: FocalDashboardReports = await secondResponse.json();
+  expect(second.total).toBe(first.total);
+  expect(second.items.every(row => !first.items.some(other => other.reportId === row.reportId))).toBe(true);
+  await page.goto("/admin/focal?pageSize=2");
+  await expect(page.getByText(`Median time to acknowledge (last 30 days): ${metricDuration(counts.medianAcknowledgmentHours30d)}`)).toBeVisible();
+  await expect(page.getByTestId("focal-kpi-row")).toContainText(counts.newReports.toLocaleString());
+  const pages = page.getByRole("navigation", { name: "Incoming reports pages" });
+  await expect(pages).toContainText(`${first.total.toLocaleString()} reports`);
+  if (first.total > 2) {
+    await pages.getByRole("link", { name: "Next", exact: true }).click();
+    await expect(page).toHaveURL(/page=2&pageSize=2/);
+    await expect(pages).toContainText("Page 2");
+    await expect(pages.getByRole("link", { name: "Previous", exact: true })).toBeVisible();
+  }
+  expect((await page.request.get("/api/admin/focal-dashboard/reports?pageSize=51", { headers })).status()).toBe(400);
+  // Existing operational guard boundaries stay enforced.
+  expect((await page.request.get("/api/admin/work-orders", { headers })).status()).toBe(403);
 });
 
 // Manuscript revision Phase 1, step 6b: Focal screens show Operational

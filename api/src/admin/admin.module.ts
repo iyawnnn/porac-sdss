@@ -1,3 +1,5 @@
+import { FocalDashboardController } from './focal-dashboard.controller';
+import { FocalDashboardService } from './focal-dashboard.service';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { DomainModule } from '../domain/domain.module';
@@ -71,6 +73,7 @@ import { OperationalAssessmentService } from './operational-assessment.service';
     BarangayInsightsController,
     SavedViewsController,
     FocalIntakeController,
+    FocalDashboardController,
     TicketGroupingController,
     TicketCorrectionsController,
   ],
@@ -88,6 +91,7 @@ import { OperationalAssessmentService } from './operational-assessment.service';
     BarangayInsightsService,
     SavedViewsService,
     FocalIntakeService,
+    FocalDashboardService,
     OperationalAssessmentService,
     RelatedTicketsService,
     TicketGroupingService,

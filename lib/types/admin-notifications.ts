@@ -25,7 +25,6 @@ export interface NotificationListResponse {
 // filter, not a backend constraint (the API accepts any string).
 export const ADMIN_NOTIFICATION_TYPES = [
   "new_citizen_report",
-  "ticket_critical",
   "ticket_escalation",
   "ticket_disputed",
   "work_order_assigned",
@@ -33,9 +32,9 @@ export const ADMIN_NOTIFICATION_TYPES = [
 ] as const;
 export type AdminNotificationType = (typeof ADMIN_NOTIFICATION_TYPES)[number];
 
-export const ADMIN_NOTIFICATION_TYPE_LABELS: Record<AdminNotificationType, string> = {
+export const ADMIN_NOTIFICATION_TYPE_LABELS: Record<AdminNotificationType | "ticket_critical", string> = {
   new_citizen_report: "New Citizen Report",
-  ticket_critical: "Ticket Urgency Became High",
+  ticket_critical: "Ticket Urgency Became High (retired)",
   ticket_escalation: "Ticket Needs Review",
   ticket_disputed: "Citizen Disputed Resolution",
   work_order_assigned: "Work Order Assigned",

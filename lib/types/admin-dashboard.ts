@@ -52,13 +52,6 @@ export interface DistributionRow {
   count: number;
 }
 
-export interface BarangayRiskRow {
-  barangay_id: number;
-  barangay_name: string;
-  active_count: number;
-  avg_priority: number | null;
-}
-
 export interface CategoryDistributionRow {
   category: string;
   active_count: number;
@@ -74,9 +67,7 @@ export interface OfficePerformanceCounts {
 }
 
 export interface OfficePerformanceSummary extends OfficePerformanceCounts {
-  scope: "MEO" | "MDRRMO" | "ALL";
-  // Populated only for a system admin viewing city-wide (scope: "ALL").
-  byOffice: { MEO: OfficePerformanceCounts; MDRRMO: OfficePerformanceCounts } | null;
+  scope: "MEO" | "MDRRMO";
 }
 
 export interface NeedsAttentionWorkOrder {
