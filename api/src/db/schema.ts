@@ -960,6 +960,8 @@ export const adminAuditEvents = pgTable('admin_audit_events', {
   // account type, and an insert trigger fills it from actor_role for older
   // code that leaves it out.
   actorAccountType: adminAccountTypeEnum('actor_account_type').notNull(),
+  // Phase 7, step 7b-1: NULL means not recorded; no default or backfill.
+  actorIsFocal: boolean('actor_is_focal'),
   actorOffice: officeEnum('actor_office'),
   actionType: text('action_type').notNull(),
   targetType: text('target_type').notNull(),
