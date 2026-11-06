@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ExportDownload } from "@/components/features/admin/shared/ExportDownload";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BanIcon,
@@ -468,12 +469,10 @@ export function FlaggedWorkspace({
             evidence and choose an action.
           </p>
         </div>
-        <Button asChild size="sm" variant="outline">
-          <a href={`/api/admin/reports/flagged.csv?${exportParams.toString()}`}>
+        <ExportDownload size="sm" variant="outline" href={`/api/admin/reports/flagged.csv?${exportParams.toString()}`}>
             <DownloadIcon />
             Export CSV
-          </a>
-        </Button>
+          </ExportDownload>
       </div>
 
       <FlaggedViewTabs

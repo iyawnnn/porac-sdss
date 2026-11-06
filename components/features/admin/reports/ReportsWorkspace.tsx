@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ExportDownload } from "@/components/features/admin/shared/ExportDownload";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -257,12 +258,10 @@ export function ReportsWorkspace({
                 </SelectContent>
               </Select>
             </div>
-            <Button asChild className="self-start">
-              <a href={ticketExportHref}>
+            <ExportDownload className="self-start" href={ticketExportHref}>
                 <DownloadIcon />
                 Export Tickets CSV
-              </a>
-            </Button>
+              </ExportDownload>
           </CardContent>
         </Card>
 
@@ -288,12 +287,10 @@ export function ReportsWorkspace({
                 </SelectContent>
               </Select>
             </div>
-            <Button asChild className="self-start">
-              <a href={workOrderExportHref}>
+            <ExportDownload className="self-start" href={workOrderExportHref}>
                 <DownloadIcon />
                 Export Work Orders CSV
-              </a>
-            </Button>
+              </ExportDownload>
           </CardContent>
         </Card>
       </div>

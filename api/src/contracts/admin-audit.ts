@@ -1,5 +1,6 @@
 // Pure shared contract: imported by both the API and web. No DB imports.
 export const AUDIT_ACTIONS = [
+  'report_exported',
   'admin_created',
   'admin_role_updated',
   'admin_password_changed',
@@ -33,6 +34,7 @@ export const AUDIT_ACTIONS = [
 ] as const;
 export type AdminAuditActionType = (typeof AUDIT_ACTIONS)[number];
 export const AUDIT_ACTION_LABELS = {
+  report_exported: 'Report export',
   admin_created: 'Admin created',
   admin_role_updated: 'Account type/office/Focal updated',
   admin_password_changed: 'Password changed',
@@ -65,7 +67,8 @@ export const AUDIT_ACTION_LABELS = {
   report_regrouped: 'Report moved to another ticket',
 } satisfies Record<AdminAuditActionType, string>;
 
-export type AdminAuditTargetType = 'admin' | 'ticket' | 'report' | 'work_order';
+export type AdminAuditTargetType =
+  'admin' | 'ticket' | 'report' | 'work_order' | 'export';
 export interface AdminAuditItem {
   id: number;
   created_at: string;

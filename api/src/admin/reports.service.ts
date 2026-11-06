@@ -1,9 +1,15 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { AdminSession } from '../auth/session.service';
 import { toCsv } from '../common/utils/csv';
+import { AdminAuditService } from './admin-audit.service';
+import { auditDetails } from './admin-audit-view';
+import { assertExportLimit } from './export-limit';
 import { TicketsService } from './tickets.service';
 import { ModerationService } from './moderation.service';
-import { WorkOrdersService, type WorkOrderExportRow } from './work-orders.service';
+import {
+  WorkOrdersService,
+  type WorkOrderExportRow,
+} from './work-orders.service';
 
 export interface ReportDateRange {
   dateFrom?: Date;
@@ -15,11 +21,12 @@ export interface ReportDateRange {
 // params are parsed here, never mixed into the list query shape).
 const EXPORT_IDS_MAX = 500;
 
-function parseIdsParam(value: string | undefined, label = 'ticket'): number[] | undefined {
+function parseIdsParam(
+  value: string | undefined,
+  label = 'ticket',
+): number[] | undefined {
   if (!value) return undefined;
-  const ids = [
-    ...new Set(value.split(',').map((part) => Number(part.trim()))),
-  ];
+  const ids = [...new Set(value.split(',').map((part) => Number(part.trim())))];
   if (ids.some((n) => !Number.isInteger(n) || n <= 0)) {
     throw new BadRequestException(
       `ids must be a comma-separated list of ${label} ids.`,
@@ -33,7 +40,10 @@ function parseIdsParam(value: string | undefined, label = 'ticket'): number[] | 
   return ids.length ? ids : undefined;
 }
 
-function parseDateParam(value: string | undefined, label: string): Date | undefined {
+function parseDateParam(
+  value: string | undefined,
+  label: string,
+): Date | undefined {
   if (!value) return undefined;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -43,7 +53,8 @@ function parseDateParam(value: string | undefined, label: string): Date | undefi
 }
 
 function isOverdue(row: WorkOrderExportRow): boolean {
-  if (!row.due_date || row.status === 'completed' || row.status === 'cancelled') return false;
+  if (!row.due_date || row.status === 'completed' || row.status === 'cancelled')
+    return false;
   return row.due_date.getTime() < Date.now();
 }
 
@@ -53,6 +64,7 @@ export class ReportsService {
     private readonly tickets: TicketsService,
     private readonly workOrders: WorkOrdersService,
     private readonly moderation: ModerationService,
+    private readonly audit: AdminAuditService,
   ) {}
 
   // Reuses TicketsService.parseTicketQuery / WorkOrdersService.parseQuery
@@ -82,7 +94,8 @@ export class ReportsService {
       ids,
     });
 
-    return toCsv(rows, [
+    assertExportLimit(rows);
+    const csv = toCsv(rows, [
       { header: 'Ticket ID', value: (r) => r.id },
       { header: 'Status', value: (r) => r.status },
       { header: 'Assigned Office', value: (r) => r.assigned_office },
@@ -97,10 +110,15 @@ export class ReportsService {
       { header: 'Hazard Information', value: (r) => r.hazard_summary },
       { header: 'Barangay', value: (r) => r.barangay_name },
       { header: 'Report Count', value: (r) => r.member_count },
-      { header: 'Created At', value: (r) => new Date(r.created_at).toISOString() },
-      { header: 'Updated At', value: (r) => new Date(r.updated_at).toISOString() },
-      // Phase 3, step 3d: set only on merged-away tickets, which appear in a
-      // status=all export.
+      {
+        header: 'Created At',
+        value: (r) => new Date(r.created_at).toISOString(),
+      },
+      {
+        header: 'Updated At',
+        value: (r) => new Date(r.updated_at).toISOString(),
+      },
+      // Retained for column compatibility; merged-away tickets are excluded.
       { header: 'Merged into', value: (r) => r.merged_into_ticket_id },
       // Phase 5, step 5c (decision 13). Blank while unresolved, and the
       // outcome is blank for a legacy Resolved ticket (no resolved_at),
@@ -115,6 +133,13 @@ export class ReportsService {
         value: (r) => r.resolved_at && new Date(r.resolved_at).toISOString(),
       },
     ]);
+    await this.auditExport(admin, 'tickets', rows.length, {
+      ...filters,
+      dateFrom,
+      dateTo,
+      ids,
+    });
+    return csv;
   }
 
   // Flagged Reports export. Same delegation rule as the two above: every
@@ -133,25 +158,39 @@ export class ReportsService {
   ): Promise<string> {
     const filters = this.moderation.parseModerationQuery(query, admin);
     const ids = parseIdsParam(query.ids, 'report');
-    const rows = await this.moderation.getModerationForExport({ ...filters, ids });
+    const rows = await this.moderation.getModerationForExport({
+      ...filters,
+      ids,
+    });
 
-    return toCsv(rows, [
+    assertExportLimit(rows);
+    const csv = toCsv(rows, [
       { header: 'Report ID', value: (r) => r.id },
       { header: 'Ticket ID', value: (r) => r.ticket_id },
-      { header: 'Title', value: (r) => r.title },
+      { header: 'Tracking Reference', value: (r) => r.tracking_reference },
       { header: 'Category', value: (r) => r.category },
       { header: 'Barangay', value: (r) => r.barangay_name },
       { header: 'Assigned Office', value: (r) => r.assigned_office },
-      { header: 'Citizen', value: (r) => r.citizen_name },
       { header: 'Citizen Severity', value: (r) => r.citizen_severity },
       { header: 'Flags', value: (r) => r.flags.join(' | ') },
       { header: 'Location Mismatch (m)', value: (r) => r.location_mismatch_m },
       // Pending is the absence of a decision, not a stored status.
-      { header: 'Moderation Status', value: (r) => r.moderation_status ?? 'pending' },
+      {
+        header: 'Moderation Status',
+        value: (r) => r.moderation_status ?? 'pending',
+      },
       { header: 'Moderated By', value: (r) => r.moderated_by },
-      { header: 'Moderated At', value: (r) => r.moderated_at && new Date(r.moderated_at).toISOString() },
-      { header: 'Submitted At', value: (r) => new Date(r.created_at).toISOString() },
+      {
+        header: 'Moderated At',
+        value: (r) => r.moderated_at && new Date(r.moderated_at).toISOString(),
+      },
+      {
+        header: 'Submitted At',
+        value: (r) => new Date(r.created_at).toISOString(),
+      },
     ]);
+    await this.auditExport(admin, 'flagged', rows.length, { ...filters, ids });
+    return csv;
   }
 
   async workOrdersCsv(
@@ -160,9 +199,14 @@ export class ReportsService {
   ): Promise<string> {
     const filters = this.workOrders.parseQuery(query, admin);
     const { dateFrom, dateTo } = this.parseDateRange(query);
-    const rows = await this.workOrders.getWorkOrdersForExport({ ...filters, dateFrom, dateTo });
+    const rows = await this.workOrders.getWorkOrdersForExport({
+      ...filters,
+      dateFrom,
+      dateTo,
+    });
 
-    return toCsv(rows, [
+    assertExportLimit(rows);
+    const csv = toCsv(rows, [
       { header: 'Work Order ID', value: (r) => r.id },
       { header: 'Ticket ID', value: (r) => r.ticket_id },
       { header: 'Title', value: (r) => r.title },
@@ -173,8 +217,70 @@ export class ReportsService {
       { header: 'Overdue', value: (r) => isOverdue(r) },
       { header: 'Due Date', value: (r) => r.due_date?.toISOString() },
       { header: 'Completed At', value: (r) => r.completed_at?.toISOString() },
+      {
+        header: 'Cancelled At',
+        value: (r) =>
+          r.status === 'cancelled' ? r.cancelled_at?.toISOString() : null,
+      },
+      {
+        header: 'Cancellation Reason',
+        value: (r) => (r.status === 'cancelled' ? r.cancellation_reason : null),
+      },
+      {
+        header: 'Replacement Work Order ID',
+        value: (r) =>
+          r.status === 'cancelled' ? r.replacement_work_order_id : null,
+      },
       { header: 'Created At', value: (r) => r.created_at.toISOString() },
       { header: 'Updated At', value: (r) => r.updated_at.toISOString() },
     ]);
+    await this.auditExport(admin, 'work_orders', rows.length, {
+      ...filters,
+      dateFrom,
+      dateTo,
+    });
+    return csv;
+  }
+
+  private async auditExport(
+    admin: AdminSession,
+    kind: 'tickets' | 'flagged' | 'work_orders',
+    rowCount: number,
+    filters: Record<string, unknown>,
+  ): Promise<void> {
+    // Sanitize before storage too: never retain free-text search or staff ids.
+    const metadata = auditDetails('report_exported', {
+      ...filters,
+      status:
+        filters.status ??
+        (kind === 'tickets'
+          ? 'active'
+          : kind === 'flagged'
+            ? 'pending'
+            : 'all'),
+      kind,
+      rowCount,
+      dateFrom:
+        filters.dateFrom instanceof Date
+          ? filters.dateFrom.toISOString()
+          : filters.from,
+      dateTo:
+        filters.dateTo instanceof Date
+          ? filters.dateTo.toISOString()
+          : filters.to,
+      searchApplied: Boolean(filters.search),
+      assigneeFiltered: Boolean(filters.assignedAdminId),
+      selectionCount: Array.isArray(filters.ids)
+        ? filters.ids.length
+        : undefined,
+    });
+    await this.audit.logRequired({
+      actor: admin,
+      actionType: 'report_exported',
+      targetType: 'export',
+      targetId: admin.adminId,
+      targetSummary: 'Report export',
+      metadata,
+    });
   }
 }

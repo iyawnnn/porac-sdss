@@ -105,7 +105,10 @@ describe('CSV is built only by the central writer (csv.ts)', () => {
       const start = service.indexOf(`async ${name}(`);
       const next = service.indexOf('\n  async ', start + 1);
       const body = service.slice(start, next === -1 ? undefined : next);
-      expect(body).toContain('return toCsv(');
+      // Serialization still happens only here, before the required audit write.
+      expect(body).toContain('const csv = toCsv(');
+      expect(body).toContain('await this.auditExport(');
+      expect(body).toContain('return csv;');
     }
   });
 });

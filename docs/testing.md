@@ -1,5 +1,13 @@
 # Testing
 
+### Phase 7, step 7c-1 export hardening
+
+API tests pin all three 5,000/5,001 boundaries, cancellation columns and blank values, flagged column list and tracking-reference privacy, required safe audit details, fail-closed attachment behavior, guards and merged-away exclusion. Root `download-export.test.ts` covers credentialed fetch, server refusal text and server filename/file bytes. `api/test/exports.pglite.cjs` runs real export queries plus required audit inserts through a `drizzle(postgresClient)` wrapper in a disposable memory database, without env files or database runners. Geometry equality has a text stand-in against an empty hazard table; this checks export SQL, not PostGIS. Run after API build with `PGLITE_MODULE_ROOT` pointing to the scratch PGlite/socket installation.
+
+`e2e/admin-reports.spec.ts` adds actual flagged downloads for both offices, opposite-office clamping, tracking-reference/no-name/no-title assertions, cancellation headers, Report export Activity Log details and Focal/MIS refusal. Export fixture helper only inserts tickets/reports; they and audit history accumulate. No citizen-report POSTs. Playwright is deliberately not run in this implementation step.
+
+Verification: 76 API suites / 1,796 tests passed; API build, root type-check, 36 root unit tests and production web build passed. Seven export PGlite groups passed (including the insert-only fixture writer). Mutations: adding citizen name failed 2 tests, removing the limit failed 3, and removing the audit write failed 7; original bytes restored, followed by 255 focused passing tests. Web/E2E/helper and harness lint passed. API lint retains five pre-existing unbound-method findings in reports.service.spec.ts; the same main file has 28 findings including those five. No new lint findings. The web build used pnpm build in a temporary source copy, with only that copy's Turbopack root widened for linked dependencies and pnpm automatic dependency installation disabled; source next-env.d.ts and the pre-existing .next remained untouched. The CSV source scan still rejects alternate writers and browser-built CSV; its service check now pins central serialization before awaited audit and return of the serialized result.
+
 **How to verify changes to PORAC-SDSS, and the caveats that make this suite different from most.**
 
 The short version: there is no mocked backend and no isolated test database. Playwright drives a real Next.js server against the real development database, with the NestJS API running separately. That buys unusually high confidence — the office-scoping tests genuinely prove the API clamps scope — at the cost of real constraints on how the suite can be run. Those constraints are documented here rather than worked around.
@@ -70,6 +78,7 @@ No migrations, seed runner, Playwright, real database or push. The user reports 
 | `ticket_returned_to_review` | `from`, `to`, `previousOutcome` |
 | `ticket_category_corrected` | `oldValue`, `newValue`, `officeChanged`, `fromOffice`, `toOffice` |
 | `ticket_location_corrected` | None |
+| `report_exported` | `kind`, `rowCount`, `office`, `status`, `category` (short code), `barangayId`, `categoryReview`, `overdue`, `flag`, `dateFrom`, `dateTo`, `searchApplied`, `assigneeFiltered`, `selectionCount` |
 | `report_moderated` | `action` |
 | `work_order_created` | `assignedOffice`, `hasDueDate` |
 | `work_order_updated` | None |

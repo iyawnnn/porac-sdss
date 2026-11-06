@@ -1,5 +1,7 @@
 # User Flows
 
+**Phase 7, step 7c-1: existing export hardening.** Tickets, flagged reports and Work Orders share a hard 5,000-row limit; 5,001+ returns a plain 400 refusal without a file. All remain own-office operational-Personnel only, with merged-away tickets excluded. Flagged CSV replaces citizen name/title with Tracking Reference. Work Orders add Cancelled At, Cancellation Reason and Replacement Work Order ID (blank unless cancelled); notes remain excluded and Assigned Admin Email still exposes the assignee's staff email to exporting own-office Personnel. Each generated export must persist `report_exported` (Report export) before release; audit failure blocks the file. The `export` target uses the actor's real admin id without schema changes. Safe structured filters and counts appear in MIS Activity Log; no search text, citizen text or assignee ids. All download controls fetch with credentials and show API refusal messages inline while retaining server filenames. No new exports, migration or CSV escaping changes. Browser verification is a separate step.
+
 **How each type of user actually works with PORAC-SDSS**, start to finish. Written for developers onboarding, capstone reviewers, future maintainers, and LGU stakeholders who need to understand the operational shape of the system rather than its code.
 
 Every flow below is implemented. Where something is pending or deliberately absent, it is marked as such rather than described as working.

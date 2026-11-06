@@ -1,4 +1,5 @@
 import { sql } from '../db';
+import { insertExportFixtures } from '../lib/export-fixtures';
 import { insertAuditViewFixtures } from '../lib/audit-view-fixtures';
 
 // Playwright fixtures for the staff Merge / Remove / Regroup spec
@@ -1166,9 +1167,11 @@ async function create() {
       ownTrackingReference: await trackingReferenceOf(referredReportId),
     };
 
+    const exportHardening = await insertExportFixtures(tx);
     const auditView = await insertAuditViewFixtures(tx);
     return {
       auditView,
+      exportHardening,
       tickets: {
         sharedReadOnly: {
           ticketId: sharedReadOnly.ticketId,

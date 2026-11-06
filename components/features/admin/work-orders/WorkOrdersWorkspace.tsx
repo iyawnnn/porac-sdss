@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ExportDownload } from "@/components/features/admin/shared/ExportDownload";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ClipboardListIcon, DownloadIcon, Inbox, Wrench } from "lucide-react";
@@ -164,12 +165,10 @@ export function WorkOrdersWorkspace({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button asChild size="sm" variant="outline">
-            <a href={`/api/admin/reports/work-orders.csv?${buildParams(query).toString()}`}>
+          <ExportDownload size="sm" variant="outline" href={`/api/admin/reports/work-orders.csv?${buildParams(query).toString()}`}>
               <DownloadIcon />
               Export CSV
-            </a>
-          </Button>
+            </ExportDownload>
           <CreateWorkOrderDialog
             onCreated={handleCreated}
             sessionOffice={sessionOffice === "MEO" || sessionOffice === "MDRRMO" ? sessionOffice : undefined}

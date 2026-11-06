@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ExportDownload } from "@/components/features/admin/shared/ExportDownload";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ActivityIcon,
@@ -499,12 +500,10 @@ export function TicketsWorkspace({
           {/* The city-wide rain / "urgency scores recomputed" pill was removed
               with Hazard Urgency (manuscript revision Phase 1, step 4). Per-ticket
               rainfall context returns on Ticket Detail in Phase 4. */}
-          <Button asChild size="sm" variant="outline">
-            <a href={`/api/admin/reports/tickets.csv?${exportParams.toString()}`}>
+          <ExportDownload size="sm" variant="outline" href={`/api/admin/reports/tickets.csv?${exportParams.toString()}`}>
               <DownloadIcon />
               Export CSV
-            </a>
-          </Button>
+            </ExportDownload>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
-import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
-import { ensureAssessment, loginAdmin as loginAs } from "./helpers";
+import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN, E2E_FOCAL_ADMIN } from "./test-credentials";
+import { ensureAssessment, loginAdmin as loginAs, settleAdminPage } from "./helpers";
 
 test.setTimeout(60_000);
 
@@ -15,6 +16,78 @@ function parseCsv(body: string): string[][] {
     .split("\r\n")
     .map((line) => line.split(","));
 }
+
+// New fixtures only INSERT; audit events accumulate and are never deleted.
+const exportFixtures = process.env.E2E_GROUPING_FIXTURES
+  ? (JSON.parse(process.env.E2E_GROUPING_FIXTURES) as { exportHardening: {
+      office: string; reportId: number; trackingReference: string; title: string; citizenName: string;
+    }[] }).exportHardening : [];
+
+for (const account of [E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN]) {
+  test(`${account.office} flagged file download has tracking reference without citizen identity or title`, async ({ page }) => {
+    const own = exportFixtures.find(f => f.office === account.office);
+    const other = exportFixtures.find(f => f.office !== account.office);
+    expect(own, "global setup must insert export fixtures").toBeTruthy();
+    expect(other).toBeTruthy();
+    if (!own || !other) throw new Error("Missing export fixtures");
+    await loginAs(page, account);
+    await page.goto(`/admin/flagged?status=all&search=${encodeURIComponent(own.title)}`);
+    await settleAdminPage(page, page.getByRole("heading", { name: "Flagged Reports" }));
+    const link = page.getByRole("link", { name: "Export CSV", exact: true });
+    const downloadPromise = page.waitForEvent("download");
+    await link.click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^flagged-reports-.*\.csv$/);
+    const file = await download.path();
+    if (!file) throw new Error("Download has no file");
+    const body = await readFile(file, "utf8");
+    const [headers, ...rows] = parseCsv(body);
+    expect(headers).toEqual(["Report ID","Ticket ID","Tracking Reference","Category","Barangay","Assigned Office","Citizen Severity","Flags","Location Mismatch (m)","Moderation Status","Moderated By","Moderated At","Submitted At"]);
+    expect(body).toContain(own.trackingReference);
+    expect(body).not.toContain(own.title);
+    expect(body).not.toContain(own.citizenName);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row[5]).toBe(account.office);
+    const scoped = await page.request.get(`/api/admin/reports/flagged.csv?status=all&office=${other.office}&ids=${own.reportId},${other.reportId}`);
+    const scopedRows = parseCsv(await scoped.text()).slice(1);
+    expect(scopedRows).toHaveLength(1);
+    expect(scopedRows[0][0]).toBe(String(own.reportId));
+
+    await loginAs(page, E2E_SYSTEM_ADMIN);
+    await page.goto("/admin/activity-log?actionType=report_exported&targetType=export");
+    await settleAdminPage(page, page.getByRole("heading", { name: "Activity Log" }));
+    const event = page.getByRole("row").filter({ hasText: "Report export" }).filter({ hasText: "flagged" }).first();
+    await expect(event).toBeVisible();
+    await expect(event).toContainText("Rows: 1");
+    await expect(event).toContainText("Office: " + account.office);
+    const audit = await page.request.get("/api/admin/activity-log?actionType=report_exported&limit=100");
+    const data = await audit.json();
+    expect(data.events.some((e: { details: { kind: string; rowCount: number; office: string } }) =>
+      e.details.kind === "flagged" && e.details.rowCount === 1 && e.details.office === account.office)).toBe(true);
+    expect(JSON.stringify(data)).not.toContain(own.title);
+    expect(JSON.stringify(data)).not.toContain(own.citizenName);
+  });
+}
+
+for (const account of [E2E_FOCAL_ADMIN, E2E_SYSTEM_ADMIN]) {
+  test(`${account.role} is refused all three export endpoints`, async ({ page }) => {
+    await loginAs(page, account);
+    for (const kind of ["tickets", "flagged", "work-orders"]) {
+      const response = await page.request.get(`/api/admin/reports/${kind}.csv`);
+      expect(response.status()).toBe(403);
+      expect(response.headers()["content-disposition"]).toBeUndefined();
+    }
+  });
+}
+
+test("work-order export retains notes exclusion and adds cancellation headers", async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  const response = await page.request.get("/api/admin/reports/work-orders.csv");
+  expect(response.ok()).toBe(true);
+  const [header] = parseCsv(await response.text());
+  expect(header).toEqual(["Work Order ID","Ticket ID","Title","Assigned Office","Assigned Admin Name","Assigned Admin Email","Status","Overdue","Due Date","Completed At","Cancelled At","Cancellation Reason","Replacement Work Order ID","Created At","Updated At"]);
+  expect(header).not.toContain("Notes");
+});
 
 // --- Ticket Queue: Export CSV button -------------------------------------
 

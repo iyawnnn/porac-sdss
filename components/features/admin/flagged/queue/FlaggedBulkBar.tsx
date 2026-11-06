@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ExportDownload } from "@/components/features/admin/shared/ExportDownload";
 import { BanIcon, CheckCheckIcon, CircleCheckIcon, CopyIcon, DownloadIcon } from "lucide-react";
 import type { ModerationAction } from "@/lib/types/admin-moderation";
 import { Button } from "@/components/ui/button";
@@ -89,15 +90,13 @@ export function FlaggedBulkBar({
           label="Mark duplicate"
           onClick={() => setDialog("duplicate")}
         />
-        {/* A plain link, not a fetch: the CSV is a file download, and the ids
-            ride as an export-only query param the list endpoint never sees. */}
-        <a
+        <ExportDownload
           className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-[var(--brand-border)] bg-card px-2.5 text-xs font-medium whitespace-nowrap transition-colors hover:border-primary"
           href={exportHref}
         >
           <DownloadIcon aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
           Export selection
-        </a>
+        </ExportDownload>
 
         <Button
           className="ml-auto h-7 px-2 text-xs text-primary"

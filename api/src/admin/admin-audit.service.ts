@@ -70,6 +70,7 @@ const TARGET_TYPES: AdminAuditTargetType[] = [
   'ticket',
   'report',
   'work_order',
+  'export',
 ];
 
 const VIEW_COLUMNS = {
@@ -174,6 +175,11 @@ export class AdminAuditService {
     } catch (err) {
       this.logger.error('Failed to write login audit event', err as Error);
     }
+  }
+
+  // A generated export is released only after this INSERT succeeds.
+  async logRequired(input: LogAdminAuditInput): Promise<void> {
+    await this.db.insert(adminAuditEvents).values(values(input));
   }
 
   parseFilters(query: Record<string, string | undefined>): AdminAuditFilters {
