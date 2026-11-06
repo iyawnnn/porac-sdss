@@ -7,7 +7,14 @@ import { ReportsController } from './reports.controller';
 import type { ReportsService } from './reports.service';
 
 describe('export response boundary', () => {
-  it.each(['ticketsCsv', 'flaggedCsv', 'workOrdersCsv'] as const)(
+  it.each([
+    'ticketsCsv',
+    'flaggedCsv',
+    'workOrdersCsv',
+    'submittedReportsCsv',
+    'operationalAssessmentsCsv',
+    'priorityIncidentsCsv',
+  ] as const)(
     '%s sends no attachment headers when generation or audit fails',
     async (method) => {
       const service = {

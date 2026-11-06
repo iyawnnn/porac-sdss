@@ -24,10 +24,19 @@ type Rule =
   | 'category'
   | 'category_code'
   | 'date'
+  | 'top'
   | 'array_count';
 export const AUDIT_DETAIL_ALLOWLIST = {
   report_exported: {
-    kind: ['tickets', 'flagged', 'work_orders'],
+    kind: [
+      'tickets',
+      'flagged',
+      'work_orders',
+      'submitted_reports',
+      'operational_assessments',
+      'priority_incidents',
+    ],
+    top: 'top',
     rowCount: 'count',
     office,
     status: [
@@ -202,6 +211,13 @@ export function auditDetails(
       rule === 'count' &&
       Number.isSafeInteger(value) &&
       Number(value) >= 0
+    )
+      details[key] = Number(value);
+    else if (
+      rule === 'top' &&
+      Number.isSafeInteger(value) &&
+      Number(value) >= 1 &&
+      Number(value) <= 200
     )
       details[key] = Number(value);
     else if (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AdditionalReportExports } from "./AdditionalReportExports";
 import { ExportDownload } from "@/components/features/admin/shared/ExportDownload";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -294,6 +295,8 @@ export function ReportsWorkspace({
           </CardContent>
         </Card>
       </div>
+
+      <AdditionalReportExports />
 
       <Card aria-label="Printable operational summary" role="region">
         <CardHeader>

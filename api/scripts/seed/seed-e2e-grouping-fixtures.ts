@@ -1,4 +1,5 @@
 import { sql } from '../db';
+import { insertNewExportFixtures } from '../lib/new-export-fixtures';
 import { insertExportFixtures } from '../lib/export-fixtures';
 import { insertAuditViewFixtures } from '../lib/audit-view-fixtures';
 
@@ -71,11 +72,13 @@ const TITLE_PATTERNS = [
   `${CITIZEN_TITLE_PREFIX}%`,
   // Export fixtures use the same ticket retirement; audit rows stay intact.
   'E2E export private title%',
+  'E2E reporting fixture%',
 ];
 // Closed fixture tickets a run may leave Resolved, retired like the active
 // ones: the step 3g feedback ticket, the step 5c resolution tickets and
 // (Phase 6, step 6b) the citizen report page's Resolved tickets.
 const RESOLVED_TITLE_PATTERNS = [
+  'E2E reporting fixture%',
   `${FEEDBACK_TITLE_PREFIX}%`,
   `${RESOLUTION_TITLE_PREFIX}%`,
   `${CITIZEN_TITLE_PREFIX}%`,
@@ -1169,11 +1172,13 @@ async function create() {
       ownTrackingReference: await trackingReferenceOf(referredReportId),
     };
 
+    const newExports = await insertNewExportFixtures(tx);
     const exportHardening = await insertExportFixtures(tx);
     const auditView = await insertAuditViewFixtures(tx);
     return {
       auditView,
       exportHardening,
+      newExports,
       tickets: {
         sharedReadOnly: {
           ticketId: sharedReadOnly.ticketId,

@@ -271,6 +271,18 @@ All exports retain OperationalStaffGuard and the existing own-office clamp; Foca
 
 ---
 
+### 6.4 Additional operational exports (Phase 7, step 7c-2)
+
+Three additional endpoints under `/admin/reports/` retain `AdminSessionGuard`, `OperationalStaffGuard` and `resolveOfficeScope`: operational Personnel in their own office only, never Focal or System Administrator. Every query excludes merged-away tickets. No migration or database column rename is required.
+
+- `submitted-reports.csv`: one row per report, with tracking reference, ticket/status/office/current category, submitted category, barangay, citizen severity, evidence flags, screening status, moderation status and submitted time. No citizen name/email/title/description/photo/EXIF/coordinates or screening remarks are selected.
+- `operational-assessments.csv`: one row per assessed ticket. `operational_assessments.ticket_id` is UNIQUE, so there is no history selection or Assessment Count column. This is the explicit exception for the same office's own assessment text: assessed conditions, safety implications, constraints/notes, recommended action, interim mitigation, reasons, remarks, actual action and supporting staff evidence URL are included, along with the recorded assessor name, ticket resolution fields and four Work Order status counts. Citizen report data, assignee email and Work Order notes remain excluded. Legacy outcomes without resolved_at stay blank, as in the existing ticket export. Physical observed_conditions/temporary_mitigation names remain unchanged; the headers use Assessed Conditions/Interim Mitigation.
+- `priority-incidents.csv`: top N active tickets by stored Operational Priority descending, ties oldest created_at then ticket id. Only Reported/Under Review/In Progress; N defaults to 20 and must be an integer 1-200 (otherwise plain 400). No cutoff score or retired Hazard Urgency value is introduced. The export reads the existing maintained priority value; it does not recompute or persist scores. Hazard Information uses the existing current-location summary; no geometry leaves the query.
+
+Submitted/assessment filters validate status/category and optional submitted barangay. Their dateFrom/dateTo are inclusive Asia/Manila calendar days using the 7b date-bound helper, with an exclusive next-midnight upper bound. SQL receives ISO strings cast to timestamptz, never JS Dates. The original three exports' date behavior and columns are unchanged.
+
+All six exports use the central CSV writer and shared 5,000-row limit. The new heavy queries fetch limit+1 and refuse overflow without truncation; priority output is already bounded to at most 200 rows. Assessment text receives the same formula neutralisation. Serialization precedes required, fail-closed report_exported auditing with the existing export target/actor id convention. New allow-listed kinds are submitted_reports, operational_assessments and priority_incidents; details include rowCount, actual office/status/category code/barangay/date filters and numeric top for priority. Assessment text, URLs and staff/citizen content never enter audit details. The audit label remains Report export, and the view labels top as Top N. All new Reports-page controls reuse ExportDownload and inline server errors.
+
 ## 7. Data separation and privacy
 
 ### 7.1 Internal content never reaches citizens

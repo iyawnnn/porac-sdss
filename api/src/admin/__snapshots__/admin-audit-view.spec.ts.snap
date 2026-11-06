@@ -71,6 +71,9 @@ exports[`audit response privacy boundary strictly pins the complete allow-list 1
       "tickets",
       "flagged",
       "work_orders",
+      "submitted_reports",
+      "operational_assessments",
+      "priority_incidents",
     ],
     "office": [
       "MEO",
@@ -96,6 +99,7 @@ exports[`audit response privacy boundary strictly pins the complete allow-list 1
       "quarantined",
       "duplicate",
     ],
+    "top": "top",
   },
   "report_moderated": {
     "action": [

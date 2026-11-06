@@ -21,6 +21,7 @@ import { WorkOrdersService } from './work-orders.service';
 import { AdminDirectoryController } from './admin-directory.controller';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
+import { ReportExportQueries } from './report-export-queries';
 import { BarangayInsightsController } from './barangay-insights.controller';
 import { BarangayInsightsService } from './barangay-insights.service';
 import { SavedViewsController } from './saved-views.controller';
@@ -83,6 +84,7 @@ import { OperationalAssessmentService } from './operational-assessment.service';
     AdminAccountService,
     WorkOrdersService,
     ReportsService,
+    ReportExportQueries,
     BarangayInsightsService,
     SavedViewsService,
     FocalIntakeService,

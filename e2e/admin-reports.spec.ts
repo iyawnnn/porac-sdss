@@ -11,10 +11,19 @@ function sessionCookieHeader(cookies: { name: string; value: string }[]): Record
 }
 
 function parseCsv(body: string): string[][] {
-  return body
-    .trim()
-    .split("\r\n")
-    .map((line) => line.split(","));
+  const rows: string[][] = [];
+  let row: string[] = [], field = "", quoted = false;
+  for (let index = 0; index < body.length; index++) {
+    const char = body[index];
+    if (char === '"') {
+      if (quoted && body[index + 1] === '"') { field += '"'; index++; }
+      else quoted = !quoted;
+    } else if (char === "," && !quoted) { row.push(field); field = ""; }
+    else if (char === "\n" && !quoted) { row.push(field); rows.push(row); row = []; field = ""; }
+    else if (char !== "\r" || quoted) field += char;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  return rows;
 }
 
 // New fixtures only INSERT; audit events accumulate and are never deleted.
@@ -72,9 +81,9 @@ for (const account of [E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN]) {
 }
 
 for (const account of [E2E_FOCAL_ADMIN, E2E_SYSTEM_ADMIN]) {
-  test(`${account.role} is refused all three export endpoints`, async ({ page }) => {
+  test(`${account.role} is refused all export endpoints`, async ({ page }) => {
     await loginAs(page, account);
-    for (const kind of ["tickets", "flagged", "work-orders"]) {
+    for (const kind of ["tickets", "flagged", "work-orders", "submitted-reports", "operational-assessments", "priority-incidents"]) {
       const response = await page.request.get(`/api/admin/reports/${kind}.csv`);
       expect(response.status()).toBe(403);
       expect(response.headers()["content-disposition"]).toBeUndefined();
@@ -92,6 +101,96 @@ test("work-order export retains notes exclusion and adds cancellation headers", 
 });
 
 // --- Ticket Queue: Export CSV button -------------------------------------
+
+type NewExportFixture = { office: string; ticketIds: number[]; reportIds: number[]; references: string[]; assessedConditions: string; citizenName: string };
+const newExportFixtures = process.env.E2E_GROUPING_FIXTURES
+  ? (JSON.parse(process.env.E2E_GROUPING_FIXTURES) as { newExports: NewExportFixture[] }).newExports : [];
+
+async function downloadRows(page: import('@playwright/test').Page, name: string) {
+  const pending = page.waitForEvent('download');
+  await page.getByRole('link', { name, exact: true }).click();
+  const download = await pending;
+  const file = await download.path();
+  if (!file) throw new Error('Download file missing');
+  return parseCsv(await readFile(file, 'utf8'));
+}
+
+for (const account of [E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN]) {
+  test(`${account.office} downloads the three new office-scoped exports and MIS sees their safe audit details`, async ({ page }) => {
+    const fixture = newExportFixtures.find(f => f.office === account.office);
+    expect(fixture, 'global setup must insert new export fixtures').toBeTruthy();
+    if (!fixture) throw new Error('Missing new export fixture');
+    await loginAs(page, account);
+    await page.goto('/admin/reports');
+    await settleAdminPage(page, page.getByRole('heading', { name: 'Reports & Exports' }));
+    await page.getByLabel('Submitted from (Manila)', { exact: true }).fill('2001-01-02');
+    await page.getByLabel('Submitted to (Manila)', { exact: true }).fill('2001-01-02');
+    const submitted = await downloadRows(page, 'Export Submitted Reports CSV');
+    expect(submitted[0]).toEqual(['Tracking Reference','Ticket ID','Ticket Status','Assigned Office','Category','Submitted Category','Barangay','Citizen Severity','Evidence Flags','Severity Screening Status','Moderation Status','Submitted At']);
+    for (const row of submitted.slice(1)) expect(row[3]).toBe(account.office);
+    for (const reference of fixture.references.slice(0, 4)) expect(submitted.some(row => row[0] === reference)).toBe(true);
+    expect(submitted.some(row => row[0] === fixture.references[4])).toBe(false);
+    const submittedText = JSON.stringify(submitted);
+    for (const text of [fixture.citizenName, 'E2E reporting fixture', 'PRIVATE_EXPORT_DESCRIPTION', '/uploads/reports/01_poblacion.jpg']) expect(submittedText).not.toContain(text);
+
+    await page.getByLabel('Assessed from (Manila)', { exact: true }).fill('2001-01-02');
+    await page.getByLabel('Assessed to (Manila)', { exact: true }).fill('2001-01-02');
+    const assessments = await downloadRows(page, 'Export Operational Assessments CSV');
+    const assessmentHeaders = assessments[0];
+    expect(assessmentHeaders).toContain('Assessed Conditions'); expect(assessmentHeaders).toContain('Interim Mitigation');
+    expect(assessmentHeaders).not.toContain('Observed Conditions'); expect(assessmentHeaders).not.toContain('Temporary Mitigation');
+    expect(assessmentHeaders).not.toContain('Assessment Count');
+    for (const row of assessments.slice(1)) expect(row[1]).toBe(account.office);
+    const ownAssessment = assessments.find(row => row[0] === String(fixture.ticketIds[0]));
+    expect(ownAssessment).toBeTruthy();
+    expect(ownAssessment?.[assessmentHeaders.indexOf('Assessed Conditions')]).toBe(fixture.assessedConditions);
+    expect(ownAssessment?.[assessmentHeaders.indexOf('Interim Mitigation')]).toBe('Fixture interim mitigation');
+    expect(ownAssessment?.slice(-4)).toEqual(['1','1','1','1']);
+    expect(JSON.stringify(assessments)).not.toContain('PRIVATE_WORK_ORDER_NOTE');
+
+    const top = page.getByLabel('Top N', { exact: true });
+    await expect(top).toHaveValue('20'); await expect(top).toHaveAttribute('min','1'); await expect(top).toHaveAttribute('max','200');
+    await top.fill('1');
+    const first = await downloadRows(page, 'Export Priority Incidents CSV');
+    expect(first[0]).toEqual(['Rank','Ticket ID','Status','Assigned Office','Operational Priority','Category','Hazard Information','Barangay','Report Count','Created At','Updated At']);
+    expect(first).toHaveLength(2); expect(first[1][0]).toBe('1'); expect(first[1][3]).toBe(account.office);
+    await top.fill('2');
+    const second = await downloadRows(page, 'Export Priority Incidents CSV');
+    expect(second).toHaveLength(3); expect(second[1][1]).toBe(first[1][1]); expect(second[2][0]).toBe('2');
+    for (const row of second.slice(1)) { expect(row[3]).toBe(account.office); expect(['Reported','Under Review','In Progress']).toContain(row[2]); }
+    expect(Number(second[1][4])).toBeGreaterThanOrEqual(Number(second[2][4]));
+    const allPriority = await page.request.get('/api/admin/reports/priority-incidents.csv?top=200');
+    expect(allPriority.ok()).toBe(true);
+    const priorityRows = parseCsv(await allPriority.text());
+    for (const id of fixture.ticketIds.slice(2)) expect(priorityRows.slice(1).some(row => row[1] === String(id))).toBe(false);
+
+    await page.context().clearCookies();
+    await loginAs(page, E2E_SYSTEM_ADMIN);
+    await page.goto('/admin/activity-log?actionType=report_exported&targetType=export');
+    await settleAdminPage(page, page.getByRole('heading', { name: 'Activity Log' }));
+    for (const kind of ['submitted_reports','operational_assessments','priority_incidents']) {
+      const event = page.getByRole('row').filter({ hasText: 'Report export' }).filter({ hasText: kind }).first();
+      await expect(event).toBeVisible(); await expect(event).toContainText('Office: ' + account.office);
+    }
+    const response = await page.request.get('/api/admin/activity-log?actionType=report_exported&targetType=export&limit=100');
+    const audit = await response.json() as { events: { details: { kind: string; office: string; top?: number } }[] };
+    for (const kind of ['submitted_reports','operational_assessments','priority_incidents']) expect(audit.events.some(e => e.details.kind === kind && e.details.office === account.office)).toBe(true);
+    expect(audit.events.some(e => e.details.kind === 'priority_incidents' && e.details.top === 2)).toBe(true);
+    expect(JSON.stringify(audit)).not.toContain(fixture.assessedConditions);
+  });
+}
+
+test('invalid priority Top N shows the server message inline without a download', async ({ page }) => {
+  await loginAs(page, E2E_MEO_ADMIN);
+  await page.goto('/admin/reports');
+  await settleAdminPage(page, page.getByRole('heading', { name: 'Reports & Exports' }));
+  await page.getByLabel('Top N', { exact: true }).fill('0');
+  let downloaded = false;
+  page.on('download', () => { downloaded = true; });
+  await page.getByRole('link', { name: 'Export Priority Incidents CSV', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Top N must be an integer from 1 to 200.' })).toBeVisible();
+  expect(downloaded).toBe(false);
+});
 
 test("Ticket Queue has an Export CSV button whose href includes the current filters", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
