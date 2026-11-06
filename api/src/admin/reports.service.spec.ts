@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import type { ReportExportQueries } from './report-export-queries';
 import { ReportsService } from './reports.service';
 import type { TicketsService } from './tickets.service';
 import type { WorkOrdersService } from './work-orders.service';
@@ -61,6 +62,7 @@ function makeService(
       workOrders,
       moderation,
       audit as unknown as AdminAuditService,
+      {} as ReportExportQueries,
     ),
     tickets,
     workOrders,

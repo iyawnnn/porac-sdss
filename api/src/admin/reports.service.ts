@@ -3,6 +3,12 @@ import type { AdminSession } from '../auth/session.service';
 import { toCsv } from '../common/utils/csv';
 import { AdminAuditService } from './admin-audit.service';
 import { auditDetails } from './admin-audit-view';
+import {
+  ReportExportQueries,
+  parseReportExportFilters,
+  parseExportTop,
+} from './report-export-queries';
+import { resolveOfficeScope } from '../common/authz/admin-scope';
 import { assertExportLimit } from './export-limit';
 import { TicketsService } from './tickets.service';
 import { ModerationService } from './moderation.service';
@@ -65,6 +71,7 @@ export class ReportsService {
     private readonly workOrders: WorkOrdersService,
     private readonly moderation: ModerationService,
     private readonly audit: AdminAuditService,
+    private readonly exportQueries: ReportExportQueries,
   ) {}
 
   // Reuses TicketsService.parseTicketQuery / WorkOrdersService.parseQuery
@@ -242,9 +249,149 @@ export class ReportsService {
     return csv;
   }
 
+  async submittedReportsCsv(
+    query: Record<string, string | undefined>,
+    admin: AdminSession,
+  ): Promise<string> {
+    const filters = parseReportExportFilters(query, admin, true);
+    const rows = await this.exportQueries.submitted(filters);
+    assertExportLimit(rows);
+    const csv = toCsv(rows, [
+      { header: 'Tracking Reference', value: (r) => r.tracking_reference },
+      { header: 'Ticket ID', value: (r) => r.ticket_id },
+      { header: 'Ticket Status', value: (r) => r.status },
+      { header: 'Assigned Office', value: (r) => r.assigned_office },
+      { header: 'Category', value: (r) => r.category },
+      { header: 'Submitted Category', value: (r) => r.submitted_category },
+      { header: 'Barangay', value: (r) => r.barangay_name },
+      { header: 'Citizen Severity', value: (r) => r.citizen_severity },
+      { header: 'Evidence Flags', value: (r) => r.flags.join('; ') },
+      {
+        header: 'Severity Screening Status',
+        value: (r) => r.severity_screening_status,
+      },
+      {
+        header: 'Moderation Status',
+        value: (r) => r.moderation_status ?? 'pending',
+      },
+      {
+        header: 'Submitted At',
+        value: (r) => new Date(r.created_at).toISOString(),
+      },
+    ]);
+    await this.auditExport(admin, 'submitted_reports', rows.length, filters);
+    return csv;
+  }
+
+  async operationalAssessmentsCsv(
+    query: Record<string, string | undefined>,
+    admin: AdminSession,
+  ): Promise<string> {
+    const filters = parseReportExportFilters(query, admin);
+    const rows = await this.exportQueries.assessments(filters);
+    assertExportLimit(rows);
+    const csv = toCsv(rows, [
+      { header: 'Ticket ID', value: (r) => r.ticket_id },
+      { header: 'Assigned Office', value: (r) => r.assigned_office },
+      { header: 'Category', value: (r) => r.category },
+      { header: 'Ticket Status', value: (r) => r.status },
+      { header: 'Operational Priority', value: (r) => r.priority_index },
+      {
+        header: 'Resolution Outcome',
+        value: (r) => (r.resolved_at ? r.resolution_outcome : null),
+      },
+      {
+        header: 'Resolved At',
+        value: (r) => r.resolved_at && new Date(r.resolved_at).toISOString(),
+      },
+      {
+        header: 'Assessed At',
+        value: (r) => new Date(r.assessed_at).toISOString(),
+      },
+      { header: 'Assessed By', value: (r) => r.assessed_by_name },
+      { header: 'Assessed Conditions', value: (r) => r.observed_conditions },
+      { header: 'Safety Implications', value: (r) => r.safety_implications },
+      {
+        header: 'Operational Constraints',
+        value: (r) => r.operational_constraints.join('; '),
+      },
+      {
+        header: 'Constraint Notes',
+        value: (r) =>
+          Object.entries(r.operational_constraint_notes)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, note]) => `${key}: ${note}`)
+            .join('; '),
+      },
+      { header: 'Recommended Action', value: (r) => r.recommended_action },
+      { header: 'Interim Mitigation', value: (r) => r.temporary_mitigation },
+      { header: 'Deferment Reason', value: (r) => r.deferment_reason },
+      { header: 'Referral Reason', value: (r) => r.referral_reason },
+      { header: 'Remarks', value: (r) => r.remarks },
+      { header: 'Actual Action', value: (r) => r.actual_action },
+      {
+        header: 'Supporting Evidence URL',
+        value: (r) => r.supporting_evidence_url,
+      },
+      { header: 'Work Orders Pending', value: (r) => r.pending },
+      { header: 'Work Orders In Progress', value: (r) => r.in_progress },
+      { header: 'Work Orders Completed', value: (r) => r.completed },
+      { header: 'Work Orders Cancelled', value: (r) => r.cancelled },
+    ]);
+    await this.auditExport(
+      admin,
+      'operational_assessments',
+      rows.length,
+      filters,
+    );
+    return csv;
+  }
+
+  async priorityIncidentsCsv(
+    query: Record<string, string | undefined>,
+    admin: AdminSession,
+  ): Promise<string> {
+    const office = resolveOfficeScope(admin, undefined);
+    const top = parseExportTop(query.top);
+    const rows = await this.exportQueries.priority(office, top);
+    assertExportLimit(rows);
+    const ranked = rows.map((row, index) => ({ ...row, rank: index + 1 }));
+    const csv = toCsv(ranked, [
+      { header: 'Rank', value: (r) => r.rank },
+      { header: 'Ticket ID', value: (r) => r.ticket_id },
+      { header: 'Status', value: (r) => r.status },
+      { header: 'Assigned Office', value: (r) => r.assigned_office },
+      { header: 'Operational Priority', value: (r) => r.priority_index },
+      { header: 'Category', value: (r) => r.category },
+      { header: 'Hazard Information', value: (r) => r.hazard_summary },
+      { header: 'Barangay', value: (r) => r.barangay_name },
+      { header: 'Report Count', value: (r) => r.member_count },
+      {
+        header: 'Created At',
+        value: (r) => new Date(r.created_at).toISOString(),
+      },
+      {
+        header: 'Updated At',
+        value: (r) => new Date(r.updated_at).toISOString(),
+      },
+    ]);
+    await this.auditExport(admin, 'priority_incidents', rows.length, {
+      office,
+      status: 'active',
+      top,
+    });
+    return csv;
+  }
+
   private async auditExport(
     admin: AdminSession,
-    kind: 'tickets' | 'flagged' | 'work_orders',
+    kind:
+      | 'tickets'
+      | 'flagged'
+      | 'work_orders'
+      | 'submitted_reports'
+      | 'operational_assessments'
+      | 'priority_incidents',
     rowCount: number,
     filters: Record<string, unknown>,
   ): Promise<void> {

@@ -82,6 +82,8 @@ Five batches of work, each with its own PR against `main`, plus a sixth integrat
 
 ## 3. Recently Completed Operational Features
 
+**Phase 7, step 7c-2 implemented:** Submitted Reports, Operational Assessments and Priority Incidents exports, with own-office operational-Personnel guards, merged-away exclusion, shared limits/writer/download errors and fail-closed report_exported auditing. UNIQUE(ticket_id) gives one current assessment; manuscript headers retain Assessed Conditions/Interim Mitigation without physical renames. Submitted/assessed filters use validated Manila days; priority defaults to top 20 (1-200), active only, deterministic score/age/id order. No migration or changes to existing export behavior. Unit/PGlite/mutation verification is recorded in docs/testing.md; browser verification remains a separate user-run step.
+
 **7c-1 Playwright follow-up (2026-11-06):** one full run completed with 292 passed / 4 failed / 0 skipped and exactly 15 citizen report submission events. Failures were the new audit action invalidating a fixed fixture count, the two new export tests retaining a staff session before MIS login, and an old Work Order CSV header expectation. Those test expectations/session transitions are corrected without application, shared helper or timeout changes. Export fixtures also join the existing ticket retirement prefix list after two were found active post-teardown. The dirty disposable copy was left intact; reset phase2-test before a rerun. Activity Log export-detail assertions remain pending that rerun. See docs/testing.md for evidence; no push.
 
 ### Manuscript revision Phase 7, step 7b-2 - audit view - **implemented; browser verification is a separate user-run step**

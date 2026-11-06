@@ -10,12 +10,10 @@ function csvFilename(prefix: string): string {
   return `${prefix}-${new Date().toISOString().slice(0, 10)}.csv`;
 }
 
-// Read-only CSV export over data the caller could already see via
-// GET /admin/tickets, GET /admin/work-orders and GET /admin/moderation —
-// same AdminSessionGuard, same office scoping (resolveOfficeScope, applied
-// inside TicketsService.parseTicketQuery / WorkOrdersService.parseQuery /
-// ModerationService.parseModerationQuery), just reshaped as a downloadable
-// file instead of a paginated JSON response.
+// Office-scoped CSVs over the caller's operational lists and ticket details.
+// Original exports delegate their list parsers; the additional exports use
+// validated calendar-day filters with the same resolveOfficeScope clamp.
+// No attachment headers are set until serialization and required audit pass.
 @UseGuards(AdminSessionGuard, OperationalStaffGuard)
 @Controller('admin/reports')
 export class ReportsController {
@@ -59,6 +57,47 @@ export class ReportsController {
     res.set({
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="${csvFilename('work-orders')}"`,
+    });
+    return csv;
+  }
+  @Get('submitted-reports.csv')
+  async submittedReportsCsv(
+    @Query() query: Record<string, string | undefined>,
+    @CurrentAdmin() admin: AdminSession,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.reports.submittedReportsCsv(query, admin);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${csvFilename('submitted-reports')}"`,
+    });
+    return csv;
+  }
+
+  @Get('operational-assessments.csv')
+  async operationalAssessmentsCsv(
+    @Query() query: Record<string, string | undefined>,
+    @CurrentAdmin() admin: AdminSession,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.reports.operationalAssessmentsCsv(query, admin);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${csvFilename('operational-assessments')}"`,
+    });
+    return csv;
+  }
+
+  @Get('priority-incidents.csv')
+  async priorityIncidentsCsv(
+    @Query() query: Record<string, string | undefined>,
+    @CurrentAdmin() admin: AdminSession,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.reports.priorityIncidentsCsv(query, admin);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${csvFilename('priority-incidents')}"`,
     });
     return csv;
   }
