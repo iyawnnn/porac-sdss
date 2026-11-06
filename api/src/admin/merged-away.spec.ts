@@ -50,15 +50,13 @@ describe('merged-away tickets are left out of lists, counts and recalculation', 
     );
   });
 
-  it('the CSV export lists them only for status=all, with a Merged into value', () => {
+  it('the CSV export excludes merged-away tickets even for status=all', () => {
     const exportQuery = between(
       tickets,
       'async getTicketsForExport(',
       'async getTicketsGeo(',
     );
-    expect(exportQuery).toContain(
-      "AND (t.merged_into_ticket_id IS NULL OR ${status} = 'all')",
-    );
+    expect(exportQuery).toContain('AND t.merged_into_ticket_id IS NULL');
     expect(exportQuery).toContain('t.merged_into_ticket_id');
     expect(read('admin', 'reports.service.ts')).toContain(
       "{ header: 'Merged into', value: (r) => r.merged_into_ticket_id }",

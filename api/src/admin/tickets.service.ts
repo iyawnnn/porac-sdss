@@ -1,3 +1,4 @@
+import { EXPORT_ROW_LIMIT, assertExportLimit } from './export-limit';
 import {
   BadRequestException,
   ConflictException,
@@ -684,9 +685,7 @@ export class TicketsService {
     };
   }
 
-  // ponytail: capped at 5,000 rows rather than streamed/paginated — fine at
-  // this LGU's current ticket volume; revisit with a cursor/streaming CSV
-  // writer if a real municipality-scale dataset ever needs a bigger export.
+  // Fetch one extra row so overflow is refused, never silently truncated.
   async getTicketsForExport(
     filters: AdminTicketFilters & {
       dateFrom?: Date;
@@ -730,9 +729,7 @@ export class TicketsService {
       JOIN barangays b ON b.id = t.barangay_id
       WHERE (${filters.office ?? null}::text IS NULL OR t.assigned_office = ${filters.office ?? null}::office)
         ${statusClause}
-        -- Merged-away tickets only in the historical (status=all) export,
-        -- where the "Merged into" column says where their reports went.
-        AND (t.merged_into_ticket_id IS NULL OR ${status} = 'all')
+        AND t.merged_into_ticket_id IS NULL
         AND (${filters.category ?? null}::text IS NULL OR t.category = ${filters.category ?? null})
         AND (${filters.barangayId ?? null}::int IS NULL OR t.barangay_id = ${filters.barangayId ?? null}::int)
         AND (${filters.categoryReview ? true : null}::boolean IS NULL OR t.category_review_required)
@@ -748,8 +745,9 @@ export class TicketsService {
           )
         )
       ORDER BY t.created_at DESC
-      LIMIT 5000
+      LIMIT ${EXPORT_ROW_LIMIT + 1}
     `;
+    assertExportLimit(rows);
     return rows.map(withHazardSummary);
   }
 

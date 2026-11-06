@@ -1,3 +1,4 @@
+import { EXPORT_ROW_LIMIT, assertExportLimit } from './export-limit';
 import {
   BadRequestException,
   Inject,
@@ -6,7 +7,10 @@ import {
 } from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
-import { ALL_CATEGORIES, MODERATION_NOTE_MAX_LENGTH } from '../contracts/schemas';
+import {
+  ALL_CATEGORIES,
+  MODERATION_NOTE_MAX_LENGTH,
+} from '../contracts/schemas';
 import type { AdminSession } from '../auth/session.service';
 import {
   resolveOfficeScope,
@@ -74,11 +78,10 @@ export interface PaginatedModeration {
 export interface ModerationExportRow {
   id: number;
   ticket_id: number;
-  title: string;
+  tracking_reference: string;
   category: string;
   barangay_name: string;
   assigned_office: 'MEO' | 'MDRRMO';
-  citizen_name: string;
   citizen_severity: string;
   flags: string[];
   location_mismatch_m: number | null;
@@ -260,18 +263,18 @@ export class ModerationService {
     // other predicate, never a way to name ids outside that scope.
     const ids = filters.ids?.length ? filters.ids : null;
 
-    return sql<ModerationExportRow[]>`
+    const rows = await sql<ModerationExportRow[]>`
       SELECT
-        r.id, r.ticket_id, r.title, r.citizen_severity, r.flags,
+        r.id, r.ticket_id, r.tracking_reference, r.citizen_severity, r.flags,
         r.location_mismatch_m, r.created_at,
         r.moderation_status, r.moderated_by, r.moderated_at,
-        t.category, t.assigned_office, b.name AS barangay_name,
-        (c.first_name || ' ' || c.last_name) AS citizen_name
+        t.category, t.assigned_office, b.name AS barangay_name
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
       JOIN citizens c ON c.id = r.citizen_id
       WHERE r.flags IS NOT NULL AND array_length(r.flags, 1) > 0
+        AND t.merged_into_ticket_id IS NULL
         ${statusClause}
         ${flagClause}
         AND (${ids}::int[] IS NULL OR r.id = ANY(${ids}::int[]))
@@ -287,7 +290,10 @@ export class ModerationService {
           OR c.last_name ILIKE '%' || ${search} || '%'
         )
       ORDER BY r.created_at DESC
+      LIMIT ${EXPORT_ROW_LIMIT + 1}
     `;
+    assertExportLimit(rows);
+    return rows;
   }
 
   async getModerationStats(

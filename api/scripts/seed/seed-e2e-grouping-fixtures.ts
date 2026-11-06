@@ -1,4 +1,5 @@
 import { sql } from '../db';
+import { insertExportFixtures } from '../lib/export-fixtures';
 import { insertAuditViewFixtures } from '../lib/audit-view-fixtures';
 
 // Playwright fixtures for the staff Merge / Remove / Regroup spec
@@ -68,6 +69,8 @@ const TITLE_PATTERNS = [
   `${RESOLUTION_TITLE_PREFIX}%`,
   `${TICKET_TITLE_PREFIX}%`,
   `${CITIZEN_TITLE_PREFIX}%`,
+  // Export fixtures use the same ticket retirement; audit rows stay intact.
+  'E2E export private title%',
 ];
 // Closed fixture tickets a run may leave Resolved, retired like the active
 // ones: the step 3g feedback ticket, the step 5c resolution tickets and
@@ -1166,9 +1169,11 @@ async function create() {
       ownTrackingReference: await trackingReferenceOf(referredReportId),
     };
 
+    const exportHardening = await insertExportFixtures(tx);
     const auditView = await insertAuditViewFixtures(tx);
     return {
       auditView,
+      exportHardening,
       tickets: {
         sharedReadOnly: {
           ticketId: sharedReadOnly.ticketId,

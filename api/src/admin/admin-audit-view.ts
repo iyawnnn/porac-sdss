@@ -18,8 +18,45 @@ const outcome = ['MUNICIPAL_ACTION_COMPLETED', 'EXTERNAL_REFERRAL'];
 // response values, ids of assignees, coordinates, or free text. Category
 // names are converted from the known category list to stable short codes.
 type Rule =
-  readonly string[] | 'boolean' | 'count' | 'category' | 'array_count';
+  | readonly string[]
+  | 'boolean'
+  | 'count'
+  | 'category'
+  | 'category_code'
+  | 'date'
+  | 'array_count';
 export const AUDIT_DETAIL_ALLOWLIST = {
+  report_exported: {
+    kind: ['tickets', 'flagged', 'work_orders'],
+    rowCount: 'count',
+    office,
+    status: [
+      ...status,
+      ...workStatus,
+      'all',
+      'active',
+      'dismissed',
+      'quarantined',
+      'duplicate',
+    ],
+    category: 'category_code',
+    barangayId: 'count',
+    categoryReview: 'boolean',
+    overdue: 'boolean',
+    flag: [
+      'LOCATION_MISMATCH',
+      'STALE_EVIDENCE',
+      'MISSING_METADATA',
+      'TIMESTAMP_ANOMALY',
+      'DUPLICATE_IMAGE',
+      'BOUNDARY_FALLBACK',
+    ],
+    dateFrom: 'date',
+    dateTo: 'date',
+    searchApplied: 'boolean',
+    assigneeFiltered: 'boolean',
+    selectionCount: 'count',
+  },
   admin_created: { accountType: account, isFocal: 'boolean', office },
   admin_role_updated: {
     'from.accountType': account,
@@ -174,6 +211,22 @@ export function auditDetails(
     )
       details.moved_reports_count = value.length;
     else if (
+      rule === 'date' &&
+      typeof value === 'string' &&
+      /^(?:\d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)$/.test(
+        value,
+      ) &&
+      Number.isFinite(Date.parse(value))
+    )
+      details[key] = value;
+    else if (
+      rule === 'category_code' &&
+      typeof value === 'string' &&
+      (Object.hasOwn(CATEGORY_CODES, value) ||
+        Object.values(CATEGORY_CODES).includes(value))
+    )
+      details[key] = CATEGORY_CODES[value] ?? value;
+    else if (
       rule === 'category' &&
       typeof value === 'string' &&
       Object.hasOwn(CATEGORY_CODES, value)
@@ -192,9 +245,13 @@ export function auditDetails(
 }
 
 export function auditItem(row: AuditStoredRow): AdminAuditItem {
-  const targetType = ['admin', 'ticket', 'report', 'work_order'].includes(
-    row.target_type,
-  )
+  const targetType = [
+    'admin',
+    'ticket',
+    'report',
+    'work_order',
+    'export',
+  ].includes(row.target_type)
     ? (row.target_type as AdminAuditItem['target_type'])
     : 'unknown';
   const isFocal =
@@ -219,6 +276,7 @@ export function auditItem(row: AuditStoredRow): AdminAuditItem {
     work_order: 'Work order',
     admin: 'Staff',
     unknown: 'Target',
+    export: 'Export by staff',
   };
   return {
     id: row.id,

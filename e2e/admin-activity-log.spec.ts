@@ -126,12 +126,13 @@ test("Manila date and actor/target filters isolate this run while prior audit ro
   const headers = authHeaders(await page.context().cookies());
   const params = new URLSearchParams({ targetType: "ticket", targetId: String(fixture!.targetId), actorAdminId: String(fixture!.actorId), from: "2026-11-05", to: "2026-11-05", limit: "100" });
   const first = await (await request.get(`/api/admin/activity-log?${params}`, { headers })).json() as PaginatedAdminAudit;
-  expect(first.total).toBe(30);
+  const expectedCount = AUDIT_ACTIONS.length;
+  expect(first.total).toBe(expectedCount);
   expect(first.events.every(e => e.created_at === "2026-11-05T15:59:00.000Z" && e.target_id === fixture!.targetId && e.actor.id === fixture!.actorId)).toBe(true);
   await page.goto(`/admin/activity-log?${params}`);
   await settleAdminPage(page, page.getByRole("heading", { name: "Activity Log", exact: true }));
   await expect(page.getByText("Dates: Asia/Manila")).toBeVisible();
-  await expect(page.getByText("Showing 1–30 of 30 events")).toBeVisible();
+  await expect(page.getByText(`Showing 1–${expectedCount} of ${expectedCount} events`)).toBeVisible();
   // Clear the upper day first, avoiding a transient reversed date range.
   await page.getByLabel("To date").fill("");
   await page.getByLabel("From date").fill("2026-11-06");

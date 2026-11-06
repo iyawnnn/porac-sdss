@@ -17,6 +17,7 @@ import { AdminErrorCard } from "../shared/AdminErrorCard";
 import { EmptyState } from "../shared/EmptyState";
 
 const TARGET_LABELS: Record<AdminAuditTargetType, string> = {
+  export: "Export",
   admin: "Admin",
   ticket: "Ticket",
   report: "Report",
@@ -94,7 +95,7 @@ function detailsText(details: PaginatedAdminAudit["events"][number]["details"]) 
       used.add(from); used.add(to);
     }
   }
-  const labels: Record<string, string> = { sessionsEnded: "Sessions ended", office: "Office", accountType: "Account type", isFocal: "Focal", officeChanged: "Office changed", outcome: "Outcome", previousOutcome: "Previous outcome", action: "Decision", assignedOffice: "Assigned office", hasDueDate: "Has due date", moved_reports_count: "Reports moved" };
+  const labels: Record<string, string> = { kind: "Export kind", rowCount: "Rows", status: "Status", category: "Category", barangayId: "Barangay ID", categoryReview: "Category review", overdue: "Overdue", flag: "Flag", dateFrom: "From", dateTo: "To", searchApplied: "Search applied", assigneeFiltered: "Assignee filter applied", selectionCount: "Selected rows", sessionsEnded: "Sessions ended", office: "Office", accountType: "Account type", isFocal: "Focal", officeChanged: "Office changed", outcome: "Outcome", previousOutcome: "Previous outcome", action: "Decision", assignedOffice: "Assigned office", hasDueDate: "Has due date", moved_reports_count: "Reports moved" };
   for (const [key, value] of Object.entries(details)) if (!used.has(key) && key in labels) entries.push(labels[key] + ": " + show(value));
   return entries.join("; ") || "Not recorded";
 }

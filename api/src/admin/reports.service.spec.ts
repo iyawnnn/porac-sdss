@@ -3,6 +3,11 @@ import { ReportsService } from './reports.service';
 import type { TicketsService } from './tickets.service';
 import type { WorkOrdersService } from './work-orders.service';
 import type { ModerationService } from './moderation.service';
+import type {
+  AdminAuditService,
+  LogAdminAuditInput,
+} from './admin-audit.service';
+import { EXPORT_LIMIT_MESSAGE, EXPORT_ROW_LIMIT } from './export-limit';
 import type { AdminSession } from '../auth/session.service';
 
 const MEO_OFFICER: AdminSession = {
@@ -14,30 +19,49 @@ const MEO_OFFICER: AdminSession = {
   isFocal: false,
 };
 
-function makeService(overrides: {
-  parseTicketQuery?: jest.Mock;
-  getTicketsForExport?: jest.Mock;
-  parseQuery?: jest.Mock;
-  getWorkOrdersForExport?: jest.Mock;
-  parseModerationQuery?: jest.Mock;
-  getModerationForExport?: jest.Mock;
-} = {}) {
+function makeService(
+  overrides: {
+    parseTicketQuery?: jest.Mock;
+    getTicketsForExport?: jest.Mock;
+    parseQuery?: jest.Mock;
+    getWorkOrdersForExport?: jest.Mock;
+    parseModerationQuery?: jest.Mock;
+    getModerationForExport?: jest.Mock;
+  } = {},
+) {
   const tickets = {
-    parseTicketQuery: overrides.parseTicketQuery ?? jest.fn().mockReturnValue({ office: 'MEO' }),
-    getTicketsForExport: overrides.getTicketsForExport ?? jest.fn().mockResolvedValue([]),
+    parseTicketQuery:
+      overrides.parseTicketQuery ??
+      jest.fn().mockReturnValue({ office: 'MEO' }),
+    getTicketsForExport:
+      overrides.getTicketsForExport ?? jest.fn().mockResolvedValue([]),
   } as unknown as TicketsService;
   const workOrders = {
-    parseQuery: overrides.parseQuery ?? jest.fn().mockReturnValue({ office: 'MEO' }),
-    getWorkOrdersForExport: overrides.getWorkOrdersForExport ?? jest.fn().mockResolvedValue([]),
+    parseQuery:
+      overrides.parseQuery ?? jest.fn().mockReturnValue({ office: 'MEO' }),
+    getWorkOrdersForExport:
+      overrides.getWorkOrdersForExport ?? jest.fn().mockResolvedValue([]),
   } as unknown as WorkOrdersService;
   const moderation = {
     parseModerationQuery:
-      overrides.parseModerationQuery ?? jest.fn().mockReturnValue({ office: 'MEO' }),
+      overrides.parseModerationQuery ??
+      jest.fn().mockReturnValue({ office: 'MEO' }),
     getModerationForExport:
       overrides.getModerationForExport ?? jest.fn().mockResolvedValue([]),
   } as unknown as ModerationService;
+  const audit = {
+    logRequired: jest
+      .fn<Promise<void>, [LogAdminAuditInput]>()
+      .mockResolvedValue(undefined),
+  };
   return {
-    service: new ReportsService(tickets, workOrders, moderation),
+    audit,
+    service: new ReportsService(
+      tickets,
+      workOrders,
+      moderation,
+      audit as unknown as AdminAuditService,
+    ),
     tickets,
     workOrders,
     moderation,
@@ -48,34 +72,47 @@ describe('ReportsService.parseDateRange', () => {
   const { service } = makeService();
 
   it('returns undefined for both bounds when neither is given', () => {
-    expect(service.parseDateRange({})).toEqual({ dateFrom: undefined, dateTo: undefined });
+    expect(service.parseDateRange({})).toEqual({
+      dateFrom: undefined,
+      dateTo: undefined,
+    });
   });
 
   it('parses valid ISO date strings', () => {
-    const range = service.parseDateRange({ dateFrom: '2026-01-01', dateTo: '2026-01-31' });
+    const range = service.parseDateRange({
+      dateFrom: '2026-01-01',
+      dateTo: '2026-01-31',
+    });
     expect(range.dateFrom).toEqual(new Date('2026-01-01'));
     expect(range.dateTo).toEqual(new Date('2026-01-31'));
   });
 
   it('rejects an unparseable date string', () => {
-    expect(() => service.parseDateRange({ dateFrom: 'not-a-date' })).toThrow(BadRequestException);
+    expect(() => service.parseDateRange({ dateFrom: 'not-a-date' })).toThrow(
+      BadRequestException,
+    );
   });
 
   it('rejects a dateFrom that is after dateTo', () => {
-    expect(() => service.parseDateRange({ dateFrom: '2026-02-01', dateTo: '2026-01-01' })).toThrow(
-      BadRequestException,
-    );
+    expect(() =>
+      service.parseDateRange({ dateFrom: '2026-02-01', dateTo: '2026-01-01' }),
+    ).toThrow(BadRequestException);
   });
 });
 
 describe('ReportsService.ticketsCsv', () => {
   it('delegates filter parsing (and office scoping) to TicketsService.parseTicketQuery', async () => {
-    const parseTicketQuery = jest.fn().mockReturnValue({ office: 'MEO', status: 'active' });
+    const parseTicketQuery = jest
+      .fn()
+      .mockReturnValue({ office: 'MEO', status: 'active' });
     const { service, tickets } = makeService({ parseTicketQuery });
 
     await service.ticketsCsv({ category: 'Pothole' }, MEO_OFFICER);
 
-    expect(parseTicketQuery).toHaveBeenCalledWith({ category: 'Pothole' }, MEO_OFFICER);
+    expect(parseTicketQuery).toHaveBeenCalledWith(
+      { category: 'Pothole' },
+      MEO_OFFICER,
+    );
     expect(tickets.getTicketsForExport).toHaveBeenCalledWith(
       expect.objectContaining({ office: 'MEO', status: 'active' }),
     );
@@ -182,13 +219,17 @@ describe('ReportsService.ticketsCsv', () => {
   // Manuscript revision Phase 1, step 4: no Hazard Urgency column or value
   // in the ticket export.
   it('has no Hazard Urgency column', async () => {
-    const { service } = makeService({ getTicketsForExport: jest.fn().mockResolvedValue([]) });
+    const { service } = makeService({
+      getTicketsForExport: jest.fn().mockResolvedValue([]),
+    });
     const header = (await service.ticketsCsv({}, MEO_OFFICER)).trim();
     expect(header).not.toMatch(/urgency/i);
   });
 
   it('produces just a header row when there are no matching tickets', async () => {
-    const { service } = makeService({ getTicketsForExport: jest.fn().mockResolvedValue([]) });
+    const { service } = makeService({
+      getTicketsForExport: jest.fn().mockResolvedValue([]),
+    });
     const csv = await service.ticketsCsv({}, MEO_OFFICER);
     expect(csv.trim().split('\r\n')).toHaveLength(1);
   });
@@ -275,7 +316,9 @@ describe('ReportsService.workOrdersCsv', () => {
   });
 
   it('produces just a header row when there are no matching work orders', async () => {
-    const { service } = makeService({ getWorkOrdersForExport: jest.fn().mockResolvedValue([]) });
+    const { service } = makeService({
+      getWorkOrdersForExport: jest.fn().mockResolvedValue([]),
+    });
     const csv = await service.workOrdersCsv({}, MEO_OFFICER);
     expect(csv.trim().split('\r\n')).toHaveLength(1);
   });
@@ -326,9 +369,9 @@ describe('ReportsService.flaggedCsv', () => {
   it('rejects a malformed id list', async () => {
     const { service } = makeService();
 
-    await expect(service.flaggedCsv({ ids: '211,abc' }, MEO_OFFICER)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.flaggedCsv({ ids: '211,abc' }, MEO_OFFICER),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('renders flagged rows into stable CSV columns', async () => {
@@ -336,7 +379,8 @@ describe('ReportsService.flaggedCsv', () => {
       {
         id: 211,
         ticket_id: 1036,
-        title: 'Lahar / Debris-Flow Threat in Sapang Uwak',
+        tracking_reference: 'PORAC-2026-211',
+        title: 'PRIVATE_TITLE',
         category: 'Lahar / Debris-Flow Threat',
         barangay_name: 'Sapang Uwak',
         assigned_office: 'MDRRMO',
@@ -355,7 +399,12 @@ describe('ReportsService.flaggedCsv', () => {
     const csv = await service.flaggedCsv({}, MEO_OFFICER);
     const [header, row] = csv.trim().split('\r\n');
 
-    expect(header).toContain('Report ID');
+    expect(header).toBe(
+      'Report ID,Ticket ID,Tracking Reference,Category,Barangay,Assigned Office,Citizen Severity,Flags,Location Mismatch (m),Moderation Status,Moderated By,Moderated At,Submitted At',
+    );
+    expect(csv).not.toContain('Maria Santos');
+    expect(csv).not.toContain('PRIVATE_TITLE');
+    expect(row).toContain('PORAC-2026-211');
     expect(header).toContain('Flags');
     expect(row).toContain('211');
     expect(row).toContain('DUPLICATE_IMAGE:96 | LOCATION_MISMATCH');
@@ -403,6 +452,7 @@ describe('ReportsService exports neutralise CSV formula injection', () => {
       {
         id: 211,
         ticket_id: 1036,
+        tracking_reference: 'PORAC-211',
         title: '=cmd|/C calc!A0',
         category: '-Lahar',
         barangay_name: '@Sapang Uwak',
@@ -425,11 +475,10 @@ describe('ReportsService exports neutralise CSV formula injection', () => {
     expect(row.split(',')).toEqual([
       '211',
       '1036',
-      "'=cmd|/C calc!A0",
+      'PORAC-211',
       "'-Lahar",
       "'@Sapang Uwak",
       'MDRRMO',
-      "'+Maria Santos",
       'Critical',
       "'=FLAG",
       '412',
@@ -472,8 +521,155 @@ describe('ReportsService exports neutralise CSV formula injection', () => {
       'false',
       '',
       '2026-01-03T00:00:00.000Z',
+      '',
+      '',
+      '',
       '2026-01-01T00:00:00.000Z',
       '2026-01-02T00:00:00.000Z',
     ]);
+  });
+});
+
+describe('export hardening', () => {
+  const ticket = { id: 1, created_at: '2026-01-01', updated_at: '2026-01-01' };
+  const flagged = {
+    ...ticket,
+    flags: [],
+    tracking_reference: 'PORAC-1',
+    citizen_name: 'PRIVATE CITIZEN',
+    title: 'PRIVATE TITLE',
+  };
+  const workOrder = {
+    ...ticket,
+    created_at: new Date('2026-01-01'),
+    updated_at: new Date('2026-01-01'),
+    status: 'pending',
+  };
+  const cases = [
+    ['ticketsCsv', 'getTicketsForExport', ticket, 'tickets'],
+    ['flaggedCsv', 'getModerationForExport', flagged, 'flagged'],
+    ['workOrdersCsv', 'getWorkOrdersForExport', workOrder, 'work_orders'],
+  ] as const;
+  it.each(cases)(
+    '%s allows exactly 5,000 and refuses 5,001 without file or audit',
+    async (method, getter, row, kind) => {
+      const mock = jest
+        .fn()
+        .mockResolvedValue(Array(EXPORT_ROW_LIMIT).fill(row));
+      const { service, audit } = makeService({ [getter]: mock });
+      const csv = await service[method]({}, MEO_OFFICER);
+      expect(csv.trimEnd().split('\r\n')).toHaveLength(EXPORT_ROW_LIMIT + 1);
+      expect(audit.logRequired).toHaveBeenCalledTimes(1);
+      expect(audit.logRequired).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionType: 'report_exported',
+          targetType: 'export',
+          targetId: MEO_OFFICER.adminId,
+          metadata: {
+            kind,
+            rowCount: 5000,
+            office: 'MEO',
+            status:
+              kind === 'tickets'
+                ? 'active'
+                : kind === 'flagged'
+                  ? 'pending'
+                  : 'all',
+            searchApplied: false,
+            assigneeFiltered: false,
+          },
+        }),
+      );
+      audit.logRequired.mockClear();
+      mock.mockResolvedValue(Array(EXPORT_ROW_LIMIT + 1).fill(row));
+      await expect(service[method]({}, MEO_OFFICER)).rejects.toThrow(
+        EXPORT_LIMIT_MESSAGE,
+      );
+      expect(audit.logRequired).not.toHaveBeenCalled();
+    },
+  );
+  it.each(cases)('%s fails closed on an audit insert error', async (method) => {
+    const { service, audit } = makeService();
+    audit.logRequired.mockRejectedValue(new Error('audit unavailable'));
+    await expect(service[method]({}, MEO_OFFICER)).rejects.toThrow(
+      'audit unavailable',
+    );
+  });
+  it('audits applied scope and safe filters only, without query text or assignee ids', async () => {
+    const { service, audit } = makeService({
+      parseTicketQuery: jest.fn().mockReturnValue({
+        office: 'MEO',
+        status: 'Rejected',
+        category: 'Localized Flooding',
+        barangayId: 1,
+        search: 'PRIVATE SEARCH',
+        categoryReview: true,
+        ignored: 'PRIVATE',
+      }),
+    });
+    await service.ticketsCsv(
+      { office: 'MDRRMO', dateFrom: '2026-01-01', ids: '1,2' },
+      MEO_OFFICER,
+    );
+    expect(audit.logRequired.mock.calls[0][0].metadata).toEqual({
+      kind: 'tickets',
+      rowCount: 0,
+      office: 'MEO',
+      status: 'Rejected',
+      category: 'LOCALIZED_FLOODING',
+      barangayId: 1,
+      categoryReview: true,
+      dateFrom: '2026-01-01T00:00:00.000Z',
+      searchApplied: true,
+      assigneeFiltered: false,
+      selectionCount: 2,
+    });
+    expect(
+      JSON.stringify(audit.logRequired.mock.calls[0][0].metadata),
+    ).not.toContain('PRIVATE');
+  });
+  it('includes cancellation columns only for cancelled orders and never notes', async () => {
+    const cancelled = {
+      ...workOrder,
+      id: 2,
+      status: 'cancelled',
+      cancelled_at: new Date('2026-01-02'),
+      cancellation_reason: 'Replaced',
+      replacement_work_order_id: 3,
+      notes: 'PRIVATE NOTE',
+    };
+    const { service } = makeService({
+      getWorkOrdersForExport: jest
+        .fn()
+        .mockResolvedValue([workOrder, cancelled]),
+    });
+    const csv = await service.workOrdersCsv({}, MEO_OFFICER);
+    const [header, active, stopped] = csv
+      .split('\r\n')
+      .map((row) => row.split(','));
+    expect(header).toEqual([
+      'Work Order ID',
+      'Ticket ID',
+      'Title',
+      'Assigned Office',
+      'Assigned Admin Name',
+      'Assigned Admin Email',
+      'Status',
+      'Overdue',
+      'Due Date',
+      'Completed At',
+      'Cancelled At',
+      'Cancellation Reason',
+      'Replacement Work Order ID',
+      'Created At',
+      'Updated At',
+    ]);
+    expect(active.slice(10, 13)).toEqual(['', '', '']);
+    expect(stopped.slice(10, 13)).toEqual([
+      '2026-01-02T00:00:00.000Z',
+      'Replaced',
+      '3',
+    ]);
+    expect(csv).not.toContain('PRIVATE NOTE');
   });
 });

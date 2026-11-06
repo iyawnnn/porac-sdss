@@ -1,3 +1,4 @@
+import { EXPORT_ROW_LIMIT, assertExportLimit } from './export-limit';
 import {
   BadRequestException,
   ConflictException,
@@ -164,6 +165,9 @@ export interface WorkOrderExportRow {
   status: WorkOrderStatus;
   due_date: Date | null;
   completed_at: Date | null;
+  cancelled_at: Date | null;
+  cancellation_reason: string | null;
+  replacement_work_order_id: number | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -1007,12 +1011,12 @@ export class WorkOrdersService {
     };
   }
 
-  // ponytail: capped at 5,000 rows rather than streamed/paginated — same
-  // ceiling and rationale as TicketsService.getTicketsForExport.
+  // Fetch one extra row so overflow is refused, never silently truncated.
   async getWorkOrdersForExport(
     filters: WorkOrderFilters & { dateFrom?: Date; dateTo?: Date } = {},
   ): Promise<WorkOrderExportRow[]> {
     const conditions = [
+      dsql`${tickets.mergedIntoTicketId} IS NULL`,
       filters.office
         ? eq(workOrders.assignedOffice, filters.office)
         : undefined,
@@ -1047,15 +1051,20 @@ export class WorkOrdersService {
         status: workOrders.status,
         due_date: workOrders.dueDate,
         completed_at: workOrders.completedAt,
+        cancelled_at: workOrders.cancelledAt,
+        cancellation_reason: workOrders.cancellationReason,
+        replacement_work_order_id: workOrders.replacementWorkOrderId,
         created_at: workOrders.createdAt,
         updated_at: workOrders.updatedAt,
       })
       .from(workOrders)
+      .innerJoin(tickets, eq(workOrders.ticketId, tickets.id))
       .leftJoin(admins, eq(workOrders.assignedAdminId, admins.id))
       .where(where)
       .orderBy(desc(workOrders.createdAt))
-      .limit(5000);
+      .limit(EXPORT_ROW_LIMIT + 1);
 
+    assertExportLimit(rows);
     return rows;
   }
 }

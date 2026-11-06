@@ -1,6 +1,22 @@
 # Testing
 
+### Phase 7, step 7c-1 export hardening
+
+API tests pin all three 5,000/5,001 boundaries, cancellation columns and blank values, flagged column list and tracking-reference privacy, required safe audit details, fail-closed attachment behavior, guards and merged-away exclusion. Root `download-export.test.ts` covers credentialed fetch, server refusal text and server filename/file bytes. `api/test/exports.pglite.cjs` runs real export queries plus required audit inserts through a `drizzle(postgresClient)` wrapper in a disposable memory database, without env files or database runners. Geometry equality has a text stand-in against an empty hazard table; this checks export SQL, not PostGIS. Run after API build with `PGLITE_MODULE_ROOT` pointing to the scratch PGlite/socket installation.
+
+`e2e/admin-reports.spec.ts` adds actual flagged downloads for both offices, opposite-office clamping, tracking-reference/no-name/no-title assertions, cancellation headers, Report export Activity Log details and Focal/MIS refusal. Export fixture helper only inserts tickets/reports; they and audit history accumulate. No citizen-report POSTs. Playwright is deliberately not run in this implementation step.
+
+Verification: 76 API suites / 1,796 tests passed; API build, root type-check, 36 root unit tests and production web build passed. Seven export PGlite groups passed (including the insert-only fixture writer). Mutations: adding citizen name failed 2 tests, removing the limit failed 3, and removing the audit write failed 7; original bytes restored, followed by 255 focused passing tests. Web/E2E/helper and harness lint passed. API lint retains five pre-existing unbound-method findings in reports.service.spec.ts; the same main file has 28 findings including those five. No new lint findings. The web build used pnpm build in a temporary source copy, with only that copy's Turbopack root widened for linked dependencies and pnpm automatic dependency installation disabled; source next-env.d.ts and the pre-existing .next remained untouched. The CSV source scan still rejects alternate writers and browser-built CSV; its service check now pins central serialization before awaited audit and return of the serialized result.
+
 **How to verify changes to PORAC-SDSS, and the caveats that make this suite different from most.**
+
+**7c-1 full Playwright run (2026-11-06, before the follow-up fixes):** one complete Chromium run with `--workers=1`: **292 passed, 4 failed, 0 skipped, 0 flaky** in 20m48s. `admin-reports.spec.ts`: **23 passed, 3 failed**. The persistent report-submission counter increased by exactly **15**. Read-only preflight matched the disposable copy baseline (239 reports / 215 tickets / 67 Work Orders), no audit target ids >= 1 billion, no active setup fixture tickets, and enabled 0047 audit protection. Baseline titles containing E2E are not a cleanliness test.
+
+Failures and follow-up: the Activity Log date test expected 30 events instead of the exhaustive action list's new 31; both flagged download tests passed download/privacy/tracking-reference/office-scope assertions, then retained their operational cookie when attempting MIS login (307 back to the staff dashboard, not a cold-server timing flake); an older Work Order test still expected the 12-column header instead of 15. Fix the fixture count from `AUDIT_ACTIONS.length`, clear the browser context's cookies before the explicit MIS sign-in, and update the old header expectation. No application, shared login-helper or timeout change. The new cancellation-header/notes checks and Focal/System Administrator export refusals passed; the two new Activity Log detail assertions were not reached and still need a fresh-copy rerun.
+
+Follow-up verification: touched E2E specs and fixture setup pass lint; root type-check and the one final `pnpm build` pass. The build ran in a temporary source copy to preserve protected generated files. No second Playwright run, migration, manual seed or audit cleanup was performed.
+
+Post-run checks found two active export fixture tickets missing from the existing retirement prefix list; that prefix is now included for future global setup/teardown. The dirty copy was not cleaned or rerun; all 32 high-id audit fixture rows remain append-only. Reset phase2-test before another Playwright run. The API ran from an empty scratch directory with inherited settings excluding RESEND_API_KEY, disabled hazard/rainfall lookups, a logged console-mailer confirmation, and no ECONNRESET. API health/dashboard and web login warm-up returned 200. Only owned servers were stopped; ports 3000/3001 were verified free and protected file hashes were unchanged. Temporary PowerShell log-sharing/native-stderr handling needed correction/report recovery; the complete JSON report contains all 296 results and no global errors.
 
 The short version: there is no mocked backend and no isolated test database. Playwright drives a real Next.js server against the real development database, with the NestJS API running separately. That buys unusually high confidence — the office-scoping tests genuinely prove the API clamps scope — at the cost of real constraints on how the suite can be run. Those constraints are documented here rather than worked around.
 
@@ -70,6 +86,7 @@ No migrations, seed runner, Playwright, real database or push. The user reports 
 | `ticket_returned_to_review` | `from`, `to`, `previousOutcome` |
 | `ticket_category_corrected` | `oldValue`, `newValue`, `officeChanged`, `fromOffice`, `toOffice` |
 | `ticket_location_corrected` | None |
+| `report_exported` | `kind`, `rowCount`, `office`, `status`, `category` (short code), `barangayId`, `categoryReview`, `overdue`, `flag`, `dateFrom`, `dateTo`, `searchApplied`, `assigneeFiltered`, `selectionCount` |
 | `report_moderated` | `action` |
 | `work_order_created` | `assignedOffice`, `hasDueDate` |
 | `work_order_updated` | None |
