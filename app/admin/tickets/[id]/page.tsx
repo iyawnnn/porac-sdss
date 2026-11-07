@@ -413,7 +413,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           <Card>
             <CardContent className="p-4">
               <WorkOrdersPanel
-                hasAssessment={Boolean(operationalAssessment?.observedConditions.trim())}
+                hasAssessment={Boolean(operationalAssessment?.assessedConditions.trim())}
                 initialWorkOrders={workOrders}
                 office={ticket.assigned_office as "MEO" | "MDRRMO"}
                 readOnly={mergedAway || rejected}

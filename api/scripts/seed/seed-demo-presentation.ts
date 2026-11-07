@@ -1605,7 +1605,7 @@ async function seedWorkOrders(
     // Assessment with observed conditions before a Work Order can be
     // created, through the same real service the Ticket Detail form uses.
     await assessmentService.upsert(ticket.id, admin, {
-      observedConditions: `Site inspected for "${title}": ${ticket.category.toLowerCase()} confirmed on the ground.`,
+      assessedConditions: `Site inspected for "${title}": ${ticket.category.toLowerCase()} confirmed on the ground.`,
       recommendedAction: title,
       operationalConstraints: [],
     });

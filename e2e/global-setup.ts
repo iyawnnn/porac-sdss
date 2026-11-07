@@ -7,12 +7,9 @@ import path from "node:path";
 //
 // Both seed scripts are idempotent upserts (ON CONFLICT), so re-running them
 // on every test invocation is safe on the shared dev database — they never
-// duplicate accounts or touch ticket/report data. cleanup:e2e-admins runs
-// first, deleting the throwaway "e2e-*@porac.gov.ph" admin accounts several
-// specs create (admin-management, admin-password, admin-activity-log) —
-// without it those accumulate unbounded across repeated local runs until
-// /admin/admins has enough rows to blow past test timeouts (see
-// api/scripts/seed/cleanup-e2e-admins.ts).
+// duplicate demo accounts. cleanup:e2e-admins first deactivates throwaway
+// assessment creators and deletes only unreferenced throwaway accounts. The
+// assessor FK preserves creators; no audit row is changed or removed.
 //
 // seed:e2e-grouping-fixtures then inserts the tickets the Merge / Remove /
 // Regroup, category / location correction, severity screening and resolution

@@ -59,12 +59,12 @@ export async function insertNewExportFixtures(tx: TransactionSql) {
     }
     const assessedConditions = `E2E reporting fixture ${office} assessed conditions`;
     await tx`
-      INSERT INTO operational_assessments (ticket_id,assessed_by_admin_id,assessed_by_name,observed_conditions,
-        safety_implications,operational_constraints,operational_constraint_notes,recommended_action,temporary_mitigation,
-        deferment_reason,referral_reason,remarks,actual_action,supporting_evidence_url,assessed_at,updated_by_admin_id,updated_by_name)
+      INSERT INTO operational_assessments (ticket_id,assessed_by_admin_id,assessed_by_name,assessed_conditions,
+        safety_implications,operational_constraints,recommended_action,interim_mitigation,
+        deferment_or_referral_reason,remarks,actual_action,supporting_evidence_url,created_at,updated_by_admin_id,updated_by_name)
       VALUES (${ticketIds[0]},${staff.id},${staff.name},${assessedConditions},'Fixture safety',
-        ${[OPERATIONAL_CONSTRAINTS[0]]}::text[],${JSON.stringify({ [OPERATIONAL_CONSTRAINTS[0]]: 'Fixture constraint note' })}::jsonb,
-        'Fixture recommended action','Fixture interim mitigation','Fixture deferment','Fixture referral',
+        ${JSON.stringify({ selected: [OPERATIONAL_CONSTRAINTS[0]], notes: { [OPERATIONAL_CONSTRAINTS[0]]: 'Fixture constraint note' } })}::jsonb,
+        'Fixture recommended action','Fixture interim mitigation',E'Deferment: Fixture deferment\nReferral: Fixture referral',
         'Fixture assessment remarks','Fixture actual action','https://example.test/staff-evidence',
         '2001-01-01T16:00:00.000Z'::timestamptz,${staff.id},${staff.name})
     `;

@@ -96,4 +96,5 @@ export const OPERATIONAL_CONSTRAINT_LABEL: Record<OperationalConstraint, string>
 // Same limits as api/src/contracts/schemas.ts (manuscript revision Phase 5,
 // step 5b).
 export const OPERATIONAL_ASSESSMENT_EVIDENCE_URL_MAX_LENGTH = 2048;
+export const OPERATIONAL_ASSESSMENT_REASON_MAX_LENGTH = 2100;
 export const OPERATIONAL_CONSTRAINT_NOTE_MAX_LENGTH = 500;

@@ -138,6 +138,8 @@ for (const account of [E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN]) {
     const assessments = await downloadRows(page, 'Export Operational Assessments CSV');
     const assessmentHeaders = assessments[0];
     expect(assessmentHeaders).toContain('Assessed Conditions'); expect(assessmentHeaders).toContain('Interim Mitigation');
+    expect(assessmentHeaders).toContain('Deferment or Referral Reason');
+    expect(assessmentHeaders).not.toContain('Deferment Reason'); expect(assessmentHeaders).not.toContain('Referral Reason');
     expect(assessmentHeaders).not.toContain('Observed Conditions'); expect(assessmentHeaders).not.toContain('Temporary Mitigation');
     expect(assessmentHeaders).not.toContain('Assessment Count');
     for (const row of assessments.slice(1)) expect(row[1]).toBe(account.office);

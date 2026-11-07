@@ -1,3 +1,5 @@
+Operational Assessment uses Assessed Conditions, Interim Mitigation and one optional Deferment or Referral Reason (maximum 2100 characters). Constraint selections and per-selected-key notes are stored together as JSONB, while the form still uses checkboxes and note fields. The original creator and creation time survive edits. Focal Personnel and System Administrators have no assessment-write or Work Order authority. Assessment CSV uses one Deferment or Referral Reason column and retains Assessed Conditions/Interim Mitigation.
+
 # User Flows
 
 ### Operational dashboard metrics (Phase 7, step 7d-1)

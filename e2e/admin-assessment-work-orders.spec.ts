@@ -73,12 +73,12 @@ test.describe.serial("Operational Assessment and Work Orders", () => {
     expect(bulk.ok()).toBe(true);
     expect((await bulk.json()) as unknown).toEqual({ ok: [], skipped: [{ id: ticketId, reason: ASSESSMENT_REQUIRED }] });
 
-    // The assessment form needs Observed Conditions (closed without saving,
+    // The assessment form needs Assessed Conditions (closed without saving,
     // so this ticket keeps having no assessment).
     await page.getByRole("button", { name: "Add Assessment" }).click();
     const dialog = page.getByRole("dialog", { name: "Add Assessment" });
     await dialog.getByRole("button", { name: "Save Assessment" }).click();
-    await expect(dialog.getByText("Observed conditions are required.")).toBeVisible();
+    await expect(dialog.getByText("Assessed conditions are required.")).toBeVisible();
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toHaveCount(0);
   });
@@ -179,7 +179,7 @@ test.describe.serial("Operational Assessment and Work Orders", () => {
       page,
       "post",
       `/api/admin/tickets/${ticketId}/assessment`,
-      { observedConditions: "E2E: should be refused" },
+      { assessedConditions: "E2E: should be refused" },
       409,
       `Ticket #${ticketId} is Rejected; its Operational Assessment can no longer be changed.`,
     );

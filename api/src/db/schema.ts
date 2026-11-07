@@ -92,7 +92,10 @@ export const resolutionFeedbackTypeEnum = pgEnum(
 // migration 0043). The table has a geometry column (query_geom), so it is
 // raw-PG only and listed in the comment block above; only its enums live
 // here. Advisory DENR-MGB susceptibility, never a score.
-export const HAZARD_CONTEXT_TYPES = ['FLOOD', 'RAIN_INDUCED_LANDSLIDE'] as const;
+export const HAZARD_CONTEXT_TYPES = [
+  'FLOOD',
+  'RAIN_INDUCED_LANDSLIDE',
+] as const;
 export type HazardContextType = (typeof HAZARD_CONTEXT_TYPES)[number];
 export const hazardContextTypeEnum = pgEnum(
   'hazard_context_type',
@@ -671,47 +674,29 @@ export const reportIntakeActions = pgTable('report_intake_actions', {
 // Batch 3: the human decision-support layer alongside the two system-
 // generated ones (tickets.priority_score/urgency_level = Hazard Urgency,
 // tickets.priority_index = Operational Priority — neither touched here).
-// ONE CURRENT assessment per ticket (ticket_id UNIQUE), not a revision-
-// history table — the approved initial model deliberately keeps this
-// simple; a later batch can add versioning if the operational need proves
-// out. observed_conditions/safety_implications/recommended_action/
-// temporary_mitigation are the substantive fields (NOT NULL, default ''
-// rather than a DB-level required constraint — the service layer enforces
-// "not fully blank," not "every field filled," per the approved design).
-// deferment_reason/referral_reason/remarks are genuinely optional and stay
-// nullable. operational_constraints is a plain text[] over the fixed
-// OPERATIONAL_CONSTRAINTS vocabulary (validated in the service layer, not
-// a join table — mirrors reports.flags above) — never a numeric field:
-// this table has no score/level/band column anywhere, by design.
-//
-// Two actor snapshots, not one: assessed_by_* captures who FIRST created
-// this record and never changes on edit (mirrors "original assessment
-// metadata" being preserved); updated_by_* captures whoever most recently
-// edited it, which matters specifically for the office-transfer case (ticket
-// reassigned MEO -> MDRRMO: MDRRMO can edit the existing assessment, and
-// updated_by_* is how the record shows that happened without losing who
-// created it originally). Both are FK-less, following the existing
-// status_history/office_reassignments/report_acknowledgments convention.
+// One current human assessment per ticket; original creator and creation time
+// survive later edits. Legacy columns preserve the pre-0048 values until Phase 8b.
 export const operationalAssessments = pgTable('operational_assessments', {
   id: serial('id').primaryKey(),
   ticketId: integer('ticket_id')
     .notNull()
     .references(() => tickets.id)
     .unique(),
-  assessedByAdminId: integer('assessed_by_admin_id'),
-  assessedByName: text('assessed_by_name'),
-  observedConditions: text('observed_conditions').notNull().default(''),
-  safetyImplications: text('safety_implications').notNull().default(''),
-  operationalConstraints: text('operational_constraints')
-    .array()
+  assessedByAdminId: integer('assessed_by_admin_id')
     .notNull()
-    .default([]),
+    .references(() => admins.id, { onDelete: 'restrict' }),
+  assessedByName: text('assessed_by_name'),
+  assessedConditions: text('assessed_conditions').notNull().default(''),
+  safetyImplications: text('safety_implications').notNull().default(''),
+  operationalConstraints: jsonb('operational_constraints')
+    .$type<{ selected: string[]; notes: Record<string, string> }>()
+    .notNull()
+    .default({ selected: [], notes: {} }),
   recommendedAction: text('recommended_action').notNull().default(''),
-  temporaryMitigation: text('temporary_mitigation').notNull().default(''),
-  defermentReason: text('deferment_reason'),
-  referralReason: text('referral_reason'),
+  interimMitigation: text('interim_mitigation').notNull().default(''),
+  defermentOrReferralReason: text('deferment_or_referral_reason'),
   remarks: text('remarks'),
-  assessedAt: timestamp('assessed_at', { withTimezone: true })
+  createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
   updatedByAdminId: integer('updated_by_admin_id'),
@@ -719,21 +704,15 @@ export const operationalAssessments = pgTable('operational_assessments', {
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
-  // Manuscript revision Phase 5, step 5b (Appendix H, migration
-  // 0045_assessment_work_orders.sql). actual_action is optional free text.
-  // supporting_evidence_url is a URL or a file path (format checked in the
-  // API; CHECK operational_assessments_evidence_url_check: NULL, or non-blank
-  // and at most 2048 characters). operational_constraint_notes is one note
-  // per selected operational_constraints key (same 12 keys, checked in the
-  // API; CHECK operational_assessments_constraint_notes_check: a JSON
-  // object), kept beside the text[] tags rather than converting them.
-  // App H names differ for some older columns (observed_conditions =
-  // assessed_conditions, temporary_mitigation = interim_mitigation,
-  // deferment_reason + referral_reason = deferment_or_referral_reason,
-  // assessed_at = created_at); the physical renames are Phase 8.
   actualAction: text('actual_action'),
   supportingEvidenceUrl: text('supporting_evidence_url'),
-  operationalConstraintNotes: jsonb('operational_constraint_notes')
+  legacyDefermentReason: text('legacy_deferment_reason'),
+  legacyReferralReason: text('legacy_referral_reason'),
+  legacyOperationalConstraints: text('legacy_operational_constraints')
+    .array()
+    .notNull()
+    .default([]),
+  legacyOperationalConstraintNotes: jsonb('legacy_operational_constraint_notes')
     .$type<Record<string, string>>()
     .notNull()
     .default({}),

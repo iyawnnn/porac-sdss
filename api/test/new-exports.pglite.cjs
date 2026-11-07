@@ -56,11 +56,11 @@ async function main() {
       (1,1,'PRC-before','2026-01-01T15:59:59.999999Z'),(10,1,'PRC-start','2026-01-01T16:00:00Z'),
       (11,1,'PRC-end','2026-01-02T15:59:59.999999Z'),(12,1,'PRC-after','2026-01-02T16:00:00Z'),
       (2,2,'PRC-other','2026-01-01T16:00:00Z'),(3,3,'PRC-merged','2026-01-01T16:00:00Z'),(4,4,'PRC-rejected','2026-01-01T16:00:00Z');
-    CREATE TABLE operational_assessments(id serial PRIMARY KEY,ticket_id int NOT NULL UNIQUE,assessed_by_admin_id int,assessed_by_name text DEFAULT 'Recorded Staff',
-      observed_conditions text DEFAULT '=PRIVATE_ASSESSMENT',safety_implications text DEFAULT 'Safety',operational_constraints text[] DEFAULT ARRAY['personnel'],
-      operational_constraint_notes jsonb DEFAULT jsonb_build_object('personnel','None available'),recommended_action text DEFAULT 'Recommended',temporary_mitigation text DEFAULT 'Interim',
-      deferment_reason text,referral_reason text,remarks text,actual_action text,supporting_evidence_url text,
-      assessed_at timestamptz DEFAULT '2026-01-01T16:00:00Z',updated_by_admin_id int,updated_by_name text);
+    CREATE TABLE operational_assessments(id serial PRIMARY KEY,ticket_id int NOT NULL UNIQUE,assessed_by_admin_id int NOT NULL DEFAULT 1 REFERENCES admins(id) ON DELETE RESTRICT,assessed_by_name text DEFAULT 'Recorded Staff',
+      assessed_conditions text NOT NULL DEFAULT '=PRIVATE_ASSESSMENT',safety_implications text NOT NULL DEFAULT 'Safety',
+      operational_constraints jsonb NOT NULL DEFAULT '{"selected":["weather"],"notes":{"weather":"None available"}}',recommended_action text NOT NULL DEFAULT 'Recommended',interim_mitigation text NOT NULL DEFAULT 'Interim',
+      deferment_or_referral_reason text,remarks text,actual_action text,supporting_evidence_url text,
+      created_at timestamptz NOT NULL DEFAULT '2026-01-01T16:00:00Z',updated_by_admin_id int,updated_by_name text);
     INSERT INTO operational_assessments(ticket_id) VALUES (1),(2),(3),(5);
     CREATE TABLE work_orders(id serial PRIMARY KEY,ticket_id int,title text,notes text,assigned_office office,status text,created_by_admin_id int,
       completed_at timestamptz,cancelled_at timestamptz,cancelled_by_admin_id int,cancellation_reason text,
@@ -286,7 +286,7 @@ async function main() {
       const assessment = await queries.assessments(f);
       assert.equal(assessment.length, 1);
       assert.equal(
-        assessment[0].observed_conditions,
+        assessment[0].assessed_conditions,
         fixture.assessedConditions,
       );
       assert.deepEqual(
@@ -302,7 +302,9 @@ async function main() {
     ok(
       'insert-only E2E fixture writer also checked on drizzle-wrapped client, unique assessment, merged-away rows and completed/cancelled records',
     );
-    const dashboard = Object.assign(Object.create(DashboardService.prototype), { pg: raw });
+    const dashboard = Object.assign(Object.create(DashboardService.prototype), {
+      pg: raw,
+    });
     const deltas = [];
     for (const { office } of fixtures) {
       const active = await dashboard.getActiveTicketTrend(7, office);
@@ -313,10 +315,19 @@ async function main() {
             AND merged_into_ticket_id IS NULL AND status IN ('Reported','Under Review','In Progress')) AS active,
           (SELECT count(*)::int FROM work_orders WHERE assigned_office=${office}::office AND status='pending') AS pending
       `;
-      deltas.push({ office, active: active.at(-1).count - headline.active, pending: pending.at(-1).count - headline.pending });
+      deltas.push({
+        office,
+        active: active.at(-1).count - headline.active,
+        pending: pending.at(-1).count - headline.pending,
+      });
     }
-    assert.deepEqual(deltas, fixtures.map(({ office }) => ({ office, active: 0, pending: 0 })));
-    ok('export fixtures preserve real dashboard active-ticket and pending-work-order trend/headline agreement in both offices');
+    assert.deepEqual(
+      deltas,
+      fixtures.map(({ office }) => ({ office, active: 0, pending: 0 })),
+    );
+    ok(
+      'export fixtures preserve real dashboard active-ticket and pending-work-order trend/headline agreement in both offices',
+    );
     console.log(`${checks} new export PGlite check groups passed`);
   } finally {
     await raw.end();

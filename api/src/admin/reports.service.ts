@@ -306,27 +306,29 @@ export class ReportsService {
       },
       {
         header: 'Assessed At',
-        value: (r) => new Date(r.assessed_at).toISOString(),
+        value: (r) => new Date(r.created_at).toISOString(),
       },
       { header: 'Assessed By', value: (r) => r.assessed_by_name },
-      { header: 'Assessed Conditions', value: (r) => r.observed_conditions },
+      { header: 'Assessed Conditions', value: (r) => r.assessed_conditions },
       { header: 'Safety Implications', value: (r) => r.safety_implications },
       {
         header: 'Operational Constraints',
-        value: (r) => r.operational_constraints.join('; '),
+        value: (r) => r.operational_constraints.selected.join('; '),
       },
       {
         header: 'Constraint Notes',
         value: (r) =>
-          Object.entries(r.operational_constraint_notes)
+          Object.entries(r.operational_constraints.notes)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([key, note]) => `${key}: ${note}`)
             .join('; '),
       },
       { header: 'Recommended Action', value: (r) => r.recommended_action },
-      { header: 'Interim Mitigation', value: (r) => r.temporary_mitigation },
-      { header: 'Deferment Reason', value: (r) => r.deferment_reason },
-      { header: 'Referral Reason', value: (r) => r.referral_reason },
+      { header: 'Interim Mitigation', value: (r) => r.interim_mitigation },
+      {
+        header: 'Deferment or Referral Reason',
+        value: (r) => r.deferment_or_referral_reason,
+      },
       { header: 'Remarks', value: (r) => r.remarks },
       { header: 'Actual Action', value: (r) => r.actual_action },
       {

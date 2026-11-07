@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   OPERATIONAL_ASSESSMENT_EVIDENCE_URL_MAX_LENGTH,
+  OPERATIONAL_ASSESSMENT_REASON_MAX_LENGTH,
   OPERATIONAL_CONSTRAINTS,
   OPERATIONAL_CONSTRAINT_LABEL,
   OPERATIONAL_CONSTRAINT_NOTE_MAX_LENGTH,
@@ -34,15 +35,14 @@ export function OperationalAssessmentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [observedConditions, setObservedConditions] = useState(existing?.observedConditions ?? "");
+  const [assessedConditions, setAssessedConditions] = useState(existing?.assessedConditions ?? "");
   const [safetyImplications, setSafetyImplications] = useState(existing?.safetyImplications ?? "");
   const [constraints, setConstraints] = useState<OperationalConstraint[]>(
     (existing?.operationalConstraints as OperationalConstraint[] | undefined) ?? [],
   );
   const [recommendedAction, setRecommendedAction] = useState(existing?.recommendedAction ?? "");
-  const [temporaryMitigation, setTemporaryMitigation] = useState(existing?.temporaryMitigation ?? "");
-  const [defermentReason, setDefermentReason] = useState(existing?.defermentReason ?? "");
-  const [referralReason, setReferralReason] = useState(existing?.referralReason ?? "");
+  const [interimMitigation, setInterimMitigation] = useState(existing?.interimMitigation ?? "");
+  const [defermentOrReferralReason, setDefermentOrReferralReason] = useState(existing?.defermentOrReferralReason ?? "");
   const [remarks, setRemarks] = useState(existing?.remarks ?? "");
   // Manuscript revision Phase 5, step 5b.
   const [actualAction, setActualAction] = useState(existing?.actualAction ?? "");
@@ -67,8 +67,8 @@ export function OperationalAssessmentDialog({
     setError("");
     // Required on every save (Appendix H assessed_conditions); the API
     // refuses a blank one too.
-    if (!observedConditions.trim()) {
-      setObservedError("Observed conditions are required.");
+    if (!assessedConditions.trim()) {
+      setObservedError("Assessed conditions are required.");
       return;
     }
     setObservedError("");
@@ -81,15 +81,14 @@ export function OperationalAssessmentDialog({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        observedConditions,
+        assessedConditions,
         safetyImplications,
         operationalConstraints: constraints,
         operationalConstraintNotes: notes,
         recommendedAction,
         actualAction: actualAction.trim() || undefined,
-        temporaryMitigation,
-        defermentReason: defermentReason.trim() || undefined,
-        referralReason: referralReason.trim() || undefined,
+        interimMitigation,
+        defermentOrReferralReason: defermentOrReferralReason.trim() || undefined,
         remarks: remarks.trim() || undefined,
         supportingEvidenceUrl: evidenceUrl.trim() || null,
       }),
@@ -116,17 +115,17 @@ export function OperationalAssessmentDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <Field label="Observed Conditions (required)">
+          <Field label="Assessed Conditions (required)">
             <Textarea
               aria-describedby={observedError ? "observed-conditions-error" : undefined}
               aria-invalid={observedError ? true : undefined}
-              aria-label="Observed Conditions"
+              aria-label="Assessed Conditions"
               onChange={(e) => {
-                setObservedConditions(e.target.value);
+                setAssessedConditions(e.target.value);
                 if (observedError && e.target.value.trim()) setObservedError("");
               }}
               rows={3}
-              value={observedConditions}
+              value={assessedConditions}
             />
             {observedError && (
               <p className="text-xs text-destructive" id="observed-conditions-error">{observedError}</p>
@@ -166,8 +165,8 @@ export function OperationalAssessmentDialog({
           <Field label="Actual Action Taken (optional)">
             <Textarea aria-label="Actual Action Taken" onChange={(e) => setActualAction(e.target.value)} rows={2} value={actualAction} />
           </Field>
-          <Field label="Temporary Mitigation / Interim Measures">
-            <Textarea onChange={(e) => setTemporaryMitigation(e.target.value)} rows={3} value={temporaryMitigation} />
+          <Field label="Interim Mitigation">
+            <Textarea onChange={(e) => setInterimMitigation(e.target.value)} rows={3} value={interimMitigation} />
           </Field>
           <Field label="Supporting Evidence URL (optional)">
             <Input
@@ -180,11 +179,8 @@ export function OperationalAssessmentDialog({
               value={evidenceUrl}
             />
           </Field>
-          <Field label="Deferment Reason (optional)">
-            <Textarea onChange={(e) => setDefermentReason(e.target.value)} rows={2} value={defermentReason} />
-          </Field>
-          <Field label="Referral Reason (optional)">
-            <Textarea onChange={(e) => setReferralReason(e.target.value)} rows={2} value={referralReason} />
+          <Field label="Deferment or Referral Reason (optional)">
+            <Textarea maxLength={OPERATIONAL_ASSESSMENT_REASON_MAX_LENGTH} onChange={(e) => setDefermentOrReferralReason(e.target.value)} rows={3} value={defermentOrReferralReason} />
           </Field>
           <Field label="Additional Remarks (optional)">
             <Textarea onChange={(e) => setRemarks(e.target.value)} rows={2} value={remarks} />

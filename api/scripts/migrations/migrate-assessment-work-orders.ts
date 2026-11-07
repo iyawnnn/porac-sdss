@@ -1,7 +1,18 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { sql } from '../db';
-import { migrationStatements } from './migrate-ticket-report-fields';
+import type { Sql } from 'postgres';
+import { alignAssessmentInTransaction } from './migrate-operational-assessment-alignment';
+// Keep this injectable runner free of modules that instantiate a real client.
+function migrationStatements(file: string): string[] {
+  return file
+    .split('--> statement-breakpoint')
+    .map((chunk) => chunk.trim())
+    .filter((chunk) =>
+      chunk
+        .split(/\r?\n/)
+        .some((line) => line.trim() !== '' && !line.trim().startsWith('--')),
+    );
+}
 
 // Manuscript revision Phase 5, step 5b (Appendix H OPERATIONAL_ASSESSMENTS
 // and WORK_ORDERS). Runs 0045_assessment_work_orders.sql one statement at a
@@ -38,6 +49,7 @@ interface CheckSummary {
 }
 
 async function printCheck(
+  sql: Pick<Sql, 'unsafe'>,
   label: string,
   checks: string[],
 ): Promise<CheckSummary> {
@@ -50,61 +62,77 @@ async function printCheck(
   return summary;
 }
 
-async function main() {
-  const dir = join(__dirname, '..', '..', 'drizzle');
-  const checks = migrationStatements(
-    readFileSync(join(dir, '0045_assessment_work_orders.check.sql'), 'utf8'),
-  );
-  const statements = migrationStatements(
-    readFileSync(join(dir, '0045_assessment_work_orders.sql'), 'utf8'),
-  );
-  if (checks.length !== 2) {
-    throw new Error(
-      `Expected 2 queries in 0045_assessment_work_orders.check.sql, found ${checks.length}`,
+export async function migrateAssessmentWorkOrders(sql: Sql) {
+  return sql.begin(async (tx) => {
+    await tx.unsafe("SET LOCAL lock_timeout = '5s'");
+    await tx.unsafe("SET LOCAL statement_timeout = '60s'");
+    // Share 0048's lock before inspecting names, so a concurrent cutover cannot
+    // make this runner recreate a retired column after its initial check.
+    await tx`SELECT pg_advisory_xact_lock(8048,1)`;
+    const markers =
+      await tx`SELECT attname FROM pg_attribute WHERE attrelid='public.operational_assessments'::regclass
+      AND attnum>0 AND NOT attisdropped AND (attname='assessed_conditions' OR attname LIKE 'legacy_%')`;
+    if (markers.length) {
+      await alignAssessmentInTransaction(tx);
+      return;
+    }
+    const dir = join(__dirname, '..', '..', 'drizzle');
+    const checks = migrationStatements(
+      readFileSync(join(dir, '0045_assessment_work_orders.check.sql'), 'utf8'),
     );
-  }
-  if (statements.length !== STEPS.length) {
-    throw new Error(
-      `Expected ${STEPS.length} statements in 0045_assessment_work_orders.sql, found ${statements.length}`,
+    const statements = migrationStatements(
+      readFileSync(join(dir, '0045_assessment_work_orders.sql'), 'utf8'),
     );
-  }
+    if (checks.length !== 2) {
+      throw new Error(
+        `Expected 2 queries in 0045_assessment_work_orders.check.sql, found ${checks.length}`,
+      );
+    }
+    if (statements.length !== STEPS.length) {
+      throw new Error(
+        `Expected ${STEPS.length} statements in 0045_assessment_work_orders.sql, found ${statements.length}`,
+      );
+    }
 
-  const before = await printCheck('Before', checks);
-  if (
-    before.completed_without_completed_at > 0 ||
-    before.cancelled_with_completed_at > 0
-  ) {
-    console.error(
-      `Stopped, nothing changed: ${before.completed_without_completed_at} completed work order(s) without completed_at, ${before.cancelled_with_completed_at} cancelled work order(s) with completed_at (see blocking_rows_first_50 above). Nothing is backfilled; fix these rows by hand and run again.`,
-    );
-    await sql.end();
-    process.exit(1);
-  }
+    const before = await printCheck(tx, 'Before', checks);
+    if (
+      before.completed_without_completed_at > 0 ||
+      before.cancelled_with_completed_at > 0
+    ) {
+      console.error(
+        `Stopped, nothing changed: ${before.completed_without_completed_at} completed work order(s) without completed_at, ${before.cancelled_with_completed_at} cancelled work order(s) with completed_at (see blocking_rows_first_50 above). Nothing is backfilled; fix these rows by hand and run again.`,
+      );
+      throw new Error('0045 preflight failed.');
+    }
 
-  const results = await sql.begin(async (tx) => {
-    const done: { command: string; count: number }[] = [];
+    const results: { command: string; count: number }[] = [];
     for (const statement of statements) {
       const result = await tx.unsafe(statement);
-      done.push({ command: result.command, count: result.count ?? 0 });
+      results.push({ command: result.command, count: result.count ?? 0 });
     }
-    return done;
-  });
-  console.log('Rows changed per step:');
-  STEPS.forEach((step, i) => {
-    const { command, count } = results[i];
-    console.log(
-      `  ${String(i + 1).padStart(2)}. ${step}: ${command === 'UPDATE' || command === 'INSERT' ? `${count} rows` : `0 rows (${command ?? 'done'})`}`,
-    );
-  });
 
-  await printCheck('After', checks);
+    console.log('Rows changed per step:');
+    STEPS.forEach((step, i) => {
+      const { command, count } = results[i];
+      console.log(
+        `  ${String(i + 1).padStart(2)}. ${step}: ${command === 'UPDATE' || command === 'INSERT' ? `${count} rows` : `0 rows (${command ?? 'done'})`}`,
+      );
+    });
 
-  await sql.end();
+    await printCheck(tx, 'After', checks);
+  });
 }
 
 if (require.main === module) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
+  void (async () => {
+    const { sql } = (await import('../db')) as { sql: Sql };
+    try {
+      await migrateAssessmentWorkOrders(sql);
+    } finally {
+      await sql.end();
+    }
+  })().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
   });
 }
