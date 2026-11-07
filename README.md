@@ -102,7 +102,7 @@ Full details and rationale for every variable, including ones not listed above, 
 
 ## D. DATABASE MIGRATIONS & SEEDING
 
-Apply PostGIS schema migrations and seed municipal boundaries, demo accounts, and realistic hazard tickets. **Order matters** — several later steps depend on tables/columns an earlier step creates (e.g. `import:barangays` must run before `migrate:geometry`, and `seed:dem` before `migrate:config`), and running them out of order fails with errors like `relation "barangays" does not exist`. See [`docs/database.md`](docs/database.md) for what each table is for, who reads/writes it, and whether an empty table is expected or a sign something's missing:
+Apply PostGIS schema migrations and seed municipal boundaries, demo accounts, and realistic hazard tickets. **Order matters** — several later steps depend on tables/columns an earlier step creates (e.g. `import:barangays` must run before `migrate:geometry`, while `seed:dem` remains required for Terrain), and running them out of order fails with errors like `relation "barangays" does not exist`. See [`docs/database.md`](docs/database.md) for what each table is for, who reads/writes it, and whether an empty table is expected or a sign something's missing:
 
 ```bash
 pnpm --prefix api migrate                          # non-spatial Drizzle tables
@@ -112,8 +112,7 @@ pnpm --prefix api migrate:city-boundary
 pnpm --prefix api import:city-boundary              # municipal outer boundary -> city_boundary_osm (idempotent)
 pnpm --prefix api import:barangays                 # PSGC barangay polygons -> barangays (must precede migrate:geometry)
 pnpm --prefix api migrate:geometry                 # geometry columns + GiST indexes, FKs to barangays(id)
-pnpm --prefix api seed:dem                         # SRTM GeoTIFF -> dem_points (must precede migrate:config)
-pnpm --prefix api migrate:config                   # config cache table, reads dem_points for elev_min/elev_max
+pnpm --prefix api seed:dem                         # SRTM GeoTIFF -> dem_points, retained for Barangay Terrain
 pnpm --prefix api migrate:exif-data
 pnpm --prefix api migrate:moderation
 pnpm --prefix api migrate:resolution
@@ -133,7 +132,7 @@ pnpm --prefix api migrate:work-orders               # work_orders table — FKs 
 pnpm --prefix api migrate:ticket-disputes           # tickets.disputed_at/dispute_reason (citizen dispute loop)
 pnpm --prefix api migrate:ticket-resolution-confirmation  # tickets.resolution_confirmed_at (persistent Confirm Fixed)
 pnpm --prefix api migrate:admin-login-throttle      # admin_login_rate_limit_events (per-account failed-login throttling)
-# Later assessment sequence: migrate:operational-assessments (0033), migrate:assessment-work-orders (0045), migrate:assessment-alignment (0048).
+# Later assessment sequence: migrate:operational-assessments (0033), migrate:assessment-work-orders (0045), migrate:assessment-alignment (0048), migrate:contraction (0049).
 # Coordinate the 0048 schema/app cutover; after 0048 use the updated 0045 runner, never replay raw 0045 SQL. No live migration was run for this change.
 pnpm --prefix api seed:users                        # citizen demo accounts (Section G) — idempotent, safe to rerun
 pnpm --prefix api seed:admin -- meo@porac.gov.ph PoracDemo2026! MEO supervisor      # admin demo account (Section G)
@@ -251,3 +250,7 @@ That workflow only works once two values are set under the repository's **Settin
 - Two separate deployables: the Next.js app (root) and the NestJS API (`api/`) — the API is a long-lived process (its own Postgres connection pool), not a serverless function, so whatever hosts it needs to support that.
 - The API needs a public, stable origin reachable from wherever the Next.js app runs (`API_ORIGIN`/`INTERNAL_API_URL`) and from GitHub Actions (`PORAC_API_BASE_URL`, same origin).
 - [`docs/project-status.md`](docs/project-status.md) §4 and `PLAN.md` §0 track what else is still open before a real deployment (credential rotation, backup verification, monitoring, a written runbook) — read those before treating "it runs locally" as "it's ready to deploy."
+
+Phase 8b-1: `pnpm --prefix api migrate:contraction` applies 0049 after 0048, using one transaction, bounded locks and strict state verification. Take a Neon branch backup first. This code runs on both 0048 and 0049; deploy it and drain older consumers before contracting. No CSV export is required. `migrate:config` and `verify:config` are retired; `dem_points`, `seed:dem`, Terrain and TARGET_DEM_TIFF_FILE remain. Report acknowledgments, admins.role, dispute/feedback mirrors and permanent audit actor_role/admin_role remain. Do not replay historical SQL directly after contraction; the 0045/0048/0039 entry points verify the final state without recreating objects.
+
+Fresh historical schema replay must include 0007_config.sql before the 0049 upgrade; retired config commands are not a provisioning path. The contraction intentionally aborts if the 0048 baseline is incomplete.
