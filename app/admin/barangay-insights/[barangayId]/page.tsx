@@ -1,11 +1,12 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { apiGetOptional, getAdminSessionFromApi } from "@/lib/api-client";
+import { ApiError, apiGetOptional, getAdminSessionFromApi } from "@/lib/api-client";
 import type { BarangayProfile as BarangayProfileData } from "@/lib/types/admin-barangay-insights";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
 import { BarangayProfile } from "@/components/features/admin/barangay-insights/BarangayProfile";
 import { BarangayProfileSkeleton } from "@/components/features/admin/barangay-insights/BarangayProfileSkeleton";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
 
 async function BarangayProfileFetch({
   barangayId,
@@ -21,6 +22,7 @@ async function BarangayProfileFetch({
   try {
     profile = await apiGetOptional<BarangayProfileData>(`/admin/barangay-insights/${barangayId}${qs}`, [401, 404]);
   } catch (err) {
+    if (err instanceof ApiError && err.status === 403) return <AdminAccessDenied />;
     return (
       <AdminErrorCard
         detail={err instanceof Error ? err.message : undefined}

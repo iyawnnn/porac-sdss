@@ -11,6 +11,13 @@ import type { CitizenSession } from "./auth/citizenSession";
 // racing against the NestJS API's IPv4 bind (see api/src/main.ts).
 const BASE = process.env.INTERNAL_API_URL ?? "http://127.0.0.1:3001";
 
+export class ApiError extends Error {
+  constructor(readonly status: number, path: string) {
+    super(`${path} -> ${status}`);
+    this.name = "ApiError";
+  }
+}
+
 async function cookieHeader(): Promise<HeadersInit> {
   return { cookie: (await headers()).get("cookie") ?? "" };
 }
@@ -61,7 +68,7 @@ async function fetchApi(path: string): Promise<Response> {
 // ticket/report state are recalculated live per request, not static.
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetchApi(path);
-  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, path);
   return res.json() as Promise<T>;
 }
 
@@ -72,7 +79,7 @@ export async function apiGet<T>(path: string): Promise<T> {
 export async function apiGetOptional<T>(path: string, treatAsNull: number[] = [401]): Promise<T | null> {
   const res = await fetchApi(path);
   if (treatAsNull.includes(res.status)) return null;
-  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, path);
   return res.json() as Promise<T>;
 }
 

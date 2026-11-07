@@ -1,10 +1,11 @@
 import { Suspense } from "react";
-import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
+import { ApiError, apiGet, getAdminSessionFromApi } from "@/lib/api-client";
 import type { PaginatedTickets, SavedView, TicketViewCounts } from "@/lib/types/admin-tickets";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
 import { TicketsWorkspace } from "@/components/features/admin/tickets/TicketsWorkspace";
 import { TicketQueueSkeleton } from "@/components/features/admin/tickets/TicketQueueSkeleton";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
 
 interface Barangay {
   id: number;
@@ -42,6 +43,7 @@ async function TicketsData({ query }: { query: Record<string, string | undefined
       apiGet<{ features: BarangaysGeoFeature[] }>("/admin/barangays/geo"),
     ]);
   } catch (err) {
+    if (err instanceof ApiError && err.status === 403) return <AdminAccessDenied />;
     return (
       <AdminErrorCard
         detail={err instanceof Error ? err.message : undefined}

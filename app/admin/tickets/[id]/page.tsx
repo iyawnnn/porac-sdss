@@ -2,7 +2,7 @@ import { Suspense, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
-import { apiGetOptional } from "@/lib/api-client";
+import { ApiError, apiGetOptional } from "@/lib/api-client";
 import type {
   TicketDetail,
   TicketReport,
@@ -27,6 +27,7 @@ import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { SEVERITY_SCREENING_LABEL } from "@/lib/utils/ui/severity-screening";
 import { StatusPill } from "@/components/features/admin/shared/StatusPill";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
 import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
 import { moderationStatusLabel } from "@/components/features/admin/flagged/flagText";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
@@ -124,6 +125,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
       workOrders = workOrdersResponse?.workOrders ?? [];
     }
   } catch (err) {
+    if (err instanceof ApiError && err.status === 403) return <AdminAccessDenied />;
     return (
       <AdminErrorCard
         detail={err instanceof Error ? err.message : undefined}

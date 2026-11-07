@@ -1,7 +1,8 @@
-import { apiGet } from "@/lib/api-client";
+import { ApiError, apiGet } from "@/lib/api-client";
 import type { FocalDashboardCounts, FocalDashboardReports } from "@/lib/types/admin-focal-dashboard";
 import { FocalDashboard } from "@/components/features/admin/focal/FocalDashboard";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
 
 export default async function FocalDashboardPage({ searchParams }: {
   searchParams: Promise<{ page?: string; pageSize?: string }>;
@@ -18,6 +19,7 @@ export default async function FocalDashboardPage({ searchParams }: {
       apiGet<FocalDashboardReports>(`/admin/focal-dashboard/reports?${params}`),
     ]);
   } catch (err) {
+    if (err instanceof ApiError && err.status === 403) return <AdminAccessDenied />;
     return (
       <AdminErrorCard
         detail={err instanceof Error ? err.message : undefined}

@@ -130,13 +130,13 @@ test("the real security boundary is the API, not the UI: a hand-crafted request 
 // Office picker — with only a small inline "Tickets Unavailable" banner
 // where pins would be. No data actually leaked (the API stayed guarded),
 // but the page presented an operational surface to a denied role. Fixed
-// in app/admin/map/page.tsx (an explicit system_admin denial, matching the
-// AdminErrorCard pattern Work Orders/Ticket Queue/Reports already use) —
+// in app/admin/map/page.tsx (an explicit operational-Personnel-only gate,
+// matching the access-denied state Work Orders/Ticket Queue/Reports use) —
 // this test pins that fix.
 test("system admin cannot reach the Interactive Map at all", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/map?office=MDRRMO");
-  await expect(page.getByText("Interactive Map Unavailable")).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
   await expect(page.locator(".leaflet-container")).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Office" })).toHaveCount(0);
 });
