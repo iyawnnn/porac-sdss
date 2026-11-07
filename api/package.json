@@ -61,6 +61,7 @@
     "migrate:resolution-feedback": "tsx --env-file=.env scripts/migrations/migrate-resolution-feedback.ts",
     "migrate:hazard-information": "tsx --env-file=.env scripts/migrations/migrate-hazard-information.ts",
     "migrate:rainfall-context": "tsx --env-file=.env scripts/migrations/migrate-rainfall-context.ts",
+    "migrate:assessment-alignment": "tsx --env-file=.env scripts/migrations/migrate-operational-assessment-alignment.ts",
     "migrate:assessment-work-orders": "tsx --env-file=.env scripts/migrations/migrate-assessment-work-orders.ts",
     "migrate:resolution-record": "tsx --env-file=.env scripts/migrations/migrate-resolution-record.ts",
     "migrate:audit-append-only": "tsx --env-file=.env scripts/migrations/migrate-audit-append-only.ts",

@@ -1,9 +1,10 @@
 import { Suspense } from "react";
-import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
+import { ApiError, apiGet, getAdminSessionFromApi } from "@/lib/api-client";
 import type { PaginatedWorkOrders } from "@/lib/types/admin-work-orders";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
 import { WorkOrdersWorkspace } from "@/components/features/admin/work-orders/WorkOrdersWorkspace";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function WorkOrdersSkeleton() {
@@ -25,6 +26,7 @@ async function WorkOrdersData({ query }: { query: Record<string, string | undefi
   try {
     initialData = await apiGet<PaginatedWorkOrders>(`/admin/work-orders${qs ? `?${qs}` : ""}`);
   } catch (err) {
+    if (err instanceof ApiError && err.status === 403) return <AdminAccessDenied />;
     return (
       <AdminErrorCard
         detail={err instanceof Error ? err.message : undefined}

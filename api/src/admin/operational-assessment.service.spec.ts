@@ -53,13 +53,12 @@ const SYSTEM_ADMIN = {
 } as AdminSession;
 
 const VALID_INPUT = {
-  observedConditions: 'Road shoulder eroded, 2m gap exposed',
+  assessedConditions: 'Road shoulder eroded, 2m gap exposed',
   safetyImplications: 'Risk of vehicle falling into the gap at night',
   operationalConstraints: ['equipment', 'funding'],
   recommendedAction: 'Deploy backfill crew with barricades',
-  temporaryMitigation: 'Cones and warning signage placed',
-  defermentReason: undefined,
-  referralReason: undefined,
+  interimMitigation: 'Cones and warning signage placed',
+  defermentOrReferralReason: undefined,
   remarks: undefined,
 };
 
@@ -107,15 +106,17 @@ const ASSESSMENT_ROW = {
   ticket_id: 10,
   assessed_by_admin_id: 1,
   assessed_by_name: 'Juan Cruz',
-  observed_conditions: VALID_INPUT.observedConditions,
+  assessed_conditions: VALID_INPUT.assessedConditions,
   safety_implications: VALID_INPUT.safetyImplications,
-  operational_constraints: VALID_INPUT.operationalConstraints,
+  operational_constraints: {
+    selected: VALID_INPUT.operationalConstraints,
+    notes: {},
+  },
   recommended_action: VALID_INPUT.recommendedAction,
-  temporary_mitigation: VALID_INPUT.temporaryMitigation,
-  deferment_reason: null,
-  referral_reason: null,
+  interim_mitigation: VALID_INPUT.interimMitigation,
+  deferment_or_referral_reason: null,
   remarks: null,
-  assessed_at: '2026-01-01T00:00:00Z',
+  created_at: '2026-01-01T00:00:00Z',
   updated_by_admin_id: 1,
   updated_by_name: 'Juan Cruz',
   updated_at: '2026-01-01T00:00:00Z',
@@ -136,7 +137,7 @@ describe('OperationalAssessmentService.upsert — create', () => {
       [ASSESSMENT_ROW], // getForTicket refetch
     ]);
     const result = await service.upsert(10, MEO_OFFICER, VALID_INPUT);
-    expect(result?.observedConditions).toBe(VALID_INPUT.observedConditions);
+    expect(result?.assessedConditions).toBe(VALID_INPUT.assessedConditions);
     expect(logInPgTx).toHaveBeenCalledTimes(1);
     expect(logInPgTx.mock.calls[0][1].actionType).toBe(
       'operational_assessment_created',
@@ -243,13 +244,13 @@ describe('OperationalAssessmentService.upsert — update', () => {
     const { service, logInPgTx } = makeService([
       [{ assigned_office: 'MEO' }], // ticket lookup
       [{ inserted: false }], // INSERT ... ON CONFLICT lands as an update
-      [{ ...ASSESSMENT_ROW, observed_conditions: 'Updated text' }], // refetch
+      [{ ...ASSESSMENT_ROW, assessed_conditions: 'Updated text' }], // refetch
     ]);
     const result = await service.upsert(10, MEO_OFFICER, {
       ...VALID_INPUT,
-      observedConditions: 'Updated text',
+      assessedConditions: 'Updated text',
     });
-    expect(result?.observedConditions).toBe('Updated text');
+    expect(result?.assessedConditions).toBe('Updated text');
     expect(logInPgTx.mock.calls[0][1].actionType).toBe(
       'operational_assessment_updated',
     );
@@ -337,7 +338,7 @@ describe('OperationalAssessmentService.upsert — concurrent first-save race', (
     );
   });
 
-  it('never overwrites assessed_by_admin_id/assessed_by_name/assessed_at on conflict — the DO UPDATE SET clause omits all three', () => {
+  it('never overwrites assessed_by_admin_id/assessed_by_name/created_at on conflict — the DO UPDATE SET clause omits all three', () => {
     const source = readFileSync(
       join(__dirname, 'operational-assessment.service.ts'),
       'utf8',
@@ -347,7 +348,7 @@ describe('OperationalAssessmentService.upsert — concurrent first-save race', (
     const setClause = onConflictMatch?.[0] ?? '';
     expect(setClause).not.toMatch(/assessed_by_admin_id\s*=/);
     expect(setClause).not.toMatch(/assessed_by_name\s*=/);
-    expect(setClause).not.toMatch(/(?<!_)\bassessed_at\s*=/);
+    expect(setClause).not.toMatch(/(?<!_)\bcreated_at\s*=/);
   });
 });
 
@@ -386,13 +387,12 @@ describe('OperationalAssessmentService.upsert — validation', () => {
     const { service } = makeService([[{ assigned_office: 'MEO' }]]);
     await expect(
       service.upsert(10, MEO_OFFICER, {
-        observedConditions: '   ',
+        assessedConditions: '   ',
         safetyImplications: '',
         operationalConstraints: [],
         recommendedAction: '',
-        temporaryMitigation: '',
-        defermentReason: undefined,
-        referralReason: undefined,
+        interimMitigation: '',
+        defermentOrReferralReason: undefined,
         remarks: undefined,
       }),
     ).rejects.toThrow(BadRequestException);
@@ -406,13 +406,12 @@ describe('OperationalAssessmentService.upsert — validation', () => {
     ]);
     await expect(
       service.upsert(10, MEO_OFFICER, {
-        observedConditions: 'Just this one field filled in',
+        assessedConditions: 'Just this one field filled in',
         safetyImplications: '',
         operationalConstraints: [],
         recommendedAction: '',
-        temporaryMitigation: '',
-        defermentReason: undefined,
-        referralReason: undefined,
+        interimMitigation: '',
+        defermentOrReferralReason: undefined,
         remarks: undefined,
       }),
     ).resolves.toBeTruthy();
@@ -513,18 +512,18 @@ describe('OperationalAssessmentService.upsert — step 5b rules', () => {
     ['blank', '   '],
     ['missing', undefined],
   ])(
-    'refuses %s observed conditions on a new save, even with every other field filled',
-    async (_label, observedConditions) => {
+    'refuses %s assessed conditions on a new save, even with every other field filled',
+    async (_label, assessedConditions) => {
       const { service } = makeService([ticket()]);
       await expect(
         service.upsert(10, MEO_OFFICER, {
           ...VALID_INPUT,
-          observedConditions,
+          assessedConditions,
           actualAction: 'Patched',
           remarks: 'Something',
         }),
       ).rejects.toThrow(
-        new BadRequestException('Observed conditions are required.'),
+        new BadRequestException('Assessed conditions are required.'),
       );
       expect(queries).toHaveLength(1);
     },
@@ -551,7 +550,10 @@ describe('OperationalAssessmentService.upsert — step 5b rules', () => {
       expect.arrayContaining([
         'Cold patch applied',
         'https://res.cloudinary.com/demo/site.jpg',
-        JSON.stringify({ equipment: 'Backhoe under repair' }),
+        JSON.stringify({
+          selected: VALID_INPUT.operationalConstraints,
+          notes: { equipment: 'Backhoe under repair' },
+        }),
       ]),
     );
     // DO UPDATE carries the new columns too, so an edit changes them.
@@ -560,7 +562,7 @@ describe('OperationalAssessmentService.upsert — step 5b rules', () => {
       /supporting_evidence_url = EXCLUDED\.supporting_evidence_url/,
     );
     expect(insert.text).toMatch(
-      /operational_constraint_notes = EXCLUDED\.operational_constraint_notes/,
+      /operational_constraints = EXCLUDED\.operational_constraints/,
     );
   });
 
@@ -577,7 +579,12 @@ describe('OperationalAssessmentService.upsert — step 5b rules', () => {
     });
     const values = queries[1].values;
     expect(values).not.toContain('');
-    expect(values).toContain('{}');
+    expect(values).toContain(
+      JSON.stringify({
+        selected: VALID_INPUT.operationalConstraints,
+        notes: {},
+      }),
+    );
   });
 
   it.each([
@@ -676,65 +683,87 @@ describe('OperationalAssessmentService.upsert — step 5b rules', () => {
   });
 });
 
-describe('OperationalAssessmentService.getForTicket — step 5b read model', () => {
-  it('returns the new fields and the Appendix H aliases', async () => {
+describe('OperationalAssessmentService aligned read model', () => {
+  it('keeps legacy snapshots out of edits and accepts a blank combined reason', async () => {
     const { service } = makeService([
-      [
-        {
-          ...ASSESSMENT_ROW,
-          actual_action: 'Cold patch applied',
-          supporting_evidence_url: 'https://example.com/a.jpg',
-          operational_constraint_notes: { equipment: 'Backhoe under repair' },
-          deferment_reason: 'Waiting for dry weather',
-        },
-      ],
+      [{ assigned_office: 'MEO' }],
+      [{ inserted: false }],
+      [ASSESSMENT_ROW],
     ]);
-    const result = await service.getForTicket(10);
-    expect(result).toMatchObject({
-      actualAction: 'Cold patch applied',
-      supportingEvidenceUrl: 'https://example.com/a.jpg',
-      operationalConstraintNotes: { equipment: 'Backhoe under repair' },
-      assessedConditions: ASSESSMENT_ROW.observed_conditions,
-      observedConditions: ASSESSMENT_ROW.observed_conditions,
-      interimMitigation: ASSESSMENT_ROW.temporary_mitigation,
-      temporaryMitigation: ASSESSMENT_ROW.temporary_mitigation,
-      defermentOrReferralReason: 'Waiting for dry weather',
-      createdAt: ASSESSMENT_ROW.assessed_at,
-      assessedAt: ASSESSMENT_ROW.assessed_at,
+    await service.upsert(10, MEO_OFFICER, {
+      ...VALID_INPUT,
+      defermentOrReferralReason: '   ',
     });
+    expect(queries[1].text).toContain('deferment_or_referral_reason');
+    expect(queries[1].text).not.toMatch(/legacy_|operational_constraint_notes/);
+    expect(queries[1].values).toContain(null);
   });
-
-  it('labels both reasons in the deferment_or_referral_reason alias when both are set', async () => {
+  it('adapts JSONB to selected keys and notes and exposes canonical names only', async () => {
     const { service } = makeService([
       [
         {
           ...ASSESSMENT_ROW,
-          deferment_reason: 'Rain',
-          referral_reason: 'DPWH road',
-        },
-      ],
-    ]);
-    const result = await service.getForTicket(10);
-    expect(result?.defermentOrReferralReason).toBe(
-      'Deferment: Rain\nReferral: DPWH road',
-    );
-  });
-
-  it('still reads a legacy row saved with blank observed conditions and no 5b fields', async () => {
-    const { service } = makeService([
-      [
-        {
-          ...ASSESSMENT_ROW,
-          observed_conditions: '',
-          operational_constraint_notes: null,
+          operational_constraints: {
+            selected: ['equipment'],
+            notes: { equipment: 'Backhoe under repair' },
+          },
+          deferment_or_referral_reason: 'Deferment: Rain\nReferral: DPWH road',
         },
       ],
     ]);
     const result = await service.getForTicket(10);
     expect(result).toMatchObject({
-      observedConditions: '',
+      operationalConstraints: ['equipment'],
+      operationalConstraintNotes: { equipment: 'Backhoe under repair' },
+      assessedConditions: ASSESSMENT_ROW.assessed_conditions,
+      interimMitigation: ASSESSMENT_ROW.interim_mitigation,
+      defermentOrReferralReason: 'Deferment: Rain\nReferral: DPWH road',
+      createdAt: ASSESSMENT_ROW.created_at,
+      assessedByAdminId: 1,
+    });
+    for (const key of [
+      'observedConditions',
+      'temporaryMitigation',
+      'assessedAt',
+      'defermentReason',
+      'referralReason',
+    ])
+      expect(result).not.toHaveProperty(key);
+  });
+  it('still reads older blank conditions after migration', async () => {
+    const { service } = makeService([
+      [
+        {
+          ...ASSESSMENT_ROW,
+          assessed_conditions: '',
+          operational_constraints: { selected: [], notes: {} },
+        },
+      ],
+    ]);
+    expect(await service.getForTicket(10)).toMatchObject({
       assessedConditions: '',
+      operationalConstraints: [],
       operationalConstraintNotes: {},
     });
+  });
+  it('accepts 2100 characters in a combined reason and rejects 2101', async () => {
+    const { service } = makeService([
+      [{ assigned_office: 'MEO' }],
+      [{ inserted: true }],
+      [ASSESSMENT_ROW],
+    ]);
+    await expect(
+      service.upsert(10, MEO_OFFICER, {
+        ...VALID_INPUT,
+        defermentOrReferralReason: 'x'.repeat(2100),
+      }),
+    ).resolves.toBeTruthy();
+    const refused = makeService([[{ assigned_office: 'MEO' }]]);
+    await expect(
+      refused.service.upsert(10, MEO_OFFICER, {
+        ...VALID_INPUT,
+        defermentOrReferralReason: 'x'.repeat(2101),
+      }),
+    ).rejects.toThrow(BadRequestException);
   });
 });

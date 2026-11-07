@@ -1,9 +1,10 @@
 import { Suspense } from "react";
-import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
+import { ApiError, apiGet, getAdminSessionFromApi } from "@/lib/api-client";
 import type { BarangayInsightsResponse } from "@/lib/types/admin-barangay-insights";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
 import { BarangayInsightsWorkspace } from "@/components/features/admin/barangay-insights/BarangayInsightsWorkspace";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
 import { Skeleton } from "@/components/ui/skeleton";
 
 async function BarangayInsightsData({ query }: { query: Record<string, string | undefined> }) {
@@ -15,6 +16,7 @@ async function BarangayInsightsData({ query }: { query: Record<string, string | 
   try {
     initialData = await apiGet<BarangayInsightsResponse>(`/admin/barangay-insights${qs}`);
   } catch (err) {
+    if (err instanceof ApiError && err.status === 403) return <AdminAccessDenied />;
     return (
       <AdminErrorCard
         detail={err instanceof Error ? err.message : undefined}

@@ -338,7 +338,7 @@ function ticketChain(overrides: Partial<Record<string, unknown>> = {}) {
     ...overrides,
   });
 }
-// An Operational Assessment with observed conditions exists.
+// An Operational Assessment with assessed conditions exists.
 const assessed = () => chain({ id: 1 });
 
 const CREATE_INPUT = {
@@ -471,7 +471,7 @@ describe('WorkOrdersService.create', () => {
     expect(db.insert).not.toHaveBeenCalled();
   });
 
-  it('refuses with 409 "Add an Operational Assessment first." when the ticket has no assessment with observed conditions', async () => {
+  it('refuses with 409 "Add an Operational Assessment first." when the ticket has no assessment with assessed conditions', async () => {
     const db = makeDb();
     db.select.mockReturnValueOnce(ticketChain()).mockReturnValueOnce(chain([]));
     const { audit, notifications, logInTx, notifyCreate } = makeDeps();
@@ -487,7 +487,7 @@ describe('WorkOrdersService.create', () => {
     expect(notifyCreate).not.toHaveBeenCalled();
   });
 
-  it('looks the assessment up by ticket and non-blank observed conditions, after locking the ticket row', async () => {
+  it('looks the assessment up by ticket and non-blank assessed conditions, after locking the ticket row', async () => {
     const db = makeDb();
     db.select
       .mockReturnValueOnce(ticketChain())
@@ -502,7 +502,7 @@ describe('WorkOrdersService.create', () => {
     });
     expect(db.reads[1].table).toBe(operationalAssessments);
     expect(db.reads[1].where).toMatch(
-      /btrim\("operational_assessments"\."observed_conditions"\) <> ''/,
+      /btrim\("operational_assessments"\."assessed_conditions"\) <> ''/,
     );
     expect(db.reads[1].params).toEqual([5]);
   });

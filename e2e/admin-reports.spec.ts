@@ -138,6 +138,8 @@ for (const account of [E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN]) {
     const assessments = await downloadRows(page, 'Export Operational Assessments CSV');
     const assessmentHeaders = assessments[0];
     expect(assessmentHeaders).toContain('Assessed Conditions'); expect(assessmentHeaders).toContain('Interim Mitigation');
+    expect(assessmentHeaders).toContain('Deferment or Referral Reason');
+    expect(assessmentHeaders).not.toContain('Deferment Reason'); expect(assessmentHeaders).not.toContain('Referral Reason');
     expect(assessmentHeaders).not.toContain('Observed Conditions'); expect(assessmentHeaders).not.toContain('Temporary Mitigation');
     expect(assessmentHeaders).not.toContain('Assessment Count');
     for (const row of assessments.slice(1)) expect(row[1]).toBe(account.office);
@@ -281,14 +283,14 @@ test("MDRRMO admin sees an office-scoped summary and no office picker on the rep
 // Batch 6 (five-role E2E reconciliation): Reports & Exports' office filter/
 // city-wide summary and its underlying CSV endpoints were system_admin-only.
 // Batch 1 of the five-role architecture removed system_admin's operational
-// access entirely — confirmed live, both `/admin/reports` (renders "Reports
-// Summary Unavailable") and `GET /admin/reports/tickets.csv`/`work-orders.csv`
+// access entirely — both `/admin/reports` (renders access denied)
+// and `GET /admin/reports/tickets.csv`/`work-orders.csv`
 // (403 "Operational staff access required") now reject it outright. There is
 // no reachable "city-wide export" capability left for any role to test.
 test("system admin cannot reach Reports & Exports, and its CSV endpoints deny system admin directly", async ({ page, request }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/reports");
-  await expect(page.getByText("Reports Summary Unavailable")).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Office", exact: true })).toHaveCount(0);
 
   const cookies = await page.context().cookies();

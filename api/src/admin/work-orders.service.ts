@@ -498,7 +498,7 @@ export class WorkOrdersService {
     // here, so the manuscript rules (p. 45) hold everywhere: the ticket's
     // current responsible office only, never on a merged-away or Rejected
     // ticket, and only once the ticket has an Operational Assessment with
-    // observed conditions. Tickets that already had Work Orders without an
+    // assessed conditions. Tickets that already had Work Orders without an
     // assessment keep them; the rule is for new ones.
     const { row, office } = await this.db.transaction(async (tx) => {
       const ticket = await this.lockTicket(tx, ticketId);
@@ -509,7 +509,7 @@ export class WorkOrdersService {
         .where(
           and(
             eq(operationalAssessments.ticketId, ticketId),
-            dsql`btrim(${operationalAssessments.observedConditions}) <> ''`,
+            dsql`btrim(${operationalAssessments.assessedConditions}) <> ''`,
           ),
         );
       if (!assessment) {

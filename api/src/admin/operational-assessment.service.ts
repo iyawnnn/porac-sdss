@@ -36,20 +36,19 @@ import {
 // the System Administrator; never on a merged-away or Rejected ticket.
 //
 // Step 5b also added actual_action, supporting_evidence_url and
-// operational_constraint_notes (Appendix H), and made observed conditions
-// required on every new save. Rows saved earlier with blank observed
+// constraint notes (Appendix H), and made assessed conditions
+// required on every new save. Rows saved earlier with blank assessed
 // conditions stay as they are and stay readable; editing one means filling
 // it in. A ticket's Work Orders can be created only once it has an
-// assessment with observed conditions (WorkOrdersService.create).
+// assessment with assessed conditions (WorkOrdersService.create).
 
 export interface OperationalAssessmentInput {
-  observedConditions?: string;
+  assessedConditions?: string;
   safetyImplications?: string;
   operationalConstraints?: string[];
   recommendedAction?: string;
-  temporaryMitigation?: string;
-  defermentReason?: string;
-  referralReason?: string;
+  interimMitigation?: string;
+  defermentOrReferralReason?: string;
   remarks?: string;
   actualAction?: string;
   supportingEvidenceUrl?: string | null;
@@ -59,65 +58,45 @@ export interface OperationalAssessmentInput {
 export interface OperationalAssessmentRow {
   id: number;
   ticketId: number;
-  assessedByAdminId: number | null;
+  assessedByAdminId: number;
   assessedByName: string | null;
-  observedConditions: string;
+  assessedConditions: string;
   safetyImplications: string;
   operationalConstraints: string[];
   recommendedAction: string;
-  temporaryMitigation: string;
-  defermentReason: string | null;
-  referralReason: string | null;
+  interimMitigation: string;
+  defermentOrReferralReason: string | null;
   remarks: string | null;
-  assessedAt: string;
+  createdAt: string;
   updatedByAdminId: number | null;
   updatedByName: string | null;
   updatedAt: string;
   actualAction: string | null;
   supportingEvidenceUrl: string | null;
-  // One note per selected operationalConstraints key.
   operationalConstraintNotes: Record<string, string>;
-  // Appendix H names for the columns whose names differ from ours (see
-  // docs/database.md for the full mapping; the physical renames are the
-  // Phase 8 cleanup). Read-only aliases of the fields above.
-  assessedConditions: string;
-  interimMitigation: string;
-  defermentOrReferralReason: string | null;
-  createdAt: string;
 }
 
 interface RawAssessmentRow {
   id: number;
   ticket_id: number;
-  assessed_by_admin_id: number | null;
+  assessed_by_admin_id: number;
   assessed_by_name: string | null;
-  observed_conditions: string;
+  assessed_conditions: string;
   safety_implications: string;
-  operational_constraints: string[] | null;
+  operational_constraints: {
+    selected: string[];
+    notes: Record<string, string>;
+  };
   recommended_action: string;
-  temporary_mitigation: string;
-  deferment_reason: string | null;
-  referral_reason: string | null;
+  interim_mitigation: string;
+  deferment_or_referral_reason: string | null;
   remarks: string | null;
-  assessed_at: string;
+  created_at: string;
   updated_by_admin_id: number | null;
   updated_by_name: string | null;
   updated_at: string;
   actual_action: string | null;
   supporting_evidence_url: string | null;
-  operational_constraint_notes: Record<string, string> | null;
-}
-
-// Appendix H has one deferment_or_referral_reason; we keep the two older
-// columns, so the alias is whichever is set, or both labelled.
-function defermentOrReferral(
-  deferment: string | null,
-  referral: string | null,
-): string | null {
-  if (deferment && referral) {
-    return `Deferment: ${deferment}\nReferral: ${referral}`;
-  }
-  return deferment ?? referral ?? null;
 }
 
 function mapRow(row: RawAssessmentRow): OperationalAssessmentRow {
@@ -126,39 +105,30 @@ function mapRow(row: RawAssessmentRow): OperationalAssessmentRow {
     ticketId: row.ticket_id,
     assessedByAdminId: row.assessed_by_admin_id,
     assessedByName: row.assessed_by_name,
-    observedConditions: row.observed_conditions,
+    assessedConditions: row.assessed_conditions,
     safetyImplications: row.safety_implications,
-    operationalConstraints: row.operational_constraints ?? [],
+    operationalConstraints: row.operational_constraints.selected,
+    operationalConstraintNotes: row.operational_constraints.notes,
     recommendedAction: row.recommended_action,
-    temporaryMitigation: row.temporary_mitigation,
-    defermentReason: row.deferment_reason,
-    referralReason: row.referral_reason,
+    interimMitigation: row.interim_mitigation,
+    defermentOrReferralReason: row.deferment_or_referral_reason,
     remarks: row.remarks,
-    assessedAt: row.assessed_at,
+    createdAt: row.created_at,
     updatedByAdminId: row.updated_by_admin_id,
     updatedByName: row.updated_by_name,
     updatedAt: row.updated_at,
     actualAction: row.actual_action,
     supportingEvidenceUrl: row.supporting_evidence_url,
-    operationalConstraintNotes: row.operational_constraint_notes ?? {},
-    assessedConditions: row.observed_conditions,
-    interimMitigation: row.temporary_mitigation,
-    defermentOrReferralReason: defermentOrReferral(
-      row.deferment_reason,
-      row.referral_reason,
-    ),
-    createdAt: row.assessed_at,
   };
 }
 
 interface NormalizedInput {
-  observedConditions: string;
+  assessedConditions: string;
   safetyImplications: string;
   operationalConstraints: OperationalConstraint[];
   recommendedAction: string;
-  temporaryMitigation: string;
-  defermentReason: string | null;
-  referralReason: string | null;
+  interimMitigation: string;
+  defermentOrReferralReason: string | null;
   remarks: string | null;
   actualAction: string | null;
   supportingEvidenceUrl: string | null;
@@ -257,10 +227,10 @@ function normalizeAndValidate(
   };
 
   const normalized: NormalizedInput = {
-    observedConditions: text(
-      input.observedConditions,
+    assessedConditions: text(
+      input.assessedConditions,
       OPERATIONAL_ASSESSMENT_TEXT_MAX_LENGTH,
-      'Observed conditions',
+      'Assessed conditions',
     ),
     safetyImplications: text(
       input.safetyImplications,
@@ -273,20 +243,15 @@ function normalizeAndValidate(
       OPERATIONAL_ASSESSMENT_TEXT_MAX_LENGTH,
       'Recommended action',
     ),
-    temporaryMitigation: text(
-      input.temporaryMitigation,
+    interimMitigation: text(
+      input.interimMitigation,
       OPERATIONAL_ASSESSMENT_TEXT_MAX_LENGTH,
-      'Temporary mitigation',
+      'Interim mitigation',
     ),
-    defermentReason: nullableText(
-      input.defermentReason,
+    defermentOrReferralReason: nullableText(
+      input.defermentOrReferralReason,
       OPERATIONAL_ASSESSMENT_REASON_MAX_LENGTH,
-      'Deferment reason',
-    ),
-    referralReason: nullableText(
-      input.referralReason,
-      OPERATIONAL_ASSESSMENT_REASON_MAX_LENGTH,
-      'Referral reason',
+      'Deferment or referral reason',
     ),
     remarks: nullableText(
       input.remarks,
@@ -306,11 +271,11 @@ function normalizeAndValidate(
   };
 
   // Appendix H's assessed_conditions is NOT NULL: every new save needs
-  // observed conditions (manuscript revision Phase 5, step 5b). This also
+  // assessed conditions (manuscript revision Phase 5, step 5b). This also
   // rules out the fully blank record the earlier "at least one field" rule
-  // refused. Older rows saved with blank observed conditions stay valid.
-  if (!normalized.observedConditions) {
-    throw new BadRequestException('Observed conditions are required.');
+  // refused. Older rows saved with blank assessed conditions stay valid.
+  if (!normalized.assessedConditions) {
+    throw new BadRequestException('Assessed conditions are required.');
   }
 
   return normalized;
@@ -329,11 +294,11 @@ export class OperationalAssessmentService {
     const sql = this.pg;
     const [row] = await sql<RawAssessmentRow[]>`
       SELECT id, ticket_id, assessed_by_admin_id, assessed_by_name,
-        observed_conditions, safety_implications, operational_constraints,
-        recommended_action, temporary_mitigation, deferment_reason,
-        referral_reason, remarks, assessed_at,
+        assessed_conditions, safety_implications, operational_constraints,
+        recommended_action, interim_mitigation, deferment_or_referral_reason,
+        remarks, created_at,
         updated_by_admin_id, updated_by_name, updated_at,
-        actual_action, supporting_evidence_url, operational_constraint_notes
+        actual_action, supporting_evidence_url
       FROM operational_assessments WHERE ticket_id = ${ticketId}
     `;
     return row ? mapRow(row) : null;
@@ -352,7 +317,7 @@ export class OperationalAssessmentService {
   // standard Postgres idiom for telling which branch fired (xmax = 0 means
   // this command inserted the row; a nonzero xmax means it updated an
   // existing one), which is what picks the correct audit action type.
-  // Critically, assessed_by_admin_id/assessed_by_name/assessed_at are NOT
+  // Critically, assessed_by_admin_id/assessed_by_name/created_at are NOT
   // in the DO UPDATE SET list below — on conflict they keep the values from
   // the row already in the table (the original creator's), never the
   // conflicting INSERT's values, so the original assessor can never be
@@ -393,34 +358,30 @@ export class OperationalAssessmentService {
       const [written] = await tx<{ inserted: boolean }[]>`
         INSERT INTO operational_assessments (
           ticket_id, assessed_by_admin_id, assessed_by_name,
-          observed_conditions, safety_implications, operational_constraints,
-          recommended_action, temporary_mitigation, deferment_reason,
-          referral_reason, remarks, updated_by_admin_id, updated_by_name,
-          actual_action, supporting_evidence_url, operational_constraint_notes
+          assessed_conditions, safety_implications, operational_constraints,
+          recommended_action, interim_mitigation, deferment_or_referral_reason,
+          remarks, updated_by_admin_id, updated_by_name,
+          actual_action, supporting_evidence_url
         )
         SELECT
           t.id, ${admin.adminId}, ${admin.adminName},
-          ${normalized.observedConditions}, ${normalized.safetyImplications}, ${normalized.operationalConstraints},
-          ${normalized.recommendedAction}, ${normalized.temporaryMitigation}, ${normalized.defermentReason},
-          ${normalized.referralReason}, ${normalized.remarks}, ${admin.adminId}, ${admin.adminName},
-          ${normalized.actualAction}, ${normalized.supportingEvidenceUrl},
-          ${JSON.stringify(normalized.operationalConstraintNotes)}::jsonb
+          ${normalized.assessedConditions}, ${normalized.safetyImplications}, ${JSON.stringify({ selected: normalized.operationalConstraints, notes: normalized.operationalConstraintNotes })}::jsonb,
+          ${normalized.recommendedAction}, ${normalized.interimMitigation}, ${normalized.defermentOrReferralReason}, ${normalized.remarks}, ${admin.adminId}, ${admin.adminName},
+          ${normalized.actualAction}, ${normalized.supportingEvidenceUrl}
         FROM tickets t
         WHERE t.id = ${ticketId}
           AND t.merged_into_ticket_id IS NULL
           AND t.status <> 'Rejected'
         ON CONFLICT (ticket_id) DO UPDATE SET
-          observed_conditions = EXCLUDED.observed_conditions,
+          assessed_conditions = EXCLUDED.assessed_conditions,
           safety_implications = EXCLUDED.safety_implications,
           operational_constraints = EXCLUDED.operational_constraints,
           recommended_action = EXCLUDED.recommended_action,
-          temporary_mitigation = EXCLUDED.temporary_mitigation,
-          deferment_reason = EXCLUDED.deferment_reason,
-          referral_reason = EXCLUDED.referral_reason,
+          interim_mitigation = EXCLUDED.interim_mitigation,
+          deferment_or_referral_reason = EXCLUDED.deferment_or_referral_reason,
           remarks = EXCLUDED.remarks,
           actual_action = EXCLUDED.actual_action,
           supporting_evidence_url = EXCLUDED.supporting_evidence_url,
-          operational_constraint_notes = EXCLUDED.operational_constraint_notes,
           updated_by_admin_id = EXCLUDED.updated_by_admin_id,
           updated_by_name = EXCLUDED.updated_by_name,
           updated_at = now()

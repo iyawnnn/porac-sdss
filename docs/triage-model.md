@@ -17,7 +17,7 @@ The manuscript's decision support has three components. Only one of them is a co
 | Component | What it is | Status |
 |---|---|---|
 | **Operational Priority** (`priority_index`) | System-computed administrative queue order — how soon staff should act | **Live** — this document |
-| **Operational Assessment** (`operational_assessments`) | Human-entered: observed conditions, safety implications, recommended action | Live (five-role Batch 3). No score, level or band |
+| **Operational Assessment** (`operational_assessments`) | Human-entered: assessed conditions, safety implications, recommended action | Live (five-role Batch 3). No score, level or band |
 | **Hazard Information** (`hazard_information`) | DENR-MGB flood / rain-induced-landslide susceptibility for the ticket's location — advisory context only, in the source's own terms | Live (Phase 4, step 4b; `docs/database.md`). Never a score and never an input to `priority_index` |
 
 The manuscript states that the system produces no "risk, urgency, severity, or numerical hazard score." The former **Hazard Urgency** score (elevation + rainfall + cluster) was retired in manuscript revision Phase 1 — see §12.

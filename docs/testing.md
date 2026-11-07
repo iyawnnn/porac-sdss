@@ -1,3 +1,7 @@
+Verification: 79 API suites / 1,851 tests and one snapshot; 45 root tests; 19 assessment-alignment and seven export PGlite groups; both reason/FK mutations detected; type-check and API/web production builds passed. Root/CJS lint is clean; API lint has no new findings (354 existing versus 356 on the parent). Builds used a temporary source copy, preserving protected files and production API PID 5176. No Playwright or real-database migration/seed run.
+
+Phase 8a assessment alignment: run api/test/assessment-alignment.pglite.cjs with PGLITE_MODULE_ROOT pointing to the existing scratch PGlite/socket installation. It builds the real 0033/0045 baseline in memory, checks populated conversion twice, all blocking preflights, rollback, mutation detection, and real service/Work Order/export/cleanup paths through a drizzle()-wrapped postgres client. No env file or real database is loaded. The updated new-exports.pglite.cjs uses the final shape. Migration order is 0033 -> 0045 -> 0048; the old 0045 runner verifies final state without recreating retired columns. E2E setup retires referenced assessment creators; audit history and actor_role remain untouched. Do not run Playwright or live migration/seed runners during this implementation gate.
+
 # Testing
 
 ### Phase 7, step 7d-2: Focal intake aggregation and dashboard cleanup
@@ -288,7 +292,7 @@ Default per-test timeout is **30 s**. Several specs raise it deliberately — `a
 
 | Script | Effect |
 |---|---|
-| `cleanup:e2e-admins` | Deletes throwaway `e2e-*@porac.gov.ph` admin accounts left by earlier runs |
+| `cleanup:e2e-admins` | Retires referenced assessment creators and deletes only unreferenced throwaway accounts from earlier runs |
 | `seed:e2e-admins` | Upserts the three demo admin accounts |
 | `seed:users` | Upserts the citizen demo accounts |
 

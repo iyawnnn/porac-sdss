@@ -289,14 +289,13 @@ test("a doctored office query value does not widen an office admin's visibility"
 // Batch 6 (five-role E2E reconciliation): the Ticket Queue's office picker/
 // city-wide view was system_admin-only. Batch 1 of the five-role
 // architecture removed system_admin's operational access entirely
-// (confirmed live in Batch 5: /admin/tickets renders "Ticket Queue
-// Unavailable" for it), so there is no reachable office picker left to test
+// (/admin/tickets renders the access-denied state), so there is no reachable office picker left to test
 // for any role — office admins never had one (their own office is
 // implicit).
 test("system admin cannot reach the Ticket Queue at all", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/tickets");
-  await expect(page.getByText("Ticket Queue Unavailable")).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
   await expect(page.getByLabel("Office", { exact: true })).toHaveCount(0);
 });
 

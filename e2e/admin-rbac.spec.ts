@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { E2E_MEO_ADMIN, E2E_MDRRMO_ADMIN, E2E_SYSTEM_ADMIN } from "./test-credentials";
-import { loginAdmin as loginAs } from "./helpers";
+import { loginAdmin as loginAs, settleAdminPage } from "./helpers";
 
 test.setTimeout(60_000);
 
@@ -54,12 +54,24 @@ test("office admin ticket queue has no office picker, only a fixed office badge"
 // shared loginAdmin helper failed first on every system_admin login), so
 // this stale assumption was never caught. The page has no frontend
 // redirect guard of its own; it relies entirely on the backend 403,
-// rendered as the generic "Ticket Queue Unavailable" AdminErrorCard.
+// rendered as the shared access-denied state.
 test("system admin gets no operational Ticket Queue — backend denies it, no office picker is ever shown", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/tickets");
-  await expect(page.getByText("Ticket Queue Unavailable")).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
   await expect(page.getByRole("button", { name: /^Filters/ })).toHaveCount(0);
+});
+
+test("system admin sees access denied instead of an outage on Ticket Queue and Work Orders", async ({ page }) => {
+  await loginAs(page, E2E_SYSTEM_ADMIN);
+  for (const route of ["/admin/tickets", "/admin/work-orders"]) {
+    await page.goto(route);
+    const denied = page.getByText("You don't have access to this page.", { exact: true });
+    await settleAdminPage(page, denied);
+    await expect(denied).toBeVisible();
+    await expect(page.getByText(/unavailable|couldn't load live data|try reloading/i)).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Back to home" })).toHaveAttribute("href", "/admin");
+  }
 });
 
 test("office admin cannot open another office's ticket via a doctored URL", async ({ page, request }) => {

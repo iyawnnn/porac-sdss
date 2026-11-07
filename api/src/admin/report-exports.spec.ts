@@ -46,16 +46,17 @@ const submitted = {
 };
 const assessment = {
   ...base,
-  assessed_at: '2026-01-01T16:00:00.000Z',
+  created_at: '2026-01-01T16:00:00.000Z',
   assessed_by_name: 'Staff Snapshot',
-  observed_conditions: '=ASSESS_CONDITIONS',
+  assessed_conditions: '=ASSESS_CONDITIONS',
   safety_implications: 'SAFETY',
-  operational_constraints: ['b', 'a'],
-  operational_constraint_notes: { b: 'note B', a: 'note A' },
+  operational_constraints: {
+    selected: ['b', 'a'],
+    notes: { b: 'note B', a: 'note A' },
+  },
   recommended_action: 'RECOMMEND',
-  temporary_mitigation: '@MITIGATION',
-  deferment_reason: 'DEFER',
-  referral_reason: 'REFER',
+  interim_mitigation: '@MITIGATION',
+  deferment_or_referral_reason: 'Deferment: DEFER\nReferral: REFER',
   remarks: 'STAFF_REMARKS',
   actual_action: 'ACTUAL',
   supporting_evidence_url: 'https://staff.test/evidence',
@@ -76,7 +77,7 @@ const headers = {
   submittedReportsCsv:
     'Tracking Reference,Ticket ID,Ticket Status,Assigned Office,Category,Submitted Category,Barangay,Citizen Severity,Evidence Flags,Severity Screening Status,Moderation Status,Submitted At',
   operationalAssessmentsCsv:
-    'Ticket ID,Assigned Office,Category,Ticket Status,Operational Priority,Resolution Outcome,Resolved At,Assessed At,Assessed By,Assessed Conditions,Safety Implications,Operational Constraints,Constraint Notes,Recommended Action,Interim Mitigation,Deferment Reason,Referral Reason,Remarks,Actual Action,Supporting Evidence URL,Work Orders Pending,Work Orders In Progress,Work Orders Completed,Work Orders Cancelled',
+    'Ticket ID,Assigned Office,Category,Ticket Status,Operational Priority,Resolution Outcome,Resolved At,Assessed At,Assessed By,Assessed Conditions,Safety Implications,Operational Constraints,Constraint Notes,Recommended Action,Interim Mitigation,Deferment or Referral Reason,Remarks,Actual Action,Supporting Evidence URL,Work Orders Pending,Work Orders In Progress,Work Orders Completed,Work Orders Cancelled',
   priorityIncidentsCsv:
     'Rank,Ticket ID,Status,Assigned Office,Operational Priority,Category,Hazard Information,Barangay,Report Count,Created At,Updated At',
 };
@@ -169,7 +170,7 @@ describe('Phase 7c-2 CSV contracts', () => {
       expect(csv).toContain(text);
     expect(csv).not.toContain('Observed Conditions');
     expect(csv).not.toContain('Temporary Mitigation');
-    expect(csv.split('\r\n')[1]).toMatch(/,1,2,3,4$/);
+    expect(csv.trimEnd()).toMatch(/,1,2,3,4$/);
     expect(
       JSON.stringify(audit.logRequired.mock.calls[0][0].metadata),
     ).not.toMatch(

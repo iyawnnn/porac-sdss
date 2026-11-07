@@ -1,13 +1,15 @@
-import { apiGet } from "@/lib/api-client";
+import { ApiError, apiGet } from "@/lib/api-client";
 import type { FocalIntakeGeoRow } from "@/lib/types/admin-focal-intake";
 import FocalMapLoader from "@/components/features/admin/focal/FocalMapLoader";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
 
 export default async function FocalMapPage() {
   let reports: FocalIntakeGeoRow[];
   try {
     reports = await apiGet<FocalIntakeGeoRow[]>("/admin/intake/geo");
   } catch (err) {
+    if (err instanceof ApiError && err.status === 403) return <AdminAccessDenied />;
     return (
       <AdminErrorCard
         detail={err instanceof Error ? err.message : undefined}

@@ -1,8 +1,9 @@
 import { Suspense } from "react";
-import { apiGet } from "@/lib/api-client";
+import { ApiError, apiGet } from "@/lib/api-client";
 import type { NotificationListResponse } from "@/lib/types/admin-notifications";
 import { NotificationCenterWorkspace } from "@/components/features/admin/notifications/NotificationCenterWorkspace";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
 import { Skeleton } from "@/components/ui/skeleton";
 
 async function NotificationCenterData({ query }: { query: Record<string, string | undefined> }) {
@@ -16,6 +17,7 @@ async function NotificationCenterData({ query }: { query: Record<string, string 
   try {
     initialData = await apiGet<NotificationListResponse>(`/notifications${params.toString() ? `?${params.toString()}` : ""}`);
   } catch (err) {
+    if (err instanceof ApiError && err.status === 403) return <AdminAccessDenied />;
     return (
       <AdminErrorCard
         detail={err instanceof Error ? err.message : undefined}

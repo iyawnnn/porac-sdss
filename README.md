@@ -133,6 +133,8 @@ pnpm --prefix api migrate:work-orders               # work_orders table — FKs 
 pnpm --prefix api migrate:ticket-disputes           # tickets.disputed_at/dispute_reason (citizen dispute loop)
 pnpm --prefix api migrate:ticket-resolution-confirmation  # tickets.resolution_confirmed_at (persistent Confirm Fixed)
 pnpm --prefix api migrate:admin-login-throttle      # admin_login_rate_limit_events (per-account failed-login throttling)
+# Later assessment sequence: migrate:operational-assessments (0033), migrate:assessment-work-orders (0045), migrate:assessment-alignment (0048).
+# Coordinate the 0048 schema/app cutover; after 0048 use the updated 0045 runner, never replay raw 0045 SQL. No live migration was run for this change.
 pnpm --prefix api seed:users                        # citizen demo accounts (Section G) — idempotent, safe to rerun
 pnpm --prefix api seed:admin -- meo@porac.gov.ph PoracDemo2026! MEO supervisor      # admin demo account (Section G)
 pnpm --prefix api seed:admin -- mdrrmo@porac.gov.ph PoracDemo2026! MDRRMO supervisor # second admin demo account

@@ -21,6 +21,7 @@ import { MapFilterBar, EMPTY_MAP_FILTERS, type MapFilterState } from "./MapFilte
 import { TicketPopup } from "./TicketPopup";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
 
 configureLeafletMarkerIcons();
 const CITY_CENTER: [number, number] = [MUNICIPALITY.centerLat, MUNICIPALITY.centerLng];
@@ -114,6 +115,7 @@ export default function MapClient({
   const [municipalBoundary, setMunicipalBoundary] = useState<FeatureCollection | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [office, setOffice] = useState<"MEO" | "MDRRMO" | undefined>(initialOffice);
   const [mode, setMode] = useState<MapMode>(initialLayer);
@@ -124,7 +126,36 @@ export default function MapClient({
   const [selectedBarangayBounds, setSelectedBarangayBounds] = useState<L.LatLngBounds | null>(null);
   const [viewportResetKey, setViewportResetKey] = useState(0);
 
-  useEffect(() => { const controller = new AbortController(); const loadTickets = async () => { setLoading(true); setLoadError(false); const qs = office ? `?office=${office}` : ""; try { const response = await fetch(`/api/admin/tickets/geo${qs}`, { signal: controller.signal }); if (!response.ok) throw new Error("Unable to load tickets"); setTickets(await response.json() as AdminTicketGeoRow[]); } catch { if (!controller.signal.aborted) { setTickets([]); setLoadError(true); } } finally { if (!controller.signal.aborted) setLoading(false); } }; void loadTickets(); return () => controller.abort(); }, [office, retryNonce]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadTickets = async () => {
+      setLoading(true);
+      setLoadError(false);
+      setAccessDenied(false);
+      const qs = office ? `?office=${office}` : "";
+      try {
+        const response = await fetch(`/api/admin/tickets/geo${qs}`, { signal: controller.signal });
+        if (response.status === 403) {
+          if (!controller.signal.aborted) {
+            setTickets([]);
+            setAccessDenied(true);
+          }
+          return;
+        }
+        if (!response.ok) throw new Error("Unable to load tickets");
+        setTickets(await response.json() as AdminTicketGeoRow[]);
+      } catch {
+        if (!controller.signal.aborted) {
+          setTickets([]);
+          setLoadError(true);
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+    void loadTickets();
+    return () => controller.abort();
+  }, [office, retryNonce]);
   useEffect(() => { fetch("/api/admin/barangays/geo").then((res) => res.ok ? res.json() : null).then(setBarangays).catch(() => setBarangays(null)); fetch("/assets/gis/porac_osm_boundary.json").then((res) => res.ok ? res.json() : null).then(setMunicipalBoundary).catch(() => setMunicipalBoundary(null)); }, []);
 
   // Keeps the URL a shareable snapshot of the current view — mirrors
@@ -160,6 +191,8 @@ export default function MapClient({
   }, [clearBarangaySelection, selectedBarangay]);
 
   const isMobile = useIsMobile();
+
+  if (accessDenied) return <AdminAccessDenied />;
 
   return <section aria-labelledby="admin-map-heading" className="admin-map-workspace flex min-h-0 flex-1 flex-col"><h1 className="sr-only" id="admin-map-heading">Interactive Incident Map</h1><div className="relative isolate min-h-0 flex-1 overflow-hidden">
     {loading && <p className="absolute top-4 left-1/2 z-30 -translate-x-1/2 rounded-md border bg-card px-3 py-1 text-sm text-card-foreground shadow-sm">Loading tickets...</p>}

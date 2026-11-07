@@ -1,9 +1,10 @@
 import { Suspense } from "react";
-import { apiGet, getAdminSessionFromApi } from "@/lib/api-client";
+import { ApiError, apiGet, getAdminSessionFromApi } from "@/lib/api-client";
 import type { DashboardKpis, DistributionRow, OfficePerformanceSummary } from "@/lib/types/admin-dashboard";
 import { isSystemAdmin } from "@/lib/utils/adminScope";
 import { ReportsWorkspace } from "@/components/features/admin/reports/ReportsWorkspace";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export interface DashboardSummary {
@@ -22,6 +23,7 @@ async function ReportsData({ query }: { query: Record<string, string | undefined
   try {
     initialSummary = await apiGet<DashboardSummary>(`/admin/dashboard${qs}`);
   } catch (err) {
+    if (err instanceof ApiError && err.status === 403) return <AdminAccessDenied />;
     return (
       <AdminErrorCard
         detail={err instanceof Error ? err.message : undefined}

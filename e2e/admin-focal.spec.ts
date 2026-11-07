@@ -133,10 +133,10 @@ test("Focal cannot reach the operational Ticket Queue, Work Orders, or Admin Man
   await loginAs(page, E2E_FOCAL_ADMIN);
 
   await page.goto("/admin/tickets");
-  await expect(page.getByText("Ticket Queue Unavailable")).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
 
   await page.goto("/admin/work-orders");
-  await expect(page.getByText(/unavailable/i)).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
 
   // SystemAdminGuard rejects non-system_admin with 403, treated the same as
   // a missing page (Next's own not-found render) rather than an error card
@@ -150,17 +150,17 @@ test("MIS (system_admin) cannot reach Focal Intake or the Focal Map", async ({ p
   await loginAs(page, E2E_SYSTEM_ADMIN);
 
   await page.goto("/admin/focal/intake");
-  await expect(page.getByText("Intake Queue Unavailable")).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Intake Queue" })).toHaveCount(0);
 
   await page.goto("/admin/focal/map");
-  await expect(page.getByText("Interactive Map Unavailable")).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
 });
 
 test("MEO/MDRRMO operational staff cannot reach Focal Intake", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/focal/intake");
-  await expect(page.getByText("Intake Queue Unavailable")).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Intake Queue" })).toHaveCount(0);
 });
 

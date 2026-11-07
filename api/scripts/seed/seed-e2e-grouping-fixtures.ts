@@ -280,7 +280,7 @@ async function create() {
     const assess = async (ticketId: number, prefix: string) => {
       await tx`
         INSERT INTO operational_assessments (
-          ticket_id, assessed_by_admin_id, assessed_by_name, observed_conditions,
+          ticket_id, assessed_by_admin_id, assessed_by_name, assessed_conditions,
           recommended_action, updated_by_admin_id, updated_by_name
         )
         VALUES (

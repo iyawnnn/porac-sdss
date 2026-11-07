@@ -89,16 +89,17 @@ export type SubmittedExportRow = TicketRow & {
   created_at: string;
 };
 export type AssessmentExportRow = TicketRow & {
-  assessed_at: string;
+  created_at: string;
   assessed_by_name: string | null;
-  observed_conditions: string;
+  assessed_conditions: string;
   safety_implications: string;
-  operational_constraints: string[];
-  operational_constraint_notes: Record<string, string>;
+  operational_constraints: {
+    selected: string[];
+    notes: Record<string, string>;
+  };
   recommended_action: string;
-  temporary_mitigation: string;
-  deferment_reason: string | null;
-  referral_reason: string | null;
+  interim_mitigation: string;
+  deferment_or_referral_reason: string | null;
   remarks: string | null;
   actual_action: string | null;
   supporting_evidence_url: string | null;
@@ -148,10 +149,10 @@ export class ReportExportQueries {
     // Aggregate Work Orders separately to keep one row per assessed ticket.
     const rows = await this.db.execute<AssessmentExportRow>(dsql`
       SELECT t.id AS ticket_id, t.assigned_office, t.category, t.status, t.priority_index,
-        t.resolution_outcome, t.resolved_at::text, a.assessed_at::text, a.assessed_by_name,
-        a.observed_conditions, a.safety_implications, a.operational_constraints,
-        a.operational_constraint_notes, a.recommended_action, a.temporary_mitigation,
-        a.deferment_reason, a.referral_reason, a.remarks, a.actual_action, a.supporting_evidence_url,
+        t.resolution_outcome, t.resolved_at::text, a.created_at::text, a.assessed_by_name,
+        a.assessed_conditions, a.safety_implications, a.operational_constraints,
+        a.recommended_action, a.interim_mitigation,
+        a.deferment_or_referral_reason, a.remarks, a.actual_action, a.supporting_evidence_url,
         (SELECT count(*)::int FROM work_orders w WHERE w.ticket_id=t.id AND w.status='pending') AS pending,
         (SELECT count(*)::int FROM work_orders w WHERE w.ticket_id=t.id AND w.status='in_progress') AS in_progress,
         (SELECT count(*)::int FROM work_orders w WHERE w.ticket_id=t.id AND w.status='completed') AS completed,
@@ -160,9 +161,9 @@ export class ReportExportQueries {
       WHERE t.assigned_office = ${f.office}::office AND t.merged_into_ticket_id IS NULL
         AND (${f.status} = 'all' OR (${f.status} = 'active' AND t.status IN ('Reported','Under Review','In Progress')) OR t.status::text = ${f.status})
         AND (${f.category ?? null}::text IS NULL OR t.category = ${f.category ?? null})
-        AND (${f.since ?? null}::timestamptz IS NULL OR a.assessed_at >= ${f.since ?? null}::timestamptz)
-        AND (${f.until ?? null}::timestamptz IS NULL OR a.assessed_at < ${f.until ?? null}::timestamptz)
-      ORDER BY a.assessed_at DESC, t.id DESC LIMIT ${EXPORT_ROW_LIMIT + 1}
+        AND (${f.since ?? null}::timestamptz IS NULL OR a.created_at >= ${f.since ?? null}::timestamptz)
+        AND (${f.until ?? null}::timestamptz IS NULL OR a.created_at < ${f.until ?? null}::timestamptz)
+      ORDER BY a.created_at DESC, t.id DESC LIMIT ${EXPORT_ROW_LIMIT + 1}
     `);
     assertExportLimit(rows);
     return [...rows];

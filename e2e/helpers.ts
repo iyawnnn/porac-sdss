@@ -131,11 +131,11 @@ export async function loginCitizen(
 }
 
 // Manuscript revision Phase 5, step 5b: a ticket needs an Operational
-// Assessment with observed conditions before a Work Order can be created.
+// Assessment with assessed conditions before a Work Order can be created.
 // Specs that create Work Orders on a ticket call this first, signed in as
 // the ticket's responsible office (the request context carries the session
 // cookie). An assessment the ticket already has is kept: only blank
-// observed conditions are filled in, with every other field sent back as
+// assessed conditions are filled in, with every other field sent back as
 // it was, since a save replaces the whole assessment.
 export async function ensureAssessment(
   request: APIRequestContext,
@@ -145,9 +145,9 @@ export async function ensureAssessment(
   const detail = await request.get(`/api/admin/tickets/${ticketId}`, { headers });
   expect(detail.ok()).toBe(true);
   const existing = ((await detail.json()) as {
-    operationalAssessment: (Record<string, unknown> & { observedConditions: string }) | null;
+    operationalAssessment: (Record<string, unknown> & { assessedConditions: string }) | null;
   }).operationalAssessment;
-  if (existing?.observedConditions.trim()) return;
+  if (existing?.assessedConditions.trim()) return;
   const res = await request.post(`/api/admin/tickets/${ticketId}/assessment`, {
     headers: { ...headers, "content-type": "application/json" },
     data: {
@@ -158,14 +158,13 @@ export async function ensureAssessment(
             operationalConstraintNotes: existing.operationalConstraintNotes,
             recommendedAction: existing.recommendedAction,
             actualAction: existing.actualAction ?? undefined,
-            temporaryMitigation: existing.temporaryMitigation,
-            defermentReason: existing.defermentReason ?? undefined,
-            referralReason: existing.referralReason ?? undefined,
+            interimMitigation: existing.interimMitigation,
+            defermentOrReferralReason: existing.defermentOrReferralReason ?? undefined,
             remarks: existing.remarks ?? undefined,
             supportingEvidenceUrl: existing.supportingEvidenceUrl ?? null,
           }
         : {}),
-      observedConditions: "E2E: site checked before creating a work order.",
+      assessedConditions: "E2E: site checked before creating a work order.",
     },
   });
   expect(res.ok()).toBe(true);

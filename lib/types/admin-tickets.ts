@@ -150,17 +150,16 @@ export interface TicketCitizenFeedback {
 export interface OperationalAssessment {
   id: number;
   ticketId: number;
-  assessedByAdminId: number | null;
+  assessedByAdminId: number;
   assessedByName: string | null;
-  observedConditions: string;
+  assessedConditions: string;
   safetyImplications: string;
   operationalConstraints: string[];
   recommendedAction: string;
-  temporaryMitigation: string;
-  defermentReason: string | null;
-  referralReason: string | null;
+  interimMitigation: string;
+  defermentOrReferralReason: string | null;
   remarks: string | null;
-  assessedAt: string;
+  createdAt: string;
   updatedByAdminId: number | null;
   updatedByName: string | null;
   updatedAt: string;
@@ -168,11 +167,6 @@ export interface OperationalAssessment {
   actualAction: string | null;
   supportingEvidenceUrl: string | null;
   operationalConstraintNotes: Record<string, string>;
-  // Appendix H aliases (docs/database.md has the mapping).
-  assessedConditions: string;
-  interimMitigation: string;
-  defermentOrReferralReason: string | null;
-  createdAt: string;
 }
 
 export interface TicketReport {

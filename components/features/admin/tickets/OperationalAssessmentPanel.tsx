@@ -52,7 +52,7 @@ export function OperationalAssessmentPanel({
         />
       ) : (
         <div className="space-y-3 text-sm">
-          <AssessmentField label="Observed Conditions" value={assessment.observedConditions} />
+          <AssessmentField label="Assessed Conditions" value={assessment.assessedConditions} />
           <AssessmentField label="Safety Implications" value={assessment.safetyImplications} />
           {assessment.operationalConstraints.length > 0 && (
             <div>
@@ -80,7 +80,7 @@ export function OperationalAssessmentPanel({
           )}
           <AssessmentField label="Recommended Action" value={assessment.recommendedAction} />
           <AssessmentField label="Actual Action Taken" value={assessment.actualAction} />
-          <AssessmentField label="Temporary Mitigation / Interim Measures" value={assessment.temporaryMitigation} />
+          <AssessmentField label="Interim Mitigation" value={assessment.interimMitigation} />
           {assessment.supportingEvidenceUrl && (
             <div>
               <p className="text-xs font-medium text-ink-500">Supporting Evidence</p>
@@ -94,12 +94,11 @@ export function OperationalAssessmentPanel({
               </a>
             </div>
           )}
-          <AssessmentField label="Deferment Reason" value={assessment.defermentReason} />
-          <AssessmentField label="Referral Reason" value={assessment.referralReason} />
+          <AssessmentField label="Deferment or Referral Reason" value={assessment.defermentOrReferralReason} />
           <AssessmentField label="Additional Remarks" value={assessment.remarks} />
           <p className="text-xs text-ink-400">
-            Assessed by {assessment.assessedByName ?? "—"} on {new Date(assessment.assessedAt).toLocaleString()}
-            {assessment.updatedAt !== assessment.assessedAt && (
+            Assessed by {assessment.assessedByName ?? "—"} on {new Date(assessment.createdAt).toLocaleString()}
+            {assessment.updatedAt !== assessment.createdAt && (
               <> · Last updated by {assessment.updatedByName ?? "—"} on {new Date(assessment.updatedAt).toLocaleString()}</>
             )}
           </p>

@@ -199,7 +199,7 @@ test("Work Orders sidebar link is visible and navigates to the list page", async
 test("system admin cannot reach Work Orders at all", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/work-orders");
-  await expect(page.getByText("Work Orders Unavailable")).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
   await expect(page.getByLabel("Office", { exact: true })).toHaveCount(0);
 });
 

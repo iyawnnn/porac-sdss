@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { SearchXIcon } from "lucide-react";
-import { apiGetOptional } from "@/lib/api-client";
+import { ApiError, apiGetOptional } from "@/lib/api-client";
 import type { FocalIntakeDetail as FocalIntakeDetailData } from "@/lib/types/admin-focal-intake";
 import type { RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
 import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { FocalIntakeDetail } from "@/components/features/admin/focal/FocalIntakeDetail";
+import { AdminAccessDenied } from "@/components/features/admin/shared/AdminAccessDenied";
+import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
 
 export default async function FocalIntakeDetailPage({
   params,
@@ -13,7 +15,19 @@ export default async function FocalIntakeDetailPage({
   params: Promise<{ reportId: string }>;
 }) {
   const { reportId } = await params;
-  const report = await apiGetOptional<FocalIntakeDetailData>(`/admin/intake/${reportId}`, [401, 404]);
+  let report: FocalIntakeDetailData | null;
+  try {
+    report = await apiGetOptional<FocalIntakeDetailData>(`/admin/intake/${reportId}`, [401, 404]);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 403) return <AdminAccessDenied />;
+    return (
+      <AdminErrorCard
+        detail={err instanceof Error ? err.message : undefined}
+        message="This report couldn't load live data from the API. Try reloading this page in a moment."
+        title="Intake Detail Unavailable"
+      />
+    );
+  }
 
   if (!report) {
     return (

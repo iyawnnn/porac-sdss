@@ -65,13 +65,12 @@ test("MDRRMO admin sees a fixed office badge, not a picker, on the index page", 
 // picker/all-offices view only ever rendered for system_admin. Batch 1 of
 // the five-role architecture removed system_admin's operational access
 // entirely (resolveOfficeScope rejects it outright), so this page now
-// throws for that role and renders "Barangay Insights Unavailable"
-// (confirmed live) rather than any picker — not a regression, since MEO/
+// renders the access-denied state rather than any picker, since MEO/
 // MDRRMO never had a picker either (their own office is implicit).
 test("system admin cannot reach Barangay Insights at all", async ({ page }) => {
   await loginAs(page, E2E_SYSTEM_ADMIN);
   await page.goto("/admin/barangay-insights");
-  await expect(page.getByText("Barangay Insights Unavailable")).toBeVisible();
+  await expect(page.getByText("You don't have access to this page.")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Office", exact: true })).toHaveCount(0);
 });
 
