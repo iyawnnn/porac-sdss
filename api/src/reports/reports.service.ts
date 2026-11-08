@@ -191,15 +191,10 @@ export interface MyReportDetail {
   // they answer. Only ever their own row: other citizens' answers, and the
   // ticket-level dispute flag another citizen may have set, are never sent.
   my_feedback: CitizenResolutionFeedback | null;
-  // When municipal monitoring acknowledged the issue (manuscript revision
-  // Phase 6, step 6b): the earliest of this report's own
-  // report_acknowledgments row (legacy data, and every acknowledgment
-  // since Batch 2) and the ticket-level acknowledgments rows of the
-  // report's current ticket and of the ticket a staff merge moved it from
-  // (the ticket-level row stays on the old ticket id after a merge) — a
-  // ticket-level row only when it is not earlier than this report itself.
-  // Never derived from an intake action; no remarks, no staff name. Null
-  // until acknowledged.
+  // Earliest eligible acknowledgment of the current ticket or the old ticket
+  // from its latest recorded merge. Never earlier than this report's submission;
+  // regroup/remove do not carry an acknowledgment to the destination ticket.
+  // No staff identity or remarks are exposed to citizens.
   acknowledged_at: string | null;
   // True when this report joined an existing ticket (step 6b): a staff
   // merge moved it (a ticket_merged audit event on its ticket lists it in
@@ -559,8 +554,8 @@ export class ReportsService {
   // Focal-intake notifications with MDRRMO's own operational office
   // traffic (see NotificationsService.scopeFilter's role-aware office
   // matching). Called from both the new-ticket and merge branches of
-  // submit(), since each is its own new report needing its own Focal
-  // acknowledgment (see docs/database.md's report_acknowledgments note).
+  // submit(): each new report enters intake and may need severity screening
+  // even when its ticket is already acknowledged.
   private async notifyFocalIntake(
     tx: TransactionSql,
     params: {
@@ -635,7 +630,6 @@ export class ReportsService {
           'feedback_type', rf.feedback_type, 'reason', rf.reason, 'created_at', rf.created_at
         ) END AS my_feedback,
         LEAST(
-          ra.acknowledged_at,
           CASE WHEN ta.acknowledged_at >= r.created_at THEN ta.acknowledged_at END,
           CASE WHEN oa.acknowledged_at >= r.created_at THEN oa.acknowledged_at END
         ) AS acknowledged_at,
@@ -654,7 +648,6 @@ export class ReportsService {
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
       JOIN citizens c ON c.id = r.citizen_id
-      LEFT JOIN report_acknowledgments ra ON ra.report_id = r.id
       LEFT JOIN resolution_feedback rf ON rf.ticket_id = r.ticket_id AND rf.citizen_id = r.citizen_id
       LEFT JOIN LATERAL (
         SELECT true AS corrected FROM admin_audit_events e

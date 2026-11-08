@@ -34,6 +34,7 @@ export interface FocalIntakeRow {
   // Operational Priority (priority_index). The Hazard Urgency field was
   // removed in manuscript revision Phase 1, step 6b.
   operationalPriority: number | null;
+  // Ticket-level acknowledgment, including reports submitted afterward.
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
   intakeState: IntakeState;

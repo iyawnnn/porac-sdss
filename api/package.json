@@ -60,6 +60,8 @@
     "migrate:resolution-feedback": "tsx --env-file=.env scripts/migrations/migrate-resolution-feedback.ts",
     "migrate:hazard-information": "tsx --env-file=.env scripts/migrations/migrate-hazard-information.ts",
     "migrate:rainfall-context": "tsx --env-file=.env scripts/migrations/migrate-rainfall-context.ts",
+    "migrate:ack-contraction": "tsx --env-file=.env scripts/migrations/migrate-report-acknowledgments-contraction.ts",
+    "archive:report-acknowledgments": "tsx --env-file=.env scripts/maintenance/archive-report-acknowledgments.ts",
     "migrate:contraction": "tsx --env-file=.env scripts/migrations/migrate-phase8b-contraction.ts",
     "migrate:assessment-alignment": "tsx --env-file=.env scripts/migrations/migrate-operational-assessment-alignment.ts",
     "migrate:assessment-work-orders": "tsx --env-file=.env scripts/migrations/migrate-assessment-work-orders.ts",

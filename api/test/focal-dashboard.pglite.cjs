@@ -28,10 +28,10 @@ async function main() {
     CREATE TABLE barangays(id int PRIMARY KEY,name text);
     INSERT INTO barangays VALUES(1,'Fixture');
     CREATE TABLE tickets(id int PRIMARY KEY,barangay_id int DEFAULT 1,category text DEFAULT 'Fixture',
-      status text DEFAULT 'Reported',assigned_office office DEFAULT 'MEO',priority_index int DEFAULT 50,merged_into_ticket_id int);
+      status text DEFAULT 'Reported',assigned_office office DEFAULT 'MEO',priority_index int DEFAULT 50,merged_into_ticket_id int,created_at timestamptz DEFAULT now()-interval '100 hours');
     CREATE TABLE reports(id int PRIMARY KEY,ticket_id int,tracking_reference text DEFAULT 'REF',
       created_at timestamptz DEFAULT now()-interval '100 hours',severity_screening_status text DEFAULT 'NOT_REVIEWED',severity_screened_at timestamptz);
-    CREATE TABLE report_acknowledgments(report_id int UNIQUE,acknowledged_at timestamptz);
+    CREATE TABLE acknowledgments(ticket_id int UNIQUE,acknowledged_at timestamptz);
     CREATE TABLE report_intake_actions(id serial PRIMARY KEY,report_id int,action_type text,created_at timestamptz);
   `);
   // There is deliberately no Work Order table: any accidental read must fail.
@@ -74,12 +74,12 @@ async function main() {
         (1,'MEO','Reported',NULL),(2,'MDRRMO','Under Review',NULL),(3,'MEO','Resolved',NULL),
         (4,'MDRRMO','Rejected',NULL),(5,'MEO','Reported',1),(6,'MDRRMO','In Progress',NULL)`;
       await sql`INSERT INTO reports(id,ticket_id) VALUES(1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,1)`;
-      await sql`INSERT INTO report_acknowledgments VALUES
+      await sql`INSERT INTO acknowledgments VALUES
         (1,now()-interval '99 hours'),(2,now()-interval '97 hours'),(3,now()),(5,now())`;
       // 1,3,100 -> median 3, unlike mean. Both offices and terminal statuses count.
       const expected = {
         newReports: 6,
-        unacknowledged: 3,
+        unacknowledged: 2,
         needsScreening: 4,
         forwardedOrEscalated: 0,
         medianAcknowledgmentHours30d: 3,
@@ -122,25 +122,32 @@ async function main() {
       ok(
         'municipality-wide report units, merged exclusion, odd median, stable ties, disjoint pages, total beyond end and narrow response',
       );
-      await sql`INSERT INTO report_acknowledgments VALUES (6,now()-interval '90 hours')`;
+      await sql`INSERT INTO acknowledgments VALUES (6,now()-interval '90 hours')`;
       assert.equal(
         (await service.counts(focal)).medianAcknowledgmentHours30d,
         6.5,
       );
-      await sql`INSERT INTO reports(id,ticket_id,created_at) VALUES (8,1,now()-interval '40 days'),(9,1,now()-interval '40 days')`;
-      await sql`INSERT INTO report_acknowledgments VALUES(8,now()-interval '30 days'),(9,now()-interval '30 days'-interval '1 microsecond')`;
+      await sql`INSERT INTO tickets(id,created_at) VALUES(8,now()-interval '40 days'),(9,now()-interval '40 days'),(10,now())`;
+      await sql`INSERT INTO reports(id,ticket_id,created_at) VALUES (8,8,now()-interval '40 days'),(9,9,now()-interval '40 days')`;
+      await sql`INSERT INTO acknowledgments VALUES(8,now()-interval '30 days'),(9,now()-interval '30 days'-interval '1 microsecond')`;
       assert.equal(
         (await service.counts(focal)).medianAcknowledgmentHours30d,
         10,
       );
-      await sql`INSERT INTO reports(id,ticket_id,created_at) VALUES(10,1,now())`;
-      await sql`INSERT INTO report_acknowledgments VALUES(10,now()+interval '1 microsecond')`;
+      await sql`INSERT INTO reports(id,ticket_id,created_at) VALUES(10,10,now())`;
+      await sql`INSERT INTO acknowledgments VALUES(10,now()+interval '1 microsecond')`;
+      assert.equal(
+        (await service.counts(focal)).medianAcknowledgmentHours30d,
+        10,
+      );
+      await sql`INSERT INTO tickets(id,created_at) VALUES(11,now()),(12,NULL)`;
+      await sql`INSERT INTO acknowledgments VALUES(11,now()-interval '1 hour'),(12,now())`;
       assert.equal(
         (await service.counts(focal)).medianAcknowledgmentHours30d,
         10,
       );
       ok(
-        'even median, exact 30-day inclusion, older and future acknowledgment exclusion',
+        'per-ticket even median, exact 30-day inclusion; negative, null, older and future intervals excluded',
       );
       // Retired screened actions count for nothing; later screening beats routing,
       // routing wins ties, and the latest action uses id to break timestamp ties.
@@ -153,7 +160,7 @@ async function main() {
       const facts =
         await sql`SELECT r.id,t.id ticket_id,t.status,t.merged_into_ticket_id,ra.acknowledged_at,
         r.severity_screening_status,r.severity_screened_at,latest.action_type,latest.created_at action_at
-        FROM reports r JOIN tickets t ON t.id=r.ticket_id LEFT JOIN report_acknowledgments ra ON ra.report_id=r.id
+        FROM reports r JOIN tickets t ON t.id=r.ticket_id LEFT JOIN acknowledgments ra ON ra.ticket_id=t.id
         LEFT JOIN LATERAL(SELECT action_type,created_at FROM report_intake_actions WHERE report_id=r.id
           AND action_type IN ('forwarded','escalated') ORDER BY created_at DESC,id DESC LIMIT 1) latest ON true
         WHERE t.merged_into_ticket_id IS NULL`;

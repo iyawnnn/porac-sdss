@@ -1081,7 +1081,7 @@ async function create() {
     `;
 
     // d. Acknowledged the way FocalIntakeService.acknowledge writes it: the
-    //    report row and the ticket-level row, same time.
+    //    ticket row only; every linked report inherits its intake state.
     const acknowledgedAt = reportPageAt(25);
     const acknowledgedTicketId = await ticket(acknowledgedAt, { ageDays: 1 });
     const acknowledgedReportId = await report(
@@ -1091,10 +1091,6 @@ async function create() {
       1,
       CITIZEN_TITLE_PREFIX,
     );
-    await tx`
-      INSERT INTO report_acknowledgments (report_id, acknowledged_by_admin_id, acknowledged_by_name, remarks, acknowledged_at)
-      VALUES (${acknowledgedReportId}, ${focal.id}, ${focal.name}, ${`${STAFF_ONLY} acknowledgment remark`}, now() - interval '12 hours')
-    `;
     await tx`
       INSERT INTO acknowledgments (ticket_id, acknowledged_by_admin_id, remarks, acknowledged_at)
       VALUES (${acknowledgedTicketId}, ${focal.id}, ${`${STAFF_ONLY} acknowledgment remark`}, now() - interval '12 hours')

@@ -499,21 +499,10 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
     expect(getMyReportDetail).not.toContain('t.resolution_confirmed_at');
   });
 
-  // Batch 2 (Focal intake): the citizen timeline needs to know whether/when
-  // Focal acknowledged this specific report — sourced directly from
-  // report_acknowledgments.acknowledged_at (never derived from the first
-  // intake action; see FocalIntakeService.deriveIntakeState's own docblock
-  // for why those are deliberately different sources of truth).
-  // Phase 6, step 6b: the ticket-level acknowledgment (Appendix H
-  // ACKNOWLEDGMENTS) of the report's current ticket and of the ticket a
-  // merge moved it from (the row stays on the old ticket id), plus the
-  // per-report row as the legacy fallback — the earliest, and a ticket-level
-  // row only when it is not earlier than the report. All LEFT JOINs, so an
-  // unacknowledged report still returns.
-  it('getMyReportDetail takes the earliest of the per-report, current-ticket and pre-merge-ticket acknowledgments', () => {
-    expect(getMyReportDetail).toMatch(
-      /LEFT JOIN report_acknowledgments ra ON ra\.report_id = r\.id/,
-    );
+  // Ticket acknowledgments only; report ownership and pre-submission timestamp
+  // protection remain unchanged, including the old ticket of a recorded merge.
+  it('getMyReportDetail takes only eligible current-ticket and latest pre-merge-ticket acknowledgments', () => {
+    expect(getMyReportDetail).not.toContain('report_acknowledgments');
     expect(getMyReportDetail).toMatch(
       /LEFT JOIN acknowledgments ta ON ta\.ticket_id = r\.ticket_id/,
     );
@@ -521,7 +510,7 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
       /LEFT JOIN acknowledgments oa ON oa\.ticket_id = me\.from_ticket_id/,
     );
     expect(getMyReportDetail).toMatch(
-      /LEAST\(\s+ra\.acknowledged_at,\s+CASE WHEN ta\.acknowledged_at >= r\.created_at THEN ta\.acknowledged_at END,\s+CASE WHEN oa\.acknowledged_at >= r\.created_at THEN oa\.acknowledged_at END\s+\) AS acknowledged_at/,
+      /LEAST\(\s+CASE WHEN ta\.acknowledged_at >= r\.created_at THEN ta\.acknowledged_at END,\s+CASE WHEN oa\.acknowledged_at >= r\.created_at THEN oa\.acknowledged_at END\s+\) AS acknowledged_at/,
     );
   });
 

@@ -14,7 +14,7 @@ import { trackedTogetherCopy } from "@/lib/utils/citizen-report-copy";
 // "acknowledged" is its own event kind, deliberately never merged into
 // "status" — Focal's acknowledgment is a municipal-monitoring event, not a
 // TicketStatus value, and must never render through the same code path as
-// one (see api/src/db/schema.ts's reportAcknowledgments docblock). Likewise
+// one (see api/src/db/schema.ts's acknowledgments docblock). Likewise
 // "referred": a referral is routing history, never a status.
 type TimelineEventKind = "submitted" | "acknowledged" | "merged" | "status" | "referred" | "quarantined" | "duplicate";
 

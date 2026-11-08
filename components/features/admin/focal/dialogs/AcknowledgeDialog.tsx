@@ -9,7 +9,7 @@ import type { FocalIntakeDetail } from "@/lib/types/admin-focal-intake";
 
 // Real production Acknowledge action — a municipal monitoring event, never
 // a ticket status change (see CLAUDE.md's terminology note
-// and the report_acknowledgments docblock in api/src/db/schema.ts). After a
+// and the acknowledgments docblock in api/src/db/schema.ts). After a
 // successful submit this calls router.refresh() rather than updating any
 // local optimistic state, so the UI always reflects server truth.
 export function AcknowledgeDialog({
@@ -55,9 +55,9 @@ export function AcknowledgeDialog({
     <Dialog onOpenChange={(next) => (next ? onOpenChange(true) : resetAndClose())} open={open}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Acknowledge Report</DialogTitle>
+          <DialogTitle>Acknowledge Ticket</DialogTitle>
           <DialogDescription>
-            Confirms Central Monitoring has seen this report. This is a municipal monitoring action — it does not change the ticket&apos;s status.
+            Confirms Central Monitoring has seen the ticket linked to this report. All reports on the ticket share its acknowledgment. This is a municipal monitoring action — it does not change the ticket&apos;s status.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -79,7 +79,7 @@ export function AcknowledgeDialog({
         </div>
         <DialogFooter>
           <Button disabled={submitting} onClick={resetAndClose} variant="outline">Cancel</Button>
-          <Button disabled={submitting} onClick={handleSubmit}>{submitting ? "Acknowledging…" : "Acknowledge Report"}</Button>
+          <Button disabled={submitting} onClick={handleSubmit}>{submitting ? "Acknowledging…" : "Acknowledge Ticket"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

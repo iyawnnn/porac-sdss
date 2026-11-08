@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { Sql, TransactionSql } from 'postgres';
-import { CONTRACTION_SQL } from './contracted-state';
+import { verifyPhase8bFinalState } from './contracted-state';
 import { alignAssessmentInTransaction } from './migrate-operational-assessment-alignment';
 
 const migrationStatements = (text: string) =>
@@ -86,7 +86,7 @@ export async function migrateStaffAccountTypes(sql: Sql) {
       // Full final-state verification only; never replay 0039's historical
       // audit backfill or recreate its retired compatibility objects.
       if (state.legacy !== 4) {
-        await tx.unsafe(CONTRACTION_SQL);
+        await verifyPhase8bFinalState(tx);
       } else {
         await alignAssessmentInTransaction(tx);
         const expected = statements[8].match(/AS \$\$([\s\S]*?)\$\$/)?.[1];

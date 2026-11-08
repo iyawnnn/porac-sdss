@@ -64,10 +64,10 @@ export class FocalDashboardService {
       SELECT r.id AS report_id,r.tracking_reference AS report_reference,t.id AS ticket_id,
         t.category,t.status AS ticket_status,b.name AS barangay_name,t.assigned_office AS routed_office,
         t.priority_index AS operational_priority,r.created_at AS submitted_at,
-        ra.acknowledged_at,r.severity_screening_status,r.severity_screened_at,
+        ta.acknowledged_at,r.severity_screening_status,r.severity_screened_at,
         latest.action_type AS latest_action_type,latest.created_at AS latest_action_at
       FROM reports r JOIN tickets t ON t.id=r.ticket_id JOIN barangays b ON b.id=t.barangay_id
-      LEFT JOIN report_acknowledgments ra ON ra.report_id=r.id
+      LEFT JOIN acknowledgments ta ON ta.ticket_id=t.id
       LEFT JOIN LATERAL (
         SELECT action_type,created_at FROM report_intake_actions
         WHERE report_id=r.id AND action_type IN ('forwarded','escalated')
@@ -89,7 +89,13 @@ export class FocalDashboardService {
         medianAcknowledgmentHours30d: number | null;
       }[]
     >`
-      WITH facts AS (${facts})
+      WITH facts AS (${facts}), ticket_ack_times AS (
+        SELECT EXTRACT(EPOCH FROM (a.acknowledged_at-t.created_at))/3600 AS hours
+        FROM acknowledgments a JOIN tickets t ON t.id=a.ticket_id
+        WHERE t.merged_into_ticket_id IS NULL AND t.created_at IS NOT NULL
+          AND a.acknowledged_at >= now()-interval '30 days' AND a.acknowledged_at <= now()
+          AND a.acknowledged_at >= t.created_at
+      )
       SELECT count(*)::int AS "newReports",
         count(*) FILTER (WHERE acknowledged_at IS NULL AND severity_screening_status='NOT_REVIEWED'
           AND latest_action_type IS NULL)::int AS "unacknowledged",
@@ -97,8 +103,7 @@ export class FocalDashboardService {
           AND ticket_status IN ('Reported','Under Review','In Progress'))::int AS "needsScreening",
         count(*) FILTER (WHERE latest_action_type IS NOT NULL AND (severity_screening_status='NOT_REVIEWED'
           OR COALESCE(latest_action_at,to_timestamp(0)) >= COALESCE(severity_screened_at,to_timestamp(0))))::int AS "forwardedOrEscalated",
-        (percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (acknowledged_at-submitted_at))/3600)
-          FILTER (WHERE acknowledged_at >= now()-interval '30 days' AND acknowledged_at <= now()))::float8 AS "medianAcknowledgmentHours30d"
+        (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY hours) FROM ticket_ack_times)::float8 AS "medianAcknowledgmentHours30d"
       FROM facts
     `;
     return row;
