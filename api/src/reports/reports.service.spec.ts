@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs';
 import { basename, join } from 'path';
+import ts from 'typescript';
 import type { Sql, TransactionSql } from 'postgres';
 import {
   LOCATION_MISMATCH_THRESHOLD_M,
@@ -1334,15 +1335,54 @@ describe('citizen responses carry no severity screening (Phase 3, step 3f)', () 
   const SCREENING = /severity_screen|severityScreen|screening/i;
   const read = (...path: string[]) =>
     readFileSync(join(__dirname, ...path), 'utf8');
+  // Keep types and SQL/string contents in the privacy scan, but allow comments
+  // explaining why staff-only screening data must not reach citizens.
+  const withoutComments = (source: string) =>
+    ts
+      .createPrinter({ removeComments: true })
+      .printFile(
+        ts.createSourceFile(
+          'citizen-response.ts',
+          source,
+          ts.ScriptTarget.Latest,
+          true,
+          ts.ScriptKind.TS,
+        ),
+      );
 
-  it('reports.service.ts and reports.controller.ts never mention a screening field', () => {
-    expect(read('reports.service.ts')).not.toMatch(SCREENING);
-    expect(read('reports.controller.ts')).not.toMatch(SCREENING);
+  it('reports.service.ts and reports.controller.ts contain no screening field outside comments', () => {
+    expect(withoutComments(read('reports.service.ts'))).not.toMatch(SCREENING);
+    expect(withoutComments(read('reports.controller.ts'))).not.toMatch(
+      SCREENING,
+    );
+  });
+
+  it('allows line and block comments about staff-only screening', () => {
+    expect(
+      withoutComments(`
+        // severity_screening_status is staff-only.
+        /* Do not expose severityScreenedAt or screening remarks. */
+        export interface CitizenResponse { id: number }
+      `),
+    ).not.toMatch(SCREENING);
+  });
+
+  it.each([
+    [
+      'SQL template',
+      "const query = `SELECT severity_screening_status, '// note' FROM reports`;",
+    ],
+    ['response property', 'const response = { severityScreenedAt: null };'],
+    ['response type', 'interface CitizenResponse { screening: string }'],
+  ])('still detects a screening field in a %s', (_label, source) => {
+    expect(withoutComments(source)).toMatch(SCREENING);
   });
 
   it('the citizen report types (lib/types/citizens-reports.ts) have no screening field', () => {
     expect(
-      read('..', '..', '..', 'lib', 'types', 'citizens-reports.ts'),
+      withoutComments(
+        read('..', '..', '..', 'lib', 'types', 'citizens-reports.ts'),
+      ),
     ).not.toMatch(SCREENING);
   });
 
