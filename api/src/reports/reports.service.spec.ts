@@ -1368,12 +1368,48 @@ describe('citizen responses carry no severity screening (Phase 3, step 3f)', () 
   });
 
   it.each([
+    ['URL string', 'const value = "http://x";', 'http://x'],
+    [
+      'SQL string with a line-comment marker',
+      'const query = "SELECT \'//\' AS marker";',
+      "SELECT '//' AS marker",
+    ],
+    ['block-comment marker string', 'const marker = "/*";', '/*'],
+    [
+      'template literal',
+      "const query = `SELECT '//', '/*', 'http://x'`;",
+      "SELECT '//', '/*', 'http://x'",
+    ],
+    [
+      'escaped regex literal',
+      String.raw`const pattern = /https?:\/\/x|\/\*|\/\//;`,
+      String.raw`/https?:\/\/x|\/\*|\/\//`,
+    ],
+    [
+      'regex character classes',
+      'const pattern = /[/*]screening[//]/;',
+      '/[/*]screening[//]/',
+    ],
+  ])('preserves comment-like text in a %s', (_label, source, literal) => {
+    expect(withoutComments(source)).toContain(literal);
+  });
+
+  it.each([
     [
       'SQL template',
       "const query = `SELECT severity_screening_status, '// note' FROM reports`;",
     ],
     ['response property', 'const response = { severityScreenedAt: null };'],
     ['response type', 'interface CitizenResponse { screening: string }'],
+    ['type name', 'interface SeverityScreeningResponse { id: number }'],
+    [
+      'string literal',
+      'const value = "http://x/ /* severity_screening_status";',
+    ],
+    [
+      'SQL string',
+      'const query = "SELECT \'//\' AS marker, severity_screening_status FROM reports";',
+    ],
   ])('still detects a screening field in a %s', (_label, source) => {
     expect(withoutComments(source)).toMatch(SCREENING);
   });
