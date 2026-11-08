@@ -27,8 +27,6 @@ import {
 //                       geom geometry(Point, 4326)
 //   city_boundary_osm  (drizzle/0006_city_boundary_osm.sql) — id, source,
 //                       geom geometry(MultiPolygon, 4326), imported_at
-//   config             (drizzle/0007_config.sql) — key text PK, value,
-//                       computed_at, note
 //   rate_limit_events  (drizzle/0003_ratelimit.sql, 0005_ratelimit_citizen.sql)
 //                       — id, ip, geom geometry(Point, 4326), created_at,
 //                       citizen_id -> citizens.id
@@ -314,23 +312,9 @@ export const tickets = pgTable('tickets', {
   barangayId: integer('barangay_id').notNull(),
   status: ticketStatusEnum('status').notNull().default('Reported'),
   memberCount: integer('member_count').notNull().default(1),
-  elevationM: real('elevation_m'),
-  elevationFactor: real('elevation_factor'),
-  precipitationFactor: real('precipitation_factor'),
-  clusterFactor: real('cluster_factor'),
-  urgencyScore: real('urgency_score'),
-  urgencyBand: text('urgency_band'),
-  // priorityIndex (common/utils/scoring.ts's severity/age/density model)
-  // powers the separate "Priority Breakdown" card on the ticket detail page
-  // (GET /admin/tickets/:id/priority-context) — not shown as the headline
-  // "Priority" number anywhere.
+  // Operational Priority: severity/age/barangay demand, including the queue
+  // order and Ticket Detail breakdown. Independent of advisory hazard data.
   priorityIndex: integer('priority_index'),
-  // priorityScore/urgencyLevel (domain/urgency.ts's elevation/rain/cluster
-  // model) is the canonical "Priority" value rendered on the admin
-  // Dashboard, Ticket Queue, and Ticket Detail header — the same number the
-  // "System urgency" card on ticket detail derives its band from.
-  priorityScore: integer('priority_score'),
-  urgencyLevel: text('urgency_level'),
   assignedOffice: officeEnum('assigned_office').notNull(),
   // Appendix H: the office automatic Initial Routing first assigned, kept
   // after any reassignment. ReportsService.submit writes it; the
@@ -428,7 +412,6 @@ export const reports = pgTable('reports', {
   // when the ticket's category is corrected (Phase 3).
   submittedCategory: varchar('submitted_category', { length: 100 }).notNull(),
   citizenSeverity: text('citizen_severity').notNull(),
-  elevationM: real('elevation_m'),
   exifCapturedAt: timestamp('exif_captured_at', { withTimezone: true }),
   // Full EXIF payload backing the admin flagged-report view, alongside the
   // derived exifCapturedAt/exifGeom columns.
@@ -671,11 +654,10 @@ export const reportIntakeActions = pgTable('report_intake_actions', {
     .defaultNow(),
 });
 
-// Batch 3: the human decision-support layer alongside the two system-
-// generated ones (tickets.priority_score/urgency_level = Hazard Urgency,
-// tickets.priority_index = Operational Priority — neither touched here).
+// Human decision support alongside computed Operational Priority
+// (tickets.priority_index), never touched here.
 // One current human assessment per ticket; original creator and creation time
-// survive later edits. Legacy columns preserve the pre-0048 values until Phase 8b.
+// survive later edits. Phase 8b removes the pre-0048 rollback snapshots.
 export const operationalAssessments = pgTable('operational_assessments', {
   id: serial('id').primaryKey(),
   ticketId: integer('ticket_id')
@@ -706,16 +688,6 @@ export const operationalAssessments = pgTable('operational_assessments', {
     .defaultNow(),
   actualAction: text('actual_action'),
   supportingEvidenceUrl: text('supporting_evidence_url'),
-  legacyDefermentReason: text('legacy_deferment_reason'),
-  legacyReferralReason: text('legacy_referral_reason'),
-  legacyOperationalConstraints: text('legacy_operational_constraints')
-    .array()
-    .notNull()
-    .default([]),
-  legacyOperationalConstraintNotes: jsonb('legacy_operational_constraint_notes')
-    .$type<Record<string, string>>()
-    .notNull()
-    .default({}),
 });
 
 export const verifications = pgTable('verifications', {

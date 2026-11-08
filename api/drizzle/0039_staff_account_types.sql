@@ -20,8 +20,8 @@
 --
 -- admins.role and admin_audit_events.actor_role stay as they are (still
 -- NOT NULL): role is kept in sync by the app as a mirror nobody reads for
--- access, actor_role is history and is never rewritten. Both are dropped in
--- Phase 8.
+-- access. Superseded Phase 8 plan: actor_role and admin_role remain permanently;
+-- admins.role stays until a later approved step. Never rewrite audit history.
 --
 -- The CHECK rule (admins_account_type_office_focal_check):
 --   a System Administrator has no office and is not Focal;
@@ -158,8 +158,8 @@ WHERE actor_account_type IS NULL;
 --> statement-breakpoint
 -- 9-11. Older code doesn't set actor_account_type; fill it from actor_role
 -- on insert so its audit writes keep working. The new code always sets it,
--- and an explicit value is never replaced. Dropped in Phase 8 with
--- actor_role.
+-- and an explicit value is never replaced. Compatibility objects retire in 0049;
+-- actor_role and admin_role remain permanently.
 CREATE OR REPLACE FUNCTION admin_audit_events_fill_actor_account_type() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN

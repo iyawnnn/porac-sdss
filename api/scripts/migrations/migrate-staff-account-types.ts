@@ -1,7 +1,11 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { sql } from '../db';
-import { migrationStatements } from './migrate-ticket-report-fields';
+import type { Sql, TransactionSql } from 'postgres';
+import { CONTRACTION_SQL } from './contracted-state';
+import { alignAssessmentInTransaction } from './migrate-operational-assessment-alignment';
+
+const migrationStatements = (text: string) =>
+  text.split('--> statement-breakpoint');
 
 // Manuscript revision Phase 2, step 2e (Appendix H ADMINS account_type /
 // is_focal, plus admin_audit_events.actor_account_type). Runs
@@ -29,7 +33,11 @@ export const STEPS = [
 
 // The second check query reads the new columns, so it only runs once all
 // three exist (the first query reports them as col_* booleans).
-async function printCheck(label: string, checks: string[]) {
+async function printCheck(
+  sql: Pick<Sql, 'unsafe'>,
+  label: string,
+  checks: string[],
+) {
   const [summary] = await sql.unsafe(checks[0]);
   console.log(`${label}:`, summary);
   if (
@@ -42,7 +50,7 @@ async function printCheck(label: string, checks: string[]) {
   }
 }
 
-async function main() {
+export async function migrateStaffAccountTypes(sql: Sql) {
   const dir = join(__dirname, '..', '..', 'drizzle');
   const checks = migrationStatements(
     readFileSync(join(dir, '0039_staff_account_types.check.sql'), 'utf8'),
@@ -61,9 +69,46 @@ async function main() {
     );
   }
 
-  await printCheck('Before', checks);
-
   const results = await sql.begin(async (tx) => {
+    await tx.unsafe("SET LOCAL lock_timeout = '5s'");
+    await tx.unsafe("SET LOCAL statement_timeout = '60s'");
+    await tx`SELECT pg_advisory_xact_lock(8048,1)`;
+    const [state] = await tx<{ canonical: boolean; legacy: number }[]>`
+      SELECT bool_or(attname IN ('assessed_conditions','interim_mitigation','deferment_or_referral_reason')) canonical,
+        count(*) FILTER (WHERE attname LIKE 'legacy_%')::int legacy
+      FROM pg_attribute WHERE attrelid=to_regclass('public.operational_assessments')
+        AND attnum>0 AND NOT attisdropped
+    `;
+    if (state.legacy && !state.canonical) {
+      throw new Error('0049 mixed assessment state');
+    }
+    if (state.canonical) {
+      // Full final-state verification only; never replay 0039's historical
+      // audit backfill or recreate its retired compatibility objects.
+      if (state.legacy !== 4) {
+        await tx.unsafe(CONTRACTION_SQL);
+      } else {
+        await alignAssessmentInTransaction(tx);
+        const expected = statements[8].match(/AS \$\$([\s\S]*?)\$\$/)?.[1];
+        const [compatibility] = await tx<{ valid: boolean }[]>`
+          SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+            JOIN pg_language l ON l.oid=p.prolang
+            WHERE t.tgrelid='public.admin_audit_events'::regclass
+              AND t.tgname='admin_audit_events_fill_actor_account_type'
+              AND t.tgtype=7 AND t.tgenabled='O' AND t.tgnargs=0 AND t.tgqual IS NULL
+              AND p.oid=to_regprocedure('public.admin_audit_events_fill_actor_account_type()')
+              AND regexp_replace(p.prosrc,'[[:space:]]','','g')=
+                regexp_replace(${expected ?? null}::text,'[[:space:]]','','g')
+              AND NOT p.prosecdef AND p.proconfig IS NULL
+              AND l.lanname='plpgsql') valid
+        `;
+        if (!compatibility.valid)
+          throw new Error('0049 mixed compatibility state');
+      }
+      await verifyStaffMapping(tx, checks);
+      return null;
+    }
+    await printCheck(tx, 'Before', checks);
     const done: { command: string; count: number }[] = [];
     for (const statement of statements) {
       const result = await tx.unsafe(statement);
@@ -71,6 +116,7 @@ async function main() {
     }
     return done;
   });
+  if (!results) return;
   console.log('Rows changed per step:');
   STEPS.forEach((step, i) => {
     const { command, count } = results[i];
@@ -79,14 +125,33 @@ async function main() {
     );
   });
 
-  await printCheck('After', checks);
+  await printCheck(sql, 'After', checks);
+}
 
-  await sql.end();
+async function verifyStaffMapping(tx: TransactionSql, checks: string[]) {
+  const [mapping] = await tx.unsafe(checks[1]);
+  if (
+    [
+      'admins_mapping_mismatch',
+      'check_rule_violations',
+      'focal_not_on_mdrrmo',
+      'audit_null_actor_account_type',
+    ].some((key) => Number(mapping[key]) !== 0)
+  ) {
+    throw new Error('0049 contracted staff mapping mismatch');
+  }
 }
 
 if (require.main === module) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
+  void (async () => {
+    const { sql } = (await import('../db.js')) as { sql: Sql };
+    try {
+      await migrateStaffAccountTypes(sql);
+    } finally {
+      await sql.end();
+    }
+  })().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
   });
 }

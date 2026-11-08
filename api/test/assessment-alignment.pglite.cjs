@@ -14,9 +14,10 @@ const { PGLiteSocketServer } = load('@electric-sql/pglite-socket');
 const postgres = require('postgres');
 const { drizzle } = require('drizzle-orm/postgres-js');
 const {
-  ALIGNMENT_SQL,
+  ALIGNMENT_SQL: alignmentFile,
   migrateAssessmentAlignment,
 } = require('../scripts/migrations/migrate-operational-assessment-alignment.ts');
+const ALIGNMENT_SQL = alignmentFile.replace(/\r\n/g, '\n');
 const {
   migrateAssessmentWorkOrders,
 } = require('../scripts/migrations/migrate-assessment-work-orders.ts');

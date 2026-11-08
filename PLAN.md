@@ -1,3 +1,5 @@
+> Superseded scoring/setup plan: Hazard Urgency and its elevation/rain/cluster formula were retired. Phase 8b-1 (0049) removes their stored columns, old config and assessment rollback snapshots. Current behavior and setup are documented in README.md, docs/database.md and docs/triage-model.md. DEM remains for display-only Terrain; Operational Priority and advisory Hazard Information/rainfall remain.
+
 # porac-sdss-nextjs Prototype Realignment Plan
  
 Repository: `MMPA-Works/porac-sdss-nextjs` (commit `9a44a41`)

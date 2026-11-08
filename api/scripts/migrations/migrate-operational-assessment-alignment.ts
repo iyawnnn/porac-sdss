@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Sql, TransactionSql } from 'postgres';
+import { verifyContractedAssessments } from './contracted-state';
 
 const directory = join(__dirname, '../../drizzle');
 export const ALIGNMENT_SQL = readFileSync(
@@ -17,6 +18,8 @@ const check = readFileSync(
 export async function alignAssessmentInTransaction(tx: TransactionSql) {
   await tx.unsafe("SET LOCAL lock_timeout = '5s'");
   await tx.unsafe("SET LOCAL statement_timeout = '60s'");
+  await tx`SELECT pg_advisory_xact_lock(8048,1)`;
+  if (await verifyContractedAssessments(tx)) return;
   const before = await tx.unsafe(check);
   console.log('0048 before:', JSON.stringify(before[0]));
   for (const statement of ALIGNMENT_SQL.split('--> statement-breakpoint')) {
@@ -33,7 +36,7 @@ export async function migrateAssessmentAlignment(sql: Sql) {
 
 if (require.main === module) {
   void (async () => {
-    const { sql } = (await import('../db')) as { sql: Sql };
+    const { sql } = (await import('../db.js')) as { sql: Sql };
     try {
       await migrateAssessmentAlignment(sql);
     } finally {

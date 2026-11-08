@@ -1086,8 +1086,6 @@ describe('TicketsService.getTicketsForExport', () => {
         assigned_office: 'MEO',
         category: 'Pothole',
         barangay_name: 'Poblacion',
-        urgency_band: 'High',
-        priority_score: 90,
         member_count: 2,
         created_at: '2026-01-01T00:00:00.000Z',
         updated_at: '2026-01-01T00:00:00.000Z',

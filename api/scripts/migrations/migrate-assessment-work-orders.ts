@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { Sql } from 'postgres';
 import { alignAssessmentInTransaction } from './migrate-operational-assessment-alignment';
+import { verifyContractedAssessments } from './contracted-state';
 // Keep this injectable runner free of modules that instantiate a real client.
 function migrationStatements(file: string): string[] {
   return file
@@ -69,6 +70,7 @@ export async function migrateAssessmentWorkOrders(sql: Sql) {
     // Share 0048's lock before inspecting names, so a concurrent cutover cannot
     // make this runner recreate a retired column after its initial check.
     await tx`SELECT pg_advisory_xact_lock(8048,1)`;
+    if (await verifyContractedAssessments(tx)) return;
     const markers =
       await tx`SELECT attname FROM pg_attribute WHERE attrelid='public.operational_assessments'::regclass
       AND attnum>0 AND NOT attisdropped AND (attname='assessed_conditions' OR attname LIKE 'legacy_%')`;
@@ -125,7 +127,7 @@ export async function migrateAssessmentWorkOrders(sql: Sql) {
 
 if (require.main === module) {
   void (async () => {
-    const { sql } = (await import('../db')) as { sql: Sql };
+    const { sql } = (await import('../db.js')) as { sql: Sql };
     try {
       await migrateAssessmentWorkOrders(sql);
     } finally {
