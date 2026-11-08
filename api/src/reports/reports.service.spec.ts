@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs';
 import { basename, join } from 'path';
+import ts from 'typescript';
 import type { Sql, TransactionSql } from 'postgres';
 import {
   LOCATION_MISMATCH_THRESHOLD_M,
@@ -499,21 +500,10 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
     expect(getMyReportDetail).not.toContain('t.resolution_confirmed_at');
   });
 
-  // Batch 2 (Focal intake): the citizen timeline needs to know whether/when
-  // Focal acknowledged this specific report — sourced directly from
-  // report_acknowledgments.acknowledged_at (never derived from the first
-  // intake action; see FocalIntakeService.deriveIntakeState's own docblock
-  // for why those are deliberately different sources of truth).
-  // Phase 6, step 6b: the ticket-level acknowledgment (Appendix H
-  // ACKNOWLEDGMENTS) of the report's current ticket and of the ticket a
-  // merge moved it from (the row stays on the old ticket id), plus the
-  // per-report row as the legacy fallback — the earliest, and a ticket-level
-  // row only when it is not earlier than the report. All LEFT JOINs, so an
-  // unacknowledged report still returns.
-  it('getMyReportDetail takes the earliest of the per-report, current-ticket and pre-merge-ticket acknowledgments', () => {
-    expect(getMyReportDetail).toMatch(
-      /LEFT JOIN report_acknowledgments ra ON ra\.report_id = r\.id/,
-    );
+  // Ticket acknowledgments only; report ownership and pre-submission timestamp
+  // protection remain unchanged, including the old ticket of a recorded merge.
+  it('getMyReportDetail takes only eligible current-ticket and latest pre-merge-ticket acknowledgments', () => {
+    expect(getMyReportDetail).not.toContain('report_acknowledgments');
     expect(getMyReportDetail).toMatch(
       /LEFT JOIN acknowledgments ta ON ta\.ticket_id = r\.ticket_id/,
     );
@@ -521,7 +511,7 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
       /LEFT JOIN acknowledgments oa ON oa\.ticket_id = me\.from_ticket_id/,
     );
     expect(getMyReportDetail).toMatch(
-      /LEAST\(\s+ra\.acknowledged_at,\s+CASE WHEN ta\.acknowledged_at >= r\.created_at THEN ta\.acknowledged_at END,\s+CASE WHEN oa\.acknowledged_at >= r\.created_at THEN oa\.acknowledged_at END\s+\) AS acknowledged_at/,
+      /LEAST\(\s+CASE WHEN ta\.acknowledged_at >= r\.created_at THEN ta\.acknowledged_at END,\s+CASE WHEN oa\.acknowledged_at >= r\.created_at THEN oa\.acknowledged_at END\s+\) AS acknowledged_at/,
     );
   });
 
@@ -1345,15 +1335,90 @@ describe('citizen responses carry no severity screening (Phase 3, step 3f)', () 
   const SCREENING = /severity_screen|severityScreen|screening/i;
   const read = (...path: string[]) =>
     readFileSync(join(__dirname, ...path), 'utf8');
+  // Keep types and SQL/string contents in the privacy scan, but allow comments
+  // explaining why staff-only screening data must not reach citizens.
+  const withoutComments = (source: string) =>
+    ts
+      .createPrinter({ removeComments: true })
+      .printFile(
+        ts.createSourceFile(
+          'citizen-response.ts',
+          source,
+          ts.ScriptTarget.Latest,
+          true,
+          ts.ScriptKind.TS,
+        ),
+      );
 
-  it('reports.service.ts and reports.controller.ts never mention a screening field', () => {
-    expect(read('reports.service.ts')).not.toMatch(SCREENING);
-    expect(read('reports.controller.ts')).not.toMatch(SCREENING);
+  it('reports.service.ts and reports.controller.ts contain no screening field outside comments', () => {
+    expect(withoutComments(read('reports.service.ts'))).not.toMatch(SCREENING);
+    expect(withoutComments(read('reports.controller.ts'))).not.toMatch(
+      SCREENING,
+    );
+  });
+
+  it('allows line and block comments about staff-only screening', () => {
+    expect(
+      withoutComments(`
+        // severity_screening_status is staff-only.
+        /* Do not expose severityScreenedAt or screening remarks. */
+        export interface CitizenResponse { id: number }
+      `),
+    ).not.toMatch(SCREENING);
+  });
+
+  it.each([
+    ['URL string', 'const value = "http://x";', 'http://x'],
+    [
+      'SQL string with a line-comment marker',
+      'const query = "SELECT \'//\' AS marker";',
+      "SELECT '//' AS marker",
+    ],
+    ['block-comment marker string', 'const marker = "/*";', '/*'],
+    [
+      'template literal',
+      "const query = `SELECT '//', '/*', 'http://x'`;",
+      "SELECT '//', '/*', 'http://x'",
+    ],
+    [
+      'escaped regex literal',
+      String.raw`const pattern = /https?:\/\/x|\/\*|\/\//;`,
+      String.raw`/https?:\/\/x|\/\*|\/\//`,
+    ],
+    [
+      'regex character classes',
+      'const pattern = /[/*]screening[//]/;',
+      '/[/*]screening[//]/',
+    ],
+  ])('preserves comment-like text in a %s', (_label, source, literal) => {
+    expect(withoutComments(source)).toContain(literal);
+  });
+
+  it.each([
+    [
+      'SQL template',
+      "const query = `SELECT severity_screening_status, '// note' FROM reports`;",
+    ],
+    ['response property', 'const response = { severityScreenedAt: null };'],
+    ['response type', 'interface CitizenResponse { screening: string }'],
+    ['type name', 'interface SeverityScreeningResponse { id: number }'],
+    [
+      'string literal',
+      'const value = "http://x/ /* severity_screening_status";',
+    ],
+    [
+      'SQL string',
+      'const query = "SELECT \'//\' AS marker, severity_screening_status FROM reports";',
+    ],
+  ])('still detects a screening field in a %s', (_label, source) => {
+    expect(withoutComments(source)).toMatch(SCREENING);
   });
 
   it('the citizen report types (lib/types/citizens-reports.ts) have no screening field', () => {
     expect(
-      read('..', '..', '..', 'lib', 'types', 'citizens-reports.ts'),
+      withoutComments(
+        read('..', '..', '..', 'lib', 'types', 'citizens-reports.ts'),
+      ),
     ).not.toMatch(SCREENING);
   });
 

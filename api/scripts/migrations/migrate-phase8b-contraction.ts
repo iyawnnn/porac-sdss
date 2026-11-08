@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Sql } from 'postgres';
-import { CONTRACTION_SQL } from './contracted-state';
+import { verifyPhase8bFinalState } from './contracted-state';
 
 const check = readFileSync(
   join(__dirname, '../../drizzle/0049_phase8b_contraction.check.sql'),
@@ -15,7 +15,7 @@ export async function migratePhase8bContraction(sql: Sql) {
     console.log('0049 before:', JSON.stringify((await tx.unsafe(check))[0]));
     // SQL owns the lock order, bounded timeouts, preflight, drops and final
     // verification. Notices contain counts/keys only, never removed values.
-    await tx.unsafe(CONTRACTION_SQL);
+    await verifyPhase8bFinalState(tx);
     console.log('0049 after:', JSON.stringify((await tx.unsafe(check))[0]));
   });
 }

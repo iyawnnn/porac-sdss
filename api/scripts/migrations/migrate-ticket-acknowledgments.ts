@@ -1,78 +1,54 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import { sql } from '../db';
-import { migrationStatements } from './migrate-ticket-report-fields';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Sql } from 'postgres';
+import {
+  acknowledgmentState,
+  lockAcknowledgmentMigration,
+  migrationError,
+  verifyAcknowledgmentContraction,
+  verifyAcknowledgmentDefinitions,
+} from '../lib/acknowledgment-contraction';
 
-// Manuscript revision Phase 2, step 2d (Appendix H ACKNOWLEDGMENTS). Runs
-// 0038_ticket_acknowledgments.sql one statement at a time in ONE
-// transaction, printing the .check.sql counts before and after and the rows
-// each statement changed. Safe to run more than once. If the guard finds a
-// report acknowledgment it can't map to an admin or a ticket, it raises, the
-// transaction rolls back and nothing is created.
-
-// One label per statement in 0038_ticket_acknowledgments.sql, in order.
-export const STEPS = [
-  'guard: admins and tickets of the report acknowledgments',
-  'acknowledgments table',
-  'backfill the earliest report acknowledgment per ticket',
-];
-
-// The second check query reads acknowledgments, so it only runs once the
-// table exists (the first query reports acknowledgments_table).
-async function printCheck(label: string, checks: string[]) {
-  const [summary] = await sql.unsafe(checks[0]);
-  console.log(`${label}:`, summary);
-  if (summary.acknowledgments_table === true) {
-    const [details] = await sql.unsafe(checks[1]);
-    console.log(`${label} (acknowledgments):`, details);
-  }
-}
-
-async function main() {
-  const dir = join(__dirname, '..', '..', 'drizzle');
-  const checks = migrationStatements(
-    readFileSync(join(dir, '0038_ticket_acknowledgments.check.sql'), 'utf8'),
-  );
-  const statements = migrationStatements(
-    readFileSync(join(dir, '0038_ticket_acknowledgments.sql'), 'utf8'),
-  );
-  if (checks.length !== 2) {
-    throw new Error(
-      `Expected 2 queries in 0038_ticket_acknowledgments.check.sql, found ${checks.length}`,
-    );
-  }
-  if (statements.length !== STEPS.length) {
-    throw new Error(
-      `Expected ${STEPS.length} statements in 0038_ticket_acknowledgments.sql, found ${statements.length}`,
-    );
-  }
-
-  await printCheck('Before', checks);
-
-  const results = await sql.begin(async (tx) => {
-    const done: { command: string; count: number }[] = [];
-    for (const statement of statements) {
-      const result = await tx.unsafe(statement);
-      done.push({ command: result.command, count: result.count ?? 0 });
+// Physical canonical table is acknowledgments (0038), not a renamed table.
+export async function migrateTicketAcknowledgments(sql: Sql) {
+  return sql.begin(async (tx) => {
+    await lockAcknowledgmentMigration(tx);
+    const state = await acknowledgmentState(tx);
+    if (state.ticket && !state.legacy) {
+      await verifyAcknowledgmentContraction(tx);
+      return;
     }
-    return done;
-  });
-  console.log('Rows changed per step:');
-  STEPS.forEach((step, i) => {
-    const { command, count } = results[i];
+    if (!state.legacy)
+      throw new Error(
+        '0038 source is missing before ticket acknowledgments exist',
+      );
+    await verifyAcknowledgmentDefinitions(tx);
+    if (!state.ticket) {
+      for (const statement of readFileSync(
+        join(__dirname, '../../drizzle/0038_ticket_acknowledgments.sql'),
+        'utf8',
+      ).split('--> statement-breakpoint')) {
+        if (statement.trim()) await tx.unsafe(statement);
+      }
+    }
+    // Already-created ticket rows are authoritative; never replay the lossy
+    // backfill over current grouping/acknowledgment state on a later rerun.
+    await verifyAcknowledgmentDefinitions(tx);
     console.log(
-      `  ${String(i + 1).padStart(2)}. ${step}: ${command === 'INSERT' ? `${count} rows` : 'done'}`,
+      '0038 ticket acknowledgment state verified; existing rows unchanged',
     );
   });
-
-  await printCheck('After', checks);
-
-  await sql.end();
 }
-
 if (require.main === module) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
+  void (async () => {
+    const { sql } = (await import('../db.js')) as { sql: Sql };
+    try {
+      await migrateTicketAcknowledgments(sql);
+    } finally {
+      await sql.end();
+    }
+  })().catch((error: unknown) => {
+    console.error(migrationError(error));
+    process.exitCode = 1;
   });
 }

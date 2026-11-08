@@ -24,7 +24,7 @@ import { routingBlock, type RoutingActor } from './ticket-routing.rules';
 // a separate concept from the operational Ticket Queue (see
 // api/src/admin/tickets.service.ts). Reads reports (not tickets) joined
 // through to their ticket for routing/status/scoring context, and writes to
-// report_acknowledgments and the report's own severity screening fields —
+// its ticket acknowledgment and the report's own severity screening fields —
 // never tickets.status. Reassign and Refer go through TicketsService.
 
 // Forwarded and Escalated come only from old report_intake_actions rows:
@@ -365,13 +365,14 @@ export class FocalIntakeService {
         t.assigned_office, t.member_count, b.name AS barangay_name, t.merged_into_ticket_id,
         r.citizen_severity, r.created_at AS submitted_at, r.flags,
         t.priority_index AS operational_priority,
-        ra.acknowledged_at, ra.acknowledged_by_name,
+        ta.acknowledged_at, (aa.first_name || ' ' || aa.last_name) AS acknowledged_by_name,
         latest.action_type AS latest_action_type, latest.created_at AS latest_action_at,
         r.severity_screening_status, r.severity_screened_at
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
-      LEFT JOIN report_acknowledgments ra ON ra.report_id = r.id
+      LEFT JOIN acknowledgments ta ON ta.ticket_id = t.id
+      LEFT JOIN admins aa ON aa.id = ta.acknowledged_by_admin_id
       LEFT JOIN LATERAL (
         SELECT action_type, created_at FROM report_intake_actions
         WHERE report_id = r.id AND action_type IN ('forwarded', 'escalated')
@@ -396,13 +397,13 @@ export class FocalIntakeService {
       SELECT
         r.id AS report_id, r.tracking_reference, t.category, b.name AS barangay_name,
         t.assigned_office, t.priority_index AS operational_priority,
-        ra.acknowledged_at, latest.action_type AS latest_action_type,
+        ta.acknowledged_at, latest.action_type AS latest_action_type,
         latest.created_at AS latest_action_at, r.severity_screening_status, r.severity_screened_at,
         ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
-      LEFT JOIN report_acknowledgments ra ON ra.report_id = r.id
+      LEFT JOIN acknowledgments ta ON ta.ticket_id = t.id
       LEFT JOIN LATERAL (
         SELECT action_type, created_at FROM report_intake_actions
         WHERE report_id = r.id AND action_type IN ('forwarded', 'escalated')
@@ -445,7 +446,7 @@ export class FocalIntakeService {
         r.description, ST_Y(r.pin_geom) AS lat, ST_X(r.pin_geom) AS lng,
         ST_Y(t.geom) AS ticket_lat, ST_X(t.geom) AS ticket_lng, r.submitted_category,
         t.priority_index AS operational_priority,
-        ra.acknowledged_at, ra.acknowledged_by_name,
+        ta.acknowledged_at, (aa.first_name || ' ' || aa.last_name) AS acknowledged_by_name,
         latest.action_type AS latest_action_type, latest.created_at AS latest_action_at,
         r.severity_screening_status, r.severity_screening_remarks, r.severity_screened_at,
         (sa.first_name || ' ' || sa.last_name) AS severity_screened_by_name,
@@ -456,7 +457,8 @@ export class FocalIntakeService {
       FROM reports r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN barangays b ON b.id = t.barangay_id
-      LEFT JOIN report_acknowledgments ra ON ra.report_id = r.id
+      LEFT JOIN acknowledgments ta ON ta.ticket_id = t.id
+      LEFT JOIN admins aa ON aa.id = ta.acknowledged_by_admin_id
       LEFT JOIN admins sa ON sa.id = r.severity_screened_by_admin_id
       LEFT JOIN LATERAL (
         SELECT action_type, created_at FROM report_intake_actions
@@ -506,9 +508,8 @@ export class FocalIntakeService {
     };
   }
 
-  // Report-level, once-only — the report_acknowledgments.report_id UNIQUE
-  // constraint is the actual enforcement (concurrency-safe, not a
-  // check-then-insert race); this maps the resulting violation to a 409.
+  // The report-id route acknowledges its current ticket once. The ticket row
+  // lock plus UNIQUE(ticket_id)/DO NOTHING prevent duplicate audits/notices.
   async acknowledge(
     reportId: number,
     admin: AdminSession,
@@ -528,22 +529,16 @@ export class FocalIntakeService {
         if (!report) throw new NotFoundException('Report not found.');
 
         const trimmedRemarks = remarks?.trim() || null;
-        await tx`
-          INSERT INTO report_acknowledgments (report_id, acknowledged_by_admin_id, acknowledged_by_name, remarks)
-          VALUES (${reportId}, ${admin.adminId}, ${admin.adminName}, ${trimmedRemarks})
-        `;
-        // Appendix H ticket-level acknowledgments (manuscript revision Phase
-        // 2, step 2d): the first acknowledged report on a ticket creates its
-        // row; later reports on the same ticket add nothing (ON CONFLICT).
-        // Same transaction, so now() equals the report row's acknowledged_at.
-        // Acknowledging the same report twice never reaches this insert — the
-        // report_acknowledgments UNIQUE above raises first, which is the 409.
-        // Every read stays on report_acknowledgments for now.
         const acknowledgment = await tx`
           INSERT INTO acknowledgments (ticket_id, acknowledged_by_admin_id, remarks, acknowledged_at)
           VALUES (${report.ticket_id}, ${admin.adminId}, ${trimmedRemarks}, now())
           ON CONFLICT (ticket_id) DO NOTHING
         `;
+        if (acknowledgment.count !== 1) {
+          throw new ConflictException(
+            'This report has already been acknowledged.',
+          );
+        }
 
         await this.audit.logInPgTx(tx, {
           actor: {

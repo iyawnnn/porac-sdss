@@ -422,6 +422,7 @@ describe('TicketGroupingService.removeReport', () => {
       },
     });
     // Both tickets' membership changed: the old one and the new one.
+    expect(t.writes().join(' ')).not.toMatch(/acknowledgments/);
     expectRecalculatedInTx(t, [7, 500]);
     expect(t.recalculateActiveTickets).toHaveBeenCalledTimes(1);
   });
@@ -505,6 +506,7 @@ describe('TicketGroupingService.regroupReport', () => {
         reason: 'Belongs with the other report.',
       },
     });
+    expect(t.writes().join(' ')).not.toMatch(/acknowledgments/);
     expectRecalculatedInTx(t, [7, 3]);
     expect(t.recalculateActiveTickets).toHaveBeenCalledTimes(1);
   });

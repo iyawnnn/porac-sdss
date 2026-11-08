@@ -55,7 +55,7 @@ test("Focal dashboard uses server counts and paged municipality-wide intake summ
   expect(second.total).toBe(first.total);
   expect(second.items.every(row => !first.items.some(other => other.reportId === row.reportId))).toBe(true);
   await page.goto("/admin/focal?pageSize=2");
-  await expect(page.getByText(`Median time to acknowledge (last 30 days): ${metricDuration(counts.medianAcknowledgmentHours30d)}`)).toBeVisible();
+  await expect(page.getByText(`Median ticket acknowledgment time (last 30 days): ${metricDuration(counts.medianAcknowledgmentHours30d)}`)).toBeVisible();
   await expect(page.getByTestId("focal-kpi-row")).toContainText(counts.newReports.toLocaleString());
   const pages = page.getByRole("navigation", { name: "Incoming reports pages" });
   await expect(pages).toContainText(`${first.total.toLocaleString()} reports`);
@@ -164,7 +164,7 @@ test("MEO/MDRRMO operational staff cannot reach Focal Intake", async ({ page }) 
   await expect(page.getByRole("heading", { name: "Intake Queue" })).toHaveCount(0);
 });
 
-test("acknowledging a report does not change the ticket's Reported status", async ({ page, request, browser }) => {
+test("acknowledging its ticket through a report does not change the ticket's Reported status", async ({ page, request, browser }) => {
   await loginAs(page, E2E_FOCAL_ADMIN);
   const cookies = await page.context().cookies();
   const cookieHeader = sessionCookieHeader(cookies);
@@ -184,6 +184,13 @@ test("acknowledging a report does not change the ticket's Reported status", asyn
   // The critical acceptance case: ACKNOWLEDGED != UNDER REVIEW.
   expect(detail.ticketStatus).toBe("Reported");
   expect(detail.intakeState).toBe("Acknowledged");
+  const intakeRes = await request.get('/api/admin/intake', { headers: cookieHeader });
+  expect(intakeRes.ok()).toBe(true);
+  const linked = (await intakeRes.json() as { ticketId: number; acknowledgedAt: string | null; acknowledgedByName: string | null }[])
+    .filter(row => row.ticketId === detail.ticketId);
+  expect(linked.length).toBeGreaterThan(0);
+  expect(linked.every(row => row.acknowledgedAt === detail.acknowledgedAt)).toBe(true);
+  expect(linked.every(row => row.acknowledgedByName === `${E2E_FOCAL_ADMIN.firstName} ${E2E_FOCAL_ADMIN.lastName}`)).toBe(true);
 
   const second = await request.post(`/api/admin/intake/${target!.reportId}/acknowledge`, {
     headers: cookieHeader,

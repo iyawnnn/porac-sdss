@@ -71,7 +71,6 @@ async function main() {
     CREATE TABLE status_history (id serial PRIMARY KEY, ticket_id int, status text, from_status text, reason text,
       admin_id int, admin_name text, changed_at timestamptz, resolution_outcome resolution_outcome,
       resolution_notes text, resolution_image_url text);
-    CREATE TABLE report_acknowledgments (report_id int UNIQUE, acknowledged_by_admin_id int, acknowledged_by_name text, remarks text);
     CREATE TABLE acknowledgments (ticket_id int UNIQUE, acknowledged_by_admin_id int, remarks text, acknowledged_at timestamptz);
     CREATE TABLE resolution_feedback (ticket_id int, citizen_id int, feedback_type text, reason text,
       created_at timestamptz DEFAULT now(), UNIQUE(ticket_id, citizen_id));
@@ -220,7 +219,10 @@ async function main() {
       'ticket_acknowledged',
       'Your report has been acknowledged by municipal monitoring.',
     );
-    await focal.acknowledge(13, focalAdmin, 'SECRET later remarks');
+    await assert.rejects(
+      focal.acknowledge(13, focalAdmin, 'SECRET later remarks'),
+      /already been acknowledged/,
+    );
     await notices(
       'ticket_acknowledged',
       'Your report has been acknowledged by municipal monitoring.',

@@ -90,7 +90,7 @@ export function FocalIntakeDetail({
           only while the ticket is Reported with no active Work Order. */}
       <div className="flex flex-wrap items-center gap-2">
         <Button disabled={!!report.acknowledgedAt} onClick={() => setOpenDialog("acknowledge")}>
-          {report.acknowledgedAt ? "Acknowledged" : "Acknowledge Report"}
+          {report.acknowledgedAt ? "Acknowledged" : "Acknowledge Ticket"}
         </Button>
         <Button disabled={routingBlocked} onClick={() => setOpenDialog("reassign")} variant="outline">Reassign</Button>
         <Button disabled={routingBlocked} onClick={() => setOpenDialog("refer")} variant="outline">Refer</Button>

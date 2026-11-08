@@ -74,6 +74,10 @@ describe('Focal dashboard contract', () => {
       const calls = query.mock.calls as [TemplateStringsArray, ...unknown[]][];
       const text = calls[1][0].join('?');
       expect(text).toContain('percentile_cont(0.5)');
+      expect(text).toContain('FROM acknowledgments a JOIN tickets t');
+      expect(text).toContain('a.acknowledged_at >= t.created_at');
+      expect(text).toContain('t.created_at IS NOT NULL');
+      expect(text).not.toContain('acknowledged_at-submitted_at');
       expect(text).toContain("acknowledged_at >= now()-interval '30 days'");
       expect(text).toContain('acknowledged_at <= now()');
       expect(text).not.toMatch(/work_orders|assigned_admin|notes/);

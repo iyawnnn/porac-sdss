@@ -542,44 +542,10 @@ export const routingActions = pgTable('routing_actions', {
     .defaultNow(),
 });
 
-// Central Monitoring / Focal Personnel's intake acknowledgment — REPORT-
-// level, not ticket-level: a ticket with 3 merged reports gets 3
-// independent acknowledgment rows, since each citizen's own submission
-// needs its own "municipal monitoring has seen this" event (see
-// docs/database.md and FocalIntakeService). report_id UNIQUE enforces
-// acknowledge-once at the database layer — the service maps the resulting
-// unique-violation to a 409, never a silent second row. FK-less
-// acknowledged_by_admin_id + acknowledged_by_name snapshot mirrors
-// status_history/office_reassignments above (actor identity can outlive/
-// change independent of this row).
-export const reportAcknowledgments = pgTable('report_acknowledgments', {
-  id: serial('id').primaryKey(),
-  reportId: integer('report_id')
-    .notNull()
-    .references(() => reports.id)
-    .unique(),
-  acknowledgedByAdminId: integer('acknowledged_by_admin_id'),
-  acknowledgedByName: text('acknowledged_by_name'),
-  remarks: text('remarks'),
-  acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
-
-// Appendix H ACKNOWLEDGMENTS (manuscript revision Phase 2, step 2d,
-// migration 0038): TICKET-level, at most one per ticket (ticket_id UNIQUE) —
-// the first time Focal acknowledged any report on the ticket. Separate from
-// tickets.status: acknowledging never changes the status. Replaces
-// report_acknowledgments above: FocalIntakeService.acknowledge writes both
-// in one transaction (ON CONFLICT (ticket_id) DO NOTHING here, so later
-// reports on the ticket add nothing), every screen still reads
-// report_acknowledgments until a later phase moves the reads here, and that
-// table is then read-only history until it is dropped in Phase 8. No name
-// column — Appendix H has none; the name comes from the admin row.
-// acknowledged_by_admin_id has a real FK to admins(id), as Appendix H defines
-// it, like routing_actions — an intentional departure from the FK-less
-// actor-snapshot convention, so an admin referenced here can no longer be
-// deleted (admins are deactivated, not deleted).
+// Appendix H ACKNOWLEDGMENTS, physical table acknowledgments (0038).
+// One immutable acknowledgment per ticket; each report inherits its ticket's
+// intake state. The citizen timeline separately rejects pre-submission times.
+// Admin FK preserves identity; displayed staff names come from admins.
 export const acknowledgments = pgTable('acknowledgments', {
   id: serial('id').primaryKey(),
   ticketId: integer('ticket_id')
@@ -632,7 +598,7 @@ export const resolutionFeedback = pgTable('resolution_feedback', {
 // Deliberately NOT a mutable "intake status" column: the citizen-/admin-
 // facing "New | Acknowledged | Screened | Forwarded | Escalated" display
 // state is always DERIVED at query time from this table,
-// report_acknowledgments and the report's severity screening (see
+// the ticket acknowledgment and the report's severity screening (see
 // FocalIntakeService.deriveIntakeState), never
 // persisted as its own state machine — this is what keeps these concepts
 // from ever becoming a second TicketStatus. action_type is plain text

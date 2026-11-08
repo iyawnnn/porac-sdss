@@ -47,7 +47,7 @@ export function FocalDashboard({ counts, reportsPage }: { counts: FocalDashboard
         <KpiCard icon={SendIcon} label="Forwarded / Escalated (history)" value={forwardedOrEscalated.toLocaleString()} />
       </div>
 
-      <p className="text-sm text-muted-foreground">Median time to acknowledge (last 30 days): <strong>{metricDuration(counts.medianAcknowledgmentHours30d)}</strong></p>
+      <p className="text-sm text-muted-foreground">Median ticket acknowledgment time (last 30 days): <strong>{metricDuration(counts.medianAcknowledgmentHours30d)}</strong></p>
 
       <Card className="@container gap-0 rounded-xl bg-muted pt-2 pb-5">
         <CardHeader className="px-4 pb-2">
