@@ -3,18 +3,27 @@ import { dirname } from "path";
 import sharp from "sharp";
 import piexif from "piexifjs";
 
-function dms(value: number): [[number, number], [number, number], [number, number]] {
+function dms(
+  value: number,
+): [[number, number], [number, number], [number, number]] {
   const absolute = Math.abs(value);
   const degrees = Math.floor(absolute);
   const minutesFloat = (absolute - degrees) * 60;
   const minutes = Math.floor(minutesFloat);
   const seconds = Math.round((minutesFloat - minutes) * 60 * 10000);
-  return [[degrees, 1], [minutes, 1], [seconds, 10000]];
+  return [
+    [degrees, 1],
+    [minutes, 1],
+    [seconds, 10000],
+  ];
 }
 
+// EXIF has no offset tag here: write Manila wall time for the API's explicit
+// Manila fallback, independently of the machine generating the fixture.
 function stamp(date: Date) {
+  date = new Date(date.getTime() + 8 * 60 * 60 * 1000);
   const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}:${pad(date.getMonth() + 1)}:${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return `${date.getUTCFullYear()}:${pad(date.getUTCMonth() + 1)}:${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
 }
 
 // Deterministic 9x8 grayscale-cell grid — 9 columns by 8 rows, matching
@@ -73,11 +82,12 @@ function variantPatternSvg(variant: number): string {
 // since two such images still collide on the same all-zero dHash as any
 // other uniform fill.
 export async function renderVariantJpeg(variant: number): Promise<Buffer> {
-  return sharp(Buffer.from(variantPatternSvg(variant))).jpeg({ quality: 88 }).toBuffer();
+  return sharp(Buffer.from(variantPatternSvg(variant)))
+    .jpeg({ quality: 88 })
+    .toBuffer();
 }
 
-export async function generateExifImage({
-  outputPath,
+export async function renderExifImage({
   lat,
   lng,
   date = new Date(),
@@ -85,11 +95,12 @@ export async function generateExifImage({
   model = "iPhone 15 Pro",
   color = { r: 55, g: 90, b: 120 },
   variant,
+  gps = true,
 }: {
-  outputPath: string;
   lat: number;
   lng: number;
-  date?: Date;
+  date?: Date | null;
+  gps?: boolean;
   make?: string;
   model?: string;
   color?: { r: number; g: number; b: number };
@@ -107,28 +118,42 @@ export async function generateExifImage({
     variant === undefined
       ? await sharp({
           create: { width: 600, height: 400, channels: 3, background: color },
-        }).jpeg({ quality: 88 }).toBuffer()
-      : await sharp(Buffer.from(variantPatternSvg(variant))).jpeg({ quality: 88 }).toBuffer();
+        })
+          .jpeg({ quality: 88 })
+          .toBuffer()
+      : await sharp(Buffer.from(variantPatternSvg(variant)))
+          .jpeg({ quality: 88 })
+          .toBuffer();
   const metadata = {
     "0th": {
       [piexif.ImageIFD.Make]: make,
       [piexif.ImageIFD.Model]: model,
     },
     Exif: {
-      [piexif.ExifIFD.DateTimeOriginal]: stamp(date),
+      ...(date ? { [piexif.ExifIFD.DateTimeOriginal]: stamp(date) } : {}),
     },
-    GPS: {
-      [piexif.GPSIFD.GPSLatitudeRef]: lat >= 0 ? "N" : "S",
-      [piexif.GPSIFD.GPSLatitude]: dms(lat),
-      [piexif.GPSIFD.GPSLongitudeRef]: lng >= 0 ? "E" : "W",
-      [piexif.GPSIFD.GPSLongitude]: dms(lng),
-    },
+    GPS: gps
+      ? {
+          [piexif.GPSIFD.GPSLatitudeRef]: lat >= 0 ? "N" : "S",
+          [piexif.GPSIFD.GPSLatitude]: dms(lat),
+          [piexif.GPSIFD.GPSLongitudeRef]: lng >= 0 ? "E" : "W",
+          [piexif.GPSIFD.GPSLongitude]: dms(lng),
+        }
+      : {},
     "1st": {},
     thumbnail: null,
   };
   const dataUrl = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
   const encoded = piexif.insert(piexif.dump(metadata), dataUrl);
+  return Buffer.from(encoded.split(",")[1], "base64");
+}
+
+export async function generateExifImage({
+  outputPath,
+  ...options
+}: Parameters<typeof renderExifImage>[0] & { outputPath: string }) {
+  const image = await renderExifImage(options);
   mkdirSync(dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, Buffer.from(encoded.split(",")[1], "base64"));
+  writeFileSync(outputPath, image);
   return outputPath;
 }

@@ -1,4 +1,16 @@
-import bcrypt from 'bcryptjs';
 import { sql } from '../lib/seed-db';
-const password=process.env.SEED_USER_PASSWORD??"PoracDemo2026!";
-async function main(){await sql`ALTER TABLE citizens ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT false`;const hash=await bcrypt.hash(password,12);for(let i=1;i<=5;i++){const email=`citizen${i}@porac.ph`;await sql`INSERT INTO citizens(first_name,last_name,email,password_hash,verified) VALUES(${`Citizen ${i}`},'Porac',${email},${hash},true) ON CONFLICT(email) DO UPDATE SET password_hash=EXCLUDED.password_hash,verified=true`;console.log(`Seeded ${email}`)}await sql.end()}main().catch(async e=>{console.error(e);await sql.end();process.exit(1)});
+import { seedDemoCitizens } from '../lib/seed-demo-citizens';
+import { E2E_CITIZEN_ACCOUNT } from '../../../e2e/test-credentials';
+
+void seedDemoCitizens(
+  sql,
+  process.env.SEED_USER_PASSWORD ?? E2E_CITIZEN_ACCOUNT.password,
+)
+  .then(() => console.log('Seeded five demo citizens.'))
+  .catch((error: unknown) => {
+    console.error(
+      error instanceof Error ? error.message : 'Citizen seed failed.',
+    );
+    process.exitCode = 1;
+  })
+  .finally(() => sql.end());

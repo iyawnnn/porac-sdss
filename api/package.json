@@ -18,6 +18,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:demo-workflow": "node test/demo-workflow.pglite.cjs",
     "migrate": "tsx --env-file=.env scripts/migrations/migrate.ts",
     "migrate:geometry": "tsx --env-file=.env scripts/migrations/migrate-geometry.ts",
     "migrate:ratelimit": "tsx --env-file=.env scripts/migrations/migrate-ratelimit.ts",
