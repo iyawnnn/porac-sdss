@@ -1,4 +1,4 @@
-import { sql } from "../db";
+import type { Sql } from 'postgres';
 import { OperationalPriorityService } from "../../src/domain/operational-priority.service";
 
 // Seed-side Operational Priority recalculation (tickets.priority_index only):
@@ -9,6 +9,6 @@ import { OperationalPriorityService } from "../../src/domain/operational-priorit
 // (rain, elevation bounds, the urgency formula and its columns) was removed
 // in manuscript revision Phase 1, step 7b — this used to be
 // recomputeActiveTicketUrgency and also wrote the Hazard Urgency columns.
-export async function recalculateActivePriority() {
+export async function recalculateActivePriority(sql: Sql) {
   return new OperationalPriorityService(sql).recalculateActiveTickets();
 }

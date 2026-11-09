@@ -1,5 +1,5 @@
 import { insertDashboardMetricFixtures } from '../lib/dashboard-metric-fixtures';
-import { sql } from '../db';
+import { sql } from '../lib/seed-db';
 import { insertNewExportFixtures } from '../lib/new-export-fixtures';
 import { insertExportFixtures } from '../lib/export-fixtures';
 import { insertAuditViewFixtures } from '../lib/audit-view-fixtures';

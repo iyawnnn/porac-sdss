@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { sql } from "../db";
+import { sql } from '../lib/seed-db';
 import { E2E_ADMIN_ACCOUNTS } from "../../../e2e/test-credentials";
 
 // Provisions the admin accounts Playwright's global setup (e2e/global-setup.ts)
