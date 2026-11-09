@@ -20,6 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:demo-workflow": "node test/demo-workflow.pglite.cjs",
     "test:fresh-database": "node test/fresh-database.pglite.cjs",
+    "test:data-inventory": "node test/test-data-inventory.pglite.cjs",
+    "inventory:test-data": "tsx --env-file=.env scripts/maintenance/inventory-test-data.ts",
     "migrate": "tsx --env-file=.env scripts/migrations/migrate.ts",
     "migrate:geometry": "tsx --env-file=.env scripts/migrations/migrate-geometry.ts",
     "migrate:ratelimit": "tsx --env-file=.env scripts/migrations/migrate-ratelimit.ts",
