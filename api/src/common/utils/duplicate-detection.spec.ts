@@ -1,46 +1,48 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import { DUPLICATE_MERGE_WINDOW_DAYS } from './duplicate-detection';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { parseBulkOptions } from '../../../scripts/lib/bulk-demo';
+import { NON_PRODUCTION_FLAG } from '../../../scripts/lib/seed-target';
 
-describe('DUPLICATE_MERGE_WINDOW_DAYS', () => {
-  it('is the PLAN.md §6 authoritative value of 7', () => {
-    expect(DUPLICATE_MERGE_WINDOW_DAYS).toBe(7);
-  });
-
-  it('is a plain number, not an env-derived value', () => {
-    // The business rule doesn't need to vary by deployment (Issue #4
-    // investigation) — this stays a code constant, never process.env-backed.
-    expect(typeof DUPLICATE_MERGE_WINDOW_DAYS).toBe('number');
-    expect(Number.isInteger(DUPLICATE_MERGE_WINDOW_DAYS)).toBe(true);
-    expect(DUPLICATE_MERGE_WINDOW_DAYS).toBeGreaterThan(0);
+const script = (name: string) =>
+  readFileSync(join(__dirname, '../../../scripts', name), 'utf8');
+describe('demo submission and explicit grouping', () => {
+  it.each(['lib/demo-workflow.ts', 'lib/bulk-demo.ts'])(
+    '%s submits through the real report service without the retired automatic merge path',
+    (file) => {
+      const source = script(file);
+      expect(source).toContain('.reports.submit(');
+      expect(source).not.toContain('DUPLICATE_MERGE_WINDOW_DAYS');
+      expect(source).not.toMatch(
+        /INSERT\s+INTO\s+(?:reports|tickets)\b|DELETE\s+FROM|TRUNCATE/i,
+      );
+    },
+  );
+  it('the presentation demo queries suggestions before invoking the staff merge service', () => {
+    const source = script('lib/demo-workflow.ts');
+    expect(source.indexOf('svc.related.forTicket')).toBeLessThan(
+      source.indexOf('svc.grouping.merge'),
+    );
+    expect(source).toContain('survivorTicketId:');
+    expect(source).toContain('mergedTicketId:');
   });
 });
-
-// api/scripts/seed/seed-bulk-reports.ts is a one-time demo-data script run
-// via tsx, outside Jest's rootDir — it previously hand-rolled its own
-// merge query with a hardcoded radius (20, vs. radiusForCategory's 25 for
-// Pothole) and no temporal cutoff at all (Issue #4 investigation finding).
-// This asserts the fix stuck: the script now imports and uses the same
-// shared constant and radius function as production, not a re-diverged
-// copy. Source-text check, not an execution test, for the same reasons
-// documented in reports.service.spec.ts.
-describe('seed-bulk-reports.ts stays wired to the shared duplicate-detection rule', () => {
-  const seedScriptSource = readFileSync(
-    join(__dirname, '..', '..', '..', 'scripts', 'seed', 'seed-bulk-reports.ts'),
-    'utf8',
-  );
-
-  it('imports the shared window constant and radius function instead of hardcoding them', () => {
-    expect(seedScriptSource).toMatch(/DUPLICATE_MERGE_WINDOW_DAYS/);
-    expect(seedScriptSource).toMatch(/radiusForCategory/);
+describe('optional bulk CLI', () => {
+  it('defaults to three reports with non-empty refusal', () => {
+    expect(parseBulkOptions([])).toEqual({ count: 3, append: false });
   });
-
-  it('no longer hardcodes the old wrong radius of 20', () => {
-    expect(seedScriptSource).not.toMatch(/geography,20\)/);
+  it('accepts explicit append and count without confusing the target guard flag or pnpm separator', () => {
+    expect(
+      parseBulkOptions(['--', '--append', '--count', '5', NON_PRODUCTION_FLAG]),
+    ).toEqual({ count: 5, append: true });
   });
-
-  it('applies the same active-status and created_at cutoff as production', () => {
-    expect(seedScriptSource).toMatch(/status IN \('Reported','Under Review','In Progress'\)/);
-    expect(seedScriptSource).toMatch(/created_at>now\(\)-make_interval\(days=>\$\{DUPLICATE_MERGE_WINDOW_DAYS\}\)/);
+  it.each([
+    ['--count', '0'],
+    ['--count', '16'],
+    ['--count', '-1'],
+    ['--count'],
+    ['--count', 'abc'],
+    ['--unknown'],
+  ])('rejects malformed or unsupported bulk options %#', (...args) => {
+    expect(() => parseBulkOptions(args)).toThrow();
   });
 });

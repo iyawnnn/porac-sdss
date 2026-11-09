@@ -109,6 +109,60 @@ export function parseCaptureTime(
   };
 }
 
+// Shared byte parser: seeds and the API use identical EXIF/time-zone handling.
+export async function extractImageExif(buffer: Buffer): Promise<ExifResult> {
+  try {
+    // reviveValues: false keeps DateTimeOriginal as the raw EXIF text for
+    // parseCaptureTime (exifr's revived Date depends on the server's time
+    // zone); latitude/longitude are still computed as numbers.
+    const d = (await exifr.parse(buffer, {
+      gps: true,
+      translateValues: false,
+      reviveValues: false,
+    })) as RawExif | undefined;
+    const lat = typeof d?.latitude === 'number' ? d.latitude : null;
+    const lng = typeof d?.longitude === 'number' ? d.longitude : null;
+    const make = typeof d?.Make === 'string' ? d.Make : null;
+    const model = typeof d?.Model === 'string' ? d.Model : null;
+    const capture = parseCaptureTime(
+      d?.DateTimeOriginal,
+      d?.OffsetTimeOriginal,
+      d?.OffsetTime,
+    );
+    const capturedAt = capture?.capturedAt ?? null;
+    return {
+      lat,
+      lng,
+      capturedAt,
+      make,
+      model,
+      data:
+        lat === null || lng === null
+          ? null
+          : {
+              GPSLatitude: lat,
+              GPSLongitude: lng,
+              GPSLatitudeRef: lat >= 0 ? 'N' : 'S',
+              GPSLongitudeRef: lng >= 0 ? 'E' : 'W',
+              DateTimeOriginal: capturedAt ? capturedAt.toISOString() : null,
+              DateTimeOriginalOffset: capture?.offset ?? null,
+              DateTimeOriginalOffsetSource: capture?.offsetSource ?? null,
+              Make: make,
+              Model: model,
+            },
+    };
+  } catch {
+    return {
+      lat: null,
+      lng: null,
+      capturedAt: null,
+      make: null,
+      model: null,
+      data: null,
+    };
+  }
+}
+
 @Injectable()
 export class MediaService {
   constructor() {
@@ -145,56 +199,7 @@ export class MediaService {
   }
 
   async extractExif(buffer: Buffer): Promise<ExifResult> {
-    try {
-      // reviveValues: false keeps DateTimeOriginal as the raw EXIF text for
-      // parseCaptureTime (exifr's revived Date depends on the server's time
-      // zone); latitude/longitude are still computed as numbers.
-      const d = (await exifr.parse(buffer, {
-        gps: true,
-        translateValues: false,
-        reviveValues: false,
-      })) as RawExif | undefined;
-      const lat = typeof d?.latitude === 'number' ? d.latitude : null;
-      const lng = typeof d?.longitude === 'number' ? d.longitude : null;
-      const make = typeof d?.Make === 'string' ? d.Make : null;
-      const model = typeof d?.Model === 'string' ? d.Model : null;
-      const capture = parseCaptureTime(
-        d?.DateTimeOriginal,
-        d?.OffsetTimeOriginal,
-        d?.OffsetTime,
-      );
-      const capturedAt = capture?.capturedAt ?? null;
-      return {
-        lat,
-        lng,
-        capturedAt,
-        make,
-        model,
-        data:
-          lat === null || lng === null
-            ? null
-            : {
-                GPSLatitude: lat,
-                GPSLongitude: lng,
-                GPSLatitudeRef: lat >= 0 ? 'N' : 'S',
-                GPSLongitudeRef: lng >= 0 ? 'E' : 'W',
-                DateTimeOriginal: capturedAt ? capturedAt.toISOString() : null,
-                DateTimeOriginalOffset: capture?.offset ?? null,
-                DateTimeOriginalOffsetSource: capture?.offsetSource ?? null,
-                Make: make,
-                Model: model,
-              },
-      };
-    } catch {
-      return {
-        lat: null,
-        lng: null,
-        capturedAt: null,
-        make: null,
-        model: null,
-        data: null,
-      };
-    }
+    return extractImageExif(buffer);
   }
 
   // dHash: resize to 9x8 grayscale, compare each pixel to its right neighbor.

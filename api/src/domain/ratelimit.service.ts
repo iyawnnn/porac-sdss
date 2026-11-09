@@ -15,10 +15,10 @@ import { PG } from '../db/db.module';
 // can't be evaded by switching networks the way an IP can). The looser
 // 20/hour-per-IP limit stays on as a secondary backstop — it still catches
 // a single IP spinning up many accounts to route around the account limit.
-const ACCOUNT_HOURLY_LIMIT = 5;
+export const ACCOUNT_HOURLY_LIMIT = 5;
 const ACCOUNT_SPATIAL_LIMIT = 3;
 const SPATIAL_RADIUS_M = 25;
-const IP_HOURLY_BACKSTOP = 20;
+export const IP_HOURLY_BACKSTOP = 20;
 
 // Forgot-password (POST /citizens/forgot-password): email is the primary
 // control here (closer to "account identity" than an IP is, same reasoning

@@ -1,3 +1,5 @@
+Phase 8c-2 seed workflow: see [demo-data.md](docs/demo-data.md) for the 15-submission scenario map, empty-target refusal, optional guarded bulk volume and offline checks. Do not run the demo and a full Playwright suite within the same hour; both share the real 20/hour/IP submission budget.
+
 # Porac SDSS (Spatial Decision Support System)
 
 ## A. PROJECT OVERVIEW
@@ -137,11 +139,11 @@ pnpm --prefix api migrate:admin-login-throttle      # admin_login_rate_limit_eve
 pnpm --prefix api seed:users                        # citizen demo accounts (Section G) — idempotent, safe to rerun
 pnpm --prefix api seed:admin -- meo@porac.gov.ph PoracDemo2026! PERSONNEL MEO false      # admin demo account (Section G)
 pnpm --prefix api seed:admin -- mdrrmo@porac.gov.ph PoracDemo2026! PERSONNEL MDRRMO false # second admin demo account
-pnpm --prefix api seed:diverse-reports              # demo tickets/reports — idempotent (truncates and reseeds a fixed set)
+pnpm --prefix api seed:diverse-reports              # 15-submission scenario demo; refuses non-empty targets (docs/demo-data.md)
 pnpm gis:generate-boundary                          # frontend map boundary overlay — independent of the DB steps above, run any time
 ```
 
-All seed commands above are idempotent (upsert by unique email, or truncate-and-reseed for `seed:diverse-reports`) — safe to rerun any of them right before a live demo without erroring or duplicating data.
+Account seeds upsert by unique email. The report scenario demo refuses a non-empty operational/history target; it never truncates existing data. Optional bulk volume requires explicit --append on a non-empty disposable target. See [demo-data.md](docs/demo-data.md) for prerequisites, rate limits and repeat-run behaviour.
 
 ## E. RUNNING THE APPLICATION
 
@@ -205,11 +207,11 @@ The E2E suite (`e2e/*.spec.ts`) drives a real dev server against a real database
 
 All test credentials live in one place — `e2e/test-credentials.ts` — imported by every spec that needs to log in. Never hardcode an email/password in a new spec; import `E2E_MEO_ADMIN`, `E2E_MDRRMO_ADMIN`, or `E2E_CITIZEN_ACCOUNT` instead.
 
-**Demo tickets/reports are a separate, explicit step.** Global setup deliberately does *not* reseed tickets/reports automatically, because that seed script (`seed:diverse-reports`) is destructive — it runs `TRUNCATE reports, tickets` before reinserting a fixed demo set, which would silently wipe any tickets a developer is manually testing against. If a spec needs real ticket data and the database has none, that spec calls `test.skip()` with a message naming the command below — the skip comes from the spec itself (`admin-tickets`, `admin-work-orders`, `citizen-reports`), not from global setup, which does not inspect ticket data at all. Watch the run output for skips, not just failures, and run:
+**Demo tickets/reports are a separate, explicit step.** Playwright globalSetup provisions its standard accounts and grouping fixtures; it never invokes the 15-submission scenario demo. That demo requires a fresh disposable operational target and consumes real submission quota. Do not run it and a full Playwright suite within the same hour. For a separate owner-operated demo on an empty target, see [demo-data.md](docs/demo-data.md) and run:
 ```bash
 pnpm --prefix api seed:diverse-reports
 ```
-This is idempotent in the sense that re-running it always produces the same deterministic set of demo tickets — but it is destructive to whatever tickets existed before, so it's opt-in rather than automatic.
+A repeat demo invocation refuses the non-empty target before changing records. No existing ticket, report, rate-limit event or audit history is erased. Use a fresh disposable target and respect the one-hour submission window.
 
 **Why `--workers=1`:** the suite runs against one shared dev database with no per-test transaction isolation. Parallel workers would race on the same admin sessions, ticket rows, and moderation state (e.g. one worker resetting filters while another asserts on them), producing flaky failures unrelated to real bugs. Keep `--workers=1` until the suite gets real test-database isolation (e.g. a per-run schema or transactional rollback) — that is a bigger change than this fix and out of scope here.
 

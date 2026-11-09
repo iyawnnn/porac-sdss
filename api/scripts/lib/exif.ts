@@ -1,3 +1,4 @@
-import exifr from "exifr";
-export interface ExifResult { lat: number | null; lng: number | null; capturedAt: Date | null; make: string | null; model: string | null; data: Record<string, unknown> | null; }
-export async function extractExif(buffer: Buffer): Promise<ExifResult> { try { const d = await exifr.parse(buffer, { gps: true, translateValues: false }); const lat = typeof d?.latitude === "number" ? d.latitude : null, lng = typeof d?.longitude === "number" ? d.longitude : null; const make = typeof d?.Make === "string" ? d.Make : null, model = typeof d?.Model === "string" ? d.Model : null; return { lat, lng, capturedAt: d?.DateTimeOriginal instanceof Date ? d.DateTimeOriginal : null, make, model, data: lat === null || lng === null ? null : { GPSLatitude: lat, GPSLongitude: lng, GPSLatitudeRef: lat >= 0 ? "N" : "S", GPSLongitudeRef: lng >= 0 ? "E" : "W", DateTimeOriginal: d?.DateTimeOriginal instanceof Date ? d.DateTimeOriginal.toISOString() : null, Make: make, Model: model } } } catch { return { lat: null, lng: null, capturedAt: null, make: null, model: null, data: null } } }
+// The production parser keeps raw EXIF text and applies the recorded offset,
+// falling back to Asia/Manila; it never revives dates in the host time zone.
+export { extractImageExif as extractExif } from '../../src/domain/media.service';
+export type { ExifResult } from '../../src/domain/media.service';
