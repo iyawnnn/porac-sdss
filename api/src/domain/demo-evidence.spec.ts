@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { renderExifImage } from '../../../lib/utils/generate-exif-image';
 import { extractExif } from '../../scripts/lib/exif';
 import { extractImageExif } from './media.service';
@@ -129,6 +129,9 @@ describe('demo evidence uses the production parser and flag rules', () => {
           cwd: apiRoot,
           env: {
             ...process.env,
+            NODE_PATH: [join(apiRoot, 'node_modules'), process.env.NODE_PATH]
+              .filter(Boolean)
+              .join(delimiter),
             TZ: zone,
             TSX_TSCONFIG_PATH: join(apiRoot, 'tsconfig.json'),
           },

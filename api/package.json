@@ -148,6 +148,7 @@
       "ts"
     ],
     "rootDir": "src",
+    "modulePaths": ["<rootDir>/../node_modules"],
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
