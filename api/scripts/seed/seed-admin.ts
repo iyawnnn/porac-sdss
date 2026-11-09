@@ -1,90 +1,25 @@
-import bcrypt from "bcryptjs";
-import { db, client } from "../db";
-import { admins } from "../../src/db/schema";
+import { db, client } from '../lib/seed-db';
+import { seedAdminAccount } from '../lib/seed-admin-account';
 
 async function main() {
-  const [email, password, officeArg, role, firstName, lastName] = process.argv.slice(2);
-
-  if (!email || !password || !officeArg || !role) {
-    console.error(
-      "Usage: tsx scripts/seed-admin.ts <email> <password> <MEO|MDRRMO|-> <officer|supervisor|focal|system_admin> [firstName] [lastName]\n" +
-        "  Use '-' for office when role is system_admin (system admins have no office).\n" +
-        '  focal must always be seeded with office MDRRMO (organizationally MDRRMO/QRT).\n' +
-        '  The role picks the account type (Phase 2, step 2e): officer/supervisor -> Personnel,\n' +
-        '  focal -> Focal Personnel, system_admin -> System Administrator; it is also stored as the\n' +
-        '  admins.role sync mirror.',
+  try {
+    const admin = await seedAdminAccount(db, process.argv.slice(2));
+    console.log(
+      'Seeded admin: ' +
+        admin.email +
+        ' (' +
+        (admin.office ?? 'no office') +
+        ', ' +
+        admin.accountType +
+        (admin.isFocal ? ', Focal' : '') +
+        ')',
     );
-    process.exit(1);
+  } finally {
+    await client.end();
   }
-  if (
-    role !== "officer" &&
-    role !== "supervisor" &&
-    role !== "focal" &&
-    role !== "system_admin"
-  ) {
-    console.error("role must be officer, supervisor, focal, or system_admin.");
-    process.exit(1);
-  }
-  if (role === "system_admin" && officeArg !== "-") {
-    console.error("system_admin must be seeded with office '-' (no office).");
-    process.exit(1);
-  }
-  if (role === "focal" && officeArg !== "MDRRMO") {
-    console.error("focal must be seeded with office MDRRMO.");
-    process.exit(1);
-  }
-  if (
-    (role === "officer" || role === "supervisor") &&
-    officeArg !== "MEO" &&
-    officeArg !== "MDRRMO"
-  ) {
-    console.error("office must be MEO or MDRRMO for officer/supervisor.");
-    process.exit(1);
-  }
-  const office = officeArg === "-" ? null : (officeArg as "MEO" | "MDRRMO");
-  // The Phase 2, step 2e mapping (migration 0039); the checks above already
-  // keep every combination inside admins_account_type_office_focal_check.
-  const accountType = role === 'system_admin' ? 'SYSTEM_ADMIN' : 'PERSONNEL';
-  const isFocal = role === 'focal';
-
-  const passwordHash = await bcrypt.hash(password, 10);
-
-  // Upsert by email — idempotent, so re-running this (e.g. re-provisioning
-  // a demo account right before a live run) updates the existing account
-  // instead of failing on the unique constraint.
-  const [admin] = await db
-    .insert(admins)
-    .values({
-      email,
-      passwordHash,
-      office,
-      accountType,
-      isFocal,
-      role: role as "officer" | "supervisor" | "focal" | "system_admin",
-      firstName: firstName ?? "Test",
-      lastName: lastName ?? "Admin",
-    })
-    .onConflictDoUpdate({
-      target: admins.email,
-      set: {
-        passwordHash,
-        office,
-        accountType,
-        isFocal,
-        role: role as "officer" | "supervisor" | "focal" | "system_admin",
-        firstName: firstName ?? "Test",
-        lastName: lastName ?? "Admin",
-      },
-    })
-    .returning();
-
-  console.log(
-    `Seeded admin: ${admin.email} (${admin.office}, ${admin.accountType}${admin.isFocal ? ', Focal' : ''})`,
-  );
-  await client.end();
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
+void main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : 'Admin seed failed.');
+  process.exitCode = 1;
 });

@@ -39,7 +39,7 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
-import { sql, db } from '../db';
+import { sql, db } from '../lib/seed-db';
 import {
   generateExifImage,
   renderVariantJpeg,
@@ -66,24 +66,13 @@ import type { BarangayService } from '../../src/domain/barangay.service';
 import type { RateLimitService } from '../../src/domain/ratelimit.service';
 import { OperationalPriorityService } from '../../src/domain/operational-priority.service';
 
-// ---------------------------------------------------------------------
-// Safety guard — fail loudly on anything that doesn't look like a local
-// demo database. Mirrors the "fail loudly on unexpected environment"
-// requirement; DATABASE_URL is the only signal available to scripts run
-// this way, so this checks it isn't obviously a production-named DB.
-// ---------------------------------------------------------------------
-function assertSafeTarget() {
-  const url = process.env.DATABASE_URL ?? '';
-  if (!url) throw new Error('DATABASE_URL is not set.');
-  if (/\bprod(uction)?\b/i.test(url)) {
+// The shared seed client rejects production before any connection or write.
+// Keep an additional confirmation for this script's destructive demo reset.
+function assertDemoResetConfirmed() {
+  if (process.env.ALLOW_DEMO_SEED !== '1') {
     throw new Error(
-      `Refusing to run seed:demo-presentation against a database URL that looks production-named:\n${url.replace(/:\/\/[^:]+:[^@]+@/, '://***:***@')}`,
-    );
-  }
-  if (!process.env.ALLOW_DEMO_SEED) {
-    throw new Error(
-      'Refusing to run: set ALLOW_DEMO_SEED=1 to confirm this points at a disposable demo/dev database. ' +
-        'This script TRUNCATEs reports/tickets/notifications and every table that cascades from them.',
+      'Refusing to run: set ALLOW_DEMO_SEED=1 to confirm the destructive demo reset. ' +
+        'This script TRUNCATEs reports/tickets/notifications and cascading tables.',
     );
   }
 }
@@ -891,7 +880,7 @@ const REASSIGN_TARGET = {
 };
 
 async function main() {
-  assertSafeTarget();
+  assertDemoResetConfirmed();
   mkdirSync(UPLOAD_DIR, { recursive: true });
 
   console.log('--- Resetting operational/demo data ---');
@@ -1046,7 +1035,7 @@ async function main() {
   console.log('--- Final Operational Priority recalculation ---');
   // Same pass the API runs on every admin list/detail/dashboard load, so
   // this only settles the seeded rows' priority_index before verification.
-  const recalcResult = await recalculateActivePriority();
+  const recalcResult = await recalculateActivePriority(sql);
   console.log('Recalculated:', recalcResult);
 
   console.log('--- Verification ---');

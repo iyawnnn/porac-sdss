@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { sql } from "../db";
+import { sql } from '../lib/seed-db';
 import { MUNICIPALITY } from "../../../lib/municipality-config";
 
 type Feature = { properties: { name?: string }; geometry: { type: string; coordinates: unknown } };

@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { sql } from "../db";
+import { sql } from '../lib/seed-db';
 import { generateExifImage } from "../../../lib/utils/generate-exif-image";
 import { extractExif } from "../lib/exif";
 import { recalculateActivePriority } from "../lib/recompute";
@@ -85,7 +85,7 @@ async function main() {
     }
   }
 
-  const result = await recalculateActivePriority();
+  const result = await recalculateActivePriority(sql);
   const priorities = await sql<{ barangay: string; priority_index: number }[]>`
     SELECT b.name AS barangay, t.priority_index
     FROM tickets t JOIN barangays b ON b.id = t.barangay_id

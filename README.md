@@ -135,8 +135,8 @@ pnpm --prefix api migrate:admin-login-throttle      # admin_login_rate_limit_eve
 # Later assessment sequence: migrate:operational-assessments (0033), migrate:assessment-work-orders (0045), migrate:assessment-alignment (0048), migrate:contraction (0049).
 # Coordinate the 0048 schema/app cutover; after 0048 use the updated 0045 runner, never replay raw 0045 SQL. No live migration was run for this change.
 pnpm --prefix api seed:users                        # citizen demo accounts (Section G) — idempotent, safe to rerun
-pnpm --prefix api seed:admin -- meo@porac.gov.ph PoracDemo2026! MEO supervisor      # admin demo account (Section G)
-pnpm --prefix api seed:admin -- mdrrmo@porac.gov.ph PoracDemo2026! MDRRMO supervisor # second admin demo account
+pnpm --prefix api seed:admin -- meo@porac.gov.ph PoracDemo2026! PERSONNEL MEO false      # admin demo account (Section G)
+pnpm --prefix api seed:admin -- mdrrmo@porac.gov.ph PoracDemo2026! PERSONNEL MDRRMO false # second admin demo account
 pnpm --prefix api seed:diverse-reports              # demo tickets/reports — idempotent (truncates and reseeds a fixed set)
 pnpm gis:generate-boundary                          # frontend map boundary overlay — independent of the DB steps above, run any time
 ```

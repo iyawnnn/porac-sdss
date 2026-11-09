@@ -1,4 +1,4 @@
-import { sql } from '../db';
+import { sql } from '../lib/seed-db';
 import { retireE2EAdmins } from '../lib/retire-e2e-admins';
 
 // Referenced assessment creators are retired, never deleted (0048 FK).

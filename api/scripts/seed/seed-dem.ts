@@ -1,6 +1,6 @@
 import { join } from "path";
 import { fromFile } from "geotiff";
-import { sql } from "../db";
+import { sql } from '../lib/seed-db';
 import { MUNICIPALITY } from "../../../lib/municipality-config";
 
 const BATCH_SIZE = 10000;
