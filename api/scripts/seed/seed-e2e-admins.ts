@@ -1,6 +1,6 @@
-import bcrypt from "bcryptjs";
+import bcrypt from 'bcryptjs';
 import { sql } from '../lib/seed-db';
-import { E2E_ADMIN_ACCOUNTS } from "../../../e2e/test-credentials";
+import { E2E_ADMIN_ACCOUNTS } from '../../../e2e/test-credentials';
 
 // Provisions the admin accounts Playwright's global setup (e2e/global-setup.ts)
 // and every admin-suite spec log in as. Idempotent by design (ON CONFLICT
@@ -31,13 +31,15 @@ async function main() {
     console.log(`Seeded E2E admin: ${account.email} (${account.office})`);
   }
 
-  const [{ count: ticketCount }] = await sql<{ count: string }[]>`SELECT count(*)::text AS count FROM tickets`;
+  const [{ count: ticketCount }] = await sql<
+    { count: string }[]
+  >`SELECT count(*)::text AS count FROM tickets`;
   if (Number(ticketCount) === 0) {
     console.warn(
-      "\n[seed-e2e-admins] No tickets found — Playwright specs that assert on real ticket/report " +
-        "data (admin-flagged, admin-dashboard, smoke) will fail their data assertions. Run " +
-        "`pnpm --prefix api seed:diverse-reports` once to populate demo tickets (idempotent — " +
-        "truncates and reseeds a fixed deterministic set).\n"
+      '\n[seed-e2e-admins] No tickets found — Playwright specs that assert on real ticket/report ' +
+        'data (admin-flagged, admin-dashboard, smoke) will fail their data assertions. Run ' +
+        '`pnpm --prefix api seed:demo-presentation` once on an empty disposable target ' +
+        'to populate the 15-report demo (an existing dataset is refused).\n',
     );
   }
 
