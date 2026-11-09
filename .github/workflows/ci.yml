@@ -89,3 +89,4 @@ jobs:
           pnpm --dir "$PGLITE_MODULE_ROOT" add --save-exact @electric-sql/pglite@0.5.15 @electric-sql/pglite-socket@0.2.18 @electric-sql/pglite-postgis@0.2.15
           pnpm --prefix api test:fresh-database
           pnpm --prefix api test:data-inventory
+          pnpm --prefix api test:session-existence

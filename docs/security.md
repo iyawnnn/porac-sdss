@@ -134,6 +134,8 @@ Office scoping is regression-tested rather than assumed:
 
 ## 4. Session security
 
+Admin and citizen session verification requires the account row to still exist. A validly signed JWT for a missing/deleted account returns the same invalid-session result as any other invalid token; protected routes keep the generic 401 response without revealing account existence. This reuses the existing account SELECT, with no additional query. Admin deactivation, account-field checks and both existing session_valid_after timestamp boundaries are unchanged. Citizens still have no deactivation field. Regression coverage includes real-guard HTTP responses and the real 0000-0050/PostGIS schema through drizzle; the normal E2E helpers/provisioning do not rely on deleted-account tokens.
+
 A stateless JWT normally cannot be revoked before it expires. Three mechanisms close that gap.
 
 ### 4.1 `session_valid_after`

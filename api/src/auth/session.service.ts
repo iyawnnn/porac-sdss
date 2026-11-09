@@ -131,7 +131,7 @@ export class SessionService {
       // deactivated-then-reactivated-then-deactivated-again admin's stale
       // token fail even if some future code path ever bumps
       // session_valid_after without also flipping isActive.
-      if (admin && !admin.isActive) {
+      if (!admin || !admin.isActive) {
         return null;
       }
       // iat has whole-second precision. Reject changed authority even in
@@ -182,6 +182,7 @@ export class SessionService {
         .select({ sessionValidAfter: citizens.sessionValidAfter })
         .from(citizens)
         .where(eq(citizens.id, session.citizenId));
+      if (!citizen) return null;
       if (
         citizen?.sessionValidAfter &&
         typeof payload.iat === 'number' &&
