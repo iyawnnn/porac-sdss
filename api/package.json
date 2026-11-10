@@ -24,6 +24,7 @@
     "test:session-existence": "node test/session-existence.pglite.cjs",
     "test:permissions": "node test/permission-matrix.pglite.cjs",
     "test:role-scenarios": "node test/role-scenarios.pglite.cjs",
+    "test:migrations": "node test/migrations.cjs",
     "inventory:test-data": "tsx --env-file=.env scripts/maintenance/inventory-test-data.ts",
     "migrate": "tsx --env-file=.env scripts/migrations/migrate.ts",
     "migrate:geometry": "tsx --env-file=.env scripts/migrations/migrate-geometry.ts",
