@@ -91,3 +91,5 @@ jobs:
           pnpm --prefix api test:data-inventory
           pnpm --prefix api test:session-existence
           pnpm --prefix api test:permissions
+          pnpm --prefix api test:role-scenarios
+          pnpm --prefix api test:demo-workflow
