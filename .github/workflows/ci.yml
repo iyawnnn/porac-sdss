@@ -92,4 +92,5 @@ jobs:
           pnpm --prefix api test:session-existence
           pnpm --prefix api test:permissions
           pnpm --prefix api test:role-scenarios
-          pnpm --prefix api test:demo-workflow
+          # Shared root EXIF helper resolves packages from the API-only install.
+          NODE_PATH="$GITHUB_WORKSPACE/api/node_modules" pnpm --prefix api test:demo-workflow
