@@ -130,6 +130,10 @@ Office scoping is regression-tested rather than assumed:
 
 `e2e/admin-rbac.spec.ts`, `e2e/admin-tickets.spec.ts`, `e2e/admin-work-orders.spec.ts`, `e2e/admin-barangay-insights.spec.ts`.
 
+The route permission regression uses `api/test/permissions/route-policy.json`: 94 explicit route rows, each with outcomes for anonymous, Citizen, MEO Personnel, MDRRMO Personnel, Focal Personnel and System Admin. Runtime Nest discovery enumerates the actual AppModule graph; missing/stale/duplicate routes, handler changes, guard wiring changes and unclassified conditions fail. Expected outcomes are checked-in decisions, never calculated from the guards being tested.
+
+`test:permissions` exercises real guards and sessions on the real migration/PostGIS baseline. Admission probes run only in the isolated test application, after guards; they do not demonstrate business-action success. Separate real-handler cases cover resource scope, privacy, denied-write fingerprints, cookies, reauthentication, OAuth state, throttles and cron secrets. Existing Focal Reported/no-active-Work-Order grouping/routing/correction rules remain unchanged; those precise gates are implementation rules, not a claim that the manuscript explicitly forbids or grants every grouping operation. Citizen-map keys and owner-only links retain the existing privacy contract. Operational reads retain their existing priority/timestamp refresh; denied writes must leave resource/history/audit data unchanged. Bulk operations retain per-item `skipped` refusals, rather than requiring every resource refusal to have an HTTP 403.
+
 ---
 
 ## 4. Session security

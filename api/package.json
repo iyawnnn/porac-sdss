@@ -22,6 +22,7 @@
     "test:fresh-database": "node test/fresh-database.pglite.cjs",
     "test:data-inventory": "node test/test-data-inventory.pglite.cjs",
     "test:session-existence": "node test/session-existence.pglite.cjs",
+    "test:permissions": "node test/permission-matrix.pglite.cjs",
     "inventory:test-data": "tsx --env-file=.env scripts/maintenance/inventory-test-data.ts",
     "migrate": "tsx --env-file=.env scripts/migrations/migrate.ts",
     "migrate:geometry": "tsx --env-file=.env scripts/migrations/migrate-geometry.ts",

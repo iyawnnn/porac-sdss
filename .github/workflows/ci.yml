@@ -90,3 +90,4 @@ jobs:
           pnpm --prefix api test:fresh-database
           pnpm --prefix api test:data-inventory
           pnpm --prefix api test:session-existence
+          pnpm --prefix api test:permissions

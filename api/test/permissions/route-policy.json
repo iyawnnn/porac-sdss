@@ -1,0 +1,1515 @@
+{
+  "version": 1,
+  "actors": ["anonymous", "citizen", "meo", "mdrrmo", "focal", "systemAdmin"],
+  "outcomes": {
+    "ADMIT": "Post-guard marker only; real resource/state cases are separate.",
+    "PUBLIC": "Public admission only; not proof of valid credentials.",
+    "REDIRECT": "Real OAuth handler; local provider adapter, no redirect followed."
+  },
+  "routes": [
+    {
+      "key": "POST /admin/account/password",
+      "controller": "AdminAccountController",
+      "handler": "changePassword",
+      "guards": ["AdminSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": []
+    },
+    {
+      "key": "GET /admin/activity-log",
+      "controller": "AdminAuditController",
+      "handler": "list",
+      "guards": ["AdminSessionGuard", "SystemAdminGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "403",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": []
+    },
+    {
+      "key": "POST /admin/admins/:id/deactivate",
+      "controller": "AdminsController",
+      "handler": "deactivate",
+      "guards": ["AdminSessionGuard", "SystemAdminGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "403",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": []
+    },
+    {
+      "key": "POST /admin/admins/:id/reactivate",
+      "controller": "AdminsController",
+      "handler": "reactivate",
+      "guards": ["AdminSessionGuard", "SystemAdminGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "403",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": []
+    },
+    {
+      "key": "POST /admin/admins/:id/reset-password",
+      "controller": "AdminsController",
+      "handler": "resetPassword",
+      "guards": ["AdminSessionGuard", "SystemAdminGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "403",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": []
+    },
+    {
+      "key": "PATCH /admin/admins/:id",
+      "controller": "AdminsController",
+      "handler": "update",
+      "guards": ["AdminSessionGuard", "SystemAdminGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "403",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": []
+    },
+    {
+      "key": "GET /admin/admins/directory",
+      "controller": "AdminDirectoryController",
+      "handler": "directory",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-lists"]
+    },
+    {
+      "key": "GET /admin/admins",
+      "controller": "AdminsController",
+      "handler": "list",
+      "guards": ["AdminSessionGuard", "SystemAdminGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "403",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": []
+    },
+    {
+      "key": "POST /admin/admins",
+      "controller": "AdminsController",
+      "handler": "create",
+      "guards": ["AdminSessionGuard", "SystemAdminGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "403",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": []
+    },
+    {
+      "key": "GET /admin/barangay-insights/:id",
+      "controller": "BarangayInsightsController",
+      "handler": "getProfile",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-lists"]
+    },
+    {
+      "key": "GET /admin/barangay-insights",
+      "controller": "BarangayInsightsController",
+      "handler": "list",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-lists"]
+    },
+    {
+      "key": "GET /admin/barangays/geo",
+      "controller": "DashboardController",
+      "handler": "barangaysGeoJson",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-lists"]
+    },
+    {
+      "key": "GET /admin/dashboard",
+      "controller": "DashboardController",
+      "handler": "getDashboard",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-lists"]
+    },
+    {
+      "key": "GET /admin/focal-dashboard/reports",
+      "controller": "FocalDashboardController",
+      "handler": "reports",
+      "guards": ["AdminSessionGuard", "FocalGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-intake"]
+    },
+    {
+      "key": "GET /admin/focal-dashboard",
+      "controller": "FocalDashboardController",
+      "handler": "counts",
+      "guards": ["AdminSessionGuard", "FocalGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-intake"]
+    },
+    {
+      "key": "POST /admin/intake/:reportId/acknowledge",
+      "controller": "FocalIntakeController",
+      "handler": "acknowledge",
+      "guards": ["AdminSessionGuard", "FocalGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-intake"]
+    },
+    {
+      "key": "POST /admin/intake/:reportId/reassign",
+      "controller": "FocalIntakeController",
+      "handler": "reassign",
+      "guards": ["AdminSessionGuard", "FocalGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-intake"]
+    },
+    {
+      "key": "POST /admin/intake/:reportId/refer",
+      "controller": "FocalIntakeController",
+      "handler": "refer",
+      "guards": ["AdminSessionGuard", "FocalGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-intake"]
+    },
+    {
+      "key": "GET /admin/intake/:reportId/related-candidates",
+      "controller": "FocalIntakeController",
+      "handler": "relatedCandidates",
+      "guards": ["AdminSessionGuard", "FocalGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-intake"]
+    },
+    {
+      "key": "POST /admin/intake/:reportId/severity-screening",
+      "controller": "FocalIntakeController",
+      "handler": "screenSeverity",
+      "guards": ["AdminSessionGuard", "FocalGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-intake"]
+    },
+    {
+      "key": "GET /admin/intake/:reportId",
+      "controller": "FocalIntakeController",
+      "handler": "detail",
+      "guards": ["AdminSessionGuard", "FocalGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-intake"]
+    },
+    {
+      "key": "GET /admin/intake/geo",
+      "controller": "FocalIntakeController",
+      "handler": "geo",
+      "guards": ["AdminSessionGuard", "FocalGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-intake"]
+    },
+    {
+      "key": "GET /admin/intake",
+      "controller": "FocalIntakeController",
+      "handler": "list",
+      "guards": ["AdminSessionGuard", "FocalGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "403",
+        "mdrrmo": "403",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-intake"]
+    },
+    {
+      "key": "POST /admin/login",
+      "controller": "AuthController",
+      "handler": "adminLogin",
+      "guards": [],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "PUBLIC",
+        "citizen": "PUBLIC",
+        "meo": "PUBLIC",
+        "mdrrmo": "PUBLIC",
+        "focal": "PUBLIC",
+        "systemAdmin": "PUBLIC"
+      },
+      "conditions": ["public-credentials"]
+    },
+    {
+      "key": "POST /admin/logout",
+      "controller": "AuthController",
+      "handler": "adminLogout",
+      "guards": [],
+      "execution": "handler",
+      "expected": {
+        "anonymous": "PUBLIC",
+        "citizen": "PUBLIC",
+        "meo": "PUBLIC",
+        "mdrrmo": "PUBLIC",
+        "focal": "PUBLIC",
+        "systemAdmin": "PUBLIC"
+      },
+      "conditions": ["session-cookies"]
+    },
+    {
+      "key": "GET /admin/moderation/stats",
+      "controller": "ModerationController",
+      "handler": "stats",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-lists"]
+    },
+    {
+      "key": "GET /admin/moderation",
+      "controller": "ModerationController",
+      "handler": "queue",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-lists"]
+    },
+    {
+      "key": "POST /admin/reports/:id/moderate",
+      "controller": "ModerationController",
+      "handler": "moderate",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-lists"]
+    },
+    {
+      "key": "GET /admin/reports/flagged.csv",
+      "controller": "ReportsController",
+      "handler": "flaggedCsv",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-exports"]
+    },
+    {
+      "key": "GET /admin/reports/operational-assessments.csv",
+      "controller": "ReportsController",
+      "handler": "operationalAssessmentsCsv",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-exports"]
+    },
+    {
+      "key": "GET /admin/reports/priority-incidents.csv",
+      "controller": "ReportsController",
+      "handler": "priorityIncidentsCsv",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-exports"]
+    },
+    {
+      "key": "GET /admin/reports/submitted-reports.csv",
+      "controller": "ReportsController",
+      "handler": "submittedReportsCsv",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-exports"]
+    },
+    {
+      "key": "GET /admin/reports/tickets.csv",
+      "controller": "ReportsController",
+      "handler": "ticketsCsv",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-exports"]
+    },
+    {
+      "key": "GET /admin/reports/work-orders.csv",
+      "controller": "ReportsController",
+      "handler": "workOrdersCsv",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["office-exports"]
+    },
+    {
+      "key": "DELETE /admin/saved-views/:id",
+      "controller": "SavedViewsController",
+      "handler": "remove",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["saved-view-ownership"]
+    },
+    {
+      "key": "GET /admin/saved-views",
+      "controller": "SavedViewsController",
+      "handler": "list",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["saved-view-ownership"]
+    },
+    {
+      "key": "POST /admin/saved-views",
+      "controller": "SavedViewsController",
+      "handler": "create",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["saved-view-ownership"]
+    },
+    {
+      "key": "POST /admin/ticket-corrections/:id/category",
+      "controller": "TicketCorrectionsController",
+      "handler": "correctCategory",
+      "guards": ["AdminSessionGuard", "PersonnelGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-correction", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/ticket-corrections/:id/location",
+      "controller": "TicketCorrectionsController",
+      "handler": "correctLocation",
+      "guards": ["AdminSessionGuard", "PersonnelGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-correction", "foreign-writes"]
+    },
+    {
+      "key": "GET /admin/ticket-corrections/:id",
+      "controller": "TicketCorrectionsController",
+      "handler": "availability",
+      "guards": ["AdminSessionGuard", "PersonnelGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-correction", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/ticket-grouping/merge",
+      "controller": "TicketGroupingController",
+      "handler": "merge",
+      "guards": ["AdminSessionGuard", "PersonnelGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-grouping", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/ticket-grouping/regroup-report",
+      "controller": "TicketGroupingController",
+      "handler": "regroupReport",
+      "guards": ["AdminSessionGuard", "PersonnelGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-grouping", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/ticket-grouping/remove-report",
+      "controller": "TicketGroupingController",
+      "handler": "removeReport",
+      "guards": ["AdminSessionGuard", "PersonnelGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "403"
+      },
+      "conditions": ["focal-grouping", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/tickets/:id/assessment",
+      "controller": "TicketsController",
+      "handler": "saveAssessment",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/tickets/:id/hazard-information/retry",
+      "controller": "TicketsController",
+      "handler": "retryHazardInformation",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "GET /admin/tickets/:id/priority-context",
+      "controller": "TicketsController",
+      "handler": "priorityContext",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/tickets/:id/rainfall-context/refresh",
+      "controller": "TicketsController",
+      "handler": "refreshRainfallContext",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/tickets/:id/reassign",
+      "controller": "TicketsController",
+      "handler": "reassign",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/tickets/:id/refer",
+      "controller": "TicketsController",
+      "handler": "refer",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/tickets/:id/reject",
+      "controller": "TicketsController",
+      "handler": "reject",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "GET /admin/tickets/:id/related-candidates",
+      "controller": "TicketsController",
+      "handler": "relatedCandidates",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/tickets/:id/return-to-review",
+      "controller": "TicketsController",
+      "handler": "returnToReview",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/tickets/:id/status",
+      "controller": "TicketsController",
+      "handler": "advanceStatus",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "GET /admin/tickets/:id",
+      "controller": "TicketsController",
+      "handler": "detail",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/tickets/bulk/advance-status",
+      "controller": "TicketsController",
+      "handler": "bulkAdvanceStatus",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/tickets/bulk/reassign",
+      "controller": "TicketsController",
+      "handler": "bulkReassign",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "GET /admin/tickets/geo",
+      "controller": "TicketsController",
+      "handler": "geo",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "GET /admin/tickets",
+      "controller": "TicketsController",
+      "handler": "list",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["ticket-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/work-orders/:id/cancel",
+      "controller": "WorkOrdersController",
+      "handler": "cancel",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["work-order-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/work-orders/:id/status",
+      "controller": "WorkOrdersController",
+      "handler": "setStatus",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["work-order-office", "foreign-writes"]
+    },
+    {
+      "key": "GET /admin/work-orders/:id",
+      "controller": "WorkOrdersController",
+      "handler": "get",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["work-order-office", "foreign-writes"]
+    },
+    {
+      "key": "PATCH /admin/work-orders/:id",
+      "controller": "WorkOrdersController",
+      "handler": "update",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["work-order-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/work-orders/bulk",
+      "controller": "WorkOrdersController",
+      "handler": "bulkCreate",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["work-order-office", "foreign-writes"]
+    },
+    {
+      "key": "GET /admin/work-orders",
+      "controller": "WorkOrdersController",
+      "handler": "list",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["work-order-office", "foreign-writes"]
+    },
+    {
+      "key": "POST /admin/work-orders",
+      "controller": "WorkOrdersController",
+      "handler": "create",
+      "guards": ["AdminSessionGuard", "OperationalStaffGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "403",
+        "systemAdmin": "403"
+      },
+      "conditions": ["work-order-office", "foreign-writes"]
+    },
+    {
+      "key": "GET /auth/google/callback",
+      "controller": "OAuthController",
+      "handler": "googleCallback",
+      "guards": ["OAuthRateLimitGuard"],
+      "execution": "handler",
+      "expected": {
+        "anonymous": "REDIRECT",
+        "citizen": "REDIRECT",
+        "meo": "REDIRECT",
+        "mdrrmo": "REDIRECT",
+        "focal": "REDIRECT",
+        "systemAdmin": "REDIRECT"
+      },
+      "conditions": ["oauth-purpose", "oauth-rate"]
+    },
+    {
+      "key": "GET /auth/google",
+      "controller": "OAuthController",
+      "handler": "googleStart",
+      "guards": ["OAuthRateLimitGuard"],
+      "execution": "handler",
+      "expected": {
+        "anonymous": "REDIRECT",
+        "citizen": "REDIRECT",
+        "meo": "REDIRECT",
+        "mdrrmo": "REDIRECT",
+        "focal": "REDIRECT",
+        "systemAdmin": "REDIRECT"
+      },
+      "conditions": ["oauth-purpose", "oauth-rate"]
+    },
+    {
+      "key": "GET /auth/me",
+      "controller": "AuthController",
+      "handler": "me",
+      "guards": [],
+      "execution": "handler",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "200",
+        "meo": "200",
+        "mdrrmo": "200",
+        "focal": "200",
+        "systemAdmin": "200"
+      },
+      "conditions": ["session-cookies"]
+    },
+    {
+      "key": "DELETE /citizens/account/identities/:provider",
+      "controller": "AccountController",
+      "handler": "unlink",
+      "guards": ["CitizenSessionGuard", "RecentReauthGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "428",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["account-ownership", "recent-reauth"]
+    },
+    {
+      "key": "POST /citizens/account/password",
+      "controller": "AccountController",
+      "handler": "setPassword",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["account-ownership"]
+    },
+    {
+      "key": "POST /citizens/account/reauth",
+      "controller": "AccountController",
+      "handler": "reauth",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["account-ownership"]
+    },
+    {
+      "key": "GET /citizens/account/security",
+      "controller": "AccountController",
+      "handler": "security",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["account-ownership"]
+    },
+    {
+      "key": "POST /citizens/forgot-password",
+      "controller": "PasswordResetController",
+      "handler": "forgotPassword",
+      "guards": [],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "PUBLIC",
+        "citizen": "PUBLIC",
+        "meo": "PUBLIC",
+        "mdrrmo": "PUBLIC",
+        "focal": "PUBLIC",
+        "systemAdmin": "PUBLIC"
+      },
+      "conditions": ["public-credentials"]
+    },
+    {
+      "key": "POST /citizens/login",
+      "controller": "AuthController",
+      "handler": "citizenLogin",
+      "guards": [],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "PUBLIC",
+        "citizen": "PUBLIC",
+        "meo": "PUBLIC",
+        "mdrrmo": "PUBLIC",
+        "focal": "PUBLIC",
+        "systemAdmin": "PUBLIC"
+      },
+      "conditions": ["public-credentials"]
+    },
+    {
+      "key": "POST /citizens/logout",
+      "controller": "AuthController",
+      "handler": "citizenLogout",
+      "guards": [],
+      "execution": "handler",
+      "expected": {
+        "anonymous": "PUBLIC",
+        "citizen": "PUBLIC",
+        "meo": "PUBLIC",
+        "mdrrmo": "PUBLIC",
+        "focal": "PUBLIC",
+        "systemAdmin": "PUBLIC"
+      },
+      "conditions": ["session-cookies"]
+    },
+    {
+      "key": "GET /citizens/reset-password/validate",
+      "controller": "PasswordResetController",
+      "handler": "validateResetToken",
+      "guards": [],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "PUBLIC",
+        "citizen": "PUBLIC",
+        "meo": "PUBLIC",
+        "mdrrmo": "PUBLIC",
+        "focal": "PUBLIC",
+        "systemAdmin": "PUBLIC"
+      },
+      "conditions": ["public-credentials"]
+    },
+    {
+      "key": "POST /citizens/reset-password",
+      "controller": "PasswordResetController",
+      "handler": "resetPassword",
+      "guards": [],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "PUBLIC",
+        "citizen": "PUBLIC",
+        "meo": "PUBLIC",
+        "mdrrmo": "PUBLIC",
+        "focal": "PUBLIC",
+        "systemAdmin": "PUBLIC"
+      },
+      "conditions": ["public-credentials"]
+    },
+    {
+      "key": "POST /citizens/signup",
+      "controller": "AuthController",
+      "handler": "citizenSignup",
+      "guards": [],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "PUBLIC",
+        "citizen": "PUBLIC",
+        "meo": "PUBLIC",
+        "mdrrmo": "PUBLIC",
+        "focal": "PUBLIC",
+        "systemAdmin": "PUBLIC"
+      },
+      "conditions": ["public-credentials"]
+    },
+    {
+      "key": "POST /cron/cleanup-notifications",
+      "controller": "CronController",
+      "handler": "cleanupNotifications",
+      "guards": ["CronSecretGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["cron-secret"]
+    },
+    {
+      "key": "POST /cron/cleanup-password-reset-tokens",
+      "controller": "CronController",
+      "handler": "cleanupPasswordResetTokens",
+      "guards": ["CronSecretGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["cron-secret"]
+    },
+    {
+      "key": "POST /cron/cleanup-rate-limit-events",
+      "controller": "CronController",
+      "handler": "cleanupRateLimitEvents",
+      "guards": ["CronSecretGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["cron-secret"]
+    },
+    {
+      "key": "POST /cron/recompute-priority",
+      "controller": "CronController",
+      "handler": "recomputePriority",
+      "guards": ["CronSecretGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "401",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["cron-secret"]
+    },
+    {
+      "key": "GET /health",
+      "controller": "AppController",
+      "handler": "health",
+      "guards": [],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "PUBLIC",
+        "citizen": "PUBLIC",
+        "meo": "PUBLIC",
+        "mdrrmo": "PUBLIC",
+        "focal": "PUBLIC",
+        "systemAdmin": "PUBLIC"
+      },
+      "conditions": []
+    },
+    {
+      "key": "POST /notifications/:id/read",
+      "controller": "NotificationsController",
+      "handler": "markRead",
+      "guards": [],
+      "execution": "handler",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "200",
+        "meo": "200",
+        "mdrrmo": "200",
+        "focal": "200",
+        "systemAdmin": "200"
+      },
+      "conditions": ["notification-scope", "session-cookies"]
+    },
+    {
+      "key": "POST /notifications/read-all",
+      "controller": "NotificationsController",
+      "handler": "markAllRead",
+      "guards": [],
+      "execution": "handler",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "200",
+        "meo": "200",
+        "mdrrmo": "200",
+        "focal": "200",
+        "systemAdmin": "200"
+      },
+      "conditions": ["notification-scope", "session-cookies"]
+    },
+    {
+      "key": "GET /notifications/unread-count",
+      "controller": "NotificationsController",
+      "handler": "unreadCount",
+      "guards": [],
+      "execution": "handler",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "200",
+        "meo": "200",
+        "mdrrmo": "200",
+        "focal": "200",
+        "systemAdmin": "200"
+      },
+      "conditions": ["notification-scope", "session-cookies"]
+    },
+    {
+      "key": "GET /notifications",
+      "controller": "NotificationsController",
+      "handler": "list",
+      "guards": [],
+      "execution": "handler",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "200",
+        "meo": "200",
+        "mdrrmo": "200",
+        "focal": "200",
+        "systemAdmin": "200"
+      },
+      "conditions": ["notification-scope", "session-cookies"]
+    },
+    {
+      "key": "GET /public-map",
+      "controller": "ReportsController",
+      "handler": "publicMap",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["public-map-privacy"]
+    },
+    {
+      "key": "POST /reports/mine/:id/confirm-resolution",
+      "controller": "ReportsController",
+      "handler": "confirmResolution",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["citizen-ownership"]
+    },
+    {
+      "key": "POST /reports/mine/:id/dispute",
+      "controller": "ReportsController",
+      "handler": "dispute",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["citizen-ownership"]
+    },
+    {
+      "key": "GET /reports/mine/:id",
+      "controller": "ReportsController",
+      "handler": "mineDetail",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["citizen-ownership"]
+    },
+    {
+      "key": "GET /reports/mine/by-reference/:ref",
+      "controller": "ReportsController",
+      "handler": "mineByReference",
+      "guards": ["CitizenSessionGuard", "ReferenceLookupRateLimitGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["citizen-ownership", "reference-rate"]
+    },
+    {
+      "key": "GET /reports/mine",
+      "controller": "ReportsController",
+      "handler": "mine",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["citizen-ownership"]
+    },
+    {
+      "key": "POST /reports",
+      "controller": "ReportsController",
+      "handler": "submit",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
+      "conditions": ["citizen-ownership"]
+    }
+  ]
+}
