@@ -1,5 +1,13 @@
 # Features
 
+## Current contract (final schema through 0050)
+
+- Account type, office and Focal flag authorize access. Non-Focal MEO/MDRRMO Personnel have office-scoped operations. MDRRMO Focal Personnel have municipality-wide intake/screening/acknowledgment and existing eligible Reported-ticket grouping/routing/correction. System Admin manages accounts/audit. Neither Focal nor System Admin has assessment/Work Order authority. The executable catalog is `api/test/permissions/route-policy.json`; [role coverage](role-scenario-coverage.md) maps the scenarios.
+- Physical ticket acknowledgments are `acknowledgments`; `report_acknowledgments` is absent after 0050. Intake history remains `report_intake_actions`.
+- Priority is `tickets.priority_index`, weighted median citizen severity 0.5 + seven-day age 0.25 + barangay demand 0.25. Hazard Information/rainfall are separate staff-only advisory context, never hazard scores. `dem_points` remains for informational Barangay Terrain.
+- Assessments use canonical conditions/mitigation/combined reason, original creator/time and JSONB `{selected, notes}`. A new Work Order requires an assessment; Completed/Cancelled orders are final. Cancellation/routing require reasons. External Referral means municipal handling is complete, not that an outside agency resolved the incident.
+- Keep `actor_role`/`admin_role` permanently, `admins.role` as a non-authorizing mirror and live dispute/confirmation mirrors. Audit history is append-only. Citizens never receive internal assessment, Work Order, screening or provider context. Preserve the tested public-map allowlist rather than replacing it with an abbreviated field description.
+
 ### Phase 7, step 7d-1: operational dashboard counting rules
 
 Operational Personnel see only their own office, clamped by resolveOfficeScope. Focal keeps its separate dashboard; System Administrators receive no analytics. All operational metrics and counts exclude merged-away ticket parents. No citizen endpoint or data-exposure boundary changes.
@@ -42,7 +50,7 @@ Four principal types, structurally separate (five-role architecture — Batches 
 | **Focal Personnel** (`PERSONNEL` with `is_focal`, always office `MDRRMO` organizationally) | `/admin/login` | Municipality-wide incoming-report intake (both offices) — never the operational Ticket Queue, Work Orders (not even as an assignee), or Operational Assessment; see §3.11 |
 | **System Administrator** (`account_type` `SYSTEM_ADMIN`, no office) | `/admin/login` | Admin management and the activity log only — **no routine operational access at all**, and no Focal Intake access either |
 
-Since manuscript revision Phase 2, step 2e, staff access comes from `admins.account_type` / `office` / `is_focal` (Appendix H), not a role. The old `officer` and `supervisor` roles had identical permissions and are both plain Personnel; `admins.role` is only an unread sync mirror until Phase 8. Staff labels everywhere are Personnel / Focal Personnel / System Administrator.
+Since manuscript revision Phase 2, step 2e, staff access comes from `admins.account_type` / `office` / `is_focal` (Appendix H), not a role. The old `officer` and `supervisor` roles had identical permissions and are both plain Personnel; `admins.role` is only a retained sync mirror, never read for access. Staff labels everywhere are Personnel / Focal Personnel / System Administrator.
 
 Citizen and admin sessions are independent and cannot cross over — a citizen account can never reach an `/admin/*` API route, and vice versa. There is **no guest/anonymous reporting**; a citizen account is required to submit. See [`security.md`](security.md) §2–§3 for the guards enforcing this (`OperationalStaffGuard`, `FocalGuard`, `SystemAdminGuard`) — each of the four admin-side user types (MEO Personnel, MDRRMO Personnel, Focal Personnel, System Administrator) is denied the other three's surfaces server-side, not merely hidden from navigation.
 
@@ -396,3 +404,8 @@ Separated from everything above because none of it is implemented.
 Every flow above is exercised by the Playwright suite — 19 spec files, roughly 200 tests, running against a real dev server and a real database with no mocks. See [`README.md`](../README.md) §I for how to run it, why `--workers=1` is mandatory, and the rate-limit caveat on repeated full runs.
 
 Phase 8b-2: Focal's median acknowledgment time is per ticket, from ticket creation to acknowledgment, over the inclusive last 30 days. Negative/null intervals are excluded; null displays “No data yet”. Report counts and paging stay per report with existing merged-away exclusions. A citizen never sees an acknowledgment before their own submission; merge history uses the surviving ticket and the old ticket in the latest recorded merge. Remove/regroup do not carry acknowledgments. No citizen response fields change.
+
+
+## Observed limits
+
+[Known limitations](known-limitations.md) records source evidence and uncertainty for all parked items. Focal notification creation already uses the correct intake URL; legacy links redirect. No product fix, permission/score change, notification addition or cleanup is authorized by this reference.

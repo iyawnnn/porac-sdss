@@ -1,3 +1,11 @@
+# Superseded historical plan
+
+This is an architecture/decision record, not current setup, migration, security or task instructions. Old role names, score/config model, deployment checklists and proposed removals are superseded by current implementation/docs. Do not execute its commands or infer approval from TODOs.
+
+Current sources: [project status](docs/project-status.md), [README](README.md), [database](docs/database.md), [security](docs/security.md), [testing](docs/testing.md) and executable permission/scenario tests. Keep `actor_role`/`admin_role` permanently. No cleanup or schema removal is authorized here.
+
+## Original historical record (preserved)
+
 > Superseded scoring/setup plan: Hazard Urgency and its elevation/rain/cluster formula were retired. Phase 8b-1 (0049) removes their stored columns, old config and assessment rollback snapshots. Current behavior and setup are documented in README.md, docs/database.md and docs/triage-model.md. DEM remains for display-only Terrain; Operational Priority and advisory Hazard Information/rainfall remain.
 
 # porac-sdss-nextjs Prototype Realignment Plan
@@ -659,4 +667,3 @@ fact from the real build, not planned in advance like the sections above.
     already built as a side effect of earlier admin dashboard work
     (`/admin/tickets/[id]`'s "System Urgency (computed)" section), not as
     a late-phase task.
- 

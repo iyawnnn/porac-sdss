@@ -1,5 +1,11 @@
 # Security Model
 
+## Current safety boundaries
+
+Audit is append-only; `actor_role`/`admin_role` remain permanently. Account/office/Focal fields authorize access, never the role mirror. Preserve eligible Reported-ticket Focal grouping, tested public-map fields and citizen/internal separation. Focal and System Admin have no assessment/Work Order authority. Production inventory is not deletion permission: real migration/archive/seed operations are owner-only; standard Playwright setup/teardown on the verified copy is the sole agent seed exception. Never expose credentials or edit the owner's api/.env.
+
+[Known limitations](known-limitations.md) covers context-refresh audit gaps, same-office Work Order CSV assignee email, lock-order risks and unverified connection recovery. A green suite does not prove multi-session concurrency or outage recovery.
+
 **The security posture that exists today**, with a source citation for each control so a reviewer can verify rather than take it on faith. §8 lists what is *not* implemented — read it before treating this document as a clean bill of health.
 
 Table and column detail is not repeated here; see [`database.md`](database.md). For what the system does functionally, see [`features.md`](features.md). For architectural rationale, see [`CLAUDE.md`](../CLAUDE.md).
@@ -247,7 +253,7 @@ A full Playwright run posts 15 real reports since manuscript revision Phase 6, s
 
 All new service inserts read `actor_role`, `actor_account_type`, `actor_is_focal` and office from the stored actor in the INSERT, including raw-PG, Drizzle and login paths. True means Focal Personnel; false uses recorded account type/office. Legacy NULL falls back to recorded actor_role (`focal` = Focal, `system_admin` = System Administrator/MIS, officer/supervisor = Personnel). MEO/MDRRMO comes only from recorded actor_office; an absent office is "Personnel - office not recorded", never inferred from a current account. actor_role is kept permanently.
 
-Migration 0047 enforces append-only history with an enabled row-level BEFORE UPDATE OR DELETE rejection trigger. INSERT and dev/test TRUNCATE remain allowed; this step runs neither. Historical values are never rewritten. The presentation seed retains audit history and skips identical actor/action/target/metadata events on repeat, without disabling the trigger.
+Migration 0047 enforces append-only history with an enabled row-level BEFORE UPDATE OR DELETE rejection trigger. INSERT remains allowed. The row trigger technically does not block TRUNCATE; this is not authorization to truncate audit history or any real database. Historical values are never rewritten. The presentation seed retains audit history and skips identical actor/action/target/metadata events on repeat, without disabling the trigger.
 
 Filters: all current and retired actions, target type, actor from the existing staff endpoint, numeric target id with its type, and Asia/Manila calendar-day range. Invalid dates and reversed ranges return plain 400 messages. The final day is inclusive via an exclusive next-midnight boundary; raw SQL receives ISO strings cast to timestamptz. Offset pagination retains 10/25/50/100 choices (service clamps to 10-100); no text search. Shared action list/labels: `api/src/contracts/admin-audit.ts`.
 

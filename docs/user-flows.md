@@ -1,6 +1,12 @@
-Operational Assessment uses Assessed Conditions, Interim Mitigation and one optional Deferment or Referral Reason (maximum 2100 characters). Constraint selections and per-selected-key notes are stored together as JSONB, while the form still uses checkboxes and note fields. The original creator and creation time survive edits. Focal Personnel and System Administrators have no assessment-write or Work Order authority. Assessment CSV uses one Deferment or Referral Reason column and retains Assessed Conditions/Interim Mitigation.
-
 # User Flows
+
+## Current contract (final schema through 0050)
+
+- Account type, office and Focal flag authorize access. Non-Focal MEO/MDRRMO Personnel have office-scoped operations. MDRRMO Focal Personnel have municipality-wide intake/screening/acknowledgment and existing eligible Reported-ticket grouping/routing/correction. System Admin manages accounts/audit. Neither Focal nor System Admin has assessment/Work Order authority. The executable catalog is `api/test/permissions/route-policy.json`; [role coverage](role-scenario-coverage.md) maps the scenarios.
+- Physical ticket acknowledgments are `acknowledgments`; `report_acknowledgments` is absent after 0050. Intake history remains `report_intake_actions`.
+- Priority is `tickets.priority_index`, weighted median citizen severity 0.5 + seven-day age 0.25 + barangay demand 0.25. Hazard Information/rainfall are separate staff-only advisory context, never hazard scores. `dem_points` remains for informational Barangay Terrain.
+- Assessments use canonical conditions/mitigation/combined reason, original creator/time and JSONB `{selected, notes}`. A new Work Order requires an assessment; Completed/Cancelled orders are final. Cancellation/routing require reasons. External Referral means municipal handling is complete, not that an outside agency resolved the incident.
+- Keep `actor_role`/`admin_role` permanently, `admins.role` as a non-authorizing mirror and live dispute/confirmation mirrors. Audit history is append-only. Citizens never receive internal assessment, Work Order, screening or provider context. Preserve the tested public-map allowlist rather than replacing it with an abbreviated field description.
 
 ### Operational dashboard metrics (Phase 7, step 7d-1)
 
@@ -35,7 +41,7 @@ Five-role architecture (Batches 1–5) — Citizen plus four distinct admin-side
 | **Focal Personnel** | `/admin/login` | Municipality-wide report intake (both offices) only — never the operational Ticket Queue, Work Orders, or Operational Assessment; see §5 (Focal flow) |
 | **System Administrator** | `/admin/login` | Admin management and the activity log only — **no operational access of any kind, and no Focal Intake access either** |
 
-**A note on account types:** since manuscript revision Phase 2, step 2e, staff accounts carry the Appendix H `account_type` (Personnel or System Administrator), `office` and `is_focal` instead of a role. MEO and MDRRMO personnel are both **Personnel** with an office; Focal Personnel is Personnel on MDRRMO with `is_focal`. The old `officer` and `supervisor` roles carried no behavioral difference and are both plain Personnel now. Every permission check distinguishes *operational Personnel* from *Focal Personnel* from *the System Administrator* — three structurally separate allowlists, not one axis. (`admins.role` survives only as an unread sync mirror until Phase 8.) If a future requirement needs staff ranks to differ, that is new work.
+**A note on account types:** since manuscript revision Phase 2, step 2e, staff accounts carry the Appendix H `account_type` (Personnel or System Administrator), `office` and `is_focal` instead of a role. MEO and MDRRMO personnel are both **Personnel** with an office; Focal Personnel is Personnel on MDRRMO with `is_focal`. The old `officer` and `supervisor` roles carried no behavioral difference and are both plain Personnel now. Every permission check distinguishes *operational Personnel* from *Focal Personnel* from *the System Administrator* — three structurally separate allowlists, not one axis. (`admins.role` survives only as a retained sync mirror, never read for access.) If a future requirement needs staff ranks to differ, that is new work.
 
 **A note on the System Administrator's scope:** it was city-wide operational plus administration until Batch 1 of the five-role architecture, which removed the operational half entirely — a genuine authority reduction, not a rename. The System Administrator today reaches *only* Admin Management, the Activity Log, and its own Account & Security — see §4 below, rewritten to match.
 
@@ -367,3 +373,10 @@ Not implemented. Listed so no one plans a workflow around them.
 - **No elevation-based map filter** — elevation is display-only.
 - **There is one kind of operational Personnel.** The old `officer` and `supervisor` roles behaved identically and are both Personnel since Phase 2, step 2e; any workflow distinction between staff ranks would be new work.
 - **Deferred product ideas** — crew scheduling, attachments and checklists, inspection logs, a due-date calendar, barangay editing, PDF export, scheduled reports. See [`project-status.md`](project-status.md) §5.
+
+
+Assessment form/API use Assessed Conditions, Interim Mitigation and one optional Deferment or Referral Reason (maximum2100 characters); constraint selections/notes share JSONB. Original creator/time survive edits. Assessment CSV retains the canonical condition/mitigation fields and one combined reason column.
+
+## Workflow caveats
+
+Grouping keeps audit/provenance and canonical ticket acknowledgments. Remove/regroup currently has no citizen-notice write in the grouping service; do not assume every regroup produces a notification. Header/list wording and resolve/reject UI caveats are in [known limitations](known-limitations.md). Focal notifications already link to `/admin/focal/intake/{id}`; old API-path links redirect.
