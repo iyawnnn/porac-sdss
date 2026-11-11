@@ -31,6 +31,10 @@ export async function migrateReportAcknowledgments(sql: Sql) {
         readFileSync(
           join(__dirname, '../../drizzle/0031_report_acknowledgments.sql'),
           'utf8',
+        ).replace(
+          // The locked runner uses pg_catalog,public as its search_path.
+          'CREATE TABLE IF NOT EXISTS report_acknowledgments',
+          'CREATE TABLE IF NOT EXISTS public.report_acknowledgments',
         ),
       );
     }

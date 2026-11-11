@@ -55,7 +55,9 @@ const MIGRATIONS = [
   '0049_phase8b_contraction.sql',
   '0050_report_acknowledgments_contraction.sql',
 ];
-async function demoBaseline(PGlite, postgis) {
+async function demoBaseline(PGlite, postgis, { stopBefore } = {}) {
+  if (stopBefore && !MIGRATIONS.includes(stopBefore))
+    throw Error('Unknown migration checkpoint: ' + stopBefore);
   const db = new PGlite({ extensions: { postgis } });
   try {
     const root = path.resolve(__dirname, '../../..');
@@ -89,6 +91,7 @@ async function demoBaseline(PGlite, postgis) {
       'INSERT INTO dem_points(elevation_m,geom) VALUES(100,ST_SetSRID(ST_MakePoint(120.5406,15.0733),4326))',
     );
     for (const name of MIGRATIONS) {
+      if (name === stopBefore) break;
       if (name.startsWith('0050')) {
         await db.exec('BEGIN');
         // Canonical empty JSONL is zero bytes. Exercise the real archive guard;

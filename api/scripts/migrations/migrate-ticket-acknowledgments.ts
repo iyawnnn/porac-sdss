@@ -27,7 +27,13 @@ export async function migrateTicketAcknowledgments(sql: Sql) {
       for (const statement of readFileSync(
         join(__dirname, '../../drizzle/0038_ticket_acknowledgments.sql'),
         'utf8',
-      ).split('--> statement-breakpoint')) {
+      )
+        // The locked runner uses pg_catalog,public as its search_path.
+        .replace(
+          'CREATE TABLE IF NOT EXISTS acknowledgments',
+          'CREATE TABLE IF NOT EXISTS public.acknowledgments',
+        )
+        .split('--> statement-breakpoint')) {
         if (statement.trim()) await tx.unsafe(statement);
       }
     }
