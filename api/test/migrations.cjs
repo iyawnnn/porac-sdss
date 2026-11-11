@@ -37,10 +37,16 @@ const files = [
 (async () => {
   for (const file of files) {
     console.log('Migration harness: ' + file);
-    const code = await new Promise((resolve, reject) => {
+    const { code, signal } = await new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
         [
+          // Node 24 V8 can abort while reclaiming repeated PGlite Wasm instances.
+          // Scope the workaround to this child; keep every assertion enabled.
+          // https://github.com/nodejs/node/issues/66366
+          ...(file === 'migration-chain.pglite.cjs'
+            ? ['--no-wasm-code-gc']
+            : []),
           '--require',
           path.join(__dirname, 'helpers/migration-test-guard.cjs'),
           path.join(__dirname, file),
@@ -48,9 +54,12 @@ const files = [
         { cwd: root, env, windowsHide: true, stdio: 'inherit' },
       );
       child.on('error', reject);
-      child.on('exit', resolve);
+      child.on('exit', (code, signal) => resolve({ code, signal }));
     });
-    assert.equal(code, 0, 'Migration harness failed: ' + file);
+    assert(
+      code === 0 && signal === null,
+      `Migration harness failed: ${file} (exit code: ${code}, signal: ${signal ?? 'none'})`,
+    );
   }
   console.log(files.length + ' migration harnesses passed');
 })().catch((error) => {

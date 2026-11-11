@@ -65,3 +65,20 @@ public.acknowledgments in their respective runners. Explicit target-schema check
 cover both regressions alongside first/repeat and final-state cases. Historical
 migration SQL is unchanged; no migration needs to be reapplied to an
 already-current database. No real database was used to reproduce these defects.
+
+## Node 24 Wasm runtime workaround
+
+PR #161 exposed a repeatable native V8 abort during migration-chain teardown:
+`jit_page_->allocations_.erase(addr) == 1`. Both attempts passed the two 0031
+cases before aborting. The upstream [Node report](https://github.com/nodejs/node/issues/66366)
+describes the same Wasm code-reclamation failure, including PGlite reproductions.
+The umbrella therefore launches only migration-chain.pglite.cjs with
+`--no-wasm-code-gc`. This retains compiled Wasm code until that child exits and
+can increase peak memory. Other harnesses, standalone migration CLI children,
+application processes and the project Node version are unchanged. No assertions,
+safety guards or migration scenarios are skipped; a nonzero exit or termination
+signal still fails the umbrella, with both code and signal reported.
+
+This is a temporary test-process workaround, not a claim that the V8 bug is fixed.
+Reassess removal when the project's Node 24 version includes the upstream fix,
+then verify the complete umbrella on CI without the flag.
