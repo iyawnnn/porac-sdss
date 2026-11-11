@@ -1,5 +1,3 @@
-Phase 8c-2 seed workflow: see [demo-data.md](docs/demo-data.md) for the 15-submission scenario map, empty-target refusal, optional guarded bulk volume and offline checks. Do not run the demo and a full Playwright suite within the same hour; both share the real 20/hour/IP submission budget.
-
 # Porac SDSS (Spatial Decision Support System)
 
 ## A. PROJECT OVERVIEW
@@ -8,7 +6,7 @@ Project Name: Porac SDSS (Spatial Decision Support System)
 
 Porac SDSS is a municipal infrastructure triage platform for Porac, Pampanga. It features Operational Priority queue ordering (citizen severity, ticket age, barangay demand), office routing by category, and automated photo EXIF GPS and duplicate-image checks.
 
-This README covers setup and running the system. For what it actually does, see [`docs/features.md`](docs/features.md); for a role-by-role walkthrough of how citizens and each admin type use it, see [`docs/user-flows.md`](docs/user-flows.md); for the urgency/priority scoring model and its limitations, see [`docs/triage-model.md`](docs/triage-model.md); for the security model, see [`docs/security.md`](docs/security.md).
+This README covers setup and running the system. For what it actually does, see [`docs/features.md`](docs/features.md); for a role-by-role walkthrough of how citizens and each admin type use it, see [`docs/user-flows.md`](docs/user-flows.md); for the Operational Priority model and its limitations, see [`docs/triage-model.md`](docs/triage-model.md); for the security model, see [`docs/security.md`](docs/security.md).
 
 ## B. PREREQUISITES
 
@@ -23,7 +21,8 @@ Install or prepare the following before running the project locally:
 ### Step 1: Clone the repository and navigate into the app folder
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/iyawnnn/porac-sdss.git
+cd porac-sdss
 ```
 
 ### Step 2: Set up the toolchain (Node + pnpm)
@@ -58,8 +57,8 @@ pnpm --version    # expect 11.9.0
 This is a two-app repo — the root Next.js app and `api/` (NestJS) each have their own `package.json` and lockfile, so both need installing:
 
 ```bash
-pnpm install
-pnpm --prefix api install
+pnpm install --frozen-lockfile
+pnpm --prefix api install --frozen-lockfile
 ```
 
 ### Step 4: Configure Environment Variables
@@ -89,7 +88,7 @@ Root `.env.local` — what's actually required:
 
 | Variable | Required? | Purpose |
 |---|---|---|
-| `DATABASE_URL` | **Yes** | Neon's **direct/unpooled** endpoint, not the `-pooler` one root uses — see the comment in `api/.env.example` for why |
+| `DATABASE_URL` | **Yes** | Neon's **direct/unpooled** endpoint, rather than a transaction-pooler endpoint; the root UI has no database connection — see the comment in `api/.env.example` for why |
 | `JWT_SECRET` | **Yes** | Must match root's `.env.local` value exactly |
 | `CLOUDINARY_URL` | **Yes** | Photo upload storage for report submissions |
 | `OPENWEATHERMAP_API_KEY` | **Yes** | OpenWeatherMap Current Weather, for the per-ticket rainfall context on Ticket Detail (manuscript revision Phase 4, step 4c); never logged or stored. Reachability from the deployed backend still needs checking (`docs/deployment-readiness.md`) |
@@ -98,62 +97,35 @@ Root `.env.local` — what's actually required:
 | `RAINFALL_LOOKUPS` | No | `enabled` (default) or `disabled`. OpenWeatherMap rainfall context refreshes (manuscript revision Phase 4, step 4c); start the API with `disabled` for a Playwright run, which must never call the live service (`docs/testing.md`) |
 | `PORT`, `NODE_ENV`, `RESET_TOKEN_TTL_MINUTES`, `TARGET_*` | No | Have working defaults |
 | `WEB_ORIGIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `OAUTH_STATE_SECRET` | No | Only needed to enable **Google OAuth login** — omit all of them to disable that login option entirely; no other feature depends on them |
-| `EMAIL_FROM`, `RESEND_API_KEY` | No | Only needed for **real email delivery** (password reset, notifications) via Resend — omit both to fall back to `ConsoleEmailService`, which logs a masked confirmation instead of sending. This fallback is fine for local dev and is what tests run against; nothing requires real email delivery to pass. **Both or neither** — setting `RESEND_API_KEY` without `EMAIL_FROM` fails startup with a clear error naming both variables. A boot log line always states which provider is active. Locally, Resend will reject sending to any address other than your account owner's until a sending domain is verified — that's the provider declining, not a bug; see [`docs/deployment-readiness.md`](docs/deployment-readiness.md) §5. |
+| `EMAIL_FROM`, `RESEND_API_KEY` | No | Only needed for **real email delivery** (password reset, notifications) via Resend — omit both to fall back to `ConsoleEmailService`, which logs a masked confirmation instead of sending. This fallback is fine for local dev and is what tests run against; nothing requires real email delivery to pass. EMAIL_FROM alone is harmless; setting `RESEND_API_KEY` without `EMAIL_FROM` fails startup with a clear error naming both variables. A boot log line always states which provider is active. Locally, Resend will reject sending to any address other than your account owner's until a sending domain is verified — that's the provider declining, not a bug; see [`docs/deployment-readiness.md`](docs/deployment-readiness.md) §5. |
 
 Full details and rationale for every variable, including ones not listed above, are in the comments inside [`.env.example`](.env.example) and [`api/.env.example`](api/.env.example) — read those files, not this table, before asking "does X matter."
 
 ## D. DATABASE MIGRATIONS & SEEDING
 
-Apply PostGIS schema migrations and seed municipal boundaries, demo accounts, and realistic hazard tickets. **Order matters** — several later steps depend on tables/columns an earlier step creates (e.g. `import:barangays` must run before `migrate:geometry`, while `seed:dem` remains required for Terrain), and running them out of order fails with errors like `relation "barangays" does not exist`. See [`docs/database.md`](docs/database.md) for what each table is for, who reads/writes it, and whether an empty table is expected or a sign something's missing:
+An existing database already at **0050** needs no migration reapplication for this documentation update or the 0031/0038 runner qualifications. Never replay historical SQL against a contracted database. Schema versions are not inferred from empty tables.
 
-```bash
-pnpm --prefix api migrate                          # non-spatial Drizzle tables
-pnpm --prefix api migrate:ratelimit
-pnpm --prefix api migrate:ratelimit-citizen
-pnpm --prefix api migrate:city-boundary
-pnpm --prefix api import:city-boundary              # municipal outer boundary -> city_boundary_osm (idempotent)
-pnpm --prefix api import:barangays                 # PSGC barangay polygons -> barangays (must precede migrate:geometry)
-pnpm --prefix api migrate:geometry                 # geometry columns + GiST indexes, FKs to barangays(id)
-pnpm --prefix api seed:dem                         # SRTM GeoTIFF -> dem_points, retained for Barangay Terrain
-pnpm --prefix api migrate:exif-data
-pnpm --prefix api migrate:moderation
-pnpm --prefix api migrate:resolution
-pnpm --prefix api migrate:diverse-demo              # despite the name, adds core schema (ticket_status 'Rejected', tickets.flagged) — not demo-only
-pnpm --prefix api migrate:citizen-identities
-pnpm --prefix api migrate:citizen-account-security
-pnpm --prefix api migrate:citizen-password-reset
-pnpm --prefix api migrate:notifications
-pnpm --prefix api migrate:admin-system-role         # admins.role 'system_admin' + nullable office (RBAC)
-pnpm --prefix api migrate:admin-created-at
-pnpm --prefix api migrate:admin-audit-events        # admin_audit_events table (Admin Activity Log)
-pnpm --prefix api migrate:admin-password-security   # admins.password_changed_at/session_valid_after
-pnpm --prefix api migrate:admin-status              # admins.is_active (account activation/deactivation)
-pnpm --prefix api migrate:admin-saved-views          # admin_saved_views — personal filter presets; FKs admins(id), so it follows
-pnpm --prefix api migrate:saved-views-surface        # admin_saved_views.surface ('tickets' | 'flagged') — ALTERs the table above, so it follows it
-pnpm --prefix api migrate:work-orders               # work_orders table — FKs tickets(id) and admins(id), so it must follow both
-pnpm --prefix api migrate:ticket-disputes           # tickets.disputed_at/dispute_reason (citizen dispute loop)
-pnpm --prefix api migrate:ticket-resolution-confirmation  # tickets.resolution_confirmed_at (persistent Confirm Fixed)
-pnpm --prefix api migrate:admin-login-throttle      # admin_login_rate_limit_events (per-account failed-login throttling)
-# Later assessment sequence: migrate:operational-assessments (0033), migrate:assessment-work-orders (0045), migrate:assessment-alignment (0048), migrate:contraction (0049).
-# Coordinate the 0048 schema/app cutover; after 0048 use the updated 0045 runner, never replay raw 0045 SQL. No live migration was run for this change.
-pnpm --prefix api seed:users                        # citizen demo accounts (Section G) — idempotent, safe to rerun
-pnpm --prefix api seed:admin -- meo@porac.gov.ph PoracDemo2026! PERSONNEL MEO false      # admin demo account (Section G)
-pnpm --prefix api seed:admin -- mdrrmo@porac.gov.ph PoracDemo2026! PERSONNEL MDRRMO false # second admin demo account
-pnpm --prefix api seed:diverse-reports              # 15-submission scenario demo; refuses non-empty targets (docs/demo-data.md)
-pnpm gis:generate-boundary                          # frontend map boundary overlay — independent of the DB steps above, run any time
-```
+For a genuinely empty, owner-controlled disposable PostGIS database, follow the [fresh-database sequence](docs/database.md#fresh-database-sequence-owner-operated) and its reference-data prerequisites. `pnpm --prefix api migrate` runs only the five files in Drizzle's journal; it is **not** the complete 0000–0050 bootstrap. The full SQL chain is exercised by `test:fresh-database`; historical runners and their limits are mapped in [migration coverage](docs/migration-test-coverage.md).
 
-Account seeds upsert by unique email. The report scenario demo refuses a non-empty operational/history target; it never truncates existing data. Optional bulk volume requires explicit --append on a non-empty disposable target. See [demo-data.md](docs/demo-data.md) for prerequisites, rate limits and repeat-run behaviour.
+Owner-operated seeds require a disposable target and final schema. [Demo data](docs/demo-data.md) documents accounts, real-service scenarios, empty-target refusal and optional additive bulk data. The shared guard rejects production even with its override flag. A reset copy of production is not an empty operational target, so the scenario demo must refuse it. Never clear audit history to make it fit.
+
+Agents never run real migrations, seeds or archive commands. The sole standing seed/retirement exception is standard Playwright globalSetup/globalTeardown on an owner-reset, preflight-confirmed `phase2-test`. Production cleanup requires reviewed candidates, a backup and separate explicit owner approval; audit-referenced records must never be deleted.
 
 ## E. RUNNING THE APPLICATION
 
-Start the local development server:
+Run these in separate PowerShell terminals from the **repository root**, after the owner configures environment and schema:
 
-```bash
+```powershell
+pnpm --prefix api start:dev
+```
+
+```powershell
 pnpm dev
 ```
 
-Open http://localhost:3000 in your browser.
+API normally listens on 3001; Next.js on 3000. Open http://localhost:3000. Use `pnpm.cmd` if execution policy blocks the PowerShell shim; do not change machine policy. Start Next from PowerShell. Never stop a verification-port process you did not start.
+
+Deployment builds are `pnpm --prefix api build` and `pnpm build`; starts are `pnpm --prefix api start:prod` and `pnpm start`. Configure API origin, shared JWT secret and provider environment first. Review [deployment readiness](docs/deployment-readiness.md): build/CI success does not prove provider reachability, backups, hosting or production readiness. Final production checks are read-only and owner-performed.
 
 ## F. APPLICATION ROUTES
 
@@ -161,72 +133,40 @@ Common entry points for a local demo. For the full route list and what each surf
 
 - Citizen Map: http://localhost:3000/map
 - Report Form: http://localhost:3000/report
-- My Reports: http://localhost:3000/reports
+- My Reports: http://localhost:3000/dashboard
 - Admin Login: http://localhost:3000/admin/login
 - Admin Map: http://localhost:3000/admin/map
 - Admin Ticket Queue: http://localhost:3000/admin/tickets
 
 ## G. DEMO ACCOUNTS & CREDENTIALS
 
-All accounts use the default password: `PoracDemo2026!`
-
-Citizen Accounts:
-
-- `citizen@porac.ph`
-- `citizen1@porac.ph`
-- `citizen2@porac.ph`
-- `citizen3@porac.ph`
-- `citizen4@porac.ph`
-- `citizen5@porac.ph`
-
-Admin Accounts:
-
-- Municipal Engineering Office (MEO): `meo@porac.gov.ph`
-- MDRRMO: `mdrrmo@porac.gov.ph`
-
-These two admin accounts are also the accounts the Playwright E2E suite logs in as — see Section I, they are provisioned automatically, you do not need to run `seed:admin` for them manually.
+The executable source is `e2e/test-credentials.ts`. Standard globalSetup provisions four staff identities (MEO, MDRRMO, MDRRMO Focal, System Admin) and five citizens. Specs import that source; never copy credentials into new tests or use demo credentials for real deployment. The owner-operated admin CLI takes account type, office and Focal flag; see [demo prerequisites](docs/demo-data.md).
 
 ## H. TESTING PHOTO EXIF GPS METADATA
 
-To test the report submission pipeline with real geotagged photo metadata, drag and drop any of the pre-configured JPEG files located in `public/uploads/reports/` (for example, `01_poblacion.jpg`) into the report form photo uploader.
+Use the deterministic evidence cases in [demo data](docs/demo-data.md) and the in-memory evidence/demo tests. Generated `public/uploads/reports/` images are local artifacts, not a promised fresh-clone fixture set. Never manually submit test reports on production. Flags are review conditions, not automatic rejection or permission to merge.
 
 ## I. RUNNING END-TO-END (PLAYWRIGHT) TESTS
 
-This section covers running the E2E suite. For the full testing reference — every test layer and its command, the E2E data strategy, what CI does and doesn't run, known limitations, and a checklist for adding a spec — see [`docs/testing.md`](docs/testing.md).
+Follow [testing.md](docs/testing.md), including owner-reset preflight and console-mailer launch. The suite mutates the disposable copy with no per-test transaction isolation. It makes **15 real submissions** against **20/hour/IP**. Never run another full suite or demo in the same hour. Keep rate limits enabled.
 
-The E2E suite (`e2e/*.spec.ts`) drives a real dev server against a real database — there is no mocked backend and no isolated test database, so a few things are required first:
+Only after owner readiness, copy/schema/quota checks, fresh API build and authenticated warm-up:
 
-1. `api/.env` must be configured and migrated (Section D) — the NestJS API must be able to start and reach Postgres.
-2. Start the API separately (Playwright's `webServer` only boots the Next.js app, not the API): `pnpm --prefix api start:dev`
-3. Run the suite from root:
-   ```bash
-   pnpm exec playwright test -- --workers=1
-   ```
-
-**Demo accounts are provisioned automatically.** Playwright's `globalSetup` (`e2e/global-setup.ts`) runs once before any test and idempotently upserts the three admin accounts (`meo@porac.gov.ph`, `mdrrmo@porac.gov.ph`, `sysadmin@porac.gov.ph` — via `pnpm --prefix api seed:e2e-admins`) and the citizen demo accounts (via the existing `pnpm --prefix api seed:users`), after first clearing throwaway `e2e-*@porac.gov.ph` admins left by earlier runs (`cleanup:e2e-admins`). Re-running the suite never duplicates accounts or errors on a second run — both scripts use `ON CONFLICT` upserts, not plain inserts. You never need to run these by hand; global setup does it for you as long as `api/.env` is reachable.
-
-All test credentials live in one place — `e2e/test-credentials.ts` — imported by every spec that needs to log in. Never hardcode an email/password in a new spec; import `E2E_MEO_ADMIN`, `E2E_MDRRMO_ADMIN`, or `E2E_CITIZEN_ACCOUNT` instead.
-
-**Demo tickets/reports are a separate, explicit step.** Playwright globalSetup provisions its standard accounts and grouping fixtures; it never invokes the 15-submission scenario demo. That demo requires a fresh disposable operational target and consumes real submission quota. Do not run it and a full Playwright suite within the same hour. For a separate owner-operated demo on an empty target, see [demo-data.md](docs/demo-data.md) and run:
-```bash
-pnpm --prefix api seed:diverse-reports
+```powershell
+pnpm exec playwright test --workers=1 --max-failures=6
 ```
-A repeat demo invocation refuses the non-empty target before changing records. No existing ticket, report, rate-limit event or audit history is erased. Use a fresh disposable target and respect the one-hour submission window.
 
-**Why `--workers=1`:** the suite runs against one shared dev database with no per-test transaction isolation. Parallel workers would race on the same admin sessions, ticket rows, and moderation state (e.g. one worker resetting filters while another asserts on them), producing flaky failures unrelated to real bugs. Keep `--workers=1` until the suite gets real test-database isolation (e.g. a per-run schema or transactional rollback) — that is a bigger change than this fix and out of scope here.
+Standard setup/teardown provisions/retires fixtures; no manual seed or cleanup is needed. Teardown preserves audit and referenced assessments; it does not restore the reset baseline. Last full copy run at e17e18a: 307 passed with no skips/flakes/retries. This is dated evidence, not proof a future run passed.
 
-**A full run submits real reports and can exhaust the IP rate limit.** Ticket-dependent specs create their own disposable tickets rather than mutating shared seeded ones, so a full suite run posts roughly 17 real reports through `POST /api/reports` (`admin-tickets` 7, `citizen-dispute` 6, `admin-work-orders` 2, `citizen-reports` 1, `citizen-map` 1). `RateLimitService` (`api/src/domain/ratelimit.service.ts`) backstops report submission at **20 per hour per IP** (`IP_HOURLY_BACKSTOP`), and every request in a local run originates from the same `127.0.0.1`. Signing up a fresh citizen per test — which the specs already do — resets the per-account limits (5/hour, 3-within-25m/24h) but **not** the IP one.
+Checks needing no real database:
 
-So one full run fits inside the budget; a second full run started within the same hour does not, and will fail partway through with `429` on report creation (surfacing as a failed `expect(res.ok())`, or as a whole spec file failing if it trips inside `admin-work-orders`' `beforeAll`). **This is the anti-abuse control working as designed, not a bug** — do not "fix" it by loosening the limit or adding a test-only bypass. Instead:
+```powershell
+pnpm --prefix api test --runInBand
+pnpm exec tsc --noEmit
+node --import tsx --test lib/*.test.ts lib/utils/*.test.ts components/features/admin/shared/*.test.tsx
+```
 
-- Wait out the hour before the next full run, or
-- Run only the specs you're working on, which is the recommended day-to-day loop:
-  ```bash
-  pnpm exec playwright test e2e/admin-tickets.spec.ts -- --workers=1
-  pnpm exec playwright test -g "Case Closure Summary" -- --workers=1
-  ```
-
-**Current coverage.** Beyond the smoke/RBAC/dashboard specs, the admin ticket workflow is covered end to end in `e2e/admin-tickets.spec.ts`: Ticket Queue baseline and empty state, status/search/disputed/category/barangay filters and filter reset, office scoping (including a doctored `?office=` clamp check), queue → detail navigation, the Ticket Detail read-only surface, status advancement, office reassignment with restore, pagination and sorting, the mobile card list, and a full admin-UI resolution (notes + photo through the resolve dialog) whose result is then asserted from the citizen side via the Case Closure Summary card.
+See testing.md for external pinned PGlite installation and the fresh-database, migration, permission, role and demo harnesses. CI runs both app builds and configured in-memory checks; it does not run Playwright.
 
 ## J. SCHEDULED JOBS & DEPLOYMENT
 
@@ -251,7 +191,11 @@ That workflow only works once two values are set under the repository's **Settin
 
 - Two separate deployables: the Next.js app (root) and the NestJS API (`api/`) — the API is a long-lived process (its own Postgres connection pool), not a serverless function, so whatever hosts it needs to support that.
 - The API needs a public, stable origin reachable from wherever the Next.js app runs (`API_ORIGIN`/`INTERNAL_API_URL`) and from GitHub Actions (`PORAC_API_BASE_URL`, same origin).
-- [`docs/project-status.md`](docs/project-status.md) §4 and `PLAN.md` §0 track what else is still open before a real deployment (credential rotation, backup verification, monitoring, a written runbook) — read those before treating "it runs locally" as "it's ready to deploy."
+- [current project status](docs/project-status.md) and [deployment readiness](docs/deployment-readiness.md) track the owner-reviewed deployment checks (credential rotation, backup verification, monitoring, a written runbook) — read those before treating "it runs locally" as "it's ready to deploy."
+
+## Historical 0049/0050 cutover reference
+
+Completed upgrade provenance, not instructions to reapply migrations to an existing final database. New empty targets follow Section D.
 
 Phase 8b-1: `pnpm --prefix api migrate:contraction` applies 0049 after 0048, using one transaction, bounded locks and strict state verification. Take a Neon branch backup first. This code runs on both 0048 and 0049; deploy it and drain older consumers before contracting. No CSV export is required. `migrate:config` and `verify:config` are retired; `dem_points`, `seed:dem`, Terrain and TARGET_DEM_TIFF_FILE remain. Report acknowledgments remain at the 0049 stage and are removed separately by 0050; admins.role, dispute/feedback mirrors and permanent audit actor_role/admin_role remain. Do not replay historical SQL directly after contraction; the 0045/0048/0039 entry points verify the final state without recreating objects.
 

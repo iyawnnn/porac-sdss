@@ -1,3 +1,50 @@
+# Project Status
+
+Baseline: main b2318c1 after owner merge of PR #161. Phase 8e is an approved **docs-only** alignment; its own PR/CI is pending. No application, schema, runner, seed, test or permission changes. Product fixes and production cleanup need separate approval.
+
+## 1. Current phase table
+
+| Phase | State | Evidence |
+| --- | --- | --- |
+| 8a / 8b | Final assessment schema and contractions delivered; owner-reported deployed state through 0050 | Current [database reference](database.md); no new production query in this docs pass |
+| 8c | Seed guards, real-service demo, fresh-database tests and read-only hygiene inventory delivered | [Demo data](demo-data.md); candidate inventory is not cleanup approval |
+| 8d-1 | Permission matrix merged in PR #158 | 94 routes / six identities and dated full-copy pass |
+| 8d-2 | Role scenarios merged in PR #159 | Acceptance mapping and dated 307-test copy pass |
+| 8d-3 | Migration consolidation merged in PR #160 | Five harnesses / 141 groups, 34 full-chain; 307-test copy pass in 20m 23s |
+| CI follow-up | PR #161 merged; both jobs green at 7d55f60 | [Run 43015735511](https://github.com/iyawnnn/porac-sdss/actions/runs/43015735511), including full migration umbrella and 1,984 API tests |
+| 8e | Documentation alignment in progress | Product/cleanup work remains unapproved |
+
+Last complete local gate: 84 API suites / 1,984 tests / one snapshot, 45 root tests and 19 PGlite harnesses / 305 groups. Broad API type-check retains 16 accepted diagnostics; API lint retains 550 errors + seven warnings. Do not call those checks wholly clean. CI is authoritative for its own run totals. The chain-child-only Wasm workaround passed complete local and CI verification; [its upstream cause/removal criteria](migration-test-coverage.md) remain relevant.
+
+## Current contract (final schema through 0050)
+
+- Account type, office and Focal flag authorize access. Non-Focal MEO/MDRRMO Personnel have office-scoped operations. MDRRMO Focal Personnel have municipality-wide intake/screening/acknowledgment and existing eligible Reported-ticket grouping/routing/correction. System Admin manages accounts/audit. Neither Focal nor System Admin has assessment/Work Order authority. The executable catalog is `api/test/permissions/route-policy.json`; [role coverage](role-scenario-coverage.md) maps the scenarios.
+- Physical ticket acknowledgments are `acknowledgments`; `report_acknowledgments` is absent after 0050. Intake history remains `report_intake_actions`.
+- Priority is `tickets.priority_index`, weighted median citizen severity 0.5 + seven-day age 0.25 + barangay demand 0.25. Hazard Information/rainfall are separate staff-only advisory context, never hazard scores. `dem_points` remains for informational Barangay Terrain.
+- Assessments use canonical conditions/mitigation/combined reason, original creator/time and JSONB `{selected, notes}`. A new Work Order requires an assessment; Completed/Cancelled orders are final. Cancellation/routing require reasons. External Referral means municipal handling is complete, not that an outside agency resolved the incident.
+- Keep `actor_role`/`admin_role` permanently, `admins.role` as a non-authorizing mirror and live dispute/confirmation mirrors. Audit history is append-only. Citizens never receive internal assessment, Work Order, screening or provider context. Preserve the tested public-map allowlist rather than replacing it with an abbreviated field description.
+
+## 2. Run, test, seed and deploy
+
+- Run: owner-configured final database/environment; API `pnpm --prefix api start:dev` and UI `pnpm dev` in separate PowerShell terminals from root.
+- Test: [testing.md](testing.md) defines unit/in-memory/CI and the separate one-full-copy browser gate. No rate-limit bypass.
+- Seed: [demo-data.md](demo-data.md), owner-operated disposable targets only. Account upserts differ from the empty-target 15-submission demo. Shared seed guard refuses production.
+- Deploy: build both apps, apply only an owner-reviewed required migration with backup, configure hosting/providers, then owner-only read-only checks. Existing final databases need no migration for this docs pass or the 0031/0038 qualifications. [Deployment readiness](deployment-readiness.md) is separate from a past green build.
+
+## 3. Current queue and boundaries
+
+Complete this docs-only PR and both CI checks, then owner review/merge/pull. No new Playwright run is required for docs alone. [Known limitations](known-limitations.md) covers every parked review item, with evidence and uncertainty; it is not a second roadmap or authorization to fix them.
+
+No new permissions, scoring changes, mirror removal or audit rewriting. Production hygiene requires separately reviewed candidates, owner backup and explicit approval; never delete audit-referenced records. Groupmate notification, backup-branch retention/removal and final read-only production checks are owner tasks. Agents do not send external messages on the owner's behalf.
+
+## Phase 8e documentation verification
+
+Local docs checks passed: 55 API command references resolve to package scripts, the 52-file historical sequence matches the executable catalog, edited fences/CRLF are valid and no new local links are broken. The existing fresh-database harness passed20 groups, including all14 documented seed/import/cleanup mappings and12 entry points, entirely in memory. Manuscript Appendix H was read privately for acknowledgment/assessment alignment. Protected hashes match. No real database, migrations, manual seeds, server operation or Playwright run occurred. Both PR CI checks and owner review/merge remain release gates; their final results are recorded on the PR rather than inferred from earlier runs.
+
+## 4. Historical implementation and verification record
+
+The following is preserved dated evidence. Old “pending,” “not run,” “not deployed” and task queues describe the state when written, not current launch/cleanup/implementation instructions. The table above supersedes those queues. Test totals apply to their recorded commits. Do not execute historical snippets without the current setup/testing procedure and owner authorization.
+
 PR #161 CI runtime follow-up: its first two API attempts aborted natively in Node 24.22.2 V8 Wasm reclamation after the two 0031 cases. The owner approved a temporary --no-wasm-code-gc argument only for the migration-chain child of test:migrations, with explicit exit-code/signal failure reporting. All assertions and safety guards remain enabled; compiled Wasm code is retained until that child exits, which may increase peak memory. Local verification passed all five migration harnesses / 141 groups (including 34 full-chain groups), launcher flag/environment/signal checks, CJS lint and CRLF formatting. Protected hashes match. Application runtime, Node version, historical SQL and database state are unchanged. CI for this follow-up is pending; no Playwright rerun was needed. See [migration-test-coverage.md](migration-test-coverage.md) for upstream evidence and removal criteria.
 
 Phase 8d-3 is complete: [PR #160](https://github.com/iyawnnn/porac-sdss/pull/160) merged as 3c44c1f on 2026-11-11 after both API and Frontend CI passed ([run 42860118220](https://github.com/iyawnnn/porac-sdss/actions/runs/42860118220)). CI confirms 84 API suites / 1,984 tests / one snapshot and all five migration harnesses, including 34 full-chain groups. Next is Phase 8e read-only investigation and a proposed scope for owner approval before implementation. Already-current databases need no migration reapplication for the 0031/0038 runner corrections.

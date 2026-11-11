@@ -1,5 +1,7 @@
 # Triage & Scoring Model
 
+Final0050 retains `tickets.priority_index` and informational `dem_points`/Terrain. Retired formulas in the historical section are not computed/emitted; `config` and report/ticket elevation factors are absent. Live weights remain severity 0.5 + seven-day age 0.25 + barangay demand 0.25. [Known limitations](known-limitations.md) records merged-history priority badges/wording separately from scoring correctness. This docs pass changes no constants.
+
 **What the system actually computes today** — read from the code, not from the design intent. Where the implementation is narrower than the project's framing, this document says so rather than smoothing it over.
 
 For developer onboarding, QA, and capstone defense. If you are preparing to answer "how does the system decide what to look at first," §4, §5, §8 and §10 are the sections that matter.
@@ -231,4 +233,4 @@ The scoring model is part of the project's research contribution. Changing it ca
 
 **How it was removed.** Step by step in manuscript revision Phase 1: off the Ticket Queue, CSV and saved views (step 4, migration `0034`), Ticket Detail and the admin map (5), the admin overview screens (6a), Focal Intake (6b), the citizen pages (6c); then no longer calculated — the recompute service, formula, weather and elevation services and the cron routes `recompute-urgency`/`recompute-weather` were deleted and report submission stopped looking up elevation and rain (7a); finally the frontend helpers and seed-script remnants went (7b). See `docs/project-status.md` §3 for each step.
 
-**What is left.** The columns `elevation_m`, `elevation_factor`, `precipitation_factor`, `cluster_factor`, `urgency_score`, `urgency_band`, `priority_score`, `urgency_level` (and `reports.elevation_m`) still exist with their old values; new rows leave them NULL. They, and the `config` table's `elev_min`/`elev_max`/`rain_1h_mm` rows, are dropped in Phase 8 — see `docs/database.md`. Existing `ticket_critical` notifications still render as history ("Ticket Urgency Became High"); nothing creates new ones.
+**Final state through 0050.** Retired report/ticket elevation and urgency columns and the config table were dropped by 0049. They no longer carry stale values on live rows. `dem_points` remains for informational Terrain and `tickets.priority_index` remains Operational Priority. Historical `ticket_critical` notifications still render with a retired label; nothing creates new ones.
