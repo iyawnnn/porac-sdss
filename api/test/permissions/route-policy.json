@@ -1339,15 +1339,31 @@
       "key": "POST /notifications/:id/read",
       "controller": "NotificationsController",
       "handler": "markRead",
-      "guards": [],
-      "execution": "handler",
+      "guards": ["AdminSessionGuard"],
+      "execution": "probe",
       "expected": {
         "anonymous": "401",
-        "citizen": "200",
-        "meo": "200",
-        "mdrrmo": "200",
-        "focal": "200",
-        "systemAdmin": "200"
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": ["notification-scope", "session-cookies"]
+    },
+    {
+      "key": "POST /citizens/notifications/:id/read",
+      "controller": "CitizenNotificationsController",
+      "handler": "markRead",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
       },
       "conditions": ["notification-scope", "session-cookies"]
     },
@@ -1355,15 +1371,31 @@
       "key": "POST /notifications/read-all",
       "controller": "NotificationsController",
       "handler": "markAllRead",
-      "guards": [],
-      "execution": "handler",
+      "guards": ["AdminSessionGuard"],
+      "execution": "probe",
       "expected": {
         "anonymous": "401",
-        "citizen": "200",
-        "meo": "200",
-        "mdrrmo": "200",
-        "focal": "200",
-        "systemAdmin": "200"
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": ["notification-scope", "session-cookies"]
+    },
+    {
+      "key": "POST /citizens/notifications/read-all",
+      "controller": "CitizenNotificationsController",
+      "handler": "markAllRead",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
       },
       "conditions": ["notification-scope", "session-cookies"]
     },
@@ -1371,15 +1403,31 @@
       "key": "GET /notifications/unread-count",
       "controller": "NotificationsController",
       "handler": "unreadCount",
-      "guards": [],
-      "execution": "handler",
+      "guards": ["AdminSessionGuard"],
+      "execution": "probe",
       "expected": {
         "anonymous": "401",
-        "citizen": "200",
-        "meo": "200",
-        "mdrrmo": "200",
-        "focal": "200",
-        "systemAdmin": "200"
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": ["notification-scope", "session-cookies"]
+    },
+    {
+      "key": "GET /citizens/notifications/unread-count",
+      "controller": "CitizenNotificationsController",
+      "handler": "unreadCount",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
       },
       "conditions": ["notification-scope", "session-cookies"]
     },
@@ -1387,15 +1435,31 @@
       "key": "GET /notifications",
       "controller": "NotificationsController",
       "handler": "list",
-      "guards": [],
-      "execution": "handler",
+      "guards": ["AdminSessionGuard"],
+      "execution": "probe",
       "expected": {
         "anonymous": "401",
-        "citizen": "200",
-        "meo": "200",
-        "mdrrmo": "200",
-        "focal": "200",
-        "systemAdmin": "200"
+        "citizen": "401",
+        "meo": "ADMIT",
+        "mdrrmo": "ADMIT",
+        "focal": "ADMIT",
+        "systemAdmin": "ADMIT"
+      },
+      "conditions": ["notification-scope", "session-cookies"]
+    },
+    {
+      "key": "GET /citizens/notifications",
+      "controller": "CitizenNotificationsController",
+      "handler": "list",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
       },
       "conditions": ["notification-scope", "session-cookies"]
     },

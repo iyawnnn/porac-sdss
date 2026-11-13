@@ -23,7 +23,7 @@ function BellIcon() {
 
 export function CitizenNotificationBell() {
   const router = useRouter();
-  const { items, unreadCount, loading, markRead, markAllRead } = useNotifications<CitizenNotification>();
+  const { items, unreadCount, loading, markRead, markAllRead } = useNotifications<CitizenNotification>("/api/citizens/notifications");
 
   function handleSelect(notification: CitizenNotification) {
     if (!notification.readAt) void markRead(notification.id);

@@ -11,7 +11,7 @@ interface NoticeCheck {
 }
 
 export async function expectCitizenNotice(page: Page, check: NoticeCheck) {
-  const response = await page.request.get(`/api/notifications?type=${check.type}&limit=100`);
+  const response = await page.request.get(`/api/citizens/notifications?type=${check.type}&limit=100`);
   expect(response.ok()).toBe(true);
   const { items } = await response.json() as { items: { href: string | null; message: string }[] };
   const own = items.filter((n) => n.href === `/dashboard/reports/${check.reportId}`);
