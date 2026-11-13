@@ -24,6 +24,10 @@ const envSchema = z
     // same switch for OpenWeatherMap: 'disabled' makes every refresh a no-op
     // that writes nothing. Stored rows are still shown.
     RAINFALL_LOOKUPS: z.enum(['enabled', 'disabled']).default('enabled'),
+    // Proxies in front of Next.js that append the real client address to
+    // X-Forwarded-For (see common/utils/client-ip.ts). 0 = none: forwarded
+    // headers are ignored. Set it to the real edge hop count at deployment.
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
     PORT: z.coerce.number().default(3001),
     NODE_ENV: z
       .enum(['development', 'production', 'test'])

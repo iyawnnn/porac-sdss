@@ -11,6 +11,7 @@ import {
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { clientIp } from '../common/utils/client-ip';
 import {
   PasswordResetRateLimitedError,
   PasswordResetService,
@@ -29,18 +30,6 @@ interface ResetPasswordBody {
   newPassword?: unknown;
 }
 
-// x-forwarded-for's first hop — main.ts sets `trust proxy` since all
-// traffic arrives one hop away via Next's rewrite proxy (same helper shape
-// as reports.controller.ts's getClientIp).
-function getClientIp(req: Request): string {
-  const forwardedFor = req.headers['x-forwarded-for'];
-  if (forwardedFor) {
-    const value = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-    return value.split(',')[0].trim();
-  }
-  return req.ip ?? 'unknown';
-}
-
 @Controller('citizens')
 export class PasswordResetController {
   constructor(private readonly passwordReset: PasswordResetService) {}
@@ -57,7 +46,7 @@ export class PasswordResetController {
     }
 
     try {
-      await this.passwordReset.requestReset(body.email, getClientIp(req));
+      await this.passwordReset.requestReset(body.email, clientIp(req));
     } catch (err) {
       if (err instanceof PasswordResetRateLimitedError) {
         throw new HttpException(err.reason, HttpStatus.TOO_MANY_REQUESTS);
