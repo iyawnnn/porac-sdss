@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import { assertStaffPasswordConfigured } from "./test-credentials";
 
 // Runs once before the whole Playwright suite. Provisions the demo accounts
 // every admin/citizen spec logs in as (see e2e/test-credentials.ts) so tests
@@ -19,6 +20,7 @@ import path from "node:path";
 // without posting a report, and hands their ids to the tests through
 // process.env.E2E_GROUPING_FIXTURES; e2e/global-teardown.ts retires them.
 export default function globalSetup(): void {
+  assertStaffPasswordConfigured();
   const apiDir = path.resolve(__dirname, "../api");
   const run = (script: string) => execFileSync("pnpm", ["run", script], { cwd: apiDir, stdio: "inherit", shell: true });
 

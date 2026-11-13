@@ -78,6 +78,7 @@ Production-specific concerns, beyond simply setting the values:
 - [ ] Provision a production PostGIS database and run the full migration sequence in the documented order.
 - [ ] Seed reference data: barangay polygons, DEM points, city boundary. These are not optional — barangay resolution and elevation scoring fail without them. Run `verify:config` and `verify:city-boundary` afterward.
 - [ ] Create the first `system_admin` via `seed:admin`. **Do not use demo credentials.**
+- [ ] Confirm no staff demo account (`meo@`, `mdrrmo@`, `focal@`, `sysadmin@porac.gov.ph`) or `e2e-*` staff account exists or is active on the production database. Staff demo accounts no longer have a committed password (IAN-26), but they must never be provisioned there at all.
 - [ ] Configure automated backups.
 - [ ] **Verify a restore actually works.** An untested backup is not a backup — this is the single most commonly skipped item on this page.
 - [ ] Decide a retention and point-in-time-recovery window.

@@ -8,10 +8,12 @@ import path from "node:path";
 // rejecting every fixture ticket still active (or the Resolved feedback
 // ticket) and cancelling its active Work Orders. Nothing is deleted. global-setup does the same
 // first, so a run whose teardown never ran is cleaned up by the next one.
+//
+// cleanup:e2e-admins then retires the throwaway e2e-* staff accounts specs
+// create and locks the shared staff demo accounts (IAN-26), so no
+// privileged credential used by the run stays valid afterwards.
 export default function globalTeardown(): void {
-  execFileSync("pnpm", ["run", "cleanup:e2e-grouping-fixtures"], {
-    cwd: path.resolve(__dirname, "../api"),
-    stdio: "inherit",
-    shell: true,
-  });
+  const cwd = path.resolve(__dirname, "../api");
+  for (const script of ["cleanup:e2e-grouping-fixtures", "cleanup:e2e-admins"])
+    execFileSync("pnpm", ["run", script], { cwd, stdio: "inherit", shell: true });
 }
