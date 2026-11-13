@@ -44,6 +44,7 @@ const runner = new SeedRunner(source, root, path.join(folder, 'artifacts'), [
   adminPassword,
   E2E_CITIZEN_ACCOUNT.password,
   FRESH_STAFF_PASSWORD,
+  process.env.E2E_ADMIN_PASSWORD,
 ]);
 let checks = 0;
 const outcomes = [];
@@ -97,13 +98,15 @@ async function count(connection, table) {
   assert(/^[a-z_]+$/.test(table));
   return (await query(connection, 'SELECT count(*)::int n FROM ' + table))[0].n;
 }
+// Only the four staff demo accounts are re-locked by cleanup:e2e-admins.
+const STAFF_EMAILS = E2E_ADMIN_ACCOUNTS.map((a) => `'${a.email}'`).join(',');
 async function fingerprint(connection, table) {
   assert(/^[a-z_]+$/.test(table));
   // cleanup:e2e-admins re-locks staff demo accounts with a fresh random hash
   // on every run (IAN-26); that rotation is checked separately below.
   const row =
     table === 'admins'
-      ? "(to_jsonb(x) - 'password_hash' - 'session_valid_after')"
+      ? `(CASE WHEN x.email IN (${STAFF_EMAILS}) THEN to_jsonb(x) - 'password_hash' - 'session_valid_after' ELSE to_jsonb(x) END)`
       : 'to_jsonb(x)';
   return (
     await query(
@@ -648,11 +651,15 @@ async function fixtureCase(snapshot) {
     await runner.run('cleanup:e2e-grouping-fixtures', connection);
     await runner.run('cleanup:e2e-admins', connection);
     assert.deepEqual(await operationalState(connection), before);
-    for (const { password_hash } of await query(
+    const locked = await query(
       connection,
-      "SELECT password_hash FROM admins WHERE email IN ('meo@porac.gov.ph','mdrrmo@porac.gov.ph','sysadmin@porac.gov.ph','focal@porac.gov.ph')",
-    ))
-      assert(!(await bcrypt.compare(FRESH_STAFF_PASSWORD, password_hash)));
+      `SELECT password_hash, session_valid_after FROM admins WHERE email IN (${STAFF_EMAILS})`,
+    );
+    assert.equal(locked.length, E2E_ADMIN_ACCOUNTS.length);
+    for (const row of locked) {
+      assert(!(await bcrypt.compare(FRESH_STAFF_PASSWORD, row.password_hash)));
+      assert(row.session_valid_after, 'locked staff sessions not invalidated');
+    }
     ok(
       'fixture cleanup retires all active tickets/orders, preserves audit and reruns without changes',
     );
