@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
@@ -11,10 +12,14 @@ async function bootstrap() {
   const config = app.get(ConfigService<Env, true>);
 
   app.use(cookieParser());
-  app.set(
-    'trust proxy',
-    trustProxyHops(config.get('TRUST_PROXY_HOPS', { infer: true })),
-  );
+  const hops = config.get('TRUST_PROXY_HOPS', { infer: true });
+  app.set('trust proxy', trustProxyHops(hops));
+  // Fails closed, but behind a real edge every client would share one
+  // rate-limit bucket — say so instead of degrading silently.
+  if (hops === 0 && config.get('NODE_ENV', { infer: true }) === 'production')
+    new Logger('Bootstrap').warn(
+      'TRUST_PROXY_HOPS=0: all clients share one IP rate-limit bucket. Set it to the edge proxy count (docs/deployment-readiness.md).',
+    );
   app.enableShutdownHooks();
 
   // Explicit IPv4 bind — Node 18+ prefers IPv6 when resolving 'localhost',
