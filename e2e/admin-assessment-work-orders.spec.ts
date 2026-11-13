@@ -79,6 +79,12 @@ test.describe.serial("Operational Assessment and Work Orders", () => {
     const dialog = page.getByRole("dialog", { name: "Add Assessment" });
     await dialog.getByRole("button", { name: "Save Assessment" }).click();
     await expect(dialog.getByText("Assessed conditions are required.")).toBeVisible();
+    // IAN-30: every free-text field has a programmatic name, reachable by keyboard.
+    for (const name of ["Safety Implications", "Recommended Action", "Interim Mitigation", "Deferment or Referral Reason (optional)", "Additional Remarks (optional)"]) {
+      const field = dialog.getByRole("textbox", { name, exact: true });
+      await field.focus();
+      await expect(field).toBeFocused();
+    }
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toHaveCount(0);
   });

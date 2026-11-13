@@ -131,8 +131,8 @@ export function OperationalAssessmentDialog({
               <p className="text-xs text-destructive" id="observed-conditions-error">{observedError}</p>
             )}
           </Field>
-          <Field label="Safety Implications">
-            <Textarea onChange={(e) => setSafetyImplications(e.target.value)} rows={3} value={safetyImplications} />
+          <Field htmlFor="assessment-safety-implications" label="Safety Implications">
+            <Textarea id="assessment-safety-implications" onChange={(e) => setSafetyImplications(e.target.value)} rows={3} value={safetyImplications} />
           </Field>
           <Field label="Operational Constraints">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -159,14 +159,14 @@ export function OperationalAssessmentDialog({
               </div>
             )}
           </Field>
-          <Field label="Recommended Action">
-            <Textarea onChange={(e) => setRecommendedAction(e.target.value)} rows={3} value={recommendedAction} />
+          <Field htmlFor="assessment-recommended-action" label="Recommended Action">
+            <Textarea id="assessment-recommended-action" onChange={(e) => setRecommendedAction(e.target.value)} rows={3} value={recommendedAction} />
           </Field>
           <Field label="Actual Action Taken (optional)">
             <Textarea aria-label="Actual Action Taken" onChange={(e) => setActualAction(e.target.value)} rows={2} value={actualAction} />
           </Field>
-          <Field label="Interim Mitigation">
-            <Textarea onChange={(e) => setInterimMitigation(e.target.value)} rows={3} value={interimMitigation} />
+          <Field htmlFor="assessment-interim-mitigation" label="Interim Mitigation">
+            <Textarea id="assessment-interim-mitigation" onChange={(e) => setInterimMitigation(e.target.value)} rows={3} value={interimMitigation} />
           </Field>
           <Field label="Supporting Evidence URL (optional)">
             <Input
@@ -179,11 +179,11 @@ export function OperationalAssessmentDialog({
               value={evidenceUrl}
             />
           </Field>
-          <Field label="Deferment or Referral Reason (optional)">
-            <Textarea maxLength={OPERATIONAL_ASSESSMENT_REASON_MAX_LENGTH} onChange={(e) => setDefermentOrReferralReason(e.target.value)} rows={3} value={defermentOrReferralReason} />
+          <Field htmlFor="assessment-deferment-reason" label="Deferment or Referral Reason (optional)">
+            <Textarea id="assessment-deferment-reason" maxLength={OPERATIONAL_ASSESSMENT_REASON_MAX_LENGTH} onChange={(e) => setDefermentOrReferralReason(e.target.value)} rows={3} value={defermentOrReferralReason} />
           </Field>
-          <Field label="Additional Remarks (optional)">
-            <Textarea onChange={(e) => setRemarks(e.target.value)} rows={2} value={remarks} />
+          <Field htmlFor="assessment-remarks" label="Additional Remarks (optional)">
+            <Textarea id="assessment-remarks" onChange={(e) => setRemarks(e.target.value)} rows={2} value={remarks} />
           </Field>
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
@@ -197,10 +197,13 @@ export function OperationalAssessmentDialog({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+// With htmlFor the caption is the control's real <label> (IAN-30); fields
+// that wrap a checkbox group or already carry aria-label keep a plain caption.
+function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
+  const Caption = htmlFor ? "label" : "p";
   return (
     <div className="space-y-1">
-      <p className="text-xs font-medium text-ink-500">{label}</p>
+      <Caption className="block text-xs font-medium text-ink-500" htmlFor={htmlFor}>{label}</Caption>
       {children}
     </div>
   );
