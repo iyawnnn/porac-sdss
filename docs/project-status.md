@@ -44,7 +44,9 @@ No new permissions, scoring changes, mirror removal or audit rewriting. Producti
 - IAN-27: `/notifications` (staff) and `/citizens/notifications` (citizen) are separate guarded routes; permission matrix is now 98 routes / 588 cells.
 - IAN-28/29/30: citizen dashboard mobile overflow, Add Admin autocomplete, Operational Assessment labels.
 
-Verified: API 85 suites / 1,981 tests, all CI PGlite harnesses, root type-check/lint/build, API build. One full Playwright run on phase2-test served a production build by mistake (213 passed, 6 stale-after-refresh failures in untouched admin flows; the one rerun under `next dev` passed); the dev-mode full rerun was stopped by host memory pressure at 76/308. **A complete Playwright pass is still an open release gate**, as is real-browser password-manager confirmation for IAN-29.
+Verified: API 85 suites / 1,981 tests, all CI PGlite harnesses, root type-check/lint/build, API build. One full Playwright run on phase2-test served a production build by mistake (213 passed, 6 stale-after-refresh failures in untouched admin flows; the one rerun under `next dev` passed); the dev-mode full rerun was stopped by host memory pressure at 76/308.
+
+2026-11-14: one complete Playwright run under `next dev` on phase2-test (not freshly reset; owner reset needs approval) passed 308/308, 0 skipped, 0 flaky, exit 0, 24.9 min. A local, uncommitted five-role acceptance walk then took one new report through citizen → Focal (acknowledge, screen) → MEO (assessment, completed and cancelled Work Orders, resolution) → citizen (resolution, confirm) → MIS (activity log), with reloads after each change, and reproduced IAN-25 (spoofed `X-Forwarded-For` still hit the 10/hour password-reset bucket) and IAN-27 (dual-cookie isolation) live. Still open: real password-manager behaviour for IAN-29 (only the `autocomplete` attributes are verified), and the production-build stale-after-refresh behaviour, which is unexplained.
 
 ## Phase 8e documentation verification
 
