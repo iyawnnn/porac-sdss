@@ -390,7 +390,7 @@ describe('AdminsService', () => {
       const db = makeDb();
       db.select.mockReturnValueOnce(chain([]));
       db.insert.mockReturnValueOnce({
-        values: () => ({ returning: () => Promise.reject({ code: '23505' }) }),
+        values: () => ({ returning: () => Promise.reject({ message: 'Failed query', cause: { code: '23505' } }) }),
       });
       const { audit, logInTx } = makeAudit();
       const service = new AdminsService(db, audit);

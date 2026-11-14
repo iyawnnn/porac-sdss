@@ -11,5 +11,8 @@ export const isValidPassword = (password: string): boolean =>
   password.length >= 8 &&
   Buffer.byteLength(password, 'utf8') <= BCRYPT_PASSWORD_MAX_BYTES;
 
+// Drizzle wraps the postgres.js error, so the SQLSTATE may be on `cause`.
 export const isUniqueViolation = (error: unknown): boolean =>
-  (error as { code?: unknown } | null)?.code === '23505';
+  [error, (error as { cause?: unknown } | null)?.cause].some(
+    (e) => (e as { code?: unknown } | null)?.code === '23505',
+  );

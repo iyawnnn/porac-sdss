@@ -302,7 +302,7 @@ describe('AuthService — existing password flows stay intact', () => {
     const db = {
       select: jest.fn().mockReturnValueOnce(chain([])),
       insert: jest.fn().mockReturnValue({
-        values: () => ({ returning: () => Promise.reject({ code: '23505' }) }),
+        values: () => ({ returning: () => Promise.reject({ message: 'Failed query', cause: { code: '23505' } }) }),
       }),
     } as unknown as PostgresJsDatabase;
     const service = new AuthService(
