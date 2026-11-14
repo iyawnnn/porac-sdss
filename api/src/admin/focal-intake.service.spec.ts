@@ -252,6 +252,14 @@ describe('FocalIntakeService reportReference is the stored tracking reference (P
 });
 
 describe('FocalIntakeService.acknowledge', () => {
+  it('rejects remarks longer than 1000 characters before reading the report', async () => {
+    const { service, logInPgTx } = makeService([]);
+    await expect(
+      service.acknowledge(1, FOCAL, 'x'.repeat(1001)),
+    ).rejects.toThrow('Remarks must be 1000 characters or fewer.');
+    expect(logInPgTx).not.toHaveBeenCalled();
+  });
+
   it('404s when the report does not exist', async () => {
     const { service } = makeService([[]]);
     await expect(service.acknowledge(1, FOCAL, undefined)).rejects.toThrow(
