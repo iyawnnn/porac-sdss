@@ -1,4 +1,16 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { SystemAdminGuard } from '../common/guards/system-admin.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -69,7 +81,7 @@ export class AdminsController {
     } catch (err) {
       if (err instanceof WeakPasswordError) {
         throw new BadRequestException(
-          'Password must be at least 8 characters.',
+          'Password must be at least 8 characters and no more than 72 bytes.',
         );
       }
       if (err instanceof SelfResetNotAllowedError) {

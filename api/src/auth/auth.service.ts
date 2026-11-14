@@ -7,7 +7,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
@@ -16,6 +16,13 @@ import { SessionService } from './session.service';
 import { RateLimitService } from '../domain/ratelimit.service';
 import { normalizeEmail } from '../common/utils/normalize-email';
 import { AdminAuditService } from '../admin/admin-audit.service';
+import {
+  EMAIL_MAX_LENGTH,
+  isUniqueViolation,
+  isValidEmail,
+  isValidPassword,
+  NAME_MAX_LENGTH,
+} from '../common/utils/account-validation';
 
 @Injectable()
 export class AuthService {
@@ -52,7 +59,7 @@ export class AuthService {
     const [admin] = await this.db
       .select()
       .from(admins)
-      .where(eq(admins.email, email));
+      .where(sql`lower(${admins.email}) = ${normalized}`);
     // Deactivated admins get the same generic error as a wrong password —
     // deliberately not a distinct message, so a login attempt can't be used
     // to probe whether an email belongs to a deactivated account. Recording
@@ -197,8 +204,7 @@ export class AuthService {
       typeof email !== 'string' ||
       typeof password !== 'string' ||
       typeof firstName !== 'string' ||
-      typeof lastName !== 'string' ||
-      password.length < 8
+      typeof lastName !== 'string'
     ) {
       throw new BadRequestException(
         'Email, password (min 8 chars), first name, and last name are required.',
@@ -210,6 +216,29 @@ export class AuthService {
     // stored row must agree on the same normalized value, or case/whitespace
     // variants of the same address could silently create two accounts.
     const normalizedEmail = normalizeEmail(email);
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
+
+    if (!isValidEmail(normalizedEmail)) {
+      throw new BadRequestException(
+        `Email must be valid and ${EMAIL_MAX_LENGTH} characters or fewer.`,
+      );
+    }
+    if (
+      !trimmedFirstName ||
+      trimmedFirstName.length > NAME_MAX_LENGTH ||
+      !trimmedLastName ||
+      trimmedLastName.length > NAME_MAX_LENGTH
+    ) {
+      throw new BadRequestException(
+        `First name and last name are required and must be ${NAME_MAX_LENGTH} characters or fewer.`,
+      );
+    }
+    if (!isValidPassword(password)) {
+      throw new BadRequestException(
+        'Password must be at least 8 characters and no more than 72 bytes.',
+      );
+    }
 
     const [existing] = await this.db
       .select()
@@ -220,10 +249,25 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const [citizen] = await this.db
-      .insert(citizens)
-      .values({ email: normalizedEmail, passwordHash, firstName, lastName })
-      .returning();
+    let citizen: typeof citizens.$inferSelect;
+    try {
+      [citizen] = await this.db
+        .insert(citizens)
+        .values({
+          email: normalizedEmail,
+          passwordHash,
+          firstName: trimmedFirstName,
+          lastName: trimmedLastName,
+        })
+        .returning();
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'An account with this email already exists.',
+        );
+      }
+      throw error;
+    }
 
     const token = await this.sessions.signCitizenSession({
       citizenId: citizen.id,
