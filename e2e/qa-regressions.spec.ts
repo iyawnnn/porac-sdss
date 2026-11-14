@@ -76,12 +76,17 @@ test.describe.serial("QA regressions", () => {
   });
 
   for (const [name, account] of [["MEO", E2E_MEO_ADMIN], ["MDRRMO", E2E_MDRRMO_ADMIN]] as const) {
-    test(`Q-05: ${name} can export submitted-reports.csv`, async ({ page }) => {
+    test(`Q-05: ${name} can export the submitted-reports and flagged CSVs`, async ({ page }) => {
       await loginAdmin(page, account);
-      const res = await page.request.get("/api/admin/reports/submitted-reports.csv");
-      expect(res.status()).toBe(200);
-      expect(res.headers()["content-type"]).toContain("text/csv");
-      expect((await res.text()).split(/\r?\n/)[0]).toContain("Report ID");
+      for (const [path, firstHeader] of [
+        ["submitted-reports.csv", "Tracking Reference"],
+        ["flagged.csv", "Report ID"],
+      ] as const) {
+        const res = await page.request.get(`/api/admin/reports/${path}`);
+        expect(res.status()).toBe(200);
+        expect(res.headers()["content-type"]).toContain("text/csv");
+        expect((await res.text()).split(/\r?\n/)[0]).toContain(firstHeader);
+      }
     });
   }
 
