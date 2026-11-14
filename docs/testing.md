@@ -233,6 +233,8 @@ pnpm exec tsc --noEmit
 pnpm exec playwright test --workers=1 --max-failures=6
 ```
 
+**Production build, too (IAN-32).** `next dev` hid a production-only bug: after a save, Ticket Detail kept showing the old status until a reload, and a second click advanced the ticket again. The suite passes against `next build && next start` as well: build with `API_ORIGIN`/`INTERNAL_API_URL` pointing at the test API, start it on its own port, and set `PLAYWRIGHT_BASE_URL` to that port so Playwright reuses it instead of starting `npm run dev`. Before a release, run the full suite against the production build. Each full run, in either mode, still uses 15 of the 20 report submissions allowed per hour.
+
 **When touching auth, RBAC, or scoping**, the highest-value targeted runs are:
 ```bash
 pnpm exec playwright test e2e/admin-rbac.spec.ts e2e/admin-password.spec.ts --workers=1
