@@ -1109,7 +1109,9 @@ export class TicketsService {
     // conditioned on the same status this check compared against.
     if (expectedStatus !== undefined) {
       if (!TICKET_STATUSES.includes(expectedStatus as TicketStatus)) {
-        throw new BadRequestException('expectedStatus must be a ticket status.');
+        throw new BadRequestException(
+          'expectedStatus must be a ticket status.',
+        );
       }
       if (expectedStatus !== ticket.status) {
         throw new ConflictException(
@@ -1957,7 +1959,14 @@ export class TicketsService {
     // Each ticket advances from the status it had when it was checked here,
     // so a ticket that moved on in between is skipped, not advanced twice.
     const result = await this.runBulk(eligible, async (id) => {
-      await this.advanceStatus(id, admin, undefined, undefined, undefined, statusById.get(id));
+      await this.advanceStatus(
+        id,
+        admin,
+        undefined,
+        undefined,
+        undefined,
+        statusById.get(id),
+      );
     });
     return { ok: result.ok, skipped: [...skipped, ...result.skipped] };
   }

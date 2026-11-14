@@ -818,7 +818,14 @@ describe('advancing with expectedStatus (IAN-32)', () => {
   it('advances exactly one step when the expected status matches', async () => {
     const t = build(resolveResponder({ status: 'Reported' }));
     await expect(
-      t.service.advanceStatus(7, MEO, undefined, undefined, undefined, 'Reported'),
+      t.service.advanceStatus(
+        7,
+        MEO,
+        undefined,
+        undefined,
+        undefined,
+        'Reported',
+      ),
     ).resolves.toEqual({ status: 'Under Review' });
     expect(updates(t)).toHaveLength(1);
     expect(updates(t)[0].values).toEqual(['Under Review', 7, 'Reported']);
@@ -826,50 +833,93 @@ describe('advancing with expectedStatus (IAN-32)', () => {
 
   it('refuses a stale second click (409) and writes nothing', async () => {
     const t = build(resolveResponder({ status: 'Under Review' }));
-    const attempt = t.service.advanceStatus(7, MEO, undefined, undefined, undefined, 'Reported');
+    const attempt = t.service.advanceStatus(
+      7,
+      MEO,
+      undefined,
+      undefined,
+      undefined,
+      'Reported',
+    );
     await expect(attempt).rejects.toBeInstanceOf(ConflictException);
-    await expect(attempt).rejects.toThrow('Ticket #7 is already Under Review; it was not changed.');
+    await expect(attempt).rejects.toThrow(
+      'Ticket #7 is already Under Review; it was not changed.',
+    );
     expect(t.writes()).toHaveLength(0);
   });
 
   it('refuses a stale resolve the same way, before the photo upload', async () => {
     const t = build(resolveResponder({ status: 'Resolved' }));
     await expect(
-      t.service.advanceStatus(7, MEO, 'Patched.', Buffer.from('x'), 'MUNICIPAL_ACTION_COMPLETED', 'In Progress'),
+      t.service.advanceStatus(
+        7,
+        MEO,
+        'Patched.',
+        Buffer.from('x'),
+        'MUNICIPAL_ACTION_COMPLETED',
+        'In Progress',
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(t.uploadImage).not.toHaveBeenCalled();
     expect(t.writes()).toHaveLength(0);
   });
 
-  it.each([['Done'], [''], [42]])('rejects expectedStatus %p (400) and writes nothing', async (expected) => {
-    const t = build(resolveResponder({ status: 'Reported' }));
-    await expect(
-      t.service.advanceStatus(7, MEO, undefined, undefined, undefined, expected),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(t.writes()).toHaveLength(0);
-  });
+  it.each([['Done'], [''], [42]])(
+    'rejects expectedStatus %p (400) and writes nothing',
+    async (expected) => {
+      const t = build(resolveResponder({ status: 'Reported' }));
+      await expect(
+        t.service.advanceStatus(
+          7,
+          MEO,
+          undefined,
+          undefined,
+          undefined,
+          expected,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(t.writes()).toHaveLength(0);
+    },
+  );
 
   it('still refuses (409) when another request wins the race after the check', async () => {
     const t = build(resolveResponder({ status: 'Reported', updateCount: 0 }));
     await expect(
-      t.service.advanceStatus(7, MEO, undefined, undefined, undefined, 'Reported'),
+      t.service.advanceStatus(
+        7,
+        MEO,
+        undefined,
+        undefined,
+        undefined,
+        'Reported',
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(t.calls.filter((c) => /^\s*INSERT/.test(c.text))).toHaveLength(0);
   });
 
   it('keeps callers that send no expectedStatus working', async () => {
     const t = build(resolveResponder({ status: 'Reported' }));
-    await expect(t.service.advanceStatus(7, MEO, undefined, undefined)).resolves.toEqual({ status: 'Under Review' });
+    await expect(
+      t.service.advanceStatus(7, MEO, undefined, undefined),
+    ).resolves.toEqual({ status: 'Under Review' });
   });
 
   it('bulk advance skips a ticket that moved on after it was selected', async () => {
     const base = resolveResponder({ status: 'Under Review' });
     const t = build((text, values) =>
-      /SELECT id, status FROM tickets WHERE id = ANY/.test(text) ? [{ id: 7, status: 'Reported' }] : base(text, values),
+      /SELECT id, status FROM tickets WHERE id = ANY/.test(text)
+        ? [{ id: 7, status: 'Reported' }]
+        : base(text, values),
     );
     await expect(t.service.bulkAdvanceStatus([7], MEO)).resolves.toEqual({
       ok: [],
-      skipped: [{ id: 7, reason: 'Ticket #7 is already Under Review; it was not changed. Reload to see its current status.' }],
+      skipped: [
+        {
+          id: 7,
+          reason:
+            'Ticket #7 is already Under Review; it was not changed. Reload to see its current status.',
+        },
+      ],
     });
     expect(t.writes()).toHaveLength(0);
   });
