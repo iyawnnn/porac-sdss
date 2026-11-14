@@ -514,8 +514,11 @@ export class FocalIntakeService {
   async acknowledge(
     reportId: number,
     admin: AdminSession,
-    remarks: string | undefined,
+    remarks: unknown,
   ): Promise<FocalIntakeDetail | null> {
+    if (remarks != null && typeof remarks !== 'string') {
+      throw new BadRequestException('Remarks must be text.');
+    }
     const trimmedRemarks = remarks?.trim() || null;
     if (
       trimmedRemarks &&

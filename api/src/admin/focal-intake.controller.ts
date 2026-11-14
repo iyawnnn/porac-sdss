@@ -4,10 +4,10 @@ import {
   Get,
   NotFoundException,
   Param,
-  ParseIntPipe,
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { PositiveIntPipe } from '../common/pipes/positive-int.pipe';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { FocalGuard } from '../common/guards/focal.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -45,7 +45,7 @@ export class FocalIntakeController {
   }
 
   @Get(':reportId')
-  async detail(@Param('reportId', ParseIntPipe) reportId: number) {
+  async detail(@Param('reportId', PositiveIntPipe) reportId: number) {
     const detail = await this.intake.getIntakeDetail(reportId);
     if (!detail) throw new NotFoundException('Report not found.');
     return detail;
@@ -55,7 +55,7 @@ export class FocalIntakeController {
   // (manuscript revision Phase 3, step 3c). Read-only; same 404 as above.
   @Get(':reportId/related-candidates')
   async relatedCandidates(
-    @Param('reportId', ParseIntPipe) reportId: number,
+    @Param('reportId', PositiveIntPipe) reportId: number,
     @CurrentAdmin() admin: AdminSession,
   ) {
     const related = await this.related.forReport(reportId, admin);
@@ -65,9 +65,9 @@ export class FocalIntakeController {
 
   @Post(':reportId/acknowledge')
   async acknowledge(
-    @Param('reportId', ParseIntPipe) reportId: number,
+    @Param('reportId', PositiveIntPipe) reportId: number,
     @CurrentAdmin() admin: AdminSession,
-    @Body('remarks') remarks: string | undefined,
+    @Body('remarks') remarks: unknown,
   ) {
     return this.intake.acknowledge(reportId, admin, remarks);
   }
@@ -77,7 +77,7 @@ export class FocalIntakeController {
   // which is gone. The service validates status and remarks.
   @Post(':reportId/severity-screening')
   async screenSeverity(
-    @Param('reportId', ParseIntPipe) reportId: number,
+    @Param('reportId', PositiveIntPipe) reportId: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('status') status: unknown,
     @Body('remarks') remarks: unknown,
@@ -92,7 +92,7 @@ export class FocalIntakeController {
   // ticket has left Reported or has an active Work Order.
   @Post(':reportId/reassign')
   async reassign(
-    @Param('reportId', ParseIntPipe) reportId: number,
+    @Param('reportId', PositiveIntPipe) reportId: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('toOffice') toOffice: unknown,
     @Body('reason') reason: unknown,
@@ -107,7 +107,7 @@ export class FocalIntakeController {
 
   @Post(':reportId/refer')
   async refer(
-    @Param('reportId', ParseIntPipe) reportId: number,
+    @Param('reportId', PositiveIntPipe) reportId: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('agency') agency: unknown,
     @Body('reason') reason: unknown,

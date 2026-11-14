@@ -6,11 +6,11 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { PositiveIntPipe } from '../common/pipes/positive-int.pipe';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { SystemAdminGuard } from '../common/guards/system-admin.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -57,7 +57,7 @@ export class AdminsController {
 
   @Patch(':id')
   update(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() actor: AdminSession,
     @Body('accountType') accountType: unknown,
     @Body('isFocal') isFocal: unknown,
@@ -72,7 +72,7 @@ export class AdminsController {
   @Post(':id/reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() actor: AdminSession,
     @Body('newPassword') newPassword: unknown,
   ) {
@@ -100,7 +100,7 @@ export class AdminsController {
   @Post(':id/deactivate')
   @HttpCode(HttpStatus.OK)
   deactivate(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() actor: AdminSession,
   ) {
     return this.admins.setActive(id, false, actor);
@@ -109,7 +109,7 @@ export class AdminsController {
   @Post(':id/reactivate')
   @HttpCode(HttpStatus.OK)
   reactivate(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() actor: AdminSession,
   ) {
     return this.admins.setActive(id, true, actor);

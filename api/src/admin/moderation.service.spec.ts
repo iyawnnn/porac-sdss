@@ -197,7 +197,10 @@ describe('parseModerationQuery', () => {
 
   it('accepts a known current category', () => {
     expect(
-      service.parseModerationQuery({ category: 'Pothole / Road Surface Damage' }, MEO_ADMIN).category,
+      service.parseModerationQuery(
+        { category: 'Pothole / Road Surface Damage' },
+        MEO_ADMIN,
+      ).category,
     ).toBe('Pothole / Road Surface Damage');
   });
 
@@ -372,6 +375,39 @@ describe('moderateReport transitions', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('rejects a malformed canonicalReportId before a database query', async () => {
+    const { sql, calls } = makeFakeSql([]);
+    const { notifications } = makeNotificationsMock();
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
+    await expect(
+      service.moderateReport(
+        1,
+        'duplicate',
+        MEO_ADMIN,
+        'abc' as unknown as number,
+      ),
+    ).rejects.toThrow('canonicalReportId must be a positive whole number.');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('rejects a non-text note before a database query', async () => {
+    const { sql, calls } = makeFakeSql([]);
+    const { notifications } = makeNotificationsMock();
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
+    await expect(
+      service.moderateReport(
+        1,
+        'dismiss',
+        MEO_ADMIN,
+        undefined,
+        5 as unknown as string,
+      ),
+    ).rejects.toThrow('note must be text.');
+    expect(calls).toHaveLength(0);
+  });
+
   it('duplicate rejects a canonicalReportId that does not exist', async () => {
     const { sql } = makeFakeSql([
       [{ assigned_office: 'MEO' }], // report -> ticket office lookup
@@ -398,10 +434,7 @@ describe('moderateReport transitions', () => {
   });
 
   it('treats a canonical report outside the acting office as not found', async () => {
-    const { sql, calls } = makeFakeSql([
-      [{ assigned_office: 'MEO' }],
-      [],
-    ]);
+    const { sql, calls } = makeFakeSql([[{ assigned_office: 'MEO' }], []]);
     const { notifications } = makeNotificationsMock();
     const { audit } = makeAuditMock();
     const service = new ModerationService(sql, notifications, audit);

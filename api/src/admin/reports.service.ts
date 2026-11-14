@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { AdminSession } from '../auth/session.service';
 import { toCsv } from '../common/utils/csv';
+import { parsePositiveInt } from '../common/pipes/positive-int.pipe';
 import { AdminAuditService } from './admin-audit.service';
 import { auditDetails } from './admin-audit-view';
 import {
@@ -32,8 +33,14 @@ function parseIdsParam(
   label = 'ticket',
 ): number[] | undefined {
   if (!value) return undefined;
-  const ids = [...new Set(value.split(',').map((part) => Number(part.trim())))];
-  if (ids.some((n) => !Number.isInteger(n) || n <= 0)) {
+  let ids: number[];
+  try {
+    ids = [
+      ...new Set(
+        value.split(',').map((part) => parsePositiveInt(part.trim(), label)),
+      ),
+    ];
+  } catch {
     throw new BadRequestException(
       `ids must be a comma-separated list of ${label} ids.`,
     );

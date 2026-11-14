@@ -9,6 +9,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Sql, TransactionSql } from 'postgres';
 import { PG } from '../db/db.module';
+import {
+  isPositiveInt,
+  parsePositiveInt,
+} from '../common/pipes/positive-int.pipe';
 import { MediaService } from '../domain/media.service';
 import {
   computePriorityBreakdown,
@@ -519,7 +523,9 @@ export class TicketsService {
     )
       ? query.category
       : undefined;
-    const barangayId = query.barangayId ? Number(query.barangayId) : undefined;
+    const barangayId = query.barangayId
+      ? parsePositiveInt(query.barangayId, 'barangayId')
+      : undefined;
     const disputed = query.disputed === 'true' ? true : undefined;
     const categoryReview = query.categoryReview === 'true' ? true : undefined;
     // Default is Operational Priority (priority_index) descending — the
@@ -576,7 +582,7 @@ export class TicketsService {
 
     const search = filters.search?.trim() || null;
     const searchPattern = search?.replace(/[\\%_]/g, '\\$&') ?? null;
-    const searchId = search && /^\d+$/.test(search) ? Number(search) : null;
+    const searchId = isPositiveInt(search) ? Number(search) : null;
     const page = Math.max(1, filters.page ?? 1);
     const limit = Math.max(
       1,
@@ -641,7 +647,7 @@ export class TicketsService {
   // Powers the queue's view-tab strip. Deliberately NOT a separate endpoint:
   // it rides along on GET /admin/tickets so it can't be fetched without the
   // list it labels, needs no second recalculation pass, and
-  // sidesteps the @Get(':id') ParseIntPipe route-ordering trap.
+  // sidesteps the @Get(':id') PositiveIntPipe route-ordering trap.
   //
   // Office scope is the caller's, not the current filter's — the tabs are a
   // fixed frame around everything this admin can see, so clicking MEO while
@@ -707,7 +713,7 @@ export class TicketsService {
           : sql`AND t.status = ${status}::ticket_status`;
 
     const search = filters.search?.trim() || null;
-    const searchId = search && /^\d+$/.test(search) ? Number(search) : null;
+    const searchId = isPositiveInt(search) ? Number(search) : null;
     // postgres.js's tagged template needs a string, not a raw Date, when
     // the same placeholder value is reused across multiple interpolation
     // sites in one query (it otherwise throws ERR_INVALID_ARG_TYPE trying

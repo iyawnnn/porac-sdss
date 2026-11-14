@@ -368,7 +368,7 @@ describe('bulk actions delegate rather than re-implementing', () => {
 });
 
 // Nest matches routes in declaration order, and 'bulk/reassign' matches the
-// pattern ':id/reassign' with :id = 'bulk'. That resolves to ParseIntPipe and
+// pattern ':id/reassign' with :id = 'bulk'. That resolves to PositiveIntPipe and
 // fails with "numeric string is expected" instead of reaching the bulk handler
 // — a bug this codebase actually shipped for one commit. A literal segment does
 // not win over a parameter by being more specific; only order decides.
@@ -409,6 +409,25 @@ describe('bulk route declaration order', () => {
 // drizzle/0034_saved_views_retire_hazard_urgency.sql.
 describe('TicketsService.parseTicketQuery default sort', () => {
   const service = buildService(jest.fn() as unknown as Sql);
+
+  it('rejects a malformed barangayId before it reaches SQL', () => {
+    expect(() =>
+      service.parseTicketQuery({ barangayId: 'abc' }, MEO_OFFICER),
+    ).toThrow('barangayId must be a positive whole number.');
+  });
+
+  it('treats an out-of-range all-digit search as text, not an integer id', async () => {
+    const calls: unknown[][] = [];
+    const sql = ((_strings: TemplateStringsArray, ...values: unknown[]) => {
+      calls.push(values);
+      return Promise.resolve([]);
+    }) as unknown as Sql;
+    const search = '99999999999999999999';
+    await buildService(sql).getTicketsForAdmin({ search });
+    const values = calls.at(-1)!;
+    expect(values).toContain(search);
+    expect(values).not.toContain(Number(search));
+  });
 
   it('defaults to Operational Priority descending when no sort is given', () => {
     const filters = service.parseTicketQuery({}, MEO_OFFICER);
@@ -464,8 +483,14 @@ describe('TicketsService.parseTicketQuery default sort', () => {
 
 describe('TicketsService.getTicketsForAdmin ORDER BY — Operational Priority vs Hazard Urgency', () => {
   it.each([
-    ['op_priority_desc', 't.priority_index DESC NULLS LAST, t.created_at DESC, t.id DESC'],
-    ['op_priority_asc', 't.priority_index ASC NULLS LAST, t.created_at DESC, t.id DESC'],
+    [
+      'op_priority_desc',
+      't.priority_index DESC NULLS LAST, t.created_at DESC, t.id DESC',
+    ],
+    [
+      'op_priority_asc',
+      't.priority_index ASC NULLS LAST, t.created_at DESC, t.id DESC',
+    ],
     ['newest', 't.created_at DESC, t.id DESC'],
   ])('adds an id tiebreaker for %s', (_sort, order) => {
     expect(ticketsServiceSource).toContain(`sql\`${order}\``);

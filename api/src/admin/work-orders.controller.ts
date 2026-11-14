@@ -4,12 +4,15 @@ import {
   Controller,
   Get,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import {
+  PositiveIntPipe,
+  parsePositiveInt,
+} from '../common/pipes/positive-int.pipe';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -41,7 +44,10 @@ export class WorkOrdersController {
   }
 
   @Get(':id')
-  get(@Param('id', ParseIntPipe) id: number, @CurrentAdmin() admin: AdminSession) {
+  get(
+    @Param('id', PositiveIntPipe) id: number,
+    @CurrentAdmin() admin: AdminSession,
+  ) {
     return this.workOrders.get(id, admin);
   }
 
@@ -54,7 +60,10 @@ export class WorkOrdersController {
     @Body('assignedAdminId') assignedAdminId: unknown,
     @Body('dueDate') dueDate: unknown,
   ) {
-    return this.workOrders.create({ ticketId, title, notes, assignedAdminId, dueDate }, admin);
+    return this.workOrders.create(
+      { ticketId, title, notes, assignedAdminId, dueDate },
+      admin,
+    );
   }
 
   // Declared before @Patch(':id')/@Post(':id/status') is not required (the
@@ -77,10 +86,9 @@ export class WorkOrdersController {
         `ticketIds must contain at most ${BULK_MAX_TICKETS} ids`,
       );
     }
-    const ids = [...new Set(ticketIds.map((v) => Number(v)))];
-    if (ids.some((n) => !Number.isInteger(n) || n <= 0)) {
-      throw new BadRequestException('ticketIds must be positive integers');
-    }
+    const ids = [
+      ...new Set(ticketIds.map((v) => parsePositiveInt(v, 'ticketIds'))),
+    ];
     return this.workOrders.bulkCreate(
       ids,
       { title, notes, assignedAdminId, dueDate },
@@ -90,14 +98,18 @@ export class WorkOrdersController {
 
   @Patch(':id')
   update(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('title') title: unknown,
     @Body('notes') notes: unknown,
     @Body('assignedAdminId') assignedAdminId: unknown,
     @Body('dueDate') dueDate: unknown,
   ) {
-    return this.workOrders.update(id, { title, notes, assignedAdminId, dueDate }, admin);
+    return this.workOrders.update(
+      id,
+      { title, notes, assignedAdminId, dueDate },
+      admin,
+    );
   }
 
   // pending -> in_progress -> completed. status 'cancelled' is accepted here
@@ -105,7 +117,7 @@ export class WorkOrdersController {
   // /:id/cancel (manuscript revision Phase 5, step 5b).
   @Post(':id/status')
   setStatus(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('status') status: unknown,
     @Body('reason') reason: unknown,
@@ -121,7 +133,7 @@ export class WorkOrdersController {
   // characters), optional replacement Work Order of the same ticket.
   @Post(':id/cancel')
   cancel(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('reason') reason: unknown,
     @Body('replacementWorkOrderId') replacementWorkOrderId: unknown,

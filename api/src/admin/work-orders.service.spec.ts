@@ -34,7 +34,10 @@ const MEO_OFFICER: AdminSession = {
 };
 
 it('uses id as the final work-order list pagination tiebreaker', () => {
-  const source = readFileSync(join(__dirname, 'work-orders.service.ts'), 'utf8');
+  const source = readFileSync(
+    join(__dirname, 'work-orders.service.ts'),
+    'utf8',
+  );
   expect(
     source.match(
       /\.orderBy\(desc\(workOrders\.createdAt\), desc\(workOrders\.id\)\)/g,
@@ -406,16 +409,13 @@ describe('WorkOrdersService.create', () => {
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('rejects an invalid ticketId before touching the database', async () => {
+  it('rejects an out-of-range ticketId before touching the database', async () => {
     const db = makeDb();
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
     await expect(
-      service.create(
-        { ...CREATE_INPUT, ticketId: 'not-a-number' },
-        MEO_OFFICER,
-      ),
-    ).rejects.toThrow(BadRequestException);
+      service.create({ ...CREATE_INPUT, ticketId: 1e30 }, MEO_OFFICER),
+    ).rejects.toThrow('ticketId must be a positive whole number.');
     expect(db.select).not.toHaveBeenCalled();
   });
 
@@ -1296,9 +1296,7 @@ describe('WorkOrdersService.cancel', () => {
     db.select
       .mockReturnValueOnce(chain(workOrderRow({ status: 'in_progress' })))
       .mockReturnValueOnce(ticketChain({ status: 'Rejected' }));
-    db.update.mockReturnValueOnce(
-      chain(workOrderRow({ status: 'cancelled' })),
-    );
+    db.update.mockReturnValueOnce(chain(workOrderRow({ status: 'cancelled' })));
     const { audit, notifications } = makeDeps();
     const service = new WorkOrdersService(db, notifications, audit);
 

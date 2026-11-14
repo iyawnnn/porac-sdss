@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import type { Sql } from 'postgres';
 import { PG } from '../db/db.module';
+import { parsePositiveInt } from '../common/pipes/positive-int.pipe';
 import {
   ALL_CATEGORIES,
   MODERATION_NOTE_MAX_LENGTH,
@@ -131,7 +132,9 @@ export class ModerationService {
     )
       ? query.category
       : undefined;
-    const barangayId = query.barangayId ? Number(query.barangayId) : undefined;
+    const barangayId = query.barangayId
+      ? parsePositiveInt(query.barangayId, 'barangayId')
+      : undefined;
     const flag = (FLAG_TYPES as string[]).includes(query.flag ?? '')
       ? (query.flag as FlagType)
       : undefined;
@@ -345,10 +348,21 @@ export class ModerationService {
     note?: string,
   ): Promise<{ status: string }> {
     const sql = this.pg;
+    if (note != null && typeof note !== 'string') {
+      throw new BadRequestException('note must be text.');
+    }
     const trimmedNote = note?.trim() || undefined;
     if (trimmedNote && trimmedNote.length > MODERATION_NOTE_MAX_LENGTH) {
       throw new BadRequestException(
         `note must be ${MODERATION_NOTE_MAX_LENGTH} characters or fewer.`,
+      );
+    }
+    if (action === 'duplicate') {
+      if (canonicalReportId == null)
+        throw new BadRequestException('canonicalReportId is required');
+      canonicalReportId = parsePositiveInt(
+        canonicalReportId,
+        'canonicalReportId',
       );
     }
 
@@ -361,23 +375,20 @@ export class ModerationService {
     assertOfficeAccess(admin, report.assigned_office);
 
     if (action === 'duplicate') {
-      if (!canonicalReportId)
-        throw new BadRequestException('canonicalReportId is required');
-      if (canonicalReportId === reportId) {
+      const canonicalId = canonicalReportId as number;
+      if (canonicalId === reportId) {
         throw new BadRequestException(
           'A report cannot be marked as a duplicate of itself.',
         );
       }
-      const [canonical] = await sql<
-        { id: number }[]
-      >`
+      const [canonical] = await sql<{ id: number }[]>`
         SELECT r.id FROM reports r
         JOIN tickets t ON t.id = r.ticket_id
-        WHERE r.id = ${canonicalReportId}
+        WHERE r.id = ${canonicalId}
           AND t.assigned_office = ${report.assigned_office}::office
       `;
       if (!canonical)
-        throw new NotFoundException(`Report #${canonicalReportId} not found`);
+        throw new NotFoundException(`Report #${canonicalId} not found`);
     }
 
     // Quarantine hides a citizen's report from the public map — that's

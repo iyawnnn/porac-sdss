@@ -21,6 +21,7 @@ import {
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import { DB } from '../db/db.module';
+import { parsePositiveInt } from '../common/pipes/positive-int.pipe';
 import {
   admins,
   operationalAssessments,
@@ -342,7 +343,9 @@ export class WorkOrdersService {
     const status = WORK_ORDER_STATUSES.includes(query.status as WorkOrderStatus)
       ? (query.status as WorkOrderStatus)
       : undefined;
-    const ticketId = query.ticketId ? Number(query.ticketId) : undefined;
+    const ticketId = query.ticketId
+      ? parsePositiveInt(query.ticketId, 'ticketId')
+      : undefined;
     // 'me' is a viewer-relative sentinel ("My Assignments" quick filter) —
     // resolved from the caller's own session, never trusted from the query
     // string as a raw id, so it can't be used to probe another admin's
@@ -352,7 +355,7 @@ export class WorkOrdersService {
       query.assignedAdminId === 'me'
         ? admin.adminId
         : query.assignedAdminId
-          ? Number(query.assignedAdminId)
+          ? parsePositiveInt(query.assignedAdminId, 'assignedAdminId')
           : undefined;
     const overdue = query.overdue === 'true' ? true : undefined;
     const page = Math.max(1, Number(query.page) || 1);
@@ -473,10 +476,7 @@ export class WorkOrdersService {
     },
     admin: AdminSession,
   ): Promise<WorkOrderRow> {
-    const ticketId = Number(input.ticketId);
-    if (!Number.isInteger(ticketId) || ticketId <= 0) {
-      throw new BadRequestException('ticketId is required.');
-    }
+    const ticketId = parsePositiveInt(input.ticketId, 'ticketId');
     if (typeof input.title !== 'string' || !input.title.trim()) {
       throw new BadRequestException('title is required.');
     }
@@ -495,10 +495,9 @@ export class WorkOrdersService {
       );
     }
     const assignedAdminId =
-      input.assignedAdminId != null ? Number(input.assignedAdminId) : null;
-    if (assignedAdminId != null && !Number.isInteger(assignedAdminId)) {
-      throw new BadRequestException('assignedAdminId must be an integer.');
-    }
+      input.assignedAdminId != null
+        ? parsePositiveInt(input.assignedAdminId, 'assignedAdminId')
+        : null;
     const dueDate = parseDueDate(input.dueDate);
 
     // Every creation path (this, bulkCreate, the demo seed) comes through
@@ -649,13 +648,8 @@ export class WorkOrdersService {
         if (input.assignedAdminId !== undefined) {
           const assignedAdminId =
             input.assignedAdminId != null
-              ? Number(input.assignedAdminId)
+              ? parsePositiveInt(input.assignedAdminId, 'assignedAdminId')
               : null;
-          if (assignedAdminId != null && !Number.isInteger(assignedAdminId)) {
-            throw new BadRequestException(
-              'assignedAdminId must be an integer.',
-            );
-          }
           // assigned_office itself is immutable via this endpoint (it's only
           // ever set once, from the ticket, at creation — see create()
           // above), so there is no "office changed" case to reconcile here:
@@ -823,12 +817,10 @@ export class WorkOrdersService {
       input.replacementWorkOrderId !== null &&
       input.replacementWorkOrderId !== ''
     ) {
-      replacementId = Number(input.replacementWorkOrderId);
-      if (!Number.isInteger(replacementId) || replacementId <= 0) {
-        throw new BadRequestException(
-          'replacementWorkOrderId must be a Work Order id.',
-        );
-      }
+      replacementId = parsePositiveInt(
+        input.replacementWorkOrderId,
+        'replacementWorkOrderId',
+      );
       if (replacementId === id) {
         throw new BadRequestException(
           'A Work Order cannot be its own replacement.',
