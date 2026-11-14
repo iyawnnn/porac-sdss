@@ -159,8 +159,8 @@ export function QueueRow({
         <span role="cell">
           {/* The chevron opens ONE legal step, not a status picker: the server's
               advanceStatus only ever moves a ticket to NEXT_STATUS[current], and
-              Resolved additionally needs a proof photo that a row menu cannot
-              collect -- so that step sends the admin to the detail page. */}
+              resolving needs outcome details that a row menu cannot collect,
+              so that step sends the admin to the detail page. */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -180,7 +180,7 @@ export function QueueRow({
             <DropdownMenuContent align="start" className="w-52">
               {nextStatus === "Resolved" ? (
                 <DropdownMenuItem asChild>
-                  <Link href={detailHref}>Resolve (needs photo)</Link>
+                  <Link href={detailHref}>Resolve</Link>
                 </DropdownMenuItem>
               ) : nextStatus ? (
                 <DropdownMenuItem onSelect={onAdvanceStatus}>Advance to {nextStatus}</DropdownMenuItem>

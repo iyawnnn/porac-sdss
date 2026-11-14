@@ -156,7 +156,7 @@ export function HorizontalStatusTracker({
             <p className="text-sm text-ink-500">{readOnlyNote}</p>
           ) : nextStatus ? (
             <Button className="w-full sm:w-auto" disabled={advancing || refreshing} onClick={handleAdvanceClick}>
-              {advancing || refreshing ? "Updating..." : `Advance to ${nextStatus}`}
+              {advancing || refreshing ? "Updating..." : nextStatus === "Resolved" ? "Resolve" : `Advance to ${nextStatus}`}
             </Button>
           ) : (
             <p className="text-sm text-ink-500">{isRejected ? "This ticket was rejected." : "No further status transition."}</p>
