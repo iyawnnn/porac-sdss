@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, AlertCircle, CheckCircle2, Radar } from "lucide-react";
 import { MUNICIPALITY } from "@/lib/municipality-config";
@@ -10,7 +10,6 @@ import { authNoticeMessage } from "./authNotices";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 export default function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const oauthError = oauthErrorMessage(searchParams.get("error"));
   const notice = authNoticeMessage(searchParams.get("notice"));
@@ -35,8 +34,8 @@ export default function LoginForm() {
       });
 
       if (res.ok) {
-        router.push("/dashboard");
-        router.refresh();
+        // One full load, so the dashboard renders once with the new session.
+        window.location.assign("/dashboard");
       } else {
         const data = await res.json();
         setError(apiErrorMessage(data, "Login failed"));
