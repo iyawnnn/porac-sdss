@@ -34,6 +34,7 @@ import {
   assertOfficeAccess,
   isOperationalPersonnel,
 } from '../common/authz/admin-scope';
+import { assertNotMergedAway } from './ticket-grouping.rules';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminAuditService } from './admin-audit.service';
 import {
@@ -79,6 +80,12 @@ const TICKET_STILL_WRITABLE = dsql`EXISTS (
   WHERE t.id = ${workOrders.ticketId}
     AND t.merged_into_ticket_id IS NULL
     AND t.status <> 'Rejected'
+)`;
+
+const TICKET_STILL_UNMERGED = dsql`EXISTS (
+  SELECT 1 FROM tickets t
+  WHERE t.id = ${workOrders.ticketId}
+    AND t.merged_into_ticket_id IS NULL
 )`;
 
 export interface WorkOrderRow {
@@ -391,7 +398,7 @@ export class WorkOrdersService {
         // getNeedsAttention already use for this table pair.
         .innerJoin(tickets, eq(workOrders.ticketId, tickets.id))
         .where(where)
-        .orderBy(desc(workOrders.createdAt))
+        .orderBy(desc(workOrders.createdAt), desc(workOrders.id))
         .limit(limit)
         .offset((page - 1) * limit),
       this.db
@@ -833,7 +840,8 @@ export class WorkOrdersService {
       return await this.db.transaction(async (tx) => {
         const existing = await this.lockWorkOrder(tx, id);
         const ticket = await this.lockTicket(tx, existing.ticket_id);
-        assertResponsibleOfficeCanAct(admin, ticket, 'Work Orders');
+        assertOfficeAccess(admin, ticket.assigned_office);
+        assertNotMergedAway(ticket);
         assertWorkOrderNotFinal(existing);
         assertWorkOrderTransition(existing, 'cancelled');
 
@@ -879,7 +887,7 @@ export class WorkOrdersService {
             and(
               eq(workOrders.id, id),
               inArray(workOrders.status, OPEN_WORK_ORDER_STATUSES),
-              TICKET_STILL_WRITABLE,
+              TICKET_STILL_UNMERGED,
             ),
           )
           .returning(SAFE_COLUMNS);
@@ -1069,7 +1077,7 @@ export class WorkOrdersService {
       .innerJoin(tickets, eq(workOrders.ticketId, tickets.id))
       .leftJoin(admins, eq(workOrders.assignedAdminId, admins.id))
       .where(where)
-      .orderBy(desc(workOrders.createdAt))
+      .orderBy(desc(workOrders.createdAt), desc(workOrders.id))
       .limit(EXPORT_ROW_LIMIT + 1);
 
     assertExportLimit(rows);

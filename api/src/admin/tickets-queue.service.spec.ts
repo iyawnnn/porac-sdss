@@ -463,6 +463,37 @@ describe('TicketsService.parseTicketQuery default sort', () => {
 });
 
 describe('TicketsService.getTicketsForAdmin ORDER BY — Operational Priority vs Hazard Urgency', () => {
+  it.each([
+    ['op_priority_desc', 't.priority_index DESC NULLS LAST, t.created_at DESC, t.id DESC'],
+    ['op_priority_asc', 't.priority_index ASC NULLS LAST, t.created_at DESC, t.id DESC'],
+    ['newest', 't.created_at DESC, t.id DESC'],
+  ])('adds an id tiebreaker for %s', (_sort, order) => {
+    expect(ticketsServiceSource).toContain(`sql\`${order}\``);
+  });
+
+  it('adds an id tiebreaker to the capped ticket export', () => {
+    expect(ticketsServiceSource).toContain(
+      'ORDER BY t.created_at DESC, t.id DESC',
+    );
+  });
+
+  it('searches tracking references and binds escaped ILIKE wildcards', async () => {
+    const calls: { text: string; values: unknown[] }[] = [];
+    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      calls.push({ text: strings.join(''), values });
+      return {
+        then(resolve: (value: unknown[]) => void) {
+          void Promise.resolve([]).then(resolve);
+        },
+      };
+    }) as unknown as Sql;
+    await buildService(sql).getTicketsForAdmin({ search: 'PRC_100%' });
+    const query = calls.at(-1)!;
+    expect(query.text).toContain('r.tracking_reference ILIKE');
+    expect(query.text).toContain("ESCAPE E'\\\\'");
+    expect(query.values).toContain('PRC\\_100\\%');
+  });
+
   it('sorts by priority_index (Operational Priority) by default, not priority_score', () => {
     const defaultBranch = ticketsServiceSource.match(
       /const orderBy =\s*\n([\s\S]*?)\n {4}const search/,

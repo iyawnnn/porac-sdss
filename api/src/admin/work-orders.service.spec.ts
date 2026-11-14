@@ -32,6 +32,15 @@ const MEO_OFFICER: AdminSession = {
   accountType: 'PERSONNEL',
   isFocal: false,
 };
+
+it('uses id as the final work-order list pagination tiebreaker', () => {
+  const source = readFileSync(join(__dirname, 'work-orders.service.ts'), 'utf8');
+  expect(
+    source.match(
+      /\.orderBy\(desc\(workOrders\.createdAt\), desc\(workOrders\.id\)\)/g,
+    ),
+  ).toHaveLength(2);
+});
 const MDRRMO_SUPERVISOR: AdminSession = {
   adminId: 2,
   email: 'mdrrmo@example.com',
@@ -1264,12 +1273,6 @@ describe('WorkOrdersService.cancel', () => {
     ['a System Administrator', SYSTEM_ADMIN, {}, ForbiddenException],
     ['Focal Personnel', FOCAL, {}, ForbiddenException],
     [
-      'on a Rejected ticket',
-      MEO_OFFICER,
-      { status: 'Rejected' },
-      ConflictException,
-    ],
-    [
       'on a merged-away ticket',
       MEO_OFFICER,
       { merged_into_ticket_id: 9 },
@@ -1286,6 +1289,23 @@ describe('WorkOrdersService.cancel', () => {
       error,
     );
     expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it('allows cancelling a stranded active Work Order on a Rejected ticket', async () => {
+    const db = makeDb();
+    db.select
+      .mockReturnValueOnce(chain(workOrderRow({ status: 'in_progress' })))
+      .mockReturnValueOnce(ticketChain({ status: 'Rejected' }));
+    db.update.mockReturnValueOnce(
+      chain(workOrderRow({ status: 'cancelled' })),
+    );
+    const { audit, notifications } = makeDeps();
+    const service = new WorkOrdersService(db, notifications, audit);
+
+    await expect(
+      service.cancel(10, { reason: 'Close stranded order' }, MEO_OFFICER),
+    ).resolves.toMatchObject({ status: 'cancelled' });
+    expect(db.updateWheres[0]).not.toMatch(/status <> 'Rejected'/);
   });
 
   it('stores a replacement on the same ticket and records it in the audit metadata', async () => {
