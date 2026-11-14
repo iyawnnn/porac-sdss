@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, AlertCircle, ShieldCheck } from "lucide-react";
 import { MUNICIPALITY } from "@/lib/municipality-config";
+import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 export default function AdminLoginForm() {
   const router = useRouter();
@@ -32,7 +33,7 @@ export default function AdminLoginForm() {
         router.refresh();
       } else {
         const data = await res.json();
-        setError(data.error ?? "Login failed");
+        setError(apiErrorMessage(data, "Login failed"));
         setSubmitting(false);
       }
     } catch {

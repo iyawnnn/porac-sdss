@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Eye, EyeOff, AlertCircle, Radar } from "lucide-react";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { oauthErrorMessage } from "./oauthErrors";
+import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 export default function SignupForm() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function SignupForm() {
         router.refresh();
       } else {
         const data = await res.json();
-        setError(data.error ?? "Sign up failed");
+        setError(apiErrorMessage(data, "Sign up failed"));
         setSubmitting(false);
       }
     } catch {

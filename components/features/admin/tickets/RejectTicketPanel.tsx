@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { reloadTicketDetail } from "./reloadTicketDetail";
+import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 export function RejectTicketPanel({ ticketId }: { ticketId: number }) {
   const router = useRouter();
@@ -31,7 +32,7 @@ export function RejectTicketPanel({ ticketId }: { ticketId: number }) {
       reloadTicketDetail(router);
     } else {
       const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Reject failed");
+      setError(apiErrorMessage(data, "Reject failed"));
       setSubmitting(false);
     }
   }
