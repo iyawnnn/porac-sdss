@@ -363,11 +363,21 @@ export class ModerationService {
     if (action === 'duplicate') {
       if (!canonicalReportId)
         throw new BadRequestException('canonicalReportId is required');
+      if (canonicalReportId === reportId) {
+        throw new BadRequestException(
+          'A report cannot be marked as a duplicate of itself.',
+        );
+      }
       const [canonical] = await sql<
         { id: number }[]
-      >`SELECT id FROM reports WHERE id = ${canonicalReportId}`;
+      >`
+        SELECT r.id FROM reports r
+        JOIN tickets t ON t.id = r.ticket_id
+        WHERE r.id = ${canonicalReportId}
+          AND t.assigned_office = ${report.assigned_office}::office
+      `;
       if (!canonical)
-        throw new BadRequestException('Canonical report not found');
+        throw new NotFoundException(`Report #${canonicalReportId} not found`);
     }
 
     // Quarantine hides a citizen's report from the public map — that's

@@ -383,7 +383,34 @@ describe('moderateReport transitions', () => {
 
     await expect(
       service.moderateReport(1, 'duplicate', MEO_ADMIN, 999),
-    ).rejects.toThrow('Canonical report not found');
+    ).rejects.toThrow('Report #999 not found');
+  });
+
+  it('duplicate rejects self-reference clearly before looking up a canonical report', async () => {
+    const { sql, calls } = makeFakeSql([[{ assigned_office: 'MEO' }]]);
+    const { notifications } = makeNotificationsMock();
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
+    await expect(
+      service.moderateReport(1, 'duplicate', MEO_ADMIN, 1),
+    ).rejects.toThrow('A report cannot be marked as a duplicate of itself.');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('treats a canonical report outside the acting office as not found', async () => {
+    const { sql, calls } = makeFakeSql([
+      [{ assigned_office: 'MEO' }],
+      [],
+    ]);
+    const { notifications } = makeNotificationsMock();
+    const { audit } = makeAuditMock();
+    const service = new ModerationService(sql, notifications, audit);
+    await expect(
+      service.moderateReport(1, 'duplicate', MEO_ADMIN, 42),
+    ).rejects.toThrow('Report #42 not found');
+    expect((calls[1] as [TemplateStringsArray])[0].join('')).toContain(
+      't.assigned_office',
+    );
   });
 
   it('duplicate with a valid canonicalReportId stores it as the note and notifies the citizen', async () => {
