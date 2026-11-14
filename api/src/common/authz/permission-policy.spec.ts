@@ -68,10 +68,10 @@ function fixturePolicy(): Policy {
 describe('independent permission policy and discovery failure gates', () => {
   it('classifies every checked-in row for all six identities', () => {
     expect(() => catalog.validatePolicy(policy)).not.toThrow();
-    expect(policy.routes).toHaveLength(94);
+    expect(policy.routes).toHaveLength(98);
     expect(
       policy.routes.reduce((n, r) => n + Object.keys(r.expected).length, 0),
-    ).toBe(564);
+    ).toBe(588);
   });
   it('finds a new registered controller through the Nest module graph', async () => {
     const module = await Test.createTestingModule({

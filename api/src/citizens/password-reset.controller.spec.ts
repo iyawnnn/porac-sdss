@@ -55,7 +55,7 @@ describe('PasswordResetController.forgotPassword', () => {
     ).rejects.toMatchObject({ status: 429 });
   });
 
-  it('reads the first hop of x-forwarded-for as the client IP', async () => {
+  it('keys the limit on req.ip, never a client-supplied x-forwarded-for', async () => {
     const requestReset = jest.fn().mockResolvedValue(undefined);
     const controller = new PasswordResetController({
       requestReset,
@@ -65,7 +65,7 @@ describe('PasswordResetController.forgotPassword', () => {
       makeReq({ 'x-forwarded-for': '1.1.1.1, 2.2.2.2' }),
       { email: 'citizen@example.com' },
     );
-    expect(requestReset).toHaveBeenCalledWith('citizen@example.com', '1.1.1.1');
+    expect(requestReset).toHaveBeenCalledWith('citizen@example.com', '9.9.9.9');
   });
 });
 

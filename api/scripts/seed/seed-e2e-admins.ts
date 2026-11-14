@@ -1,6 +1,9 @@
 import bcrypt from 'bcryptjs';
 import { sql } from '../lib/seed-db';
-import { E2E_ADMIN_ACCOUNTS } from '../../../e2e/test-credentials';
+import {
+  E2E_ADMIN_ACCOUNTS,
+  assertStaffPasswordConfigured,
+} from '../../../e2e/test-credentials';
 
 // Provisions the admin accounts Playwright's global setup (e2e/global-setup.ts)
 // and every admin-suite spec log in as. Idempotent by design (ON CONFLICT
@@ -12,6 +15,7 @@ import { E2E_ADMIN_ACCOUNTS } from '../../../e2e/test-credentials';
 // for provisioning a *real* admin) so production databases are never expected
 // to contain these demo credentials.
 async function main() {
+  assertStaffPasswordConfigured();
   for (const account of E2E_ADMIN_ACCOUNTS) {
     const passwordHash = await bcrypt.hash(account.password, 10);
     await sql`

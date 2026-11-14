@@ -80,7 +80,7 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <div className="flex flex-col gap-4 rounded-xl border border-line-200 bg-surface p-6 lg:col-span-2">
           <div className="flex items-center justify-between">
             <h2 className="text-[18px] font-semibold leading-[26px] text-ink-900">Recent Activity</h2>

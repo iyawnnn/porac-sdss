@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
+import { clientIp } from '../common/utils/client-ip';
 import { AuthService } from './auth.service';
 import {
   CITIZEN_SESSION_COOKIE,
@@ -32,18 +33,6 @@ interface LoginBody {
 interface SignupBody extends LoginBody {
   firstName?: unknown;
   lastName?: unknown;
-}
-
-// x-forwarded-for's first hop — main.ts sets `trust proxy` since all
-// traffic arrives one hop away via Next's rewrite proxy (same helper shape
-// as reports.controller.ts/password-reset.controller.ts's getClientIp).
-function getClientIp(req: Request): string {
-  const forwardedFor = req.headers['x-forwarded-for'];
-  if (forwardedFor) {
-    const value = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-    return value.split(',')[0].trim();
-  }
-  return req.ip ?? 'unknown';
 }
 
 @Controller()
@@ -114,7 +103,7 @@ export class AuthController {
       body.password,
       body.firstName,
       body.lastName,
-      getClientIp(req),
+      clientIp(req),
     );
     res.cookie(
       CITIZEN_SESSION_COOKIE,

@@ -7,6 +7,7 @@ import { Eye, EyeOff, AlertCircle, CheckCircle2, Radar } from "lucide-react";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { oauthErrorMessage } from "./oauthErrors";
 import { authNoticeMessage } from "./authNotices";
+import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function LoginForm() {
         router.refresh();
       } else {
         const data = await res.json();
-        setError(data.error ?? "Login failed");
+        setError(apiErrorMessage(data, "Login failed"));
         setSubmitting(false);
       }
     } catch {

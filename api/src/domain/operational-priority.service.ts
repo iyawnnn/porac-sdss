@@ -49,7 +49,11 @@ export class OperationalPriorityService {
   // ticket, so it never runs inside another write's transaction), on admin
   // reads and by the daily cron.
   async recalculateActiveTickets(): Promise<OperationalPriorityRecalcResult> {
-    return this.write(this.pg, await this.readInputs(this.pg, null));
+    const tickets = await this.readInputs(this.pg, null);
+    if (tickets.length === 0) return { updated: 0 };
+    // Its own transaction, so the row locks write() takes in id order hold
+    // until the UPDATE commits.
+    return this.pg.begin((tx) => this.write(tx, tickets));
   }
 
   // Only the given tickets, inside the caller's transaction: the tickets
@@ -113,6 +117,13 @@ export class OperationalPriorityService {
     }
 
     const sql = client as Sql;
+    // Lock the rows in id order first. Admin reads recalculate on every page
+    // load, so two run at once routinely (a production build prefetches
+    // several admin routes together); a bare UPDATE ... FROM locks rows in
+    // join order, and two of them deadlocked (40P01, a 500 on the page).
+    await sql`
+      SELECT id FROM tickets WHERE id = ANY(${ids}::int[]) ORDER BY id FOR UPDATE
+    `;
     await sql`
       UPDATE tickets AS t SET
         priority_index = u.priority_index,

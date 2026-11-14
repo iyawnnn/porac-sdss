@@ -37,7 +37,7 @@ Admin and citizen sessions are separate JWTs (`jose`, HS256), signed with an **`
 
 `api/src/auth/session.service.ts`.
 
-Because the two systems are independent, **one browser can legitimately hold both cookies at once** — a staff member signed into `/admin` who then signs into the citizen portal in the same browser. `GET /auth/me` (`api/src/auth/auth.controller.ts`) therefore resolves each cookie separately and returns `{ admin, citizen }`, either side nullable, 401 only when neither resolves. It must never collapse to a single "admin first, else citizen" principal: `lib/api-client.ts`'s `getAdminSessionFromApi()`/`getCitizenSessionFromApi()` each read their own field, and an admin-first response made the citizen field unreachable — every citizen page (`/dashboard`, `/map`, `/reports`) rendered "Sign in to continue" for a dual-cookie browser even though `proxy.ts` (which checks only the citizen cookie) had already admitted the request. Note that `NotificationsController.resolvePrincipal` still does resolve admin-first, deliberately — it serves one notification feed and has no second field to return; a dual-cookie browser sees the admin feed in both shells.
+Because the two systems are independent, **one browser can legitimately hold both cookies at once** — a staff member signed into `/admin` who then signs into the citizen portal in the same browser. `GET /auth/me` (`api/src/auth/auth.controller.ts`) therefore resolves each cookie separately and returns `{ admin, citizen }`, either side nullable, 401 only when neither resolves. It must never collapse to a single "admin first, else citizen" principal: `lib/api-client.ts`'s `getAdminSessionFromApi()`/`getCitizenSessionFromApi()` each read their own field, and an admin-first response made the citizen field unreachable — every citizen page (`/dashboard`, `/map`, `/reports`) rendered "Sign in to continue" for a dual-cookie browser even though `proxy.ts` (which checks only the citizen cookie) had already admitted the request. Notifications follow the same rule by audience-specific routes (IAN-27): `/notifications` sits behind `AdminSessionGuard` and `/citizens/notifications` behind `CitizenSessionGuard` (`api/src/notifications/notifications.controller.ts`), so each shell reads and marks read only its own feed and a dual-cookie browser never sees staff notices on a citizen page. There is no cookie fallback between the two.
 
 ### 2.2 Cookie shape
 
@@ -177,6 +177,8 @@ There is deliberately **no** `citizens.is_active` equivalent — citizens are se
 ## 5. Rate limiting
 
 Postgres-backed rather than in-memory, so limits survive process restarts and are shared across instances. `api/src/domain/ratelimit.service.ts`; storage tables documented in [`database.md`](database.md).
+
+**Client IP.** Every IP-keyed limit reads `req.ip` through `clientIp` (`api/src/common/utils/client-ip.ts`), never a raw header. The Next `/api` rewrite adds nothing to `X-Forwarded-For` and passes a client-supplied one through verbatim, so the API trusts forwarded addresses only when `TRUST_PROXY_HOPS` (default 0) names edge proxies in front of Next that append the real address, and only via a loopback peer. With the default, forwarded headers are ignored and all local traffic keys on `127.0.0.1`; a direct off-host caller keys on its socket address (IAN-25).
 
 ### 5.1 Report submission
 

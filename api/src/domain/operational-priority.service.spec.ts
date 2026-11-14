@@ -8,10 +8,13 @@ import {
 const NOW = new Date('2026-10-01T00:00:00.000Z');
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Tagged-template mock: first call is the SELECT, second is the UPDATE.
+// Tagged-template mock: the first call is the SELECT, then the id-ordered
+// row lock, then the UPDATE. begin() runs its callback on the same mock.
 function makeSql(selectRows: unknown[]) {
   const sql = jest.fn().mockResolvedValueOnce(selectRows).mockResolvedValue([]);
-  return sql as unknown as Sql & jest.Mock;
+  const begin = jest.fn((cb: (tx: unknown) => unknown) => cb(sql));
+  Object.assign(sql, { begin });
+  return sql as unknown as Sql & jest.Mock & { begin: jest.Mock };
 }
 
 function queryText(call: unknown[]): string {
@@ -78,9 +81,10 @@ describe('OperationalPriorityService.recalculateActiveTickets', () => {
     await expect(service.recalculateActiveTickets()).resolves.toEqual({
       updated: 2,
     });
-    expect(sql).toHaveBeenCalledTimes(2);
+    expect(sql).toHaveBeenCalledTimes(3);
+    expect(sql.begin).toHaveBeenCalledTimes(1);
 
-    const updateCall = sql.mock.calls[1];
+    const updateCall = sql.mock.calls[2];
     const update = queryText(updateCall);
     expect(update).toContain('priority_index = u.priority_index');
     for (const forbidden of [
@@ -124,7 +128,28 @@ describe('OperationalPriorityService.recalculateActiveTickets', () => {
       },
     ]);
     await new OperationalPriorityService(sql).recalculateActiveTickets();
-    expect(sql.mock.calls[1][2]).toEqual([38, 32]);
+    expect(sql.mock.calls[2][2]).toEqual([38, 32]);
+  });
+
+  // Two recalculations at once (concurrent admin page loads) used to lock
+  // overlapping tickets in different orders and deadlock (40P01).
+  it('locks the tickets in id order inside one transaction before updating them', async () => {
+    const row = (id: number) => ({
+      id,
+      created_at: NOW.toISOString(),
+      member_severities: ['Low'],
+      active_barangay_count: 0,
+      max_active_barangay_count: 0,
+    });
+    const sql = makeSql([row(31), row(30)]);
+    await new OperationalPriorityService(sql).recalculateActiveTickets();
+
+    expect(sql.begin).toHaveBeenCalledTimes(1);
+    const lock = queryText(sql.mock.calls[1]);
+    expect(lock).toContain('FROM tickets WHERE id = ANY(');
+    expect(lock).toContain('ORDER BY id FOR UPDATE');
+    expect(sql.mock.calls[1][1]).toEqual([31, 30]);
+    expect(queryText(sql.mock.calls[2])).toContain('UPDATE tickets AS t SET');
   });
 });
 
@@ -154,7 +179,7 @@ describe('OperationalPriorityService.recalculateTickets (inside a transaction)',
       service.recalculateTickets(tx as unknown as TransactionSql, [5, 9]),
     ).resolves.toEqual({ updated: 1 });
     expect(pg).not.toHaveBeenCalled();
-    expect(tx).toHaveBeenCalledTimes(2);
+    expect(tx).toHaveBeenCalledTimes(3);
     // The id filter is applied to both the reports and the tickets.
     expect(tx.mock.calls[0].slice(1)).toEqual([
       [5, 9],
@@ -163,8 +188,9 @@ describe('OperationalPriorityService.recalculateTickets (inside a transaction)',
       [5, 9],
     ]);
     // Medium + Critical -> 0.75 -> 38
-    expect(tx.mock.calls[1][1]).toEqual([5]);
-    expect(tx.mock.calls[1][2]).toEqual([38]);
+    expect(queryText(tx.mock.calls[1])).toContain('ORDER BY id FOR UPDATE');
+    expect(tx.mock.calls[2][1]).toEqual([5]);
+    expect(tx.mock.calls[2][2]).toEqual([38]);
   });
 
   it('does nothing for an empty list', async () => {

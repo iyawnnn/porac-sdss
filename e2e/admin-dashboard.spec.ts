@@ -213,12 +213,15 @@ test("range filters, tables, and chart labels remain intact", async ({ page }) =
   if (hasReports) {
     await expect(async () => {
       const bars = page.getByTestId("incident-trend-chart").locator(".recharts-bar-rectangle");
+      // The tallest bar: a day with one report beside a busy day can be a
+      // 1px sliver the pointer cannot land on.
       let barWithHeight = null;
+      let tallest = 0;
       for (const candidate of await bars.all()) {
         const box = await candidate.boundingBox();
-        if (box && box.height > 0) {
+        if (box && box.height > tallest) {
           barWithHeight = candidate;
-          break;
+          tallest = box.height;
         }
       }
       if (!barWithHeight) throw new Error("The nonzero incident trend has no visible bar yet.");

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { postRouting, ROUTING_REASON_MAX_LENGTH } from "./postRouting";
+import { reloadTicketDetail } from "../reloadTicketDetail";
 
 // Suggested targets only — the manuscript's explicit referral examples. The
 // API takes the agency as free text (at most 200 characters, never MEO or
@@ -68,7 +69,7 @@ export function ReferDialog({
       return;
     }
     close();
-    router.refresh();
+    reloadTicketDetail(router);
   }
 
   return (

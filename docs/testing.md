@@ -71,11 +71,13 @@ Playwright's webServer can start/reuse Next, but this controlled gate explicitly
 
 | Script | Effect |
 |---|---|
-| `cleanup:e2e-admins` | Retires referenced assessment creators and deletes only unreferenced throwaway accounts from earlier runs |
-| `seed:e2e-admins` | Upserts four staff identities: MEO, MDRRMO, Focal and System Admin |
+| `cleanup:e2e-admins` | Retires referenced assessment creators, deletes only unreferenced throwaway accounts from earlier runs, and locks the four staff demo accounts (unknowable hash, sessions invalidated; IAN-26) |
+| `seed:e2e-admins` | Upserts four staff identities: MEO, MDRRMO, Focal and System Admin, with the private `E2E_ADMIN_PASSWORD` |
 | `seed:users` | Upserts the citizen demo accounts |
 
-Account seeds upsert by email; cleanup separately retires referenced assessment creators and deletes only unreferenced throwaways. Fixture setup/teardown have their own insertion/retirement behavior. **You never need to run them by hand.** If they fail, global setup raises an error naming the likely cause (missing `api/.env`, or an unmigrated database) and pointing at README §D.
+Account seeds upsert by email; cleanup separately retires referenced assessment creators and deletes only unreferenced throwaways. Fixture setup/teardown have their own insertion/retirement behavior. **You never need to run them by hand.**
+
+**Staff credentials (IAN-26).** Staff demo accounts are privileged, so `e2e/test-credentials.ts` has no committed staff password: export `E2E_ADMIN_PASSWORD` (a private value, at least 16 characters, never committed or pasted into an issue) in the shell that runs Playwright, or global setup refuses to start. `e2e/global-teardown.ts` runs `cleanup:e2e-admins` after the suite, which deletes/retires the throwaway `e2e-*` staff accounts specs create (with committed passwords) and locks the four staff demo accounts, so no staff credential used by the run stays valid. To sign in as a demo staff account outside a run, rerun `pnpm --prefix api seed:e2e-admins` with `E2E_ADMIN_PASSWORD` set — that is also the recovery path for the demo System Administrator. Citizen demo accounts keep the shared `E2E_DEMO_PASSWORD` default; they hold no staff authority. If they fail, global setup raises an error naming the likely cause (missing `api/.env`, or an unmigrated database) and pointing at README §D.
 
 The `cleanup:e2e-admins` step exists for a specific reason: `admin-management`, `admin-password`, and `admin-activity-log` each create throwaway admin accounts. Without cleanup those accumulate across local runs until `/admin/admins` has enough rows to blow past test timeouts.
 
@@ -230,6 +232,8 @@ pnpm exec tsc --noEmit
 ```bash
 pnpm exec playwright test --workers=1 --max-failures=6
 ```
+
+**Production build, too (IAN-32).** `next dev` hid a production-only bug: after a save, Ticket Detail kept showing the old status until a reload, and a second click advanced the ticket again. The suite passes against `next build && next start` as well: build with `API_ORIGIN`/`INTERNAL_API_URL` pointing at the test API, start it on its own port, and set `PLAYWRIGHT_BASE_URL` to that port so Playwright reuses it instead of starting `npm run dev`. Before a release, run the full suite against the production build. Each full run, in either mode, still uses 15 of the 20 report submissions allowed per hour.
 
 **When touching auth, RBAC, or scoping**, the highest-value targeted runs are:
 ```bash

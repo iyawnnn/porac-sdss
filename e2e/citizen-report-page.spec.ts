@@ -183,3 +183,19 @@ test.describe("Citizen report page (step 6b)", () => {
     expect(await mine.json()).toEqual({ id: f.referredReportId });
   });
 });
+
+// IAN-28: no horizontal scroll at phone widths, even with a long unbroken
+// title (the citizen controls it, up to 200 characters).
+test("dashboard and report detail fit a 360px viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await loginCitizen(page, E2E_CITIZEN_ACCOUNT);
+  const fitsViewport = () =>
+    page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: "Recent Activity" })).toBeVisible();
+  expect(await fitsViewport()).toBe(true);
+  await openReport(page, fixtures().acknowledgedReportId);
+  expect(await fitsViewport()).toBe(true);
+  await page.getByRole("heading", { level: 1 }).evaluate((h) => { h.textContent = "Flooded" + "X".repeat(190); });
+  expect(await fitsViewport()).toBe(true);
+});
