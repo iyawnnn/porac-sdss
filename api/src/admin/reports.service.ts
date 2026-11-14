@@ -179,7 +179,7 @@ export class ReportsService {
       { header: 'Barangay', value: (r) => r.barangay_name },
       { header: 'Assigned Office', value: (r) => r.assigned_office },
       { header: 'Citizen Severity', value: (r) => r.citizen_severity },
-      { header: 'Flags', value: (r) => r.flags.join(' | ') },
+      { header: 'Flags', value: (r) => r.flags?.join(' | ') ?? '' },
       { header: 'Location Mismatch (m)', value: (r) => r.location_mismatch_m },
       // Pending is the absence of a decision, not a stored status.
       {
@@ -265,7 +265,7 @@ export class ReportsService {
       { header: 'Submitted Category', value: (r) => r.submitted_category },
       { header: 'Barangay', value: (r) => r.barangay_name },
       { header: 'Citizen Severity', value: (r) => r.citizen_severity },
-      { header: 'Evidence Flags', value: (r) => r.flags.join('; ') },
+      { header: 'Evidence Flags', value: (r) => r.flags?.join('; ') ?? '' },
       {
         header: 'Severity Screening Status',
         value: (r) => r.severity_screening_status,
