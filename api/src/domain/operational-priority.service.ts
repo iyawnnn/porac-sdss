@@ -124,10 +124,8 @@ export class OperationalPriorityService {
     await sql`
       SELECT id FROM tickets WHERE id = ANY(${ids}::int[]) ORDER BY id FOR UPDATE
     `;
-    await sql`
-      UPDATE tickets AS t SET
-        priority_index = u.priority_index,
-        updated_at = now()
+    const updated = await sql<{ id: number }[]>`
+      UPDATE tickets AS t SET priority_index = u.priority_index
       FROM (
         SELECT * FROM unnest(
           ${ids}::int[],
@@ -135,9 +133,11 @@ export class OperationalPriorityService {
         ) AS u(id, priority_index)
       ) AS u
       WHERE t.id = u.id
+        AND t.priority_index IS DISTINCT FROM u.priority_index
+      RETURNING t.id
     `;
 
-    return { updated: tickets.length };
+    return { updated: updated.length };
   }
 }
 
