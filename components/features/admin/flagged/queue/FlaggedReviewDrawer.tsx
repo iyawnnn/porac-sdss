@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { BanIcon, ChevronDownIcon, ChevronUpIcon, CircleCheckIcon, CopyIcon } from "lucide-react";
 import type { ModerationAction, ModerationQueueRow } from "@/lib/types/admin-moderation";
+import { apiErrorMessage } from "@/lib/utils/api-error-message";
 import { computeRiskScore, getFlagCategory, riskBand } from "@/lib/utils/flag-risk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -162,11 +163,11 @@ function DrawerBody({
         note: note.trim() || undefined,
       }),
     });
-    const responseData = await res.json();
+    const responseData = await res.json().catch(() => null);
     setSubmitting(false);
 
     if (!res.ok) {
-      setActionError(responseData.error ?? responseData.message ?? "Action failed.");
+      setActionError(apiErrorMessage(responseData, "Action failed."));
       return;
     }
     onModerated();

@@ -1,5 +1,10 @@
 import bcrypt from 'bcryptjs';
-import { ConflictException, HttpException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { SessionService } from './session.service';
@@ -10,7 +15,10 @@ function chain(result: unknown) {
   const obj: Record<string, unknown> = {};
   const self = () => obj;
   obj.from = self;
-  obj.where = self;
+  obj.where = (condition: unknown) => {
+    obj.whereArg = condition;
+    return obj;
+  };
   obj.values = self;
   obj.returning = () => Promise.resolve(result);
   obj.then = (resolve: (v: unknown) => unknown) =>
@@ -22,9 +30,15 @@ function chain(result: unknown) {
 // (JSON.stringify chokes on it) — the bound literal lives in queryChunks as
 // a Param node.
 function boundParamValue(condition: unknown): unknown {
-  const chunks = (condition as { queryChunks?: { constructor: { name: string }; value: unknown }[] })
-    .queryChunks;
-  return chunks?.find((c) => c.constructor.name === 'Param')?.value;
+  const chunks = (condition as { queryChunks?: unknown[] } | null)?.queryChunks;
+  for (const chunk of chunks ?? []) {
+    if ((chunk as { constructor?: { name?: string } }).constructor?.name === 'Param') {
+      return (chunk as { value: unknown }).value;
+    }
+    const nested = boundParamValue(chunk);
+    if (nested !== undefined) return nested;
+  }
+  return undefined;
 }
 
 function makeSessions(): SessionService {
@@ -227,6 +241,89 @@ describe('AuthService — existing password flows stay intact', () => {
     );
     expect(token).toBe('citizen-token');
   });
+
+  it.each([
+    ['an invalid email', 'nope', 'longenoughpassword', 'New', 'Citizen'],
+    [
+      'an oversized email',
+      `${'a'.repeat(250)}@x.com`,
+      'longenoughpassword',
+      'New',
+      'Citizen',
+    ],
+    [
+      'an oversized first name',
+      'new@example.com',
+      'longenoughpassword',
+      'N'.repeat(101),
+      'Citizen',
+    ],
+    [
+      'an oversized last name',
+      'new@example.com',
+      'longenoughpassword',
+      'New',
+      'C'.repeat(101),
+    ],
+    [
+      'an oversized ASCII password',
+      'new@example.com',
+      'p'.repeat(73),
+      'New',
+      'Citizen',
+    ],
+    [
+      'an oversized multibyte password',
+      'new@example.com',
+      '😀'.repeat(19),
+      'New',
+      'Citizen',
+    ],
+  ])(
+    'rejects %s before querying the database',
+    async (_label, email, password, firstName, lastName) => {
+      const select = jest.fn();
+      const db = { select } as unknown as PostgresJsDatabase;
+      const service = new AuthService(
+        db,
+        makeSessions(),
+        makeRateLimit(),
+        makeAdminAudit(),
+      );
+
+      await expect(
+        service.citizenSignup(email, password, firstName, lastName, '1.2.3.4'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(select).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns the normal duplicate-email conflict when a concurrent insert loses the race', async () => {
+    const db = {
+      select: jest.fn().mockReturnValueOnce(chain([])),
+      insert: jest.fn().mockReturnValue({
+        values: () => ({ returning: () => Promise.reject({ message: 'Failed query', cause: { code: '23505' } }) }),
+      }),
+    } as unknown as PostgresJsDatabase;
+    const service = new AuthService(
+      db,
+      makeSessions(),
+      makeRateLimit(),
+      makeAdminAudit(),
+    );
+
+    await expect(
+      service.citizenSignup(
+        'new@example.com',
+        'longenoughpassword',
+        'New',
+        'Citizen',
+        '1.2.3.4',
+      ),
+    ).rejects.toThrow(
+      new ConflictException('An account with this email already exists.'),
+    );
+  });
 });
 
 describe('AuthService.citizenLogin — failed-login throttling (hardening item 3)', () => {
@@ -407,9 +504,9 @@ describe('AuthService.citizenSignup — account-creation-spam throttling (harden
   });
 
   it('records an attempt under the limit, and still enforces the existing duplicate-email conflict unchanged', async () => {
-    const select = jest.fn().mockReturnValueOnce(
-      chain([{ id: 9, email: 'existing@example.com' }]),
-    ); // existing account
+    const select = jest
+      .fn()
+      .mockReturnValueOnce(chain([{ id: 9, email: 'existing@example.com' }])); // existing account
     const db = { select } as unknown as PostgresJsDatabase;
     const rateLimit = makeRateLimit();
     const service = new AuthService(
@@ -517,7 +614,8 @@ describe('AuthService.adminLogin — failed-login throttling (R1)', () => {
   });
 
   it('checks and records against the normalized email, not whatever casing/whitespace was submitted', async () => {
-    const select = jest.fn().mockReturnValueOnce(chain([])); // no such admin
+    const query = chain([]);
+    const select = jest.fn().mockReturnValueOnce(query); // no such admin
     const db = { select } as unknown as PostgresJsDatabase;
     const rateLimit = makeRateLimit();
     const service = new AuthService(

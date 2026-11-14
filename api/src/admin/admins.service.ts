@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DB } from '../db/db.module';
@@ -21,6 +21,14 @@ import {
   assertAccountFields,
   roleMirror,
 } from '../common/authz/admin-account-fields';
+import { normalizeEmail } from '../common/utils/normalize-email';
+import {
+  EMAIL_MAX_LENGTH,
+  isUniqueViolation,
+  isValidEmail,
+  isValidPassword,
+  NAME_MAX_LENGTH,
+} from '../common/utils/account-validation';
 export { roleMirror } from '../common/authz/admin-account-fields';
 
 // The old role values. Since manuscript revision Phase 2, step 2e this is
@@ -161,18 +169,36 @@ export class AdminsService {
     const { email, password, firstName, lastName } = input;
     if (
       typeof email !== 'string' ||
-      !email.trim() ||
       typeof firstName !== 'string' ||
-      !firstName.trim() ||
       typeof lastName !== 'string' ||
-      !lastName.trim()
+      typeof password !== 'string'
     ) {
       throw new BadRequestException(
         'email, firstName, and lastName are required.',
       );
     }
-    if (typeof password !== 'string' || password.length < 8) {
-      throw new BadRequestException('password must be at least 8 characters.');
+    const normalizedEmail = normalizeEmail(email);
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
+    if (!isValidEmail(normalizedEmail)) {
+      throw new BadRequestException(
+        `email must be valid and ${EMAIL_MAX_LENGTH} characters or fewer.`,
+      );
+    }
+    if (
+      !trimmedFirstName ||
+      trimmedFirstName.length > NAME_MAX_LENGTH ||
+      !trimmedLastName ||
+      trimmedLastName.length > NAME_MAX_LENGTH
+    ) {
+      throw new BadRequestException(
+        `firstName and lastName are required and must be ${NAME_MAX_LENGTH} characters or fewer.`,
+      );
+    }
+    if (!isValidPassword(password)) {
+      throw new BadRequestException(
+        'password must be at least 8 characters and no more than 72 bytes.',
+      );
     }
     const fields = assertAccountFields(
       input.accountType,
@@ -183,7 +209,7 @@ export class AdminsService {
     const [existing] = await this.db
       .select({ id: admins.id })
       .from(admins)
-      .where(eq(admins.email, email));
+      .where(sql`lower(${admins.email}) = ${normalizedEmail}`);
     if (existing) {
       throw new ConflictException('An admin with this email already exists.');
     }
@@ -193,38 +219,46 @@ export class AdminsService {
     // — if the audit write fails, account creation rolls back with it
     // rather than leaving an untracked admin account behind (see
     // admin-audit.service.ts for why the audit trail is load-bearing here).
-    const row = await this.db.transaction(async (tx) => {
-      const [created] = await tx
-        .insert(admins)
-        .values({
-          email,
-          passwordHash,
-          firstName,
-          lastName,
-          ...fields,
-          role: roleMirror(fields),
-        })
-        .returning(SAFE_COLUMNS);
-      await this.audit.logInTx(tx, {
-        actor: {
-          adminId: actor.adminId,
-          adminName: actor.adminName,
-          email: actor.email,
-          accountType: actor.accountType,
-          office: actor.office,
-        },
-        actionType: 'admin_created',
-        targetType: 'admin',
-        targetId: created.id,
-        targetSummary: `${created.first_name} ${created.last_name} <${created.email}>`,
-        metadata: {
-          accountType: created.account_type,
-          isFocal: created.is_focal,
-          office: created.office,
-        },
+    let row: AdminAccountRow;
+    try {
+      row = await this.db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(admins)
+          .values({
+            email: normalizedEmail,
+            passwordHash,
+            firstName: trimmedFirstName,
+            lastName: trimmedLastName,
+            ...fields,
+            role: roleMirror(fields),
+          })
+          .returning(SAFE_COLUMNS);
+        await this.audit.logInTx(tx, {
+          actor: {
+            adminId: actor.adminId,
+            adminName: actor.adminName,
+            email: actor.email,
+            accountType: actor.accountType,
+            office: actor.office,
+          },
+          actionType: 'admin_created',
+          targetType: 'admin',
+          targetId: created.id,
+          targetSummary: `${created.first_name} ${created.last_name} <${created.email}>`,
+          metadata: {
+            accountType: created.account_type,
+            isFocal: created.is_focal,
+            office: created.office,
+          },
+        });
+        return created;
       });
-      return created;
-    });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('An admin with this email already exists.');
+      }
+      throw error;
+    }
     return row;
   }
 

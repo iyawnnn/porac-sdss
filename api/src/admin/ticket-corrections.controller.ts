@@ -4,10 +4,10 @@ import {
   Get,
   NotFoundException,
   Param,
-  ParseIntPipe,
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { PositiveIntPipe } from '../common/pipes/positive-int.pipe';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { PersonnelGuard } from '../common/guards/personnel.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -25,7 +25,7 @@ export class TicketCorrectionsController {
 
   @Get(':id')
   async availability(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
   ) {
     const availability = await this.corrections.availability(id, admin);
@@ -35,7 +35,7 @@ export class TicketCorrectionsController {
 
   @Post(':id/category')
   correctCategory(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @Body() body: Record<string, unknown>,
     @CurrentAdmin() admin: AdminSession,
   ) {
@@ -44,7 +44,7 @@ export class TicketCorrectionsController {
 
   @Post(':id/location')
   correctLocation(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @Body() body: Record<string, unknown>,
     @CurrentAdmin() admin: AdminSession,
   ) {

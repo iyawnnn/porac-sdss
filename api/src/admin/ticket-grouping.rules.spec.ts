@@ -288,9 +288,11 @@ describe('validateGroupingReason', () => {
 });
 
 describe('validateTicketId', () => {
-  it.each([0, -1, 1.5, 'abc', undefined])('rejects %p (400)', (value) => {
+  it.each([0, -1, 1.5, 'abc', 1e30, undefined])('rejects %p (400)', (value) => {
     expect(() => validateTicketId(value, 'survivorTicketId')).toThrow(
-      new BadRequestException('survivorTicketId must be a positive integer.'),
+      new BadRequestException(
+        'survivorTicketId must be a positive whole number.',
+      ),
     );
   });
 

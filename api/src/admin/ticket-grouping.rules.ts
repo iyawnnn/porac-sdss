@@ -5,6 +5,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import type { AdminSession } from '../auth/session.service';
+import { parsePositiveInt } from '../common/pipes/positive-int.pipe';
 import {
   isFocalPersonnel,
   isOperationalPersonnel,
@@ -215,11 +216,7 @@ export function validateGroupingReason(reason: unknown): string {
 }
 
 export function validateTicketId(value: unknown, field: string): number {
-  const id = Number(value);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw new BadRequestException(`${field} must be a positive integer.`);
-  }
-  return id;
+  return parsePositiveInt(value, field);
 }
 
 // A merged-away ticket is history: viewable, never changed again.

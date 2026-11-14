@@ -206,13 +206,19 @@ function normalizeAndValidate(
   input: OperationalAssessmentInput,
 ): NormalizedInput {
   const constraints = input.operationalConstraints ?? [];
+  if (!Array.isArray(constraints)) {
+    throw new BadRequestException('Operational constraints must be an array.');
+  }
   for (const c of constraints) {
     if (!OPERATIONAL_CONSTRAINTS.includes(c as OperationalConstraint)) {
       throw new BadRequestException(`Invalid operational constraint: ${c}`);
     }
   }
 
-  const text = (v: string | undefined, max: number, label: string) => {
+  const text = (v: unknown, max: number, label: string) => {
+    if (v != null && typeof v !== 'string') {
+      throw new BadRequestException(`${label} must be text.`);
+    }
     const trimmed = (v ?? '').trim();
     if (trimmed.length > max) {
       throw new BadRequestException(
@@ -221,7 +227,7 @@ function normalizeAndValidate(
     }
     return trimmed;
   };
-  const nullableText = (v: string | undefined, max: number, label: string) => {
+  const nullableText = (v: unknown, max: number, label: string) => {
     const trimmed = text(v, max, label);
     return trimmed || null;
   };

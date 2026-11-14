@@ -19,6 +19,7 @@ import {
   notifyTicketCitizens,
 } from '../notifications/citizen-notices';
 import { routingBlock, type RoutingActor } from './ticket-routing.rules';
+import { ACKNOWLEDGMENT_REMARKS_MAX_LENGTH } from '../contracts/schemas';
 
 // Central Monitoring / Focal Personnel's municipality-wide intake surface —
 // a separate concept from the operational Ticket Queue (see
@@ -513,8 +514,20 @@ export class FocalIntakeService {
   async acknowledge(
     reportId: number,
     admin: AdminSession,
-    remarks: string | undefined,
+    remarks: unknown,
   ): Promise<FocalIntakeDetail | null> {
+    if (remarks != null && typeof remarks !== 'string') {
+      throw new BadRequestException('Remarks must be text.');
+    }
+    const trimmedRemarks = remarks?.trim() || null;
+    if (
+      trimmedRemarks &&
+      trimmedRemarks.length > ACKNOWLEDGMENT_REMARKS_MAX_LENGTH
+    ) {
+      throw new BadRequestException(
+        `Remarks must be ${ACKNOWLEDGMENT_REMARKS_MAX_LENGTH} characters or fewer.`,
+      );
+    }
     const sql = this.pg;
     try {
       await sql.begin(async (tx) => {
@@ -528,7 +541,6 @@ export class FocalIntakeService {
         `;
         if (!report) throw new NotFoundException('Report not found.');
 
-        const trimmedRemarks = remarks?.trim() || null;
         const acknowledgment = await tx`
           INSERT INTO acknowledgments (ticket_id, acknowledged_by_admin_id, remarks, acknowledged_at)
           VALUES (${report.ticket_id}, ${admin.adminId}, ${trimmedRemarks}, now())

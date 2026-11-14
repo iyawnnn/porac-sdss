@@ -151,6 +151,18 @@ describe('Phase 7c-2 CSV contracts', () => {
     expect(csv).toContain(submitted.tracking_reference);
     expect(csv).toContain('pending');
   });
+  it('submitted reports render null, empty and populated flags safely', async () => {
+    const { service, queries } = setup();
+    queries.submitted.mockResolvedValue([
+      { ...submitted, flags: null },
+      { ...submitted, flags: [] },
+      { ...submitted, flags: ['ONE', 'TWO'] },
+    ]);
+    const rows = (await service.submittedReportsCsv({}, actor)).split('\r\n');
+    expect(rows[1].split(',')[8]).toBe('');
+    expect(rows[2].split(',')[8]).toBe('');
+    expect(rows[3].split(',')[8]).toBe('ONE; TWO');
+  });
   it('assessment text, manuscript headers, flattened notes and formula neutralisation are retained', async () => {
     const { service, audit } = setup();
     const csv = await service.operationalAssessmentsCsv({}, actor);

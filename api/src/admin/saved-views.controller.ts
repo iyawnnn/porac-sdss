@@ -4,16 +4,19 @@ import {
   Delete,
   Get,
   Param,
-  ParseIntPipe,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { PositiveIntPipe } from '../common/pipes/positive-int.pipe';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
 import type { AdminSession } from '../auth/session.service';
-import { SavedViewsService, parseSavedViewSurface } from './saved-views.service';
+import {
+  SavedViewsService,
+  parseSavedViewSurface,
+} from './saved-views.service';
 
 // No SystemAdminGuard: a saved view is the caller's own private bookmark and
 // carries no office-scoped data of its own. SavedViewsService scopes every
@@ -51,7 +54,7 @@ export class SavedViewsController {
 
   @Delete(':id')
   remove(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
   ) {
     return this.savedViews.remove(admin, id);
