@@ -1084,6 +1084,7 @@ export class TicketsService {
     notes: unknown,
     imageBuffer: Buffer | undefined,
     outcome?: unknown,
+    expectedStatus?: unknown,
   ): Promise<{ status: TicketStatus }> {
     const sql = this.pg;
     // Not filtered on merged_into_ticket_id, so a merged-away ticket is a
@@ -1101,6 +1102,21 @@ export class TicketsService {
     if (!ticket) throw new NotFoundException('Ticket not found');
     assertOfficeAccess(admin, ticket.assigned_office);
     assertNotMergedAway({ id: ticketId, ...ticket });
+    // The status the caller saw (IAN-32). Optional so API callers that never
+    // sent it keep working; the Ticket Detail page always sends it, so a
+    // second click on a stale page is refused instead of advancing the
+    // ticket another step. Atomic with the update below: that UPDATE is
+    // conditioned on the same status this check compared against.
+    if (expectedStatus !== undefined) {
+      if (!TICKET_STATUSES.includes(expectedStatus as TicketStatus)) {
+        throw new BadRequestException('expectedStatus must be a ticket status.');
+      }
+      if (expectedStatus !== ticket.status) {
+        throw new ConflictException(
+          `Ticket #${ticketId} is already ${ticket.status}; it was not changed. Reload to see its current status.`,
+        );
+      }
+    }
 
     const nextStatus = NEXT_STATUS[ticket.status];
     if (!nextStatus) {
@@ -1938,8 +1954,10 @@ export class TicketsService {
       eligible.push(id);
     }
 
+    // Each ticket advances from the status it had when it was checked here,
+    // so a ticket that moved on in between is skipped, not advanced twice.
     const result = await this.runBulk(eligible, async (id) => {
-      await this.advanceStatus(id, admin, undefined, undefined);
+      await this.advanceStatus(id, admin, undefined, undefined, undefined, statusById.get(id));
     });
     return { ok: result.ok, skipped: [...skipped, ...result.skipped] };
   }

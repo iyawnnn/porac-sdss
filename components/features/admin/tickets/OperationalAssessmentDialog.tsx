@@ -16,12 +16,13 @@ import {
   type OperationalConstraint,
 } from "@/lib/types/admin-ticket-constants";
 import type { OperationalAssessment } from "@/lib/types/admin-tickets";
+import { reloadTicketDetail } from "./reloadTicketDetail";
 
 // Real production Operational Assessment form — one manageable dialog, not
 // a wizard (Batch 3 §15). First save creates the ticket's one current
 // assessment; every later save edits that same row (never a second one) —
 // see api/src/admin/operational-assessment.service.ts's upsert(). After a
-// successful save this calls router.refresh() rather than updating local
+// successful save this re-renders the page (reloadTicketDetail) rather than updating local
 // state, so the summary card always reflects server truth.
 export function OperationalAssessmentDialog({
   ticketId,
@@ -95,7 +96,7 @@ export function OperationalAssessmentDialog({
     });
     if (res.ok) {
       resetAndClose();
-      router.refresh();
+      reloadTicketDetail(router);
     } else {
       const data = await res.json().catch(() => null);
       setError(data?.message ?? "Could not save the assessment.");

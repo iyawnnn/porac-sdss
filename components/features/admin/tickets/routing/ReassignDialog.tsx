@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { postRouting, ROUTING_REASON_MAX_LENGTH } from "./postRouting";
+import { reloadTicketDetail } from "../reloadTicketDetail";
 
 type Office = "MEO" | "MDRRMO";
 const OFFICES: Office[] = ["MEO", "MDRRMO"];
@@ -74,7 +75,7 @@ export function ReassignDialog({
       return;
     }
     close();
-    router.refresh();
+    reloadTicketDetail(router);
   }
 
   return (

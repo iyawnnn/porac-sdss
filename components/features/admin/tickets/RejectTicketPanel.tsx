@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { reloadTicketDetail } from "./reloadTicketDetail";
 
 export function RejectTicketPanel({ ticketId }: { ticketId: number }) {
   const router = useRouter();
@@ -27,7 +28,7 @@ export function RejectTicketPanel({ ticketId }: { ticketId: number }) {
     });
 
     if (res.ok) {
-      router.refresh();
+      reloadTicketDetail(router);
     } else {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Reject failed");
