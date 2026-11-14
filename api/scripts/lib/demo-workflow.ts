@@ -204,8 +204,13 @@ export async function runDemoWorkflow(
       /^PRC-\d{4}-\d{6,}$/.test(result.trackingReference),
       'Missing generated tracking reference.',
     );
+    const [stored] = await pg<{ flags: string[]; member_count: number }[]>`
+      SELECT r.flags, t.member_count FROM reports r
+      JOIN tickets t ON t.id = r.ticket_id
+      WHERE r.id = ${result.reportId}
+    `;
     requireDemo(
-      !result.merged && result.memberCount === 1,
+      stored.member_count === 1,
       'Submission unexpectedly merged a report.',
     );
     const expected =
@@ -220,12 +225,12 @@ export async function runDemoWorkflow(
               : null;
     if (expected)
       requireDemo(
-        result.flags.includes(expected),
+        stored.flags.includes(expected),
         'Evidence scenario did not produce ' + expected,
       );
     else
       requireDemo(
-        !result.flags.some((f) =>
+        !stored.flags.some((f) =>
           [
             'LOCATION_MISMATCH',
             'STALE_EVIDENCE',
