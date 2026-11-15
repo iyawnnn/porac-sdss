@@ -9,7 +9,6 @@ import {
   GaugeIcon,
   MapPinIcon,
   TicketIcon,
-  TriangleAlertIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type {
@@ -24,7 +23,6 @@ import {
   TICKET_STATUSES,
   type TicketSort,
 } from "@/lib/types/admin-ticket-constants";
-import { priorityBandLabel } from "@/lib/utils/ui/priority";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -462,13 +460,6 @@ export function TicketsWorkspace({
   const activeCount = data.tickets.filter(
     (t) => t.status === "Reported" || t.status === "Under Review" || t.status === "In Progress",
   ).length;
-  // Operational Priority (priority_index) replaced the two Hazard Urgency tiles
-  // in manuscript revision Phase 1, step 4. "High" is Operational Priority's
-  // own display band from lib/utils/ui/priority.ts (67-100), never
-  // urgency_level.
-  const highPriorityCount = data.tickets.filter(
-    (t) => priorityBandLabel(t.priority_index) === "High",
-  ).length;
   const prioritized = data.tickets.map((t) => t.priority_index).filter((s): s is number => s !== null);
   const avgPriority = prioritized.length
     ? Math.round(prioritized.reduce((sum, s) => sum + s, 0) / prioritized.length)
@@ -518,10 +509,9 @@ export function TicketsWorkspace({
         views={builtInViews}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={TicketIcon} label="Total tickets" note="all filters" value={data.total.toLocaleString()} />
         <KpiCard icon={ActivityIcon} label="Active" note="on this page" value={activeCount.toLocaleString()} />
-        <KpiCard icon={TriangleAlertIcon} label="High priority" note="&ge; 67, this page" value={highPriorityCount.toLocaleString()} />
         <KpiCard icon={GaugeIcon} label="Avg. priority" note="of 100" value={avgPriority === null ? "—" : String(avgPriority)} />
         <KpiCard icon={MapPinIcon} label="Barangays" note="affected" value={barangayCount.toLocaleString()} />
       </div>

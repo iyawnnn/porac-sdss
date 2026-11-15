@@ -133,9 +133,14 @@ test("authenticated admin can open the Ticket Queue and see its content", async 
   const hasRows = (await queueRows(page).count()) > 0;
   if (hasRows) {
     await expect(queueRows(page).first()).toBeVisible();
+    const queue = page.getByRole("table", { name: "Ticket queue" });
+    await expect(queue.getByRole("columnheader", { name: "Level", exact: true })).toHaveCount(0);
+    await expect(queue.getByText(/^(Low|Medium|High)$/)).toHaveCount(0);
+    await expect(queueRows(page).first()).toContainText(/\d+\/100/);
   } else {
     await expect(page.getByText("No tickets match this filter.")).toBeVisible();
   }
+  await expect(page.getByText("High priority", { exact: true })).toHaveCount(0);
 });
 
 // --- 2. Ticket Queue filters -----------------------------------------------
@@ -347,7 +352,7 @@ test("Ticket Detail shows status, office, Operational Priority, evidence, and lo
   // Operational Priority (header badge + scoring tab). Hazard Urgency was
   // retired from this page in manuscript revision Phase 1, step 5 — no
   // urgency card, no factor bars, no live rain line.
-  await expect(page.getByText(/^Operational Priority (\d+|—) · (Low|Medium|High|—)$/)).toBeVisible();
+  await expect(page.getByText(/^Operational Priority — (\d+\/100|—)$/)).toBeVisible();
   await expect(page.getByText("Operational Priority (how soon to act)", { exact: true })).toBeVisible();
   await expect(page.getByText(/Hazard Urgency/)).toHaveCount(0);
   await expect(page.getByText(/rain rate/i)).toHaveCount(0);

@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { ImageOffIcon, MapPinIcon, XIcon } from "lucide-react";
 import type { AdminTicketGeoRow } from "@/lib/types/admin-tickets";
-import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { getCategoryMarkerSpec } from "@/lib/gis/categoryMarker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,8 +48,8 @@ export function TicketPopup({ ticket, onClose }: { ticket: AdminTicketGeoRow; on
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
-            Operational Priority: {priorityBandLabel(ticket.priority_index)} <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span>
+          <Badge className="bg-line-100 text-ink-700" variant="outline">
+            Operational Priority: <span className="font-mono tabular-nums">{ticket.priority_index === null ? "—" : `${ticket.priority_index}/100`}</span>
           </Badge>
           <StatusPill status={ticket.status} />
         </div>

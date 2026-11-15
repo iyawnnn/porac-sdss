@@ -80,6 +80,7 @@ test("Focal Dashboard and Intake Queue show Operational Priority and no Hazard U
   await page.goto("/admin/focal/intake");
   await expect(page.getByRole("heading", { name: "Intake Queue" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Op. Priority" })).toBeVisible();
+  await expect(page.getByText(/^(LOW|MEDIUM|HIGH)$/)).toHaveCount(0);
   await expect(page.getByText(/Hazard Urgency/)).toHaveCount(0);
   await expect(page.getByLabel("Filter by Hazard Urgency")).toHaveCount(0);
 });
@@ -95,6 +96,8 @@ test("Focal intake detail shows the Operational Priority card and no Hazard Urge
   await expect(page).toHaveURL(/\/admin\/focal\/intake\/\d+$/);
   await expect(page.getByText("Decision Support", { exact: true })).toBeVisible();
   await expect(page.getByText("Operational Priority", { exact: true })).toBeVisible();
+  await expect(page.getByText("Administrative queue recommendation. Final action is determined through Operational Assessment.", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^(LOW|MEDIUM|HIGH)$/)).toHaveCount(0);
   await expect(page.getByText(/Hazard Urgency/)).toHaveCount(0);
 });
 

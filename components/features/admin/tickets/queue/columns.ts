@@ -19,7 +19,6 @@ export type QueueColumnKey =
   | "barangay"
   | "members"
   | "priority"
-  | "level"
   | "office"
   | "status"
   | "created"
@@ -51,10 +50,7 @@ export const QUEUE_COLUMNS: QueueColumn[] = [
   { key: "category", label: "Category", track: "132px", hideable: true, minPx: 132 },
   { key: "barangay", label: "Barangay", track: "96px", hideable: true, minPx: 96 },
   { key: "members", label: "Members", track: "64px", align: "center", hideable: true, minPx: 64 },
-  // Operational Priority (priority_index) and its display band. Replaced the
-  // Hazard Urgency meter and level in manuscript revision Phase 1, step 4.
   { key: "priority", label: "Op. Priority", track: "96px", align: "center", hideable: true, minPx: 96 },
-  { key: "level", label: "Level", track: "70px", hideable: true, minPx: 70 },
   { key: "office", label: "Office", track: "56px", hideable: true, minPx: 56 },
   { key: "status", label: "Status", track: "118px", hideable: true, minPx: 118 },
   { key: "created", label: "Created", track: "86px", hideable: true, minPx: 86 },

@@ -43,9 +43,7 @@ function HeatmapLayer({ tickets }: { tickets: AdminTicketGeoRow[] }) {
   const map = useMap();
   useEffect(() => {
     const points: L.HeatLatLngTuple[] = tickets.map((ticket) => [ticket.lat, ticket.lng, Math.max((ticket.priority_index ?? 1) / 100, 0.15)]);
-    // A continuous density gradient, deliberately not the three priority band hexes the
-    // pin rings use (priorityBandHex) — a heat colour is not a Low/Medium/High band, so
-    // reusing those hues would invite reading it as one.
+    // Continuous Operational Priority intensity; category owns marker colour.
     const layer = L.heatLayer(points, { radius: 28, blur: 20, maxZoom: MUNICIPALITY.defaultZoom + 2, gradient: { 0.2: "#4338ca", 0.5: "#7c3aed", 0.75: "#c026d3", 1: "#db2777" } }).addTo(map);
     return () => { layer.remove(); };
   }, [map, tickets]);

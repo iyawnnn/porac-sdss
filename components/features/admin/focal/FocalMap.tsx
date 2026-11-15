@@ -5,7 +5,6 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { configureLeafletMarkerIcons } from "@/lib/gis/leaflet-icons";
 import { priorityMarkerIcon } from "@/lib/gis/markerIcon";
-import { priorityBandLabel } from "@/lib/utils/ui/priority";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import type { FocalIntakeGeoRow } from "@/lib/types/admin-focal-intake";
 
@@ -45,8 +44,7 @@ export function FocalMap({ reports }: { reports: FocalIntakeGeoRow[] }) {
                 <p className="font-medium">{report.reportReference} &middot; {report.category}</p>
                 <p className="text-muted-foreground">{report.barangayName} &middot; routed to {report.routedOffice}</p>
                 <p>
-                  Operational Priority: <span className="font-medium">{priorityBandLabel(report.operationalPriority)}</span>
-                  {report.operationalPriority !== null && ` (${report.operationalPriority})`}
+                  Operational Priority: <span className="font-medium">{report.operationalPriority === null ? "—" : `${report.operationalPriority}/100`}</span>
                 </p>
                 <p>Intake State: <span className="font-medium">{report.intakeState}</span></p>
                 <Link className="mt-1 inline-block font-medium text-primary hover:underline" href={`/admin/focal/intake/${report.reportId}`}>

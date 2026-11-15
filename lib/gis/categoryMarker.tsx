@@ -16,7 +16,6 @@ import {
   Disc,
   type LucideIcon,
 } from "lucide-react";
-import { priorityBandHex, priorityBandLabel } from "@/lib/utils/ui/priority";
 
 // Admin-map-only category markers â€” deliberately separate from
 // lib/gis/markerIcon.ts (neutralMarkerIcon/priorityMarkerIcon), which the
@@ -71,12 +70,8 @@ export function getCategoryMarkerSpec(category: string): CategoryMarkerSpec {
   return CATEGORY_MARKER_SPEC[category] ?? DEFAULT_CATEGORY_SPEC;
 }
 
-// Category owns the fill/icon; Operational Priority owns the outer ring
-// (priorityBandHex, the same 1-33 / 34-66 / 67-100 bands as the Ticket Queue
-// and Ticket Detail) — the two dimensions never overwrite each other. The
-// ring showed Hazard Urgency until manuscript revision Phase 1, step 5. The
-// High-band pulse went with it: it signalled an environmental hazard, which
-// Operational Priority does not measure.
+// Category owns the fill/icon. Operational Priority stays numeric in the
+// accessible label, popup and continuous heatmap instead of a marker band.
 const iconSvgCache = new Map<string, string>();
 function iconSvgMarkup(Icon: LucideIcon, size: number): string {
   const key = `${Icon.displayName ?? Icon.name}-${size}`;
@@ -91,21 +86,19 @@ const markerIconCache = new Map<string, L.DivIcon>();
 
 export function categoryMarkerIcon(category: string, priorityIndex: number | null, options: { selected?: boolean } = {}): L.DivIcon {
   const selected = options.selected ?? false;
-  const band = priorityBandLabel(priorityIndex);
-  const cacheKey = `${category}|${band}|${selected}`;
+  const cacheKey = `${category}|${priorityIndex ?? "unset"}|${selected}`;
   const cached = markerIconCache.get(cacheKey);
   if (cached) return cached;
 
   const spec = getCategoryMarkerSpec(category);
-  const ringColor = priorityBandHex(priorityIndex);
   const diameter = selected ? 34 : 26;
   const ringWidth = selected ? 3 : 2;
   const iconSize = selected ? 16 : 13;
-  const label = priorityIndex === null ? `${category}, operational priority not set` : `${category}, ${band} operational priority`;
+  const label = priorityIndex === null ? `${category}, operational priority not set` : `${category}, operational priority ${priorityIndex} of 100`;
 
   const icon = L.divIcon({
     className: "",
-    html: `<div class="map-marker-pin" role="img" aria-label="${label.replace(/"/g, "&quot;")}" style="width:${diameter}px;height:${diameter}px;border-radius:50% 50% 50% 0;background:${spec.color};display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 0 0 ${ringWidth}px ${ringColor}, 0 1px 3px rgba(15,23,42,0.35);transform:rotate(-45deg);"><span style="display:flex;transform:rotate(45deg);">${iconSvgMarkup(spec.icon, iconSize)}</span></div>`,
+    html: `<div class="map-marker-pin" role="img" aria-label="${label.replace(/"/g, "&quot;")}" style="width:${diameter}px;height:${diameter}px;border-radius:50% 50% 50% 0;background:${spec.color};display:flex;align-items:center;justify-content:center;border:${ringWidth}px solid #fff;box-shadow:0 1px 3px rgba(15,23,42,0.35);transform:rotate(-45deg);"><span style="display:flex;transform:rotate(45deg);">${iconSvgMarkup(spec.icon, iconSize)}</span></div>`,
     iconSize: [diameter, diameter],
     iconAnchor: [diameter / 2, Math.round(diameter * 1.18)],
   });
@@ -113,30 +106,22 @@ export function categoryMarkerIcon(category: string, priorityIndex: number | nul
   return icon;
 }
 
-// Cluster icons can't read a priority back out of a marker's color (each
-// marker's fill is its category color), so each marker's priority_index is
-// registered here at mount time (Marker ref callback) and read back by
-// categoryClusterIcon — a WeakMap avoids threading a parallel prop through
-// react-leaflet-cluster's iconCreateFunction. The cluster ring shows the
-// highest Operational Priority inside it.
-const markerPriority = new WeakMap<L.Marker, number | null>();
-
-export function registerMarkerPriority(marker: L.Marker, priorityIndex: number | null) {
-  markerPriority.set(marker, priorityIndex);
+export function registerMarkerPriority(_marker: L.Marker, _priorityIndex: number | null) {
+  // Kept for react-leaflet's existing ref callback; marker clusters are neutral.
+  void _marker;
+  void _priorityIndex;
 }
 
 export function categoryClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
   const children = cluster.getAllChildMarkers();
   const count = children.length;
-  const priorities = children.map((marker) => markerPriority.get(marker) ?? null).filter((p): p is number => p !== null);
-  const ringColor = priorityBandHex(priorities.length > 0 ? Math.max(...priorities) : null);
 
   const size = count < 10 ? 32 : count < 50 ? 42 : 54;
   const ringWidth = count < 10 ? 2 : count < 50 ? 2.5 : 3;
 
   return L.divIcon({
     className: "",
-    html: `<div style="width:${size}px;height:${size}px;border-radius:9999px;background:#1e293b;display:flex;align-items:center;justify-content:center;border:${ringWidth}px solid ${ringColor};box-shadow:0 1px 4px rgba(15,23,42,0.35);color:#fff;font-weight:600;font-size:13px;">${count}</div>`,
+    html: `<div style="width:${size}px;height:${size}px;border-radius:9999px;background:#1e293b;display:flex;align-items:center;justify-content:center;border:${ringWidth}px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,0.35);color:#fff;font-weight:600;font-size:13px;">${count}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });

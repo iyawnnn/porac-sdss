@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { ChevronDownIcon, EllipsisIcon, PanelRightOpenIcon } from "lucide-react";
 import type { AdminTicketRow } from "@/lib/types/admin-tickets";
-import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { relativeAge } from "@/lib/utils/ui/time";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -132,20 +131,7 @@ export function QueueRow({
 
       {show("priority") && (
         <span className="text-center font-mono text-[13px] font-semibold tabular-nums" role="cell">
-          {ticket.priority_index ?? "—"}
-        </span>
-      )}
-
-      {/* Operational Priority's own display band (lib/utils/ui/priority.ts:
-          1-33 Low, 34-66 Medium, 67-100 High) — never urgency_level. Text
-          label always rendered beside the color, so it is not color-only. */}
-      {show("level") && (
-        <span role="cell">
-          <span
-            className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${priorityBandClass(ticket.priority_index)}`}
-          >
-            {priorityBandLabel(ticket.priority_index)}
-          </span>
+          {ticket.priority_index === null ? "—" : `${ticket.priority_index}/100`}
         </span>
       )}
 
