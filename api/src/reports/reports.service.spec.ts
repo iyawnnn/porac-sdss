@@ -9,6 +9,7 @@ import {
   STALE_EVIDENCE_CATEGORIES,
   STALE_EVIDENCE_HOURS,
   TIMESTAMP_ANOMALY_TOLERANCE_HOURS,
+  citizenSubmitResponse,
   evidenceCheckFlags,
   withPublicMapPositionKeys,
 } from './reports.service';
@@ -86,15 +87,40 @@ describe('automatic grouping removed from submit() (Phase 1, step 3)', () => {
     expect(submitBody).not.toMatch(/pg_advisory_xact_lock/);
   });
 
-  it('always inserts a new ticket with member_count 1 and reports merged: false', () => {
+  it('always inserts a new ticket with member_count 1', () => {
     expect(submitBody.match(/INSERT INTO tickets/g)).toHaveLength(1);
     expect(submitBody).toMatch(/\$\{category\}, \$\{barangay\.id\}, 1,/);
-    expect(submitBody).toMatch(/merged: false,\s*memberCount: 1,/);
-    expect(submitBody).not.toMatch(/merged: true/);
   });
 
   it('still records the rate-limit event inside the submission transaction', () => {
     expect(submitBody).toMatch(/this\.rateLimit\.recordRateLimitEvent\(\s*tx,/);
+  });
+});
+
+describe('citizenSubmitResponse', () => {
+  it('returns only the citizen-safe keys and reduces internal flags to a boolean', () => {
+    const result = citizenSubmitResponse({
+      reportId: 12,
+      trackingReference: 'PRC-2026-000012',
+      ticketId: 34,
+      barangay: 'Poblacion',
+      assignedOffice: 'MEO',
+      flags: ['DUPLICATE_IMAGE:145'],
+    });
+
+    expect(Object.keys(result).sort()).toEqual(
+      [
+        'assignedOffice',
+        'barangay',
+        'needsReview',
+        'reportId',
+        'ticketId',
+        'trackingReference',
+      ].sort(),
+    );
+    expect(result.needsReview).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('DUPLICATE_IMAGE');
+    expect(JSON.stringify(result)).not.toContain('145');
   });
 });
 
@@ -690,12 +716,10 @@ describe('citizen responses carry no system score (Phase 1, step 6c)', () => {
   );
 
   it('the submit response has no elevationM key', () => {
-    const returned = reportsServiceSource.match(
-      /return \{\s*reportId: result\.reportId[\s\S]*?\};/,
-    );
-    expect(returned).not.toBeNull();
-    expect(returned![0]).toContain('barangay: barangay.name');
-    expect(returned![0]).not.toMatch(/elevationM/);
+    const submitBody = methodBody('submit');
+    expect(submitBody).toContain('citizenSubmitResponse({');
+    expect(submitBody).toContain('barangay: barangay.name');
+    expect(submitBody).not.toMatch(/elevationM/);
 
     const resultType = reportsServiceSource.slice(
       reportsServiceSource.indexOf('export interface SubmitReportResult'),

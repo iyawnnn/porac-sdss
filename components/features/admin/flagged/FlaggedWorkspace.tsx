@@ -54,6 +54,7 @@ import {
 } from "./queue/FlaggedViewTabs";
 import { useFlaggedKeyboard } from "./queue/useFlaggedKeyboard";
 import { useFlaggedSelection } from "./queue/useFlaggedSelection";
+import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 interface Barangay {
   id: number;
@@ -389,7 +390,7 @@ export function FlaggedWorkspace({
           ok.push(id);
         } else {
           const body = await res.json().catch(() => ({}));
-          failed.push({ id, reason: body.error ?? body.message ?? `Failed (${res.status})` });
+          failed.push({ id, reason: apiErrorMessage(body, `Failed (${res.status})`) });
         }
       } catch {
         failed.push({ id, reason: "Network error" });

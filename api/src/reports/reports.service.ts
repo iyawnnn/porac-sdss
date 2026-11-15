@@ -115,15 +115,29 @@ export interface SubmitReportResult {
   // reports insert trigger (migration 0036) and read back via RETURNING.
   trackingReference: string;
   ticketId: number;
-  // Always false / 1 since Phase 1, step 3 (no automatic grouping). Kept so
-  // the submit response shape is unchanged for the citizen report form.
-  merged: boolean;
-  memberCount: number;
   barangay: string;
   // elevationM left the response in manuscript revision Phase 1, step 6c;
   // since step 7a the elevation is no longer looked up or stored either.
   assignedOffice: 'MEO' | 'MDRRMO';
-  flags: string[];
+  needsReview: boolean;
+}
+
+export function citizenSubmitResponse(input: {
+  reportId: number;
+  trackingReference: string;
+  ticketId: number;
+  barangay: string;
+  assignedOffice: 'MEO' | 'MDRRMO';
+  flags: readonly string[];
+}): SubmitReportResult {
+  return {
+    reportId: input.reportId,
+    trackingReference: input.trackingReference,
+    ticketId: input.ticketId,
+    barangay: input.barangay,
+    assignedOffice: input.assignedOffice,
+    needsReview: input.flags.length > 0,
+  };
 }
 
 export interface MyReportRow {
@@ -520,8 +534,6 @@ export class ReportsService {
         ticketId: ticket.id,
         reportId: report.id,
         trackingReference: report.tracking_reference,
-        merged: false,
-        memberCount: 1,
       };
     });
 
@@ -536,16 +548,14 @@ export class ReportsService {
     this.hazardInformation.triggerForNewTicket(result.ticketId, category);
     await this.operationalPriority.recalculateActiveTickets();
 
-    return {
+    return citizenSubmitResponse({
       reportId: result.reportId,
       trackingReference: result.trackingReference,
       ticketId: result.ticketId,
-      merged: result.merged,
-      memberCount: result.memberCount,
       barangay: barangay.name,
       assignedOffice: office,
       flags,
-    };
+    });
   }
 
   // Central Monitoring / Focal Personnel has municipality-wide intake

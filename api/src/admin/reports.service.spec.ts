@@ -327,6 +327,33 @@ describe('ReportsService.workOrdersCsv', () => {
 });
 
 describe('ReportsService.flaggedCsv', () => {
+  it('renders null, empty and populated flags safely', async () => {
+    const row = {
+        id: 211,
+        ticket_id: 1036,
+        tracking_reference: 'PORAC-2026-211',
+        category: 'Flooding',
+        barangay_name: 'Sapang Uwak',
+        assigned_office: 'MDRRMO',
+        citizen_severity: 'Critical',
+        location_mismatch_m: null,
+        moderation_status: null,
+        moderated_by: null,
+        moderated_at: null,
+        created_at: '2026-08-20T08:12:00.000Z',
+    };
+    const getModerationForExport = jest.fn().mockResolvedValue([
+      { ...row, flags: null },
+      { ...row, flags: [] },
+      { ...row, flags: ['ONE', 'TWO'] },
+    ]);
+    const { service } = makeService({ getModerationForExport });
+    const rows = (await service.flaggedCsv({}, MEO_OFFICER)).split('\r\n');
+    expect(rows[1].split(',')[7]).toBe('');
+    expect(rows[2].split(',')[7]).toBe('');
+    expect(rows[3].split(',')[7]).toBe('ONE | TWO');
+  });
+
   it('delegates filter parsing (and office scoping) to ModerationService.parseModerationQuery', async () => {
     const parseModerationQuery = jest
       .fn()

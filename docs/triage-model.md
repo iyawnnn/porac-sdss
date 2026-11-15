@@ -112,7 +112,7 @@ The median is taken in `api/src/common/utils/severity.ts` (`ticketSeverity`, Pha
 
 ### What recalculates
 
-`OperationalPriorityService.recalculateActiveTickets` (`api/src/domain/operational-priority.service.ts`) writes only `priority_index`, using the §4 formula. The seed scripts use `api/scripts/lib/recompute.ts`'s `recalculateActivePriority`, which runs that same service. `recalculateTickets(tx, ids)` is the same calculation limited to given tickets inside a caller's transaction. `pnpm --prefix api recalc:median-severity` (`api/scripts/recalculate-median-severity.ts`, dry run unless `--apply`) recalculated every active ticket once when the median rule arrived.
+`OperationalPriorityService.recalculateActiveTickets` (`api/src/domain/operational-priority.service.ts`) writes only changed `priority_index` values, using the §4 formula; recalculation does not change the ticket's `updated_at`. The seed scripts use `api/scripts/lib/recompute.ts`'s `recalculateActivePriority`, which runs that same service. `recalculateTickets(tx, ids)` is the same calculation limited to given tickets inside a caller's transaction. `pnpm --prefix api recalc:median-severity` (`api/scripts/recalculate-median-severity.ts`, dry run unless `--apply`) recalculated every active ticket once when the median rule arrived.
 
 **Only tickets with status `Reported`, `Under Review`, or `In Progress` are updated.** `Resolved` and `Rejected` tickets keep whatever value they last held — their priority is effectively frozen at closure.
 

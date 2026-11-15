@@ -8,7 +8,6 @@ import {
   NotFoundException,
   Param,
   ParseFilePipe,
-  ParseIntPipe,
   Post,
   Query,
   UploadedFile,
@@ -30,6 +29,10 @@ import {
 } from './operational-assessment.service';
 import { RelatedTicketsService } from './related-tickets.service';
 import { validateReassignOffice } from './ticket-routing.rules';
+import {
+  PositiveIntPipe,
+  parsePositiveInt,
+} from '../common/pipes/positive-int.pipe';
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|png|webp)$/;
@@ -47,10 +50,7 @@ function parseTicketIds(value: unknown): number[] {
       `ticketIds must contain at most ${BULK_MAX_TICKETS} ids`,
     );
   }
-  const ids = value.map((v) => Number(v));
-  if (ids.some((n) => !Number.isInteger(n) || n <= 0)) {
-    throw new BadRequestException('ticketIds must be positive integers');
-  }
+  const ids = value.map((v) => parsePositiveInt(v, 'ticketIds'));
   // De-duplicate: a repeated id would otherwise be advanced twice and write
   // two audit rows for one intent.
   return [...new Set(ids)];
@@ -106,7 +106,7 @@ export class TicketsController {
 
   @Get(':id')
   async detail(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
   ) {
     // Matches the original SSR page (app/admin/tickets/[id]/page.tsx),
@@ -150,7 +150,7 @@ export class TicketsController {
   // 8 s) and returns the new state.
   @Post(':id/hazard-information/retry')
   async retryHazardInformation(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
   ) {
     return this.hazardInformation.retry(id, admin);
@@ -163,7 +163,7 @@ export class TicketsController {
   // (at most 5 s) and returns the new state.
   @Post(':id/rainfall-context/refresh')
   async refreshRainfallContext(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
   ) {
     return this.rainfallContext.manualRefresh(id, admin);
@@ -171,7 +171,7 @@ export class TicketsController {
 
   @Post(':id/assessment')
   async saveAssessment(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body() body: OperationalAssessmentInput,
   ) {
@@ -181,7 +181,7 @@ export class TicketsController {
 
   @Get(':id/priority-context')
   async priorityContext(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
   ) {
     const context = await this.tickets.getTicketPriorityContext(id, admin);
@@ -193,7 +193,7 @@ export class TicketsController {
   // read-only, same 403/404 as GET /admin/tickets/:id, own office only.
   @Get(':id/related-candidates')
   async relatedCandidates(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
   ) {
     const related = await this.related.forTicket(id, admin);
@@ -203,7 +203,7 @@ export class TicketsController {
 
   // These MUST stay declared above the @Post(':id/...') routes below. Nest
   // matches in declaration order, and 'bulk/reassign' matches the pattern
-  // ':id/reassign' with :id = 'bulk' — which resolves to ParseIntPipe and
+  // ':id/reassign' with :id = 'bulk' — which resolves to PositiveIntPipe and
   // fails as "numeric string is expected" instead of reaching this handler.
   // A literal path segment does not win over a parameter by being more
   // specific; only declaration order decides.
@@ -245,7 +245,7 @@ export class TicketsController {
   // the photo stays optional (manuscript revision Phase 5, step 5c). Other
   // steps ignore all three.
   async advanceStatus(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('notes') notes: unknown,
     @Body('outcome') outcome: unknown,
@@ -279,7 +279,7 @@ export class TicketsController {
   // merged away, not Resolved, legacy, or not an External Referral.
   @Post(':id/return-to-review')
   async returnToReview(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('reason') reason: unknown,
   ) {
@@ -296,7 +296,7 @@ export class TicketsController {
   // /admin/intake/:reportId/reassign|refer.
   @Post(':id/reassign')
   async reassign(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('toOffice') toOffice: unknown,
     @Body('reason') reason: unknown,
@@ -312,7 +312,7 @@ export class TicketsController {
 
   @Post(':id/refer')
   async refer(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('agency') agency: unknown,
     @Body('reason') reason: unknown,
@@ -323,7 +323,7 @@ export class TicketsController {
 
   @Post(':id/reject')
   async reject(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('reason') reason: unknown,
   ) {

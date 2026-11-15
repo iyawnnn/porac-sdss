@@ -11,7 +11,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Tagged-template mock: the first call is the SELECT, then the id-ordered
 // row lock, then the UPDATE. begin() runs its callback on the same mock.
 function makeSql(selectRows: unknown[]) {
-  const sql = jest.fn().mockResolvedValueOnce(selectRows).mockResolvedValue([]);
+  const sql = jest
+    .fn()
+    .mockResolvedValueOnce(selectRows)
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce(selectRows);
   const begin = jest.fn((cb: (tx: unknown) => unknown) => cb(sql));
   Object.assign(sql, { begin });
   return sql as unknown as Sql & jest.Mock & { begin: jest.Mock };
@@ -56,7 +60,7 @@ describe('OperationalPriorityService.recalculateActiveTickets', () => {
     expect(sql.mock.calls[0].slice(1)).toEqual([null, null, null, null]);
   });
 
-  it('computes 0.50 severity + 0.25 age + 0.25 barangay demand and writes only priority_index', async () => {
+  it('computes the formula and changes only distinct priority_index values', async () => {
     const sql = makeSql([
       {
         // Critical, 7 days old, busiest barangay -> 1.0 -> 100
@@ -87,6 +91,10 @@ describe('OperationalPriorityService.recalculateActiveTickets', () => {
     const updateCall = sql.mock.calls[2];
     const update = queryText(updateCall);
     expect(update).toContain('priority_index = u.priority_index');
+    expect(update).toContain(
+      't.priority_index IS DISTINCT FROM u.priority_index',
+    );
+    expect(update).not.toContain('updated_at');
     for (const forbidden of [
       'priority_score',
       'urgency_score',

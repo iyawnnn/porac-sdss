@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import type { Env } from '../../config/env';
 
 // CRON_SECRET is an env var (validated at boot in config/env.ts), so this
@@ -32,7 +33,12 @@ export class CronSecretGuard implements CanActivate {
 
     const provided = bearerToken ?? headerSecret;
 
-    if (!provided || provided !== expected) {
+    const providedBuffer = Buffer.from(provided ?? '', 'utf8');
+    const expectedBuffer = Buffer.from(expected, 'utf8');
+    if (
+      providedBuffer.length !== expectedBuffer.length ||
+      !timingSafeEqual(providedBuffer, expectedBuffer)
+    ) {
       throw new UnauthorizedException();
     }
     return true;

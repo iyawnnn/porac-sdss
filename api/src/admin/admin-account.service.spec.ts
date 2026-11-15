@@ -21,7 +21,9 @@ const ACTOR: AdminSession = {
 
 // select() chain: from/where resolve via .then, mirroring the other
 // admin service specs in this directory.
-function selectChain(rowOrRows: Record<string, unknown> | Record<string, unknown>[]) {
+function selectChain(
+  rowOrRows: Record<string, unknown> | Record<string, unknown>[],
+) {
   const rows = Array.isArray(rowOrRows) ? rowOrRows : [rowOrRows];
   const obj: Record<string, unknown> = {};
   const self = () => obj;
@@ -48,7 +50,10 @@ function makeDb() {
   const db: Record<string, unknown> = { select: jest.fn(), update };
   db.transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(db));
   return {
-    db: db as unknown as PostgresJsDatabase & { select: jest.Mock; transaction: jest.Mock },
+    db: db as unknown as PostgresJsDatabase & {
+      select: jest.Mock;
+      transaction: jest.Mock;
+    },
     setMock: set,
   };
 }
@@ -64,7 +69,23 @@ describe('AdminAccountService.changeOwnPassword', () => {
     const { audit } = makeAudit();
     const service = new AdminAccountService(db, audit);
     await expect(
-      service.changeOwnPassword(ACTOR, { currentPassword: 'whatever', newPassword: 'short' }),
+      service.changeOwnPassword(ACTOR, {
+        currentPassword: 'whatever',
+        newPassword: 'short',
+      }),
+    ).rejects.toThrow(WeakPasswordError);
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it('rejects a new password longer than 72 bytes before touching the database', async () => {
+    const { db } = makeDb();
+    const { audit } = makeAudit();
+    const service = new AdminAccountService(db, audit);
+    await expect(
+      service.changeOwnPassword(ACTOR, {
+        currentPassword: 'whatever',
+        newPassword: '😀'.repeat(19),
+      }),
     ).rejects.toThrow(WeakPasswordError);
     expect(db.select).not.toHaveBeenCalled();
   });
@@ -74,7 +95,10 @@ describe('AdminAccountService.changeOwnPassword', () => {
     const { audit } = makeAudit();
     const service = new AdminAccountService(db, audit);
     await expect(
-      service.changeOwnPassword(ACTOR, { currentPassword: undefined, newPassword: 'longenoughpassword' }),
+      service.changeOwnPassword(ACTOR, {
+        currentPassword: undefined,
+        newPassword: 'longenoughpassword',
+      }),
     ).rejects.toThrow(WrongPasswordError);
     expect(db.select).not.toHaveBeenCalled();
   });
@@ -87,7 +111,10 @@ describe('AdminAccountService.changeOwnPassword', () => {
     const service = new AdminAccountService(db, audit);
 
     await expect(
-      service.changeOwnPassword(ACTOR, { currentPassword: 'wrong-password', newPassword: 'longenoughpassword' }),
+      service.changeOwnPassword(ACTOR, {
+        currentPassword: 'wrong-password',
+        newPassword: 'longenoughpassword',
+      }),
     ).rejects.toThrow(WrongPasswordError);
     expect(db.transaction).not.toHaveBeenCalled();
     expect(setMock).not.toHaveBeenCalled();
@@ -110,7 +137,9 @@ describe('AdminAccountService.changeOwnPassword', () => {
     const setArgs = setMock.mock.calls[0][0];
     expect(setArgs.passwordHash).not.toBe('a-brand-new-password');
     expect(setArgs.passwordHash).not.toBe(existingHash);
-    expect(await bcrypt.compare('a-brand-new-password', setArgs.passwordHash)).toBe(true);
+    expect(
+      await bcrypt.compare('a-brand-new-password', setArgs.passwordHash),
+    ).toBe(true);
     expect(setArgs.sessionValidAfter).toBeInstanceOf(Date);
     expect(setArgs.passwordChangedAt).toBeInstanceOf(Date);
 
@@ -119,7 +148,9 @@ describe('AdminAccountService.changeOwnPassword', () => {
     expect(input.actionType).toBe('admin_password_changed');
     expect(input.targetType).toBe('admin');
     expect(input.targetId).toBe(ACTOR.adminId);
-    expect(JSON.stringify(input)).not.toMatch(/a-brand-new-password|correct-horse/);
+    expect(JSON.stringify(input)).not.toMatch(
+      /a-brand-new-password|correct-horse/,
+    );
   });
 });
 
@@ -139,7 +170,19 @@ describe('AdminAccountService.resetPassword', () => {
     const { db } = makeDb();
     const { audit } = makeAudit();
     const service = new AdminAccountService(db, audit);
-    await expect(service.resetPassword(ACTOR, 42, 'short')).rejects.toThrow(WeakPasswordError);
+    await expect(service.resetPassword(ACTOR, 42, 'short')).rejects.toThrow(
+      WeakPasswordError,
+    );
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it('rejects a temporary password longer than 72 bytes before touching the database', async () => {
+    const { db } = makeDb();
+    const { audit } = makeAudit();
+    const service = new AdminAccountService(db, audit);
+    await expect(
+      service.resetPassword(ACTOR, 42, 'p'.repeat(73)),
+    ).rejects.toThrow(WeakPasswordError);
     expect(db.select).not.toHaveBeenCalled();
   });
 
@@ -156,7 +199,12 @@ describe('AdminAccountService.resetPassword', () => {
   it('hashes the temporary password, bumps the target session_valid_after, and audits with no secrets', async () => {
     const { db, setMock } = makeDb();
     db.select.mockReturnValueOnce(
-      selectChain({ id: 42, firstName: 'Jane', lastName: 'Doe', email: 'jane@example.com' }),
+      selectChain({
+        id: 42,
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@example.com',
+      }),
     );
     const { audit, logInTx } = makeAudit();
     const service = new AdminAccountService(db, audit);
@@ -165,7 +213,9 @@ describe('AdminAccountService.resetPassword', () => {
 
     expect(setMock).toHaveBeenCalledTimes(1);
     const setArgs = setMock.mock.calls[0][0];
-    expect(await bcrypt.compare('a-temporary-password', setArgs.passwordHash)).toBe(true);
+    expect(
+      await bcrypt.compare('a-temporary-password', setArgs.passwordHash),
+    ).toBe(true);
     expect(setArgs.sessionValidAfter).toBeInstanceOf(Date);
 
     expect(logInTx).toHaveBeenCalledTimes(1);

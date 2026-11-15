@@ -144,6 +144,34 @@ describe('AdminsService', () => {
       expect(db.select.mock.calls).toHaveLength(0);
     });
 
+    it.each([
+      ['an invalid email', { email: 'notanemail' }],
+      ['an oversized email', { email: `${'a'.repeat(250)}@x.com` }],
+      ['an oversized first name', { firstName: 'A'.repeat(101) }],
+      ['an oversized last name', { lastName: 'B'.repeat(101) }],
+      ['an oversized ASCII password', { password: 'p'.repeat(73) }],
+      ['an oversized multibyte password', { password: '😀'.repeat(19) }],
+    ])('rejects %s before touching the database', async (_label, invalid) => {
+      const db = makeDb();
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      await expect(
+        service.create(
+          {
+            ...NEW_ADMIN,
+            ...invalid,
+            accountType: 'PERSONNEL',
+            isFocal: false,
+            office: 'MEO',
+          },
+          ACTOR,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(db.select).not.toHaveBeenCalled();
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
     // Manuscript revision Phase 2, step 2e: the API side of the CHECK
     // admins_account_type_office_focal_check — each invalid combination is
     // a clear 400, before the database is touched.
@@ -327,6 +355,59 @@ describe('AdminsService', () => {
         ),
       ).rejects.toThrow(ConflictException);
       expect(db.insert.mock.calls).toHaveLength(0);
+      expect(logInTx).not.toHaveBeenCalled();
+    });
+
+    it('normalizes the stored email and trims names', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(chain([]));
+      const inserted = chain(fullAdminRow({ id: 42 }));
+      db.insert.mockReturnValueOnce(inserted);
+      const { audit } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      await service.create(
+        {
+          ...NEW_ADMIN,
+          email: '  QA-TECH-A@Example.com  ',
+          firstName: '  QA  ',
+          lastName: '  Tech  ',
+          accountType: 'PERSONNEL',
+          isFocal: false,
+          office: 'MEO',
+        },
+        ACTOR,
+      );
+
+      expect(inserted.valuesArg).toMatchObject({
+        email: 'qa-tech-a@example.com',
+        firstName: 'QA',
+        lastName: 'Tech',
+      });
+    });
+
+    it('returns the normal duplicate-email conflict when a concurrent insert loses the race', async () => {
+      const db = makeDb();
+      db.select.mockReturnValueOnce(chain([]));
+      db.insert.mockReturnValueOnce({
+        values: () => ({ returning: () => Promise.reject({ message: 'Failed query', cause: { code: '23505' } }) }),
+      });
+      const { audit, logInTx } = makeAudit();
+      const service = new AdminsService(db, audit);
+
+      await expect(
+        service.create(
+          {
+            ...NEW_ADMIN,
+            accountType: 'PERSONNEL',
+            isFocal: false,
+            office: 'MEO',
+          },
+          ACTOR,
+        ),
+      ).rejects.toThrow(
+        new ConflictException('An admin with this email already exists.'),
+      );
       expect(logInTx).not.toHaveBeenCalled();
     });
 

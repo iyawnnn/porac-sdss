@@ -1,4 +1,5 @@
-import { Controller, Get, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { PositiveIntPipe } from '../common/pipes/positive-int.pipe';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -6,8 +7,12 @@ import type { AdminSession } from '../auth/session.service';
 import { resolveOfficeScope } from '../common/authz/admin-scope';
 import { BarangayInsightsService } from './barangay-insights.service';
 
-function parseOfficeParam(value: string | undefined): 'MEO' | 'MDRRMO' | 'all' | undefined {
-  return value === 'all' || value === 'MEO' || value === 'MDRRMO' ? value : undefined;
+function parseOfficeParam(
+  value: string | undefined,
+): 'MEO' | 'MDRRMO' | 'all' | undefined {
+  return value === 'all' || value === 'MEO' || value === 'MDRRMO'
+    ? value
+    : undefined;
 }
 
 // Read-only, no extra guard beyond AdminSessionGuard — safe because every
@@ -33,7 +38,7 @@ export class BarangayInsightsController {
 
   @Get(':id')
   getProfile(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @Query('office') officeParam: string | undefined,
     @CurrentAdmin() admin: AdminSession,
   ) {

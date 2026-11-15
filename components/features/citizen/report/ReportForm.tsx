@@ -30,6 +30,7 @@ import {
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { createDefaultMarkerIcon } from "@/lib/gis/leaflet-icons";
 import { bindBarangayHoverTooltip, styleBarangayFeature, styleMunicipalBoundary } from "@/lib/gis/map-styles";
+import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 const icon = createDefaultMarkerIcon();
 
@@ -419,32 +420,45 @@ export default function ReportForm() {
     form.set("lng", String(position.lng));
     form.set("image", file);
 
-    const res = await fetch("/api/reports", { method: "POST", body: form });
-    const data = await res.json();
+    let succeeded = false;
+    try {
+      const res = await fetch("/api/reports", { method: "POST", body: form });
+      const data = await res.json();
 
-    if (res.ok) {
-      setStatus("success");
-      // Flags are internal review signals (EXIF/GPS/staleness/duplicate checks) —
-      // never shown as raw codes to the citizen; the report goes through review
-      // either way, so a short neutral note is enough here.
-      const flagNote: string = data.flags?.length ? " This report has been flagged for additional review by city staff." : "";
-      // The tracking reference and the office's full name (manuscript
-      // revision Phase 6, step 6b) — not the internal ticket number or the
-      // raw office code.
-      setMessage(
-        `Report submitted. Tracking reference: ${data.trackingReference}. Barangay: ${data.barangay}. Handled by the ${officeLabel(data.assignedOffice)}.${flagNote}`
-      );
-      formRef.current?.reset();
-      setFile(null);
-      setPositionRaw(null);
-      setExifPosition(null);
-      setSearchTarget(null);
-      setLocationSource("default");
-      setExifStatus("idle");
-      setSeverityChoice(NO_SEVERITY);
-    } else {
-      setStatus("error");
-      setMessage(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
+      if (res.ok) {
+        setStatus("success");
+        // Flags are internal review signals (EXIF/GPS/staleness/duplicate checks) —
+        // never shown as raw codes to the citizen; the report goes through review
+        // either way, so a short neutral note is enough here.
+        const flagNote: string = data.needsReview
+          ? " This report has been flagged for additional review by city staff."
+          : "";
+        // The tracking reference and the office's full name (manuscript
+        // revision Phase 6, step 6b) — not the internal ticket number or the
+        // raw office code.
+        setMessage(
+          `Report submitted. Tracking reference: ${data.trackingReference}. Barangay: ${data.barangay}. Handled by the ${officeLabel(data.assignedOffice)}.${flagNote}`,
+        );
+        formRef.current?.reset();
+        setFile(null);
+        setPositionRaw(null);
+        setExifPosition(null);
+        setSearchTarget(null);
+        setLocationSource("default");
+        setExifStatus("idle");
+        setSeverityChoice(NO_SEVERITY);
+        succeeded = true;
+      } else {
+        const fallback =
+          res.status === 429
+            ? "Too many reports were submitted from this network. Please try again later."
+            : "We couldn't submit your report. Please try again.";
+        setMessage(apiErrorMessage(data, fallback));
+      }
+    } catch {
+      setMessage("We couldn't submit your report. Please try again.");
+    } finally {
+      if (!succeeded) setStatus("error");
     }
   }
 
@@ -554,7 +568,7 @@ export default function ReportForm() {
               </p>
             )}
             {!detectedBarangay && position && (
-              <p className="text-amber-800">Pin is inside the Porac bounding box but outside loaded barangay polygons.</p>
+              <p className="text-amber-800">The selected location is outside Porac&apos;s barangay boundaries. Move the pin to a location inside Porac.</p>
             )}
             {locationError && <p className="text-danger-ink">{locationError}</p>}
           </div>
@@ -592,7 +606,7 @@ export default function ReportForm() {
             <label htmlFor="title" className={LABEL_CLASS}>
               Title
             </label>
-            <input id="title" name="title" required className={FIELD_CLASS} />
+            <input id="title" name="title" required maxLength={200} className={FIELD_CLASS} />
           </div>
 
           <div className="flex flex-1 flex-col">
@@ -603,6 +617,7 @@ export default function ReportForm() {
               id="description"
               name="description"
               rows={3}
+              maxLength={2000}
               className="w-full min-h-30 flex-1 resize-none px-4 py-3 text-base rounded-lg border border-line-200 bg-surface text-ink-900"
             />
           </div>
@@ -660,7 +675,7 @@ export default function ReportForm() {
             {status === "submitting" ? "Submitting..." : "Submit Report"}
           </button>
 
-          <div aria-live="polite">
+          <div role={status === "error" ? "alert" : undefined} aria-live="polite">
             {message && (
               <p
                 className={`text-sm flex items-start gap-1.5 ${

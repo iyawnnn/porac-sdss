@@ -6,6 +6,7 @@ import { DB } from '../db/db.module';
 import { admins } from '../db/schema';
 import type { AdminSession } from '../auth/session.service';
 import { AdminAuditService } from './admin-audit.service';
+import { isValidPassword } from '../common/utils/account-validation';
 
 export class WrongPasswordError extends Error {}
 export class WeakPasswordError extends Error {}
@@ -16,7 +17,6 @@ export class WeakPasswordError extends Error {}
 // silently allowed.
 export class SelfResetNotAllowedError extends Error {}
 
-const MIN_PASSWORD_LENGTH = 8;
 const BCRYPT_ROUNDS = 10;
 
 function actorSnapshot(actor: AdminSession) {
@@ -48,7 +48,7 @@ export class AdminAccountService {
   ): Promise<void> {
     if (
       typeof input.newPassword !== 'string' ||
-      input.newPassword.length < MIN_PASSWORD_LENGTH
+      !isValidPassword(input.newPassword)
     ) {
       throw new WeakPasswordError();
     }
@@ -60,7 +60,10 @@ export class AdminAccountService {
       .select({ passwordHash: admins.passwordHash })
       .from(admins)
       .where(eq(admins.id, actor.adminId));
-    if (!row || !(await bcrypt.compare(input.currentPassword, row.passwordHash))) {
+    if (
+      !row ||
+      !(await bcrypt.compare(input.currentPassword, row.passwordHash))
+    ) {
       throw new WrongPasswordError();
     }
 
@@ -98,7 +101,7 @@ export class AdminAccountService {
     if (targetId === actor.adminId) {
       throw new SelfResetNotAllowedError();
     }
-    if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
+    if (typeof newPassword !== 'string' || !isValidPassword(newPassword)) {
       throw new WeakPasswordError();
     }
 

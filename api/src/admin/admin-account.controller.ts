@@ -18,7 +18,10 @@ import {
   SessionService,
   type AdminSession,
 } from '../auth/session.service';
-import { adminCookieOptions, ADMIN_SESSION_MAX_AGE_MS } from '../auth/admin-cookie.util';
+import {
+  adminCookieOptions,
+  ADMIN_SESSION_MAX_AGE_MS,
+} from '../auth/admin-cookie.util';
 import type { Env } from '../config/env';
 import {
   AdminAccountService,
@@ -62,7 +65,7 @@ export class AdminAccountController {
       }
       if (err instanceof WeakPasswordError) {
         throw new BadRequestException(
-          'Password must be at least 8 characters.',
+          'Password must be at least 8 characters and no more than 72 bytes.',
         );
       }
       throw err;

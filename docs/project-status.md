@@ -56,6 +56,17 @@ Verified: API 85 suites / 1,981 tests, all CI PGlite harnesses, root type-check/
 - Operational Priority recalculation locks rows in id order inside a transaction. Two concurrent admin reads used to deadlock (40P01), so the page got a 500.
 - Production builds are now part of the Playwright gate ([testing](testing.md) §7). Real-Chrome five-role walk-through done; open items and observations are in the PR #163 report.
 
+## Full-site QA stabilization (2026-11-15, branch `fix/qa-stabilization`, stacked on PR #163)
+
+Fixes for the confirmed findings of the 2026-11-14 full-site QA (Q-ids are the QA report's):
+- Reject locks the ticket and re-checks it; a ticket that changed meanwhile, or is already Resolved/Rejected, gets 409 (Q-01, Q-31). Reject is refused while a Work Order is Pending or In Progress, matching the resolve rule; a Work Order stranded on an already Rejected ticket can still be cancelled, nothing else (Q-02).
+- Ticket and Work Order lists end their ORDER BY with the id, so paging never repeats or skips a ticket (Q-04). Staff ticket search matches citizen tracking references and treats `%`/`_` literally (Q-12).
+- Exports treat NULL `flags` on older reports as no flags (Q-05). Mark-as-duplicate refuses the report itself and reports outside the moderated report's office, and the Flagged drawer shows the API's reason (Q-06).
+- Malformed ids, filters and body fields get 400 instead of 500 through one shared int4 check (Q-07). Concurrent duplicate signups/admin creations get 409 (Q-08). Admin emails are normalized and validated with name/password length caps; citizen signup validates email format and lengths (Q-09, Q-10). The cron secret is compared in constant time (Q-18).
+- The citizen submit response no longer carries raw flags, merge state or another report's id; it keeps the citizen's own references and a `needsReview` flag (Q-11). The report form shows the API's reason, never stays stuck on "Submitting", caps title/description to the server limits and uses plain language for a pin outside Porac's barangays (Q-03, Q-24).
+- Operational Priority recalculation no longer rewrites `tickets.updated_at` and skips unchanged rows (Q-19). Acknowledgment remarks cap at 1000 characters (Q-15); the queue's resolve link no longer claims a photo is required (Q-14).
+- Open, not changed here: Q-13 (the manuscript, printed p.75, says Operational Priority is not converted into categorical bands, while [triage-model](triage-model.md) §5 keeps Low/Medium/High as a display convention) needs an owner decision; the remaining low-severity usability items are inputs to the frontend redesign.
+
 ## Phase 8e documentation verification
 
 Local docs checks passed: 55 API command references resolve to package scripts, the 52-file historical sequence matches the executable catalog, edited fences/CRLF are valid and no new local links are broken. The existing fresh-database harness passed20 groups, including all14 documented seed/import/cleanup mappings and12 entry points, entirely in memory. Manuscript Appendix H was read privately for acknowledgment/assessment alignment. Protected hashes match. No real database, migrations, manual seeds, server operation or Playwright run occurred. Both PR CI checks and owner review/merge remain release gates; their final results are recorded on the PR rather than inferred from earlier runs.

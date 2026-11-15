@@ -4,11 +4,14 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import {
+  PositiveIntPipe,
+  parsePositiveInt,
+} from '../common/pipes/positive-int.pipe';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { CitizenSessionGuard } from '../common/guards/citizen-session.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -29,7 +32,7 @@ interface ListQuery {
 const listOptions = (
   q: ListQuery,
 ): Parameters<NotificationsService['listForPrincipal']>[1] => ({
-  before: q.before ? Number(q.before) : undefined,
+  before: q.before ? parsePositiveInt(q.before, 'before') : undefined,
   limit: q.limit ? Number(q.limit) : undefined,
   // Unrecognized value falls back to 'all' — same silent-default
   // convention every other admin list endpoint already uses.
@@ -78,7 +81,7 @@ export class NotificationsController {
   @HttpCode(HttpStatus.OK)
   async markRead(
     @CurrentAdmin() admin: AdminSession,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
   ) {
     await this.notifications.markRead(adminPrincipal(admin), id);
     return { ok: true };
@@ -116,7 +119,7 @@ export class CitizenNotificationsController {
   @HttpCode(HttpStatus.OK)
   async markRead(
     @CurrentCitizen() citizen: CitizenSession,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
   ) {
     await this.notifications.markRead(citizenPrincipal(citizen), id);
     return { ok: true };

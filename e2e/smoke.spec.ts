@@ -244,7 +244,7 @@ test("citizen report form explains each severity and confirms Critical before it
     await route.fulfill({
       status: 201,
       contentType: "application/json",
-      body: JSON.stringify({ trackingReference: "E2E-STUB", ticketId: 0, barangay: "Poblacion", assignedOffice: "MEO", flags: [] }),
+      body: JSON.stringify({ trackingReference: "E2E-STUB", ticketId: 0, barangay: "Poblacion", assignedOffice: "MEO", needsReview: false }),
     });
   });
   await page.getByRole("button", { name: "Submit Report" }).click();

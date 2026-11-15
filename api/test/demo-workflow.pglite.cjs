@@ -327,7 +327,17 @@ async function main() {
     );
     const volume = await runBulkDemo(pg, db, media, { append: true, count: 3 });
     assert.equal(volume.length, 3);
-    assert(volume.every((x) => !x.merged && x.memberCount === 1));
+    const volumeRows = await pg`
+      SELECT t.member_count, t.merged_into_ticket_id
+      FROM reports r JOIN tickets t ON t.id=r.ticket_id
+      WHERE r.id=ANY(${volume.map((x) => x.reportId)}::int[])
+    `;
+    assert.equal(volumeRows.length, volume.length);
+    assert(
+      volumeRows.every(
+        (x) => x.member_count === 1 && x.merged_into_ticket_id === null,
+      ),
+    );
     await assert.rejects(
       () => runBulkDemo(pg, db, media, { append: true, count: 3 }),
       /already exists/,

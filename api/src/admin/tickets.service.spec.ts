@@ -1009,7 +1009,7 @@ describe('admin audit logging for ticket mutations', () => {
     ]);
     await expect(
       service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toThrow(ConflictException);
   });
 
   it('rejects rejecting an already-Rejected ticket (no double-reject)', async () => {
@@ -1024,7 +1024,51 @@ describe('admin audit logging for ticket mutations', () => {
     ]);
     await expect(
       service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('refuses rejection when active Work Orders remain, without writing history or audit', async () => {
+    const { service, logInPgTx } = makeService([
+      [{
+        status: 'In Progress', assigned_office: 'MEO', category: 'Flooding',
+        active_work_orders: 2,
+      }],
+    ]);
+    await expect(
+      service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
+    ).rejects.toThrow(
+      'Ticket #9 has 2 active Work Orders. Complete or cancel them before rejecting the ticket.',
+    );
+    expect(logInPgTx).not.toHaveBeenCalled();
+  });
+
+  it('allows rejection when all Work Orders are completed or cancelled', async () => {
+    const { service } = makeService([
+      [{
+        status: 'Under Review', assigned_office: 'MEO', category: 'Flooding',
+        active_work_orders: 0,
+      }],
+      Object.assign([], { count: 1 }),
+      [{}],
+      [],
+    ]);
+    await expect(
+      service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
+    ).resolves.toEqual({ status: 'Rejected' });
+  });
+
+  it('turns a zero-row rejection update into 409 before history or audit writes', async () => {
+    const { service, logInPgTx } = makeService([
+      [{
+        status: 'Reported', assigned_office: 'MEO', category: 'Flooding',
+        active_work_orders: 0,
+      }],
+      Object.assign([], { count: 0 }),
+    ]);
+    await expect(
+      service.rejectTicket(9, MEO_OFFICER as AdminSession, 'Reason'),
+    ).rejects.toThrow(ConflictException);
+    expect(logInPgTx).not.toHaveBeenCalled();
   });
 
   it('rejects an empty reason', async () => {

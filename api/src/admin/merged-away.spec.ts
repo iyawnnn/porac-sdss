@@ -204,23 +204,22 @@ describe('a merged-away ticket is read-only', () => {
     expect(texts).toHaveLength(1);
   });
 
-  // Step 5b: every Work Order write (create, edit, status, cancel) checks the
-  // locked ticket with assertResponsibleOfficeCanAct, which refuses a
-  // merged-away ticket, and every UPDATE also carries TICKET_STILL_WRITABLE.
+  // Step 5b: every Work Order write checks the locked ticket and carries an
+  // UPDATE guard that excludes merged-away tickets. Cancel has its own guard
+  // because it alone remains available after a ticket is Rejected.
   it("its Work Orders can't be created, edited, moved or cancelled (409, and the UPDATE skips a merged-away ticket's)", () => {
     const workOrders = read('admin', 'work-orders.service.ts');
     expect(between(workOrders, 'const TICKET_STILL_WRITABLE', ';\n')).toContain(
       't.merged_into_ticket_id IS NULL',
     );
-    for (const method of [
-      'async setStatus(',
-      'async cancel(',
-      'async update(',
-    ]) {
+    for (const method of ['async setStatus(', 'async update(']) {
       const body = between(workOrders, method, '\n  async ');
       expect(body).toContain('assertResponsibleOfficeCanAct(');
       expect(body).toContain('TICKET_STILL_WRITABLE');
     }
+    const cancel = between(workOrders, 'async cancel(', '\n  async ');
+    expect(cancel).toContain('assertNotMergedAway(ticket)');
+    expect(cancel).toContain('TICKET_STILL_UNMERGED');
     expect(between(workOrders, 'async create(', 'async update(')).toContain(
       'assertResponsibleOfficeCanAct(',
     );

@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Eye, EyeOff, AlertCircle, ShieldCheck } from "lucide-react";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 export default function AdminLoginForm() {
-  const router = useRouter();
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -29,8 +27,10 @@ export default function AdminLoginForm() {
       });
 
       if (res.ok) {
-        router.push("/admin");
-        router.refresh();
+        // One full load: /admin/login shares the /admin layout, so a client
+        // push kept the signed-out layout and push + refresh rendered the
+        // dashboard twice.
+        window.location.assign("/admin");
       } else {
         const data = await res.json();
         setError(apiErrorMessage(data, "Login failed"));

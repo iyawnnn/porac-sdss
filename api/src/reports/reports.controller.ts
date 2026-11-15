@@ -10,13 +10,13 @@ import {
   NotFoundException,
   Param,
   ParseFilePipe,
-  ParseIntPipe,
   Post,
   Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { PositiveIntPipe } from '../common/pipes/positive-int.pipe';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { clientIp } from '../common/utils/client-ip';
@@ -107,7 +107,7 @@ export class ReportsController {
   @Get('reports/mine/:id')
   async mineDetail(
     @CurrentCitizen() citizen: CitizenSession,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
   ) {
     const detail = await this.reports.getMyReportDetail(citizen.citizenId, id);
     if (!detail) throw new NotFoundException();
@@ -123,13 +123,17 @@ export class ReportsController {
   @HttpCode(HttpStatus.OK)
   async dispute(
     @CurrentCitizen() citizen: CitizenSession,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @Body('reason') reason: unknown,
   ) {
     if (typeof reason !== 'string') {
       throw new BadRequestException('A short reason is required.');
     }
-    const result = await this.reports.disputeReport(citizen.citizenId, id, reason);
+    const result = await this.reports.disputeReport(
+      citizen.citizenId,
+      id,
+      reason,
+    );
     return { ok: true, ...result };
   }
 
@@ -137,7 +141,7 @@ export class ReportsController {
   @HttpCode(HttpStatus.OK)
   async confirmResolution(
     @CurrentCitizen() citizen: CitizenSession,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
   ) {
     const result = await this.reports.confirmResolution(citizen.citizenId, id);
     return { ok: true, ...result };

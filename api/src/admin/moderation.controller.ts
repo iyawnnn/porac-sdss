@@ -4,11 +4,11 @@ import {
   Controller,
   Get,
   Param,
-  ParseIntPipe,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { PositiveIntPipe } from '../common/pipes/positive-int.pipe';
 import { AdminSessionGuard } from '../common/guards/admin-session.guard';
 import { OperationalStaffGuard } from '../common/guards/operational-staff.guard';
 import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
@@ -48,7 +48,7 @@ export class ModerationController {
 
   @Post('reports/:id/moderate')
   async moderate(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', PositiveIntPipe) id: number,
     @CurrentAdmin() admin: AdminSession,
     @Body('action') action: unknown,
     @Body('canonicalReportId') canonicalReportId: number | undefined,

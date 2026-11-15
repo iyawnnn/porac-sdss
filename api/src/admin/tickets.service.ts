@@ -9,6 +9,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Sql, TransactionSql } from 'postgres';
 import { PG } from '../db/db.module';
+import {
+  isPositiveInt,
+  parsePositiveInt,
+} from '../common/pipes/positive-int.pipe';
 import { MediaService } from '../domain/media.service';
 import {
   computePriorityBreakdown,
@@ -519,7 +523,9 @@ export class TicketsService {
     )
       ? query.category
       : undefined;
-    const barangayId = query.barangayId ? Number(query.barangayId) : undefined;
+    const barangayId = query.barangayId
+      ? parsePositiveInt(query.barangayId, 'barangayId')
+      : undefined;
     const disputed = query.disputed === 'true' ? true : undefined;
     const categoryReview = query.categoryReview === 'true' ? true : undefined;
     // Default is Operational Priority (priority_index) descending — the
@@ -569,13 +575,14 @@ export class TicketsService {
     // manuscript revision Phase 1, step 4.
     const orderBy =
       filters.sort === 'op_priority_asc'
-        ? sql`t.priority_index ASC NULLS LAST, t.created_at DESC`
+        ? sql`t.priority_index ASC NULLS LAST, t.created_at DESC, t.id DESC`
         : filters.sort === 'newest'
-          ? sql`t.created_at DESC`
-          : sql`t.priority_index DESC NULLS LAST, t.created_at DESC`;
+          ? sql`t.created_at DESC, t.id DESC`
+          : sql`t.priority_index DESC NULLS LAST, t.created_at DESC, t.id DESC`;
 
     const search = filters.search?.trim() || null;
-    const searchId = search && /^\d+$/.test(search) ? Number(search) : null;
+    const searchPattern = search?.replace(/[\\%_]/g, '\\$&') ?? null;
+    const searchId = isPositiveInt(search) ? Number(search) : null;
     const page = Math.max(1, filters.page ?? 1);
     const limit = Math.max(
       1,
@@ -612,11 +619,14 @@ export class TicketsService {
         AND (${filters.categoryReview ? true : null}::boolean IS NULL OR t.category_review_required)
         AND (
           ${search}::text IS NULL
-          OR b.name ILIKE '%' || ${search} || '%'
-          OR t.category ILIKE '%' || ${search} || '%'
+          OR b.name ILIKE '%' || ${searchPattern} || '%' ESCAPE E'\\\\'
+          OR t.category ILIKE '%' || ${searchPattern} || '%' ESCAPE E'\\\\'
           OR (${searchId}::int IS NOT NULL AND t.id = ${searchId}::int)
           OR EXISTS (
-            SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title ILIKE '%' || ${search} || '%'
+            SELECT 1 FROM reports r
+            WHERE r.ticket_id = t.id
+              AND (r.title ILIKE '%' || ${searchPattern} || '%' ESCAPE E'\\\\'
+                OR r.tracking_reference ILIKE '%' || ${searchPattern} || '%' ESCAPE E'\\\\')
           )
         )
       ORDER BY ${orderBy}
@@ -637,7 +647,7 @@ export class TicketsService {
   // Powers the queue's view-tab strip. Deliberately NOT a separate endpoint:
   // it rides along on GET /admin/tickets so it can't be fetched without the
   // list it labels, needs no second recalculation pass, and
-  // sidesteps the @Get(':id') ParseIntPipe route-ordering trap.
+  // sidesteps the @Get(':id') PositiveIntPipe route-ordering trap.
   //
   // Office scope is the caller's, not the current filter's — the tabs are a
   // fixed frame around everything this admin can see, so clicking MEO while
@@ -703,7 +713,7 @@ export class TicketsService {
           : sql`AND t.status = ${status}::ticket_status`;
 
     const search = filters.search?.trim() || null;
-    const searchId = search && /^\d+$/.test(search) ? Number(search) : null;
+    const searchId = isPositiveInt(search) ? Number(search) : null;
     // postgres.js's tagged template needs a string, not a raw Date, when
     // the same placeholder value is reused across multiple interpolation
     // sites in one query (it otherwise throws ERR_INVALID_ARG_TYPE trying
@@ -744,7 +754,7 @@ export class TicketsService {
             SELECT 1 FROM reports r WHERE r.ticket_id = t.id AND r.title ILIKE '%' || ${search} || '%'
           )
         )
-      ORDER BY t.created_at DESC
+      ORDER BY t.created_at DESC, t.id DESC
       LIMIT ${EXPORT_ROW_LIMIT + 1}
     `;
     assertExportLimit(rows);
@@ -1791,28 +1801,46 @@ export class TicketsService {
     }
 
     const sql = this.pg;
-    const [ticket] = await sql<
-      {
-        status: TicketStatus;
-        assigned_office: 'MEO' | 'MDRRMO';
-        category: string;
-        merged_into_ticket_id: number | null;
-      }[]
-    >`
-      SELECT status, assigned_office, category, merged_into_ticket_id FROM tickets WHERE id = ${ticketId}
-    `;
-    if (!ticket) throw new NotFoundException('Ticket not found');
-    assertOfficeAccess(admin, ticket.assigned_office);
-    assertNotMergedAway({ id: ticketId, ...ticket });
-
-    if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) {
-      throw new BadRequestException(
-        `Ticket is already ${ticket.status} and cannot be rejected.`,
-      );
-    }
-
     const emailRecipients = await sql.begin(async (tx) => {
-      await tx`UPDATE tickets SET status = 'Rejected', updated_at = now() WHERE id = ${ticketId}`;
+      const [ticket] = await tx<
+        {
+          status: TicketStatus;
+          assigned_office: 'MEO' | 'MDRRMO';
+          category: string;
+          merged_into_ticket_id: number | null;
+          active_work_orders: number;
+        }[]
+      >`
+        SELECT t.status, t.assigned_office, t.category, t.merged_into_ticket_id,
+          (SELECT count(*)::int FROM work_orders w
+           WHERE w.ticket_id = t.id AND w.status IN ('pending', 'in_progress')) AS active_work_orders
+        FROM tickets t WHERE t.id = ${ticketId}
+        FOR UPDATE OF t
+      `;
+      if (!ticket) throw new NotFoundException('Ticket not found');
+      assertOfficeAccess(admin, ticket.assigned_office);
+      assertNotMergedAway({ id: ticketId, ...ticket });
+      if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) {
+        throw new ConflictException(
+          `Ticket is already ${ticket.status} and cannot be rejected.`,
+        );
+      }
+      if (ticket.active_work_orders > 0) {
+        throw new ConflictException(
+          `Ticket #${ticketId} has ${ticket.active_work_orders} active Work Order${ticket.active_work_orders === 1 ? '' : 's'}. Complete or cancel ${ticket.active_work_orders === 1 ? 'it' : 'them'} before rejecting the ticket.`,
+        );
+      }
+
+      const updateResult = await tx`
+        UPDATE tickets SET status = 'Rejected', updated_at = now()
+        WHERE id = ${ticketId} AND status = ${ticket.status}
+          AND status IN ('Reported', 'Under Review', 'In Progress')
+      `;
+      if (updateResult.count === 0) {
+        throw new ConflictException(
+          `Ticket #${ticketId} is already changed; it was not rejected. Reload to see its current status.`,
+        );
+      }
       await tx`
         INSERT INTO status_history (ticket_id, status, admin_id, admin_name, changed_at)
         VALUES (${ticketId}, 'Rejected', ${admin.adminId}, ${admin.adminName}, now())

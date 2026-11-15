@@ -373,6 +373,17 @@ describe('OperationalAssessmentService.upsert — no score', () => {
 });
 
 describe('OperationalAssessmentService.upsert — validation', () => {
+  it('rejects non-text assessedConditions before touching the database', async () => {
+    const { service } = makeService([[{ assigned_office: 'MEO' }]]);
+    await expect(
+      service.upsert(10, MEO_OFFICER, {
+        ...VALID_INPUT,
+        assessedConditions: 5 as unknown as string,
+      }),
+    ).rejects.toThrow('Assessed conditions must be text.');
+    expect(queries).toHaveLength(1);
+  });
+
   it('rejects an invalid operational constraint value', async () => {
     const { service } = makeService([[{ assigned_office: 'MEO' }]]);
     await expect(
