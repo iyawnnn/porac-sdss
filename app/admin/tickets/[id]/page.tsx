@@ -23,7 +23,6 @@ import type {
 import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import type { WorkOrderRow } from "@/lib/types/admin-work-orders";
 import type { RelatedTicketCandidate, RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
-import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { SEVERITY_SCREENING_LABEL } from "@/lib/utils/ui/severity-screening";
 import { StatusPill } from "@/components/features/admin/shared/StatusPill";
 import { AdminErrorCard } from "@/components/features/admin/shared/AdminErrorCard";
@@ -201,10 +200,8 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
               Outcome: {outcomeLabel(ticket)}
             </Badge>
           )}
-          {/* Manuscript revision Phase 1, step 5: the header shows Operational
-              Priority (lib/utils/ui/priority.ts bands), not Hazard Urgency. */}
-          <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
-            Operational Priority <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> · {priorityBandLabel(ticket.priority_index)}
+          <Badge className="bg-line-100 text-ink-700" variant="outline">
+            Operational Priority — <span className="font-mono tabular-nums">{ticket.priority_index === null ? "—" : `${ticket.priority_index}/100`}</span>
           </Badge>
           {/* Only a dispute of the current resolution (manuscript revision
               Phase 5, step 5c, decision 11). */}
@@ -648,10 +645,11 @@ function ScoringTab({
       <p className="text-[11px] text-ink-400">System generated</p>
       <p className="mt-0.5 text-xs text-ink-400">Citizen-reported severity + ticket age + barangay density.</p>
       <div className="mt-3 flex items-baseline gap-2">
-        <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
-          <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> · {priorityBandLabel(ticket.priority_index)}
+        <Badge className="bg-line-100 text-ink-700" variant="outline">
+          <span className="font-mono tabular-nums">{ticket.priority_index === null ? "—" : `${ticket.priority_index}/100`}</span>
         </Badge>
       </div>
+      <p className="mt-2 text-xs text-ink-500">Administrative queue recommendation. Final action is determined through Operational Assessment.</p>
       {priorityContext && (
         <table className="mt-3 w-full border-collapse text-xs text-ink-700">
           <thead>

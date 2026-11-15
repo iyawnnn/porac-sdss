@@ -10,7 +10,6 @@ import { CardHeaderRow } from "@/components/features/admin/shared/CardHeaderRow"
 import { TABLE_HEAD_CLASS } from "@/components/features/admin/shared/tableHead";
 import { KpiCard } from "@/components/features/admin/shared/KpiCard";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
-import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import type { FocalDashboardCounts, FocalDashboardReports } from "@/lib/types/admin-focal-dashboard";
 import { metricDuration } from "@/lib/utils/metric-duration";
 import { Button } from "@/components/ui/button";
@@ -88,8 +87,8 @@ export function FocalDashboard({ counts, reportsPage }: { counts: FocalDashboard
                         <Badge variant="secondary">{report.routedOffice}</Badge>
                       </TableCell>
                       <TableCell className="py-2.5">
-                        <span className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${priorityBandClass(report.operationalPriority)}`}>
-                          {priorityBandLabel(report.operationalPriority).toUpperCase()} <span className="mx-1 opacity-60">&middot;</span> <span className="font-mono tabular-nums">{report.operationalPriority ?? "—"}</span>
+                        <span className="inline-flex h-5 items-center rounded-md bg-line-100 px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap text-ink-700">
+                          <span className="font-mono tabular-nums">{report.operationalPriority === null ? "—" : `${report.operationalPriority}/100`}</span>
                         </span>
                       </TableCell>
                       <TableCell className="py-2.5">

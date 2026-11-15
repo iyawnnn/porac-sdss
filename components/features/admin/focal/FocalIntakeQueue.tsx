@@ -11,7 +11,6 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { TABLE_HEAD_CLASS } from "@/components/features/admin/shared/tableHead";
 import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
-import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import type { FocalIntakeRow, IntakeState } from "@/lib/types/admin-focal-intake";
 
 const INTAKE_STATES: IntakeState[] = ["New", "Acknowledged", "Screened", "Forwarded", "Escalated"];
@@ -175,8 +174,8 @@ export function FocalIntakeQueue({
                       <Badge variant="secondary">{report.routedOffice}</Badge>
                     </TableCell>
                     <TableCell className="py-2.5">
-                      <span className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap ${priorityBandClass(report.operationalPriority)}`}>
-                        {priorityBandLabel(report.operationalPriority).toUpperCase()} <span className="mx-1 opacity-60">&middot;</span> <span className="font-mono tabular-nums">{report.operationalPriority ?? "—"}</span>
+                      <span className="inline-flex h-5 items-center rounded-md bg-line-100 px-2 text-[11px] font-semibold tracking-[0.02em] whitespace-nowrap text-ink-700">
+                        <span className="font-mono tabular-nums">{report.operationalPriority === null ? "—" : `${report.operationalPriority}/100`}</span>
                       </span>
                     </TableCell>
                     <TableCell className="py-2.5">

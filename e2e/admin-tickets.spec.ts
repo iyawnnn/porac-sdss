@@ -133,9 +133,14 @@ test("authenticated admin can open the Ticket Queue and see its content", async 
   const hasRows = (await queueRows(page).count()) > 0;
   if (hasRows) {
     await expect(queueRows(page).first()).toBeVisible();
+    const queue = page.getByRole("table", { name: "Ticket queue" });
+    await expect(queue.getByRole("columnheader", { name: "Level", exact: true })).toHaveCount(0);
+    await expect(queue.getByText(/^(Low|Medium|High)$/)).toHaveCount(0);
+    await expect(queueRows(page).first()).toContainText(/\d+\/100/);
   } else {
     await expect(page.getByText("No tickets match this filter.")).toBeVisible();
   }
+  await expect(page.getByText("High priority", { exact: true })).toHaveCount(0);
 });
 
 // --- 2. Ticket Queue filters -----------------------------------------------

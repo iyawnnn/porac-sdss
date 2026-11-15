@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
 import { FlagBadge } from "@/components/features/admin/flagged/FlagBadge";
-import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import type { FocalIntakeDetail as FocalIntakeDetailData } from "@/lib/types/admin-focal-intake";
 import type { RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
 import type { CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
@@ -70,8 +69,8 @@ export function FocalIntakeDetail({
           <h1 className="text-xl font-semibold">{report.reportReference} &middot; {report.category}</h1>
           <Badge variant="outline">{report.intakeState}</Badge>
           {/* Operational Priority since manuscript revision Phase 1, step 6b (Hazard Urgency before). */}
-          <span className={`inline-flex h-5 items-center rounded-md px-2 text-[11px] font-semibold tracking-[0.02em] ${priorityBandClass(report.operationalPriority)}`} title="Operational Priority">
-            {priorityBandLabel(report.operationalPriority).toUpperCase()} <span className="mx-1 opacity-60">&middot;</span> <span className="font-mono tabular-nums">{report.operationalPriority ?? "—"}</span>
+          <span className="inline-flex h-5 items-center rounded-md bg-line-100 px-2 text-[11px] font-semibold tracking-[0.02em] text-ink-700" title="Operational Priority">
+            <span className="font-mono tabular-nums">{report.operationalPriority === null ? "—" : `${report.operationalPriority}/100`}</span>
           </span>
           <Badge title="Related operational ticket" variant="secondary">
             Related: {report.linkedTicketReference}
@@ -167,13 +166,8 @@ export function FocalIntakeDetail({
               {/* The Hazard Urgency block was removed in manuscript revision Phase 1, step 6b. */}
               <div>
                 <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Operational Priority</p>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <span className={`inline-flex h-6 items-center rounded-md px-2 text-xs font-semibold tracking-[0.02em] ${priorityBandClass(report.operationalPriority)}`}>
-                    {priorityBandLabel(report.operationalPriority).toUpperCase()}
-                  </span>
-                  <span className="font-mono text-lg font-semibold tabular-nums">{report.operationalPriority ?? "—"} / 100</span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">System-generated administrative queue recommendation — citizen severity, ticket age and barangay density.</p>
+                <p className="mt-1 font-mono text-lg font-semibold tabular-nums">{report.operationalPriority ?? "—"} / 100</p>
+                <p className="mt-1 text-xs text-muted-foreground">Administrative queue recommendation. Final action is determined through Operational Assessment.</p>
               </div>
             </CardContent>
           </Card>

@@ -28,13 +28,15 @@ test("map loads with query params applied and reflects them in the filter bar", 
   await expect(page).not.toHaveURL(/[?&]urgency=/);
 });
 
-test("the map legend explains the marker ring as Operational Priority, not Hazard Urgency", async ({ page }) => {
+test("the map legend has no categorical Operational Priority bands", async ({ page }) => {
   await loginAs(page, E2E_MEO_ADMIN);
   await page.goto("/admin/map");
   await waitForMapReady(page);
 
   await page.getByRole("button", { name: "Legend", exact: true }).click();
-  await expect(page.getByText("Operational Priority (outer ring)", { exact: true })).toBeVisible();
+  await expect(page.getByText("Operational Priority (outer ring)", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Numbered circles are ticket clusters. Heatmap intensity shows Operational Priority continuously.", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^(Low|Medium|High) \(\d/)).toHaveCount(0);
   await expect(page.getByText(/Hazard Urgency/)).toHaveCount(0);
 });
 

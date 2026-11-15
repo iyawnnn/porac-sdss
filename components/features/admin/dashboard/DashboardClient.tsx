@@ -14,7 +14,6 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { priorityBandClass, priorityBandLabel } from "@/lib/utils/ui/priority";
 import { relativeAge } from "@/lib/utils/ui/time";
 import { CardBodyPanel } from "../shared/CardBodyPanel";
 import { CardHeaderRow } from "../shared/CardHeaderRow";
@@ -233,8 +232,8 @@ function HighestPriorityActionsTable({ tickets }: { tickets: AdminTicketRow[] | 
                       <span className="block text-xs text-muted-foreground">{ticket.assigned_office}</span>
                     </TableCell>
                     <TableCell className="py-2.5">
-                      <Badge className={priorityBandClass(ticket.priority_index)} variant="outline">
-                        <span className="font-mono tabular-nums">{ticket.priority_index ?? "—"}</span> {priorityBandLabel(ticket.priority_index)}
+                      <Badge className="bg-line-100 text-ink-700" variant="outline">
+                        <span className="font-mono tabular-nums">{ticket.priority_index === null ? "—" : `${ticket.priority_index}/100`}</span>
                       </Badge>
                     </TableCell>
                     <TableCell className="py-2.5"><StatusPill status={ticket.status} /></TableCell>

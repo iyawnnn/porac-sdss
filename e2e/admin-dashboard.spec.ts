@@ -123,6 +123,7 @@ test("Highest Priority Actions renders at most 5 rows and its View all link uses
   // Manuscript revision Phase 1, step 4: no Hazard Urgency on this card.
   await expect(card.getByText("Hazard Urgency")).toHaveCount(0);
   await expect(card.getByRole("columnheader", { name: "Op. Priority" })).toBeVisible();
+  await expect(card.getByText(/^(Low|Medium|High)$/)).toHaveCount(0);
 });
 
 // Operational dashboards expose office-only summaries and map presets.

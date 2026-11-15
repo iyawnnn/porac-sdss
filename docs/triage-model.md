@@ -85,9 +85,9 @@ The median is taken in `api/src/common/utils/severity.ts` (`ticketSeverity`, Pha
 
 ---
 
-## 5. Display band
+## 5. Numeric presentation
 
-`priority_index` is stored as a raw 1–100 number with **no stored band**. The UI adds a Low / Medium / High display band in thirds — 1–33 / 34–66 / 67–100 — from `lib/utils/ui/priority.ts` (`priorityBandLabel`, `priorityBandClass`, `priorityBandHex`). That band is **a UI convention, not a manuscript-defined threshold**: it is never stored, never used to filter or count tickets, and the CSV export carries the number only. This is why the admin overview screens show no "High priority" counts (manuscript revision Phase 1, step 6a).
+`priority_index` remains a raw 1–100 administrative queue recommendation. It is shown numerically and is **not converted into Low / Medium / High categories**, counted by a derived threshold, or used to colour discrete map bands (Decision-Support Design p. 75; Functional Requirements pp. 51, 55, 59; Appendix H Operational Priority table; Appendix L Focal Intake Detail and Operational Ticket Detail). CSV exports likewise carry only the number. This does not affect the separate citizen-reported Severity labels or DENR-MGB hazard classifications.
 
 ---
 
@@ -95,12 +95,12 @@ The median is taken in `api/src/common/utils/severity.ts` (`ticketSeverity`, Pha
 
 | Surface | Shows |
 |---|---|
-| **Ticket Queue** (`TicketsWorkspace.tsx`) | `priority_index` in the "Op. Priority" column with its display band in "Level"; the default and only score sort is Operational Priority (`op_priority_desc`/`op_priority_asc`). The KPI tiles "High priority" (≥ 67, this page) and "Avg. priority" use the same values |
-| **Ticket Detail** (`app/admin/tickets/[id]`) | Header badge with the display band; the Scoring tab's Operational Priority card shows the factor table (severity / age / barangay demand) while the ticket is active |
-| **Admin Map** (`MapClient.tsx`, `TicketPopup.tsx`) | Marker and cluster rings, legend and popup use the display band; heatmap intensity is `priority_index` |
+| **Ticket Queue** (`TicketsWorkspace.tsx`) | Numeric `priority_index` in the "Op. Priority" column; the derived "Level" column and "High priority" KPI are absent. The default and only score sort remains Operational Priority (`op_priority_desc`/`op_priority_asc`); "Avg. priority" remains numeric |
+| **Ticket Detail** (`app/admin/tickets/[id]`) | Neutral numeric header badge; the Scoring tab shows the factor table (severity / age / barangay demand) while the ticket is active and states that final action comes from Operational Assessment |
+| **Admin Map** (`MapClient.tsx`, `TicketPopup.tsx`) | Category-coloured markers and neutral clusters; the popup is numeric and heatmap intensity continuously represents `priority_index` |
 | **Dashboard** | The "Highest Priority Actions" table ranks by `priority_index`. No band counts (§5) |
-| **Work Orders / Barangay Insights** | The linked ticket's Operational Priority badge per row (Work Orders list; Barangay profile recent tickets) |
-| **Focal Intake** (`components/features/admin/focal/`) | Dashboard and Intake Queue "Op. Priority" columns, intake detail header badge and Decision Support card, Focal map pins and popup |
+| **Work Orders / Barangay Insights** | The linked ticket's neutral numeric Operational Priority badge per row (Work Orders list; Barangay profile recent tickets) |
+| **Focal Intake** (`components/features/admin/focal/`) | Numeric Dashboard and Intake Queue "Op. Priority" columns, intake detail header and Decision Support card, continuously sized neutral map pins and numeric popup |
 | **CSV export** | An "Operational Priority" column (`priority_index`, the raw number) |
 | **Citizen views** (`app/(citizen)/**`) | **Nothing.** Citizens are shown no system score — see §10.3 |
 
@@ -145,6 +145,7 @@ Engineering assessment only — no academic rewriting.
 ### Fully aligned
 
 - **The Operational Priority formula** — 0.50 severity + 0.25 age (capped at 7 days) + 0.25 barangay demand — is implemented as the manuscript describes it.
+- **Numeric presentation only.** The queue recommendation remains 1–100 and is not converted into categorical bands (Decision-Support Design p. 75).
 - **Citizen severity drives the queue order.** It carries half the weight of `priority_index`.
 - **No hazard or risk score is produced.** Hazard Urgency was removed in manuscript revision Phase 1 (§12); Hazard Information (Phase 4) is advisory context, not a score.
 - **Category-based office routing** works as described, and also classifies each category as the assigned office's direct responsibility or a Referral/coordination concern — see [`features.md`](features.md) §1 and [`database.md`](database.md)'s `tickets.category`/`assigned_office` notes.
@@ -166,7 +167,7 @@ Engineering assessment only — no academic rewriting.
 1. **Read the inputs.** From the database you need the ticket's `created_at`, its reports' `citizen_severity` (take the median factor; for an even count the mean of the two middle ones), and the active-ticket counts per barangay (`status IN ('Reported', 'Under Review', 'In Progress')`).
 2. **Compute by hand** using §4. Barangay demand is this ticket's barangay count divided by the busiest barangay's count.
 3. **Cross-check the stored value.** `GET /admin/tickets/:id` returns `priority_index`; its `priority-context` endpoint returns the breakdown, and each contribution should equal its factor × weight.
-4. **Cross-check the surfaces.** The same ticket must show the same number and band on the Ticket Queue, Ticket Detail, admin map popup and Focal Intake. They all read the same stored column.
+4. **Cross-check the surfaces.** The same ticket must show the same numeric value on the Ticket Queue, Ticket Detail, admin map popup and Focal Intake. None should derive a Low / Medium / High label from it. They all read the same stored column.
 
 **Pitfalls that will make hand-verification fail for non-bug reasons:**
 
@@ -196,9 +197,9 @@ Stated plainly. None of these is a defect to fix casually.
 
 Be careful not to describe the score as a calibrated risk probability. It is a **transparent, reproducible ranking heuristic** — genuinely useful for triage, and a more defensible claim.
 
-### 10.4 The display band is not a threshold
+### 10.4 No categorical Operational Priority bands
 
-The Low / Medium / High band (§5) is a display convention. Do not describe "High priority" as a manuscript-defined category, and do not build counts, alerts or filters on it without a product decision.
+Operational Priority must remain numeric. Do not derive Low / Medium / High labels, thresholds, counts, alerts, filters or discrete map styling from `priority_index` (Decision-Support Design p. 75). This restriction does not apply to citizen-reported Severity or source-owned hazard classifications.
 
 ---
 
@@ -221,7 +222,7 @@ The scoring model is part of the project's research contribution. Changing it ca
 
 - Any weight change (`PLAN.md` §15 Q4 is still open)
 - Changing the severity aggregation (median since Phase 4, step 4a, per the manuscript)
-- Turning the display band (§5) into a stored or counted threshold
+- Turning Operational Priority into any categorical or counted threshold (§5)
 
 ---
 
