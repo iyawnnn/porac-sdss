@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CorrectionAvailability, LocationCorrectionResult } from "@/lib/types/admin-ticket-corrections";
 import { distanceMeters } from "@/lib/utils/distance";
 import { postCorrection } from "./postCorrection";
+import { reloadTicketDetail } from "../reloadTicketDetail";
 
 const CorrectLocationMap = dynamic(() => import("./CorrectLocationMap"), { ssr: false });
 
@@ -68,7 +69,7 @@ export function CorrectLocationDialog({
     const result = await postCorrection<LocationCorrectionResult>(availability.ticketId, "location", { ...picked, reason });
     if (result.ok) {
       close();
-      router.refresh();
+      reloadTicketDetail(router);
     } else {
       setError(result.message);
       setSubmitting(false);

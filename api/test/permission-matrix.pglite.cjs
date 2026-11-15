@@ -274,9 +274,9 @@ async function main() {
           });
         cells++;
       }
-    assert.equal(cells, 564);
+    assert.equal(cells, 588);
     ok(
-      '94 independent route rows x six identities = 564 HTTP admission/inline-auth cells, no guard overrides',
+      '98 independent route rows x six identities = 588 HTTP admission/inline-auth cells, no guard overrides',
     );
 
     const context = {
@@ -1002,12 +1002,16 @@ async function boundaries(c) {
     if (kind !== 'mdrrmo') assert(!text.includes(mdOffice.title));
     assert(!text.includes(citizenNotice.title));
   }
-  const citizenList = await allowed('GET', '/notifications', citizen);
+  const citizenList = await allowed(
+    'GET',
+    '/citizens/notifications',
+    citizen,
+  );
   assert(JSON.stringify(citizenList.body).includes(citizenNotice.title));
   assert(!JSON.stringify(citizenList.body).includes(foreignNotice.title));
   await denied(
     'POST',
-    `/notifications/${foreignNotice.id}/read`,
+    `/citizens/notifications/${foreignNotice.id}/read`,
     citizen,
     undefined,
     404,
@@ -1060,17 +1064,23 @@ async function sessionBoundaries(c, helpers) {
   assert.equal(me.body.citizen.citizenId, actors.citizen.id);
   const newestAdmin = await c.notification(actors.meo),
     newestCitizen = await c.notification(actors.citizen);
-  const preferred = await request('GET', '/notifications?limit=100', null, {
+  // IAN-27: with both cookies each audience path reads only its own session.
+  const staffList = await request('GET', '/notifications?limit=100', null, {
     cookie: both,
   });
-  status(
-    preferred,
-    200,
-    'Notifications prefer the valid admin when both cookies exist',
+  status(staffList, 200, 'Staff notifications with both cookies');
+  assert(JSON.stringify(staffList.body).includes(newestAdmin.title));
+  assert(!JSON.stringify(staffList.body).includes(newestCitizen.title));
+  const citizenList = await request(
+    'GET',
+    '/citizens/notifications?limit=100',
+    null,
+    { cookie: both },
   );
-  assert(JSON.stringify(preferred.body).includes(newestAdmin.title));
-  assert(!JSON.stringify(preferred.body).includes(newestCitizen.title));
-  const fallback = await request('GET', '/notifications', null, {
+  status(citizenList, 200, 'Citizen notifications with both cookies');
+  assert(JSON.stringify(citizenList.body).includes(newestCitizen.title));
+  assert(!JSON.stringify(citizenList.body).includes(newestAdmin.title));
+  const noFallback = await request('GET', '/notifications', null, {
     cookie:
       SESSION_COOKIE +
       '=malformed; ' +
@@ -1078,9 +1088,45 @@ async function sessionBoundaries(c, helpers) {
       '=' +
       actors.citizen.token,
   });
-  status(fallback, 200, 'Invalid admin cookie falls back to valid citizen');
-  assert(JSON.stringify(fallback.body).includes(newestCitizen.title));
-  assert(!JSON.stringify(fallback.body).includes(newestAdmin.title));
+  status(noFallback, 401, 'Staff path never falls back to a citizen cookie');
+  const unread = async (id) =>
+    (await pg`SELECT read_at FROM notifications WHERE id=${id}`)[0].read_at ===
+    null;
+  status(
+    await request(
+      'POST',
+      `/citizens/notifications/${newestAdmin.id}/read`,
+      null,
+      { cookie: both },
+    ),
+    404,
+    'Citizen path cannot mark a staff notification read',
+  );
+  status(
+    await request('POST', '/citizens/notifications/read-all', null, {
+      cookie: both,
+    }),
+    200,
+    'Citizen read-all with both cookies',
+  );
+  assert(await unread(newestAdmin.id), 'Citizen read-all touched staff rows');
+  assert(!(await unread(newestCitizen.id)));
+  const staffOnly = await c.notification(actors.meo),
+    citizenOnly = await c.notification(actors.citizen);
+  status(
+    await request('POST', `/notifications/${citizenOnly.id}/read`, null, {
+      cookie: both,
+    }),
+    404,
+    'Staff path cannot mark a citizen notification read',
+  );
+  status(
+    await request('POST', '/notifications/read-all', null, { cookie: both }),
+    200,
+    'Staff read-all with both cookies',
+  );
+  assert(await unread(citizenOnly.id), 'Staff read-all touched citizen rows');
+  assert(!(await unread(staffOnly.id)));
   for (const kind of ['meo', 'citizen']) {
     const a = await makeActor(kind),
       audience = kind === 'citizen' ? 'citizen' : 'admin';

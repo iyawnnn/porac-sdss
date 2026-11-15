@@ -7,92 +7,125 @@ import {
   ParseIntPipe,
   Post,
   Query,
-  Req,
-  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import { AdminSessionGuard } from '../common/guards/admin-session.guard';
+import { CitizenSessionGuard } from '../common/guards/citizen-session.guard';
+import { CurrentAdmin } from '../common/decorators/current-admin.decorator';
+import { CurrentCitizen } from '../common/decorators/current-citizen.decorator';
+import type { AdminSession, CitizenSession } from '../auth/session.service';
 import {
-  CITIZEN_SESSION_COOKIE,
-  SESSION_COOKIE,
-  SessionService,
-} from '../auth/session.service';
-import { NotificationsService, type NotificationPrincipal } from './notifications.service';
+  NotificationsService,
+  type NotificationPrincipal,
+} from './notifications.service';
 
+interface ListQuery {
+  before?: string;
+  limit?: string;
+  status?: string;
+  type?: string;
+}
+
+const listOptions = (
+  q: ListQuery,
+): Parameters<NotificationsService['listForPrincipal']>[1] => ({
+  before: q.before ? Number(q.before) : undefined,
+  limit: q.limit ? Number(q.limit) : undefined,
+  // Unrecognized value falls back to 'all' — same silent-default
+  // convention every other admin list endpoint already uses.
+  status: q.status === 'unread' || q.status === 'read' ? q.status : 'all',
+  type: q.type || undefined,
+});
+
+const adminPrincipal = (s: AdminSession): NotificationPrincipal => ({
+  type: 'admin',
+  adminId: s.adminId,
+  office: s.office,
+  accountType: s.accountType,
+  isFocal: s.isFocal,
+});
+
+const citizenPrincipal = (s: CitizenSession): NotificationPrincipal => ({
+  type: 'citizen',
+  citizenId: s.citizenId,
+});
+
+// One controller per audience (IAN-27). The old shared route picked the
+// admin cookie whenever both were present, so a citizen page in a browser
+// that also held a staff session read — and marked read — staff
+// notifications. Each shell now calls its own path behind its own guard.
+@UseGuards(AdminSessionGuard)
 @Controller('notifications')
 export class NotificationsController {
-  constructor(
-    private readonly notifications: NotificationsService,
-    private readonly sessions: SessionService,
-  ) {}
-
-  // Serves both shells from one controller — mirrors auth.controller.ts's
-  // GET auth/me exactly (try the admin cookie, fall back to the citizen
-  // cookie, 401 if neither) rather than inventing a new combined guard.
-  private async resolvePrincipal(req: Request): Promise<NotificationPrincipal> {
-    const adminToken = req.cookies?.[SESSION_COOKIE] as string | undefined;
-    if (adminToken) {
-      const session = await this.sessions.verifyAdminSession(adminToken);
-      if (session) {
-        return {
-          type: 'admin',
-          adminId: session.adminId,
-          office: session.office,
-          accountType: session.accountType,
-          isFocal: session.isFocal,
-        };
-      }
-    }
-
-    const citizenToken = req.cookies?.[CITIZEN_SESSION_COOKIE] as string | undefined;
-    if (citizenToken) {
-      const session = await this.sessions.verifyCitizenSession(citizenToken);
-      if (session) {
-        return { type: 'citizen', citizenId: session.citizenId };
-      }
-    }
-
-    throw new UnauthorizedException();
-  }
+  constructor(private readonly notifications: NotificationsService) {}
 
   @Get()
-  async list(
-    @Req() req: Request,
-    @Query('before') before?: string,
-    @Query('limit') limit?: string,
-    @Query('status') status?: string,
-    @Query('type') type?: string,
-  ) {
-    const principal = await this.resolvePrincipal(req);
-    return this.notifications.listForPrincipal(principal, {
-      before: before ? Number(before) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      // Unrecognized value falls back to 'all' — same silent-default
-      // convention every other admin list endpoint already uses.
-      status: status === 'unread' || status === 'read' ? status : 'all',
-      type: type || undefined,
-    });
+  list(@CurrentAdmin() admin: AdminSession, @Query() q: ListQuery) {
+    return this.notifications.listForPrincipal(
+      adminPrincipal(admin),
+      listOptions(q),
+    );
   }
 
   @Get('unread-count')
-  async unreadCount(@Req() req: Request) {
-    const principal = await this.resolvePrincipal(req);
-    const count = await this.notifications.getUnreadCount(principal);
-    return { count };
+  async unreadCount(@CurrentAdmin() admin: AdminSession) {
+    return {
+      count: await this.notifications.getUnreadCount(adminPrincipal(admin)),
+    };
   }
 
   @Post(':id/read')
   @HttpCode(HttpStatus.OK)
-  async markRead(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
-    const principal = await this.resolvePrincipal(req);
-    await this.notifications.markRead(principal, id);
+  async markRead(
+    @CurrentAdmin() admin: AdminSession,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    await this.notifications.markRead(adminPrincipal(admin), id);
     return { ok: true };
   }
 
   @Post('read-all')
   @HttpCode(HttpStatus.OK)
-  async markAllRead(@Req() req: Request) {
-    const principal = await this.resolvePrincipal(req);
-    await this.notifications.markAllRead(principal);
+  async markAllRead(@CurrentAdmin() admin: AdminSession) {
+    await this.notifications.markAllRead(adminPrincipal(admin));
+    return { ok: true };
+  }
+}
+
+@UseGuards(CitizenSessionGuard)
+@Controller('citizens/notifications')
+export class CitizenNotificationsController {
+  constructor(private readonly notifications: NotificationsService) {}
+
+  @Get()
+  list(@CurrentCitizen() citizen: CitizenSession, @Query() q: ListQuery) {
+    return this.notifications.listForPrincipal(
+      citizenPrincipal(citizen),
+      listOptions(q),
+    );
+  }
+
+  @Get('unread-count')
+  async unreadCount(@CurrentCitizen() citizen: CitizenSession) {
+    return {
+      count: await this.notifications.getUnreadCount(citizenPrincipal(citizen)),
+    };
+  }
+
+  @Post(':id/read')
+  @HttpCode(HttpStatus.OK)
+  async markRead(
+    @CurrentCitizen() citizen: CitizenSession,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    await this.notifications.markRead(citizenPrincipal(citizen), id);
+    return { ok: true };
+  }
+
+  @Post('read-all')
+  @HttpCode(HttpStatus.OK)
+  async markAllRead(@CurrentCitizen() citizen: CitizenSession) {
+    await this.notifications.markAllRead(citizenPrincipal(citizen));
     return { ok: true };
   }
 }

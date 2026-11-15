@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { reloadTicketDetail } from "./reloadTicketDetail";
 
 // "Refresh" for the rainfall context (manuscript revision Phase 4, step 4c).
 // The API allows one per ticket per 60 s and answers 429 with the wait; the
@@ -17,7 +18,7 @@ export function RainfallRefreshButton({ ticketId }: { ticketId: number }) {
     setError("");
     const res = await fetch(`/api/admin/tickets/${ticketId}/rainfall-context/refresh`, { method: "POST" });
     if (res.ok) {
-      router.refresh();
+      reloadTicketDetail(router);
     } else {
       const data = await res.json().catch(() => null);
       setError(data?.message ?? data?.error ?? "Refresh failed. Try again in a minute.");

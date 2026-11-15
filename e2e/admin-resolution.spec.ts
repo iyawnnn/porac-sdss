@@ -187,7 +187,7 @@ test.describe.serial("Resolution outcome and return to Under Review", () => {
     expect(citizenText).not.toContain(fixtures!.referralAgency);
     expect(citizenText).not.toContain(`${E2E_MEO_ADMIN.firstName} ${E2E_MEO_ADMIN.lastName}`);
     await expectCitizenNotice(citizenPage, { reportId: referredReportId, type: "ticket_returned_to_review", message: "Your report is back under review by the assigned office.", forbidden: [RETURN_REASON, "E2E: referred to the water district for the main line."] });
-    const ladder = await citizenPage.request.get("/api/notifications?type=ticket_under_review&limit=100");
+    const ladder = await citizenPage.request.get("/api/citizens/notifications?type=ticket_under_review&limit=100");
     expect(((await ladder.json()) as { items: { href: string }[] }).items.filter((n) => n.href === `/dashboard/reports/${referredReportId}`)).toHaveLength(0);
     await citizenContext.close();
 

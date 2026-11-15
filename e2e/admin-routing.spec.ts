@@ -189,6 +189,22 @@ test.describe.serial("Manual routing: Reassign and Refer", () => {
 
     await expectRefusal(page, `/api/admin/tickets/${ticketId}/reassign`, { toOffice: "MDRRMO", reason: "E2E" }, 409, message);
     await expectRefusal(page, `/api/admin/tickets/${ticketId}/refer`, { agency: "DPWH", reason: "E2E" }, 409, message);
+
+    // Cancelling the Work Order in its own panel unlocks Reassign on the same
+    // page, with no reload (the rest of Ticket Detail used to keep the block).
+    const listed = await page.request.get(`/api/admin/work-orders?ticketId=${ticketId}`);
+    const workOrders = ((await listed.json()) as { workOrders: { id: number; status: string }[] }).workOrders;
+    const active = workOrders.filter((w) => w.status === "pending" || w.status === "in_progress");
+    expect(active).toHaveLength(1);
+    const item = page.getByTestId(`work-order-${active[0].id}`);
+    await item.getByRole("combobox", { name: `Status for work order #${active[0].id}` }).click();
+    await page.getByRole("option", { name: "Cancel…" }).click();
+    const dialog = page.getByRole("dialog", { name: `Cancel Work Order #${active[0].id}` });
+    await dialog.getByLabel("Cancellation reason").fill("E2E: no longer needed.");
+    await dialog.getByRole("button", { name: "Cancel Work Order" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByTestId("reassign-blocked")).toHaveCount(0);
+    await expect(reassign).toBeEnabled();
   });
 
   test("a Rejected ticket hides Reassign, New Work Order and Add Assessment, and refuses routing", async ({ page }) => {

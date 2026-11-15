@@ -127,24 +127,27 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
           <DialogTitle>Add administrator account</DialogTitle>
           <DialogDescription>Creates a login with a temporary password. Share it with the admin out of band.</DialogDescription>
         </DialogHeader>
-        <form className="space-y-3" onSubmit={handleSubmit}>
+        <form autoComplete="off" className="space-y-3" onSubmit={handleSubmit}>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-first-name">First name</label>
-              <Input id="admin-first-name" onChange={(e) => setDraft((d) => ({ ...d, firstName: e.target.value }))} required value={draft.firstName} />
+              <Input autoComplete="off" id="admin-first-name" onChange={(e) => setDraft((d) => ({ ...d, firstName: e.target.value }))} required value={draft.firstName} />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-last-name">Last name</label>
-              <Input id="admin-last-name" onChange={(e) => setDraft((d) => ({ ...d, lastName: e.target.value }))} required value={draft.lastName} />
+              <Input autoComplete="off" id="admin-last-name" onChange={(e) => setDraft((d) => ({ ...d, lastName: e.target.value }))} required value={draft.lastName} />
             </div>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-email">Email</label>
-            <Input id="admin-email" onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} required type="email" value={draft.email} />
+            <Input autoComplete="off" id="admin-email" onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} required type="email" value={draft.email} />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-password">Temporary password</label>
             <Input
+              // new-password, not current: this creates another person's
+              // credential, so saved logins must never fill it (IAN-29).
+              autoComplete="new-password"
               id="admin-password"
               minLength={8}
               onChange={(e) => setDraft((d) => ({ ...d, password: e.target.value }))}
@@ -255,10 +258,11 @@ function ResetPasswordDialog({ admin }: { admin: AdminAccountRow }) {
         {done ? (
           <DialogFooter><Button onClick={resetAndClose} type="button">Done</Button></DialogFooter>
         ) : (
-          <form className="space-y-3" onSubmit={handleSubmit}>
+          <form autoComplete="off" className="space-y-3" onSubmit={handleSubmit}>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground" htmlFor={`reset-password-${admin.id}`}>New temporary password</label>
               <Input
+                autoComplete="new-password"
                 id={`reset-password-${admin.id}`}
                 minLength={8}
                 onChange={(e) => setPassword(e.target.value)}

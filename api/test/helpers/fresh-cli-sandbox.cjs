@@ -92,6 +92,8 @@ function commandCatalog(root) {
   return commands;
 }
 
+const FRESH_STAFF_PASSWORD = 'fresh-only-e2e-staff-password';
+
 class SeedRunner {
   constructor(source, root, output, secrets) {
     this.source = source;
@@ -132,6 +134,8 @@ class SeedRunner {
       TMP: this.cache,
       TMPDIR: this.cache,
       DATABASE_URL: databaseUrl,
+      // seed:e2e-admins has no committed staff password (IAN-26).
+      E2E_ADMIN_PASSWORD: FRESH_STAFF_PASSWORD,
       PGMAX: '1',
       NODE_ENV: 'test',
       TSX_TSCONFIG_PATH: path.join(this.source, 'api/tsconfig.json'),
@@ -239,4 +243,9 @@ class SeedRunner {
     );
   }
 }
-module.exports = { copySources, commandCatalog, SeedRunner };
+module.exports = {
+  copySources,
+  commandCatalog,
+  SeedRunner,
+  FRESH_STAFF_PASSWORD,
+};

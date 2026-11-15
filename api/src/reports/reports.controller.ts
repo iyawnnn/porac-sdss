@@ -19,6 +19,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import { clientIp } from '../common/utils/client-ip';
 import { z } from 'zod';
 import { CitizenSessionGuard } from '../common/guards/citizen-session.guard';
 import { ReferenceLookupRateLimitGuard } from '../common/guards/reference-lookup-rate-limit.guard';
@@ -34,21 +35,6 @@ export const REFERENCE_NOT_FOUND_MESSAGE =
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|png|webp)$/;
-
-// x-forwarded-for's first hop — main.ts sets `trust proxy` since all
-// traffic arrives one hop away via Next's rewrite proxy (PLAN blueprint §3
-// gotcha: must be verified empirically that the rewrite actually forwards
-// this header, or rate-limit layer 3 silently collapses to one IP bucket).
-function getClientIp(req: Request): string {
-  const forwardedFor = req.headers['x-forwarded-for'];
-  if (forwardedFor) {
-    const value = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-    return value.split(',')[0].trim();
-  }
-  const realIp = req.headers['x-real-ip'];
-  if (typeof realIp === 'string') return realIp;
-  return req.ip ?? 'unknown';
-}
 
 @UseGuards(CitizenSessionGuard)
 @Controller()
@@ -83,7 +69,7 @@ export class ReportsController {
       throw new BadRequestException(z.flattenError(parsed.error));
     }
 
-    const ip = getClientIp(req);
+    const ip = clientIp(req);
     const result = await this.reports.submit(
       citizen,
       ip,

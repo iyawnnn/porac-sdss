@@ -260,8 +260,10 @@ describe('TicketsService.bulkAdvanceStatus eligibility', () => {
       ticketsServiceSource.indexOf('async bulkAdvanceStatus('),
       ticketsServiceSource.indexOf('async bulkReassign('),
     );
+    // notes, image, outcome all undefined; the last argument is the status
+    // the ticket was selected at (IAN-32 expectedStatus).
     expect(body).toMatch(
-      /this\.advanceStatus\(id, admin, undefined, undefined\)/,
+      /this\.advanceStatus\(\s*id,\s*admin,\s*undefined,\s*undefined,\s*undefined,\s*statusById\.get\(id\),?\s*\)/,
     );
   });
 });

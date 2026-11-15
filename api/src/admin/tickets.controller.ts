@@ -249,6 +249,7 @@ export class TicketsController {
     @CurrentAdmin() admin: AdminSession,
     @Body('notes') notes: unknown,
     @Body('outcome') outcome: unknown,
+    @Body('expectedStatus') expectedStatus: unknown,
     @UploadedFile(
       new ParseFilePipe({
         fileIsRequired: false,
@@ -266,6 +267,7 @@ export class TicketsController {
       notes,
       image?.buffer,
       outcome,
+      expectedStatus,
     );
     return { ok: true, ...result };
   }

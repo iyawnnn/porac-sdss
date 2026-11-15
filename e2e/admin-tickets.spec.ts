@@ -398,6 +398,10 @@ test("advancing a ticket's status from the queue-linked detail page updates the 
   const ticketId = ticketFixtures().advanceStatusTicketId;
 
   await loginAs(page, E2E_MEO_ADMIN);
+  // IAN-32: a second tab opened before the advance, so it still shows Reported.
+  const staleTab = await page.context().newPage();
+  await staleTab.goto(`/admin/tickets/${ticketId}`);
+  await expect(staleTab.getByRole("button", { name: "Advance to Under Review" })).toBeVisible();
   await page.goto(`/admin/tickets/${ticketId}`);
 
   // The status pill sits in the same header row as the ticket title.
@@ -408,8 +412,21 @@ test("advancing a ticket's status from the queue-linked detail page updates the 
 
   await advanceButton.click();
 
+  // The first click's result shows without a reload (IAN-32: a production
+  // build used to drop this refresh and keep showing Reported).
   await expect(headerRow.getByText("Under Review", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Advance to In Progress" })).toBeVisible();
+
+  // The stale tab's click is refused, not applied as a second step, and the
+  // tab catches up to the real status.
+  const refused = staleTab.waitForResponse((r) => r.url().endsWith(`/api/admin/tickets/${ticketId}/status`));
+  await staleTab.getByRole("button", { name: "Advance to Under Review" }).click();
+  expect((await refused).status()).toBe(409);
+  await expect(staleTab.getByText(`Ticket #${ticketId} is already Under Review; it was not changed.`, { exact: false })).toBeVisible();
+  await expect(staleTab.getByRole("button", { name: "Advance to In Progress" })).toBeVisible();
+  const detail = await page.request.get(`/api/admin/tickets/${ticketId}`);
+  expect(((await detail.json()) as { ticket: { status: string } }).ticket.status).toBe("Under Review");
+  await staleTab.close();
 });
 
 // --- 7. Office reassignment ---------------------------------------------------

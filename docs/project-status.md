@@ -37,6 +37,25 @@ Complete this docs-only PR and both CI checks, then owner review/merge/pull. No 
 
 No new permissions, scoring changes, mirror removal or audit rewriting. Production hygiene requires separately reviewed candidates, owner backup and explicit approval; never delete audit-referenced records. Groupmate notification, backup-branch retention/removal and final read-only production checks are owner tasks. Agents do not send external messages on the owner's behalf.
 
+## IAN-25 to IAN-30 security and frontend fixes (2026-11-13, branch `fix/ian-25-30-security-frontend`)
+
+- IAN-25: IP-keyed limits read `req.ip` under `TRUST_PROXY_HOPS` (default 0; set it at deployment, see [deployment-readiness](deployment-readiness.md)).
+- IAN-26: staff E2E accounts need a private `E2E_ADMIN_PASSWORD`; teardown locks them. The four public-password staff accounts and six active `e2e-*` throwaways on the main database were rotated/deactivated by the agent with a private backup; the owner holds the recovery password.
+- IAN-27: `/notifications` (staff) and `/citizens/notifications` (citizen) are separate guarded routes; permission matrix is now 98 routes / 588 cells.
+- IAN-28/29/30: citizen dashboard mobile overflow, Add Admin autocomplete, Operational Assessment labels.
+
+Verified: API 85 suites / 1,981 tests, all CI PGlite harnesses, root type-check/lint/build, API build. One full Playwright run on phase2-test served a production build by mistake (213 passed, 6 stale-after-refresh failures in untouched admin flows; the one rerun under `next dev` passed); the dev-mode full rerun was stopped by host memory pressure at 76/308.
+
+2026-11-14: one complete Playwright run under `next dev` on phase2-test (not freshly reset; owner reset needs approval) passed 308/308, 0 skipped, 0 flaky, exit 0, 24.9 min. A local, uncommitted five-role acceptance walk then took one new report through citizen → Focal (acknowledge, screen) → MEO (assessment, completed and cancelled Work Orders, resolution) → citizen (resolution, confirm) → MIS (activity log), with reloads after each change, and reproduced IAN-25 (spoofed `X-Forwarded-For` still hit the 10/hour password-reset bucket) and IAN-27 (dual-cookie isolation) live. Still open: real password-manager behaviour for IAN-29 (only the `autocomplete` attributes are verified), and the production-build stale-after-refresh behaviour, which is unexplained.
+
+## IAN-32 production-build fixes and browser QA (2026-11-14, same branch)
+
+- IAN-32: in a production build, `router.refresh()` of the current Ticket Detail URL could leave the transition suspended; the page kept the old status while the save had succeeded, and a second click advanced the ticket another step. Ticket Detail saves now re-render through `reloadTicketDetail` (a same-page replace under a fresh URL, which commits reliably). `POST /admin/tickets/:id/status` takes an optional `expectedStatus` and answers 409 when the ticket has moved on; Ticket Detail always sends it, and bulk advance sends the status each ticket was selected at.
+- A Work Order's create or status change now re-renders Ticket Detail; before, Reassign stayed disabled until a reload.
+- Sign-in, sign-up and reject errors show the API's message ("Invalid email or password"), not the HTTP status name.
+- Operational Priority recalculation locks rows in id order inside a transaction. Two concurrent admin reads used to deadlock (40P01), so the page got a 500.
+- Production builds are now part of the Playwright gate ([testing](testing.md) §7). Real-Chrome five-role walk-through done; open items and observations are in the PR #163 report.
+
 ## Phase 8e documentation verification
 
 Local docs checks passed: 55 API command references resolve to package scripts, the 52-file historical sequence matches the executable catalog, edited fences/CRLF are valid and no new local links are broken. The existing fresh-database harness passed20 groups, including all14 documented seed/import/cleanup mappings and12 entry points, entirely in memory. Manuscript Appendix H was read privately for acknowledgment/assessment alignment. Protected hashes match. No real database, migrations, manual seeds, server operation or Playwright run occurred. Both PR CI checks and owner review/merge remain release gates; their final results are recorded on the PR rather than inferred from earlier runs.

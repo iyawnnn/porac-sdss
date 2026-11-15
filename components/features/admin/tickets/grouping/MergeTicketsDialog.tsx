@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import type { MergeTicketsResult, RelatedTicketCandidate, RelatedTicketCandidates } from "@/lib/types/admin-related-tickets";
 import { postGrouping } from "./postGrouping";
+import { reloadTicketDetail } from "../reloadTicketDetail";
 
 const REASON_MAX_LENGTH = 1000;
 
@@ -73,7 +74,7 @@ export function MergeTicketsDialog({
     });
     if (result.ok) {
       close();
-      router.refresh();
+      reloadTicketDetail(router);
     } else {
       setError(result.message);
       setSubmitting(false);

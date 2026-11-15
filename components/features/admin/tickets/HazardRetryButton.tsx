@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { reloadTicketDetail } from "./reloadTicketDetail";
 
 // "Retry lookup" for a TEMPORARILY_UNAVAILABLE Hazard Information result
 // (manuscript revision Phase 4, step 4b). The API allows one attempt per
@@ -18,7 +19,7 @@ export function HazardRetryButton({ ticketId }: { ticketId: number }) {
     setError("");
     const res = await fetch(`/api/admin/tickets/${ticketId}/hazard-information/retry`, { method: "POST" });
     if (res.ok) {
-      router.refresh();
+      reloadTicketDetail(router);
     } else {
       const data = await res.json().catch(() => null);
       setError(data?.message ?? data?.error ?? "Retry failed. Try again in a minute.");

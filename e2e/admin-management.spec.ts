@@ -54,6 +54,12 @@ test("system admin creates staff, separate fields enforce the combinations, and 
   await page.getByRole("button", { name: "Add Admin" }).click();
   const dialog = page.getByRole("dialog", { name: "Add administrator account" });
   await expect(dialog).toBeVisible();
+  // IAN-29: the new account's fields start empty and are marked as a new
+  // credential, so the signed-in admin's saved login never fills them.
+  await expect(dialog.getByLabel("Email")).toHaveValue("");
+  await expect(dialog.getByLabel("Email")).toHaveAttribute("autocomplete", "off");
+  await expect(dialog.getByLabel("Temporary password")).toHaveValue("");
+  await expect(dialog.getByLabel("Temporary password")).toHaveAttribute("autocomplete", "new-password");
 
   await dialog.getByLabel("First name").fill("Created");
   await dialog.getByLabel("Last name").fill("ByTest");

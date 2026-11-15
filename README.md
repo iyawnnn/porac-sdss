@@ -140,7 +140,7 @@ Common entry points for a local demo. For the full route list and what each surf
 
 ## G. DEMO ACCOUNTS & CREDENTIALS
 
-The executable source is `e2e/test-credentials.ts`. Standard globalSetup provisions four staff identities (MEO, MDRRMO, MDRRMO Focal, System Admin) and five citizens. Specs import that source; never copy credentials into new tests or use demo credentials for real deployment. The owner-operated admin CLI takes account type, office and Focal flag; see [demo prerequisites](docs/demo-data.md).
+The executable source is `e2e/test-credentials.ts`. Standard globalSetup provisions four staff identities (MEO, MDRRMO, MDRRMO Focal, System Admin) and five citizens. Specs import that source; never copy credentials into new tests or use demo credentials for real deployment. Staff demo accounts have no committed password: set `E2E_ADMIN_PASSWORD` privately before Playwright, and global teardown locks them after every run (IAN-26; see [testing.md §3](docs/testing.md#3-global-setup-demo-accounts)). The owner-operated admin CLI takes account type, office and Focal flag; see [demo prerequisites](docs/demo-data.md).
 
 ## H. TESTING PHOTO EXIF GPS METADATA
 

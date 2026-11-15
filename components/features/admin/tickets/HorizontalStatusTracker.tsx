@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ResolutionOutcome } from "@/lib/types/admin-tickets";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
 import { TICKET_STATUS_STYLE } from "../shared/StatusPill";
+import { reloadTicketDetail } from "./reloadTicketDetail";
 
 const STEPS = ["Reported", "Under Review", "In Progress", "Resolved"] as const;
 const REJECTED_STYLE = TICKET_STATUS_STYLE.Rejected;
@@ -71,6 +72,7 @@ export function HorizontalStatusTracker({
 }) {
   const router = useRouter();
   const [advancing, setAdvancing] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
   const [advanceError, setAdvanceError] = useState("");
   const [showResolveModal, setShowResolveModal] = useState(false);
 
@@ -95,13 +97,21 @@ export function HorizontalStatusTracker({
   async function advanceStatus() {
     setAdvancing(true);
     setAdvanceError("");
-    const res = await fetch(`/api/admin/tickets/${ticketId}/status`, { method: "POST" });
-    if (res.ok) {
-      router.refresh();
-    } else {
+    // expectedStatus is the status this page shows: if the ticket has moved
+    // on since (another tab, another admin), the API answers 409 instead of
+    // advancing it a second step (IAN-32).
+    const res = await fetch(`/api/admin/tickets/${ticketId}/status`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedStatus: currentStatus }),
+    });
+    if (!res.ok) {
       const data = await res.json().catch(() => null);
-      setAdvanceError(data?.error ?? "Could not advance this ticket's status.");
+      setAdvanceError(apiErrorMessage(data, "Could not advance this ticket's status."));
     }
+    // Refresh either way (a 409 means this page is out of date), and keep the
+    // button disabled until the refreshed page has rendered.
+    startRefresh(() => reloadTicketDetail(router));
     setAdvancing(false);
   }
 
@@ -145,8 +155,8 @@ export function HorizontalStatusTracker({
           {readOnlyNote ? (
             <p className="text-sm text-ink-500">{readOnlyNote}</p>
           ) : nextStatus ? (
-            <Button className="w-full sm:w-auto" disabled={advancing} onClick={handleAdvanceClick}>
-              {advancing ? "Updating..." : `Advance to ${nextStatus}`}
+            <Button className="w-full sm:w-auto" disabled={advancing || refreshing} onClick={handleAdvanceClick}>
+              {advancing || refreshing ? "Updating..." : `Advance to ${nextStatus}`}
             </Button>
           ) : (
             <p className="text-sm text-ink-500">{isRejected ? "This ticket was rejected." : "No further status transition."}</p>
@@ -157,9 +167,10 @@ export function HorizontalStatusTracker({
 
       <ResolveDialog
         onOpenChange={setShowResolveModal}
+        expectedStatus={currentStatus}
         onResolved={() => {
           setShowResolveModal(false);
-          router.refresh();
+          startRefresh(() => reloadTicketDetail(router));
         }}
         open={showResolveModal}
         ticketId={ticketId}
@@ -188,11 +199,13 @@ const RESOLUTION_NOTES_MAX_LENGTH = 2000;
 
 function ResolveDialog({
   ticketId,
+  expectedStatus,
   open,
   onOpenChange,
   onResolved,
 }: {
   ticketId: number;
+  expectedStatus: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onResolved: () => void;
@@ -231,6 +244,7 @@ function ResolveDialog({
     if (file) formData.append("image", file);
     formData.append("outcome", outcome);
     formData.append("notes", trimmed);
+    formData.append("expectedStatus", expectedStatus);
 
     const res = await fetch(`/api/admin/tickets/${ticketId}/status`, { method: "POST", body: formData });
     if (res.ok) {

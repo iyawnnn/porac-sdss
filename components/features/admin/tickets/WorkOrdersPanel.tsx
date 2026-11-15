@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ASSESSMENT_REQUIRED_MESSAGE, isFinalWorkOrder, type WorkOrderRow } from "@/lib/types/admin-work-orders";
 import { CreateWorkOrderDialog } from "@/components/features/admin/work-orders/CreateWorkOrderDialog";
 import { WorkOrderStatusBadge } from "@/components/features/admin/work-orders/WorkOrderStatusBadge";
@@ -10,6 +11,7 @@ import { WorkOrderDueDateEditor } from "@/components/features/admin/work-orders/
 import { WorkOrderNotesEditor } from "@/components/features/admin/work-orders/WorkOrderNotesEditor";
 import { WorkOrderFinalState } from "@/components/features/admin/work-orders/WorkOrderFinalState";
 import { EmptyState } from "@/components/features/admin/shared/EmptyState";
+import { reloadTicketDetail } from "./reloadTicketDetail";
 
 // Internal-only panel — work orders (and their notes) never appear on any
 // citizen-facing route. Only rendered on the admin Ticket Detail page.
@@ -31,13 +33,20 @@ export function WorkOrdersPanel({
   // conditions before a Work Order can be created (the API enforces it).
   hasAssessment?: boolean;
 }) {
+  const router = useRouter();
   const [workOrders, setWorkOrders] = useState(initialWorkOrders);
 
+  // A new Work Order, or one moving to another status, changes what the rest
+  // of Ticket Detail allows (Reassign, Refer, resolving), so the page
+  // re-renders; notes, assignee and due-date edits only update this panel.
   function handleCreated(created: WorkOrderRow) {
     setWorkOrders((prev) => [created, ...prev]);
+    reloadTicketDetail(router);
   }
   function handleUpdated(updated: WorkOrderRow) {
+    const statusChanged = workOrders.find((w) => w.id === updated.id)?.status !== updated.status;
     setWorkOrders((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
+    if (statusChanged) reloadTicketDetail(router);
   }
 
   return (

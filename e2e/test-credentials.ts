@@ -23,13 +23,27 @@ export interface E2EAdminAccount {
 }
 
 // Overridable so CI/local runs can rotate the password without editing source.
+// Citizen accounts only: they hold no staff authority.
 const DEMO_PASSWORD = process.env.E2E_DEMO_PASSWORD ?? "PoracDemo2026!";
 
+// Staff accounts are privileged, so their password has no committed default
+// (IAN-26). Set E2E_ADMIN_PASSWORD privately; global teardown locks these
+// accounts again after every run.
+const STAFF_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "";
+
+export function assertStaffPasswordConfigured(): void {
+  if (STAFF_PASSWORD.length < 16 || STAFF_PASSWORD === DEMO_PASSWORD) {
+    throw new Error(
+      "E2E_ADMIN_PASSWORD must be set to a private value of at least 16 characters (not the citizen demo password) before staff E2E accounts are provisioned.",
+    );
+  }
+}
+
 export const E2E_ADMIN_ACCOUNTS: readonly E2EAdminAccount[] = [
-  { email: "meo@porac.gov.ph", password: DEMO_PASSWORD, accountType: "PERSONNEL", isFocal: false, office: "MEO", role: "supervisor", firstName: "MEO", lastName: "Supervisor" },
-  { email: "mdrrmo@porac.gov.ph", password: DEMO_PASSWORD, accountType: "PERSONNEL", isFocal: false, office: "MDRRMO", role: "supervisor", firstName: "MDRRMO", lastName: "Supervisor" },
-  { email: "sysadmin@porac.gov.ph", password: DEMO_PASSWORD, accountType: "SYSTEM_ADMIN", isFocal: false, office: null, role: "system_admin", firstName: "System", lastName: "Administrator" },
-  { email: "focal@porac.gov.ph", password: DEMO_PASSWORD, accountType: "PERSONNEL", isFocal: true, office: "MDRRMO", role: "focal", firstName: "Focal", lastName: "Personnel" },
+  { email: "meo@porac.gov.ph", password: STAFF_PASSWORD, accountType: "PERSONNEL", isFocal: false, office: "MEO", role: "supervisor", firstName: "MEO", lastName: "Supervisor" },
+  { email: "mdrrmo@porac.gov.ph", password: STAFF_PASSWORD, accountType: "PERSONNEL", isFocal: false, office: "MDRRMO", role: "supervisor", firstName: "MDRRMO", lastName: "Supervisor" },
+  { email: "sysadmin@porac.gov.ph", password: STAFF_PASSWORD, accountType: "SYSTEM_ADMIN", isFocal: false, office: null, role: "system_admin", firstName: "System", lastName: "Administrator" },
+  { email: "focal@porac.gov.ph", password: STAFF_PASSWORD, accountType: "PERSONNEL", isFocal: true, office: "MDRRMO", role: "focal", firstName: "Focal", lastName: "Personnel" },
 ];
 
 export const E2E_MEO_ADMIN = E2E_ADMIN_ACCOUNTS[0];

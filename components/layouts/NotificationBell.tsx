@@ -20,7 +20,7 @@ import {
 
 export function NotificationBell() {
   const router = useRouter();
-  const { items, unreadCount, loading, markRead, markAllRead } = useNotifications<AdminNotification>();
+  const { items, unreadCount, loading, markRead, markAllRead } = useNotifications<AdminNotification>("/api/notifications");
 
   function handleSelect(notification: AdminNotification) {
     if (!notification.readAt) void markRead(notification.id);

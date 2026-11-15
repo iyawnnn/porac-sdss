@@ -148,7 +148,9 @@ async function createPermissionApp(pg, db, policy) {
     })
     .compile();
   const app = module.createNestApplication({ logger: false });
-  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  // Production trust rule; supertest plays one appending edge proxy.
+  const { trustProxyHops } = require('../../src/common/utils/client-ip.ts');
+  app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops(1));
   app.use(cookieParser());
   const routes = discoverRoutes(module.get(DiscoveryService));
   assertCatalog(policy, routes, app.config.getGlobalGuards());

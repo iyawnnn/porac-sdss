@@ -78,6 +78,7 @@ Production-specific concerns, beyond simply setting the values:
 - [ ] Provision a production PostGIS database and run the full migration sequence in the documented order.
 - [ ] Seed reference data: barangay polygons, DEM points, city boundary. These are not optional — barangay resolution and elevation scoring fail without them. Run `verify:config` and `verify:city-boundary` afterward.
 - [ ] Create the first `system_admin` via `seed:admin`. **Do not use demo credentials.**
+- [ ] Confirm no staff demo account (`meo@`, `mdrrmo@`, `focal@`, `sysadmin@porac.gov.ph`) or `e2e-*` staff account exists or is active on the production database. Staff demo accounts no longer have a committed password (IAN-26), but they must never be provisioned there at all.
 - [ ] Configure automated backups.
 - [ ] **Verify a restore actually works.** An untested backup is not a backup — this is the single most commonly skipped item on this page.
 - [ ] Decide a retention and point-in-time-recovery window.
@@ -144,7 +145,7 @@ Until the API is deployed and reachable, this workflow runs on schedule but **sk
 
 **Deployment-topology dependent — cannot be resolved before a platform is chosen:**
 
-- [ ] **Review `trust proxy` depth.** `api/src/main.ts` sets `trust proxy: 1`, correct for exactly one hop (the Next rewrite). Adding a CDN or load balancer changes the hop count, and a wrong depth lets a forged `X-Forwarded-For` spoof the client IP — defeating the IP-keyed report and password-reset limits. Re-derive it against the real topology and record the reasoning.
+- [ ] **Set `TRUST_PROXY_HOPS` for the real topology.** The Next rewrite never appends to `X-Forwarded-For` (it forwards a client-supplied header verbatim), so the API ignores forwarded addresses unless `TRUST_PROXY_HOPS` counts the edge proxies in front of Next that append the real client address (`api/src/common/utils/client-ip.ts`, IAN-25). Left at 0 behind an edge, every client shares one rate-limit bucket (fails closed); set too high, a forged header spoofs the IP. Each counted edge proxy must append, not pass through, and the API port must not be reachable except via Next.
 - [ ] **Ensure the API is not publicly reachable** independently of the frontend proxy. It binds `0.0.0.0`, which is correct for local development and must be constrained at the network layer in production.
 - [ ] **TLS termination and HSTS**, and confirm session cookies carry `Secure` in the live environment.
 - [ ] **Rotate every credential** away from development values (§3).
@@ -221,7 +222,7 @@ Consolidated. Checked boxes reflect application-level work already shipped (§7'
 - [x] Free-text length bounds added (R3)
 - [x] Login audit events added (R4)
 - [x] Admin SSR error boundary implemented (R10)
-- [ ] `trust proxy` depth re-derived for the real topology
+- [ ] `TRUST_PROXY_HOPS` set for the real topology
 - [ ] API not publicly reachable independently of the proxy
 - [ ] TLS/HSTS configured; `Secure` cookies confirmed live
 - [ ] All development credentials rotated

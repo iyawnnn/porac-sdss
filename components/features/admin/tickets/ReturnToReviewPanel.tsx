@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
+import { reloadTicketDetail } from "./reloadTicketDetail";
 
 const RETURN_REASON_MAX_LENGTH = 1000;
 
@@ -37,7 +38,7 @@ export function ReturnToReviewPanel({ ticketId }: { ticketId: number }) {
     if (res.ok) {
       setReason("");
       setSubmitting(false);
-      router.refresh();
+      reloadTicketDetail(router);
     } else {
       const data = await res.json().catch(() => null);
       setError(apiErrorMessage(data, "Could not return this ticket to Under Review."));

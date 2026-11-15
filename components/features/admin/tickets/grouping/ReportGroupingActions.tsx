@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { RegroupReportResult, RelatedTicketCandidate, RemoveReportResult } from "@/lib/types/admin-related-tickets";
 import { postGrouping } from "./postGrouping";
+import { reloadTicketDetail } from "../reloadTicketDetail";
 
 const REASON_MAX_LENGTH = 1000;
 
@@ -119,7 +120,7 @@ function GroupingReasonDialog({
     const result = await submit(reason, targetId);
     if (result.ok) {
       close();
-      router.refresh();
+      reloadTicketDetail(router);
     } else {
       setError(result.message);
       setSubmitting(false);

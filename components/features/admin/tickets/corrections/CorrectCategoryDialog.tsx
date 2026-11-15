@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import type { CategoryCorrectionResult, CorrectionAvailability } from "@/lib/types/admin-ticket-corrections";
 import { postCorrection } from "./postCorrection";
+import { reloadTicketDetail } from "../reloadTicketDetail";
 
 const REASON_MAX_LENGTH = 1000;
 
@@ -66,7 +67,7 @@ export function CorrectCategoryDialog({
       return;
     }
     close();
-    router.refresh();
+    reloadTicketDetail(router);
   }
 
   return (
