@@ -119,7 +119,7 @@ export default function SignupForm() {
             {submitting ? "Creating account…" : "Create Account"}
           </Button>
 
-          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">Or continue with</FieldSeparator>
+          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-background">Or continue with</FieldSeparator>
 
           <GoogleButton />
 

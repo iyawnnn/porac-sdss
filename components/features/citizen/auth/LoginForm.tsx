@@ -95,7 +95,7 @@ export default function LoginForm() {
             {submitting ? "Signing in…" : "Sign In"}
           </Button>
 
-          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">Or continue with</FieldSeparator>
+          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-background">Or continue with</FieldSeparator>
 
           <GoogleButton />
 
