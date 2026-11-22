@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, Eye, EyeOff } from "lucide-react";
-import { BrandLogo } from "@/components/layouts/BrandLogo";
-import { MUNICIPALITY } from "@/lib/municipality-config";
+import { AuthShell } from "@/components/features/auth/AuthShell";
+import { AuthAlert, PasswordInput } from "@/components/features/auth/AuthFields";
+import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 
 const RESET_ERROR_MESSAGES: Record<string, string> = {
   invalid_token: "This reset link is invalid. Please request a new one.",
@@ -23,7 +24,6 @@ export default function ResetPasswordForm() {
 
   const [status, setStatus] = useState<Status>(() => (token ? "checking" : "invalid"));
   const [newPassword, setNewPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -65,115 +65,56 @@ export default function ResetPasswordForm() {
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-2">
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-[#07291a] via-[#0c4720] to-[#145e37] lg:flex lg:flex-col lg:justify-between">
-        <div className="relative z-10 flex flex-col items-start gap-3 p-10">
-          <BrandLogo tone="dark" height={40} priority />
-          <div>
-            <p className="text-xs text-white/70">Web-Based Decision Support System</p>
-          </div>
-        </div>
-        <div className="relative z-10 p-10">
-          <p className="text-xl font-medium leading-snug text-white text-balance">
-            {`Choose a new password to get back into ${MUNICIPALITY.name}'s hazard reporting portal.`}
+    <AuthShell
+      portal="citizen"
+      title="Choose a new password"
+      description="Pick a new password for your citizen account."
+    >
+      <div className="flex flex-col gap-5">
+        {status === "checking" && (
+          <p role="status" className="text-center text-sm text-muted-foreground">
+            Checking your reset link…
           </p>
-        </div>
-      </div>
+        )}
 
-      <div className="flex flex-col justify-center bg-surface px-6 py-12 sm:px-12 lg:px-20">
-        <div className="mx-auto w-full max-w-sm">
-          <BrandLogo height={28} className="mb-8 lg:hidden" />
-          <h1 className="text-base font-semibold tracking-[-0.01em] text-ink-900">
-            Choose a new password
-          </h1>
+        {status === "invalid" && (
+          <>
+            <AuthAlert tone="error">This reset link is invalid or has expired.</AuthAlert>
+            <Button asChild size="lg" className="h-11 w-full text-base">
+              <Link href="/forgot-password">Request a new link</Link>
+            </Button>
+          </>
+        )}
 
-          {status === "checking" && (
-            <p className="mt-4 text-xs text-ink-500">Checking your reset link…</p>
-          )}
+        {status === "valid" && (
+          <form onSubmit={handleSubmit} noValidate>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="newPassword">New password</FieldLabel>
+                <PasswordInput
+                  id="newPassword"
+                  placeholder="At least 8 characters"
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </Field>
 
-          {status === "invalid" && (
-            <div className="mt-4 space-y-3">
-              <p
-                role="alert"
-                aria-live="polite"
-                className="flex items-center gap-2 rounded-md border border-danger-ink/20 bg-danger-ink/5 px-3 py-2 text-xs text-danger-ink"
-              >
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                This reset link is invalid or has expired.
-              </p>
-              <Link
-                href="/forgot-password"
-                className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                Request a new link
-              </Link>
-            </div>
-          )}
+              {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
-          {status === "valid" && (
-            <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-3">
-              <div>
-                <label
-                  htmlFor="newPassword"
-                  className="mb-1 block text-[11px] font-medium tracking-[0.04em] text-ink-700 uppercase"
-                >
-                  New password
-                </label>
-                <div className="relative">
-                  <input
-                    id="newPassword"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="At least 8 characters"
-                    autoComplete="new-password"
-                    required
-                    minLength={8}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 pr-9 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-ink-400 hover:text-ink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" aria-hidden="true" />
-                    ) : (
-                      <Eye className="h-4 w-4" aria-hidden="true" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {error && (
-                <p
-                  role="alert"
-                  aria-live="polite"
-                  className="flex items-center gap-2 text-xs text-danger-ink"
-                >
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  {error}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="h-9 w-full rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
+              <Button type="submit" size="lg" disabled={submitting} className="h-11 w-full text-base">
                 {submitting ? "Resetting…" : "Reset password"}
-              </button>
-            </form>
-          )}
+              </Button>
+            </FieldGroup>
+          </form>
+        )}
 
-          <p className="mt-4 text-center text-xs text-ink-500">
-            <Link href="/login" className="font-medium text-primary hover:text-primary/80">
-              Back to log in
-            </Link>
-          </p>
-        </div>
+        <FieldDescription className="text-center">
+          <Link href="/login">Back to Sign In</Link>
+        </FieldDescription>
       </div>
-    </main>
+    </AuthShell>
   );
 }

@@ -33,12 +33,12 @@ test("sign-in forms show the API's reason, not the status name", async ({ page }
   await page.goto("/login");
   await page.getByLabel("Email").fill("e2e-nobody@porac.ph");
   await page.getByPlaceholder("Password").fill("not-the-password");
-  await page.getByRole("button", { name: "Sign In with Email" }).click();
+  await page.getByRole("button", { name: "Sign In" }).click();
   await expect(page.getByText("Invalid email or password")).toBeVisible();
 });
 
 test("citizen login page shows a safe message for each OAuth error code", async ({ page }) => {
-  const banner = page.locator('p[role="alert"]');
+  const banner = page.locator('[data-slot="alert"][role="alert"]');
 
   await page.goto("/login?error=account_link_required");
   await expect(banner).toContainText("account with this email already exists");

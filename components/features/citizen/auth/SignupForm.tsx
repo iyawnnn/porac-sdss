@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, AlertCircle } from "lucide-react";
-import { BrandLogo } from "@/components/layouts/BrandLogo";
-import { MUNICIPALITY } from "@/lib/municipality-config";
+import { AuthShell } from "@/components/features/auth/AuthShell";
+import { AUTH_INPUT, AuthAlert, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
+import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { oauthErrorMessage } from "./oauthErrors";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
@@ -15,7 +17,6 @@ export default function SignupForm() {
   const oauthError = oauthErrorMessage(searchParams.get("error"));
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -53,215 +54,86 @@ export default function SignupForm() {
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-2">
-      {/* Visual panel */}
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-[#07291a] via-[#0c4720] to-[#145e37] lg:flex lg:flex-col lg:justify-between">
-        <svg
-          className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.12]"
-          viewBox="0 0 400 800"
-          fill="none"
-          aria-hidden="true"
-        >
-          {[80, 160, 240, 320, 400, 480, 560, 640, 720].map((y, i) => (
-            <path
-              key={y}
-              d={`M -40 ${y} C 80 ${y - 40 + (i % 2) * 20}, 160 ${y + 40 - (i % 2) * 20}, 280 ${y} S 480 ${y - 30}, 560 ${y}`}
-              stroke="white"
-              strokeWidth="1.5"
-            />
-          ))}
-        </svg>
+    <AuthShell
+      portal="citizen"
+      title="Create Account"
+      description="Create an account to report concerns and follow their progress."
+    >
+      <div className="flex flex-col gap-5">
+        {oauthError && <AuthAlert tone="error">{oauthError}</AuthAlert>}
 
-        <div className="relative z-10 flex flex-col items-start gap-3 p-10">
-          <BrandLogo tone="dark" height={40} priority />
-          <div>
-            <p className="text-xs text-white/70">Web-Based Decision Support System</p>
-          </div>
-        </div>
+        <GoogleButton />
 
-        <div className="relative z-10 p-10">
-          <p className="text-xl font-medium leading-snug text-white text-balance">
-            {`“Reporting local hazards has never been easier. This platform helps us keep ${MUNICIPALITY.name} safe for everyone.”`}
-          </p>
-          <p className="mt-4 text-sm text-white/70">Citizen of {MUNICIPALITY.name}</p>
-        </div>
-      </div>
+        <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">Or continue with email</FieldSeparator>
 
-      {/* Form panel */}
-      <div className="flex flex-col justify-center bg-surface px-6 py-12 sm:px-12 lg:px-20">
-        <div className="mx-auto w-full max-w-sm">
-          <BrandLogo height={28} className="mb-8 lg:hidden" />
-          <h1 className="text-base font-semibold tracking-[-0.01em] text-ink-900">
-            Create your Account
-          </h1>
-          <p className="mt-1 text-xs text-ink-500">Sign up to start reporting hazards.</p>
-
-          {oauthError && (
-            <p
-              role="alert"
-              aria-live="polite"
-              className="mt-4 flex items-center gap-2 rounded-md border border-danger-ink/20 bg-danger-ink/5 px-3 py-2 text-xs text-danger-ink"
-            >
-              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              {oauthError}
-            </p>
-          )}
-
-          <div className="mt-4 space-y-2">
-            <a
-              href="/api/auth/google"
-              className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-line-200 text-xs font-medium text-ink-700 hover:bg-line-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              <GoogleIcon className="h-3.5 w-3.5" />
-              Continue with Google
-            </a>
-          </div>
-
-          <div className="my-4 flex items-center gap-3">
-            <span className="h-px flex-1 bg-line-200" />
-            <span className="text-[10px] font-medium tracking-[0.04em] text-ink-400 uppercase">
-              Or continue with email
-            </span>
-            <span className="h-px flex-1 bg-line-200" />
-          </div>
-
-          <form onSubmit={handleSubmit} noValidate className="space-y-3">
+        <form onSubmit={handleSubmit} noValidate>
+          <FieldGroup>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label
-                  htmlFor="firstName"
-                  className="mb-1 block text-[11px] font-medium tracking-[0.04em] text-ink-700 uppercase"
-                >
-                  First name
-                </label>
-                <input
+              <Field>
+                <FieldLabel htmlFor="firstName">First name</FieldLabel>
+                <Input
                   id="firstName"
                   name="firstName"
                   type="text"
                   placeholder="Juan"
                   autoComplete="given-name"
                   required
-                  className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className={AUTH_INPUT}
                 />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="lastName"
-                  className="mb-1 block text-[11px] font-medium tracking-[0.04em] text-ink-700 uppercase"
-                >
-                  Last name
-                </label>
-                <input
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="lastName">Last name</FieldLabel>
+                <Input
                   id="lastName"
                   name="lastName"
                   type="text"
                   placeholder="Dela Cruz"
                   autoComplete="family-name"
                   required
-                  className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className={AUTH_INPUT}
                 />
-              </div>
+              </Field>
             </div>
 
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-1 block text-[11px] font-medium tracking-[0.04em] text-ink-700 uppercase"
-              >
-                Email
-              </label>
-              <input
+            <Field>
+              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <Input
                 id="email"
                 name="email"
                 type="email"
                 placeholder="name@example.com"
                 autoComplete="email"
                 required
-                className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className={AUTH_INPUT}
               />
-            </div>
+            </Field>
 
-            <div>
-              <label
-                htmlFor="password"
-                className="mb-1 block text-[11px] font-medium tracking-[0.04em] text-ink-700 uppercase"
-              >
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="At least 8 characters"
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
-                  className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 pr-9 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-ink-400 hover:text-ink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" aria-hidden="true" />
-                  ) : (
-                    <Eye className="h-4 w-4" aria-hidden="true" />
-                  )}
-                </button>
-              </div>
-            </div>
+            <Field>
+              <FieldLabel htmlFor="password">Password</FieldLabel>
+              <PasswordInput
+                id="password"
+                name="password"
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+                required
+                minLength={8}
+                aria-describedby="password-hint"
+              />
+              <FieldDescription id="password-hint">Use at least 8 characters.</FieldDescription>
+            </Field>
 
-            {error && (
-              <p role="alert" aria-live="polite" className="flex items-center gap-2 text-xs text-danger-ink">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                {error}
-              </p>
-            )}
+            {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="h-9 w-full rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
+            <Button type="submit" size="lg" disabled={submitting} className="h-11 w-full text-base">
               {submitting ? "Creating account…" : "Create Account"}
-            </button>
-          </form>
+            </Button>
 
-          <p className="mt-4 text-center text-xs text-ink-500">
-            Already have an account?{" "}
-            <Link href="/login" className="font-medium text-primary hover:text-primary/80">
-              Log in
-            </Link>
-          </p>
-        </div>
+            <FieldDescription className="text-center">
+              Already have an account? <Link href="/login">Sign In</Link>
+            </FieldDescription>
+          </FieldGroup>
+        </form>
       </div>
-    </main>
-  );
-}
-
-function GoogleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="#4285F4"
-        d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.48a5.54 5.54 0 0 1-2.4 3.64v3.02h3.89c2.28-2.1 3.55-5.18 3.55-8.85Z"
-      />
-      <path
-        fill="#34A853"
-        d="M12 24c3.24 0 5.96-1.07 7.95-2.9l-3.89-3.02c-1.08.72-2.46 1.15-4.06 1.15-3.12 0-5.77-2.11-6.71-4.94H1.28v3.1A12 12 0 0 0 12 24Z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M5.29 14.29a7.2 7.2 0 0 1 0-4.58v-3.1H1.28a12 12 0 0 0 0 10.78l4.01-3.1Z"
-      />
-      <path
-        fill="#EA4335"
-        d="M12 4.77c1.76 0 3.35.61 4.6 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.61l4.01 3.1C6.23 6.88 8.88 4.77 12 4.77Z"
-      />
-    </svg>
+    </AuthShell>
   );
 }

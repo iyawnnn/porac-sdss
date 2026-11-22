@@ -32,7 +32,7 @@ application behavior.
    generous (outdoors, one-handed, under stress).
 6. **Every semantic colour resolves to a token.** No raw Tailwind palette class (`bg-red-100`,
    `text-slate-600`) for anything carrying meaning. Hex literals are allowed only in Leaflet
-   `divIcon` mirrors and the fixed auth hero gradient (§7).
+   `divIcon` mirrors.
 7. **Redundant encoding.** Status and severity names are always spelled out; map pins encode by size
    and ring weight as well as hue.
 
@@ -122,10 +122,6 @@ utilities were moved to `bg-primary`, `text-primary-foreground`, `hover:bg-prima
 `text-primary`, `ring-ring`, and hard-coded red/amber/emerald/blue/white/slate classes to the
 danger / warning / `status-resolved` / info tint tokens, `bg-card` and `bg-muted`. Stragglers may
 remain; fix them when touched.
-
-**Fixed dark surface:** the auth hero panels use `bg-gradient-to-br from-[#07291a] via-[#0c4720]
-to-[#145e37]` in both themes because the brand ramp inverts in dark. This is the only sanctioned
-gradient.
 
 ### 3.5 Theme mechanism
 
@@ -267,9 +263,9 @@ app-specific `ImageLightbox`.
 radio-group, switch, accordion, empty, spinner, progress, sonner/toast, drawer, navigation-menu,
 native-select, button-group, combobox.
 
-Many citizen forms still use hand-rolled `<input>` / `<button>` styling with tokens rather than
-shadcn `Button` / `Input`, and several (login, signup) still use `h-9` / `text-sm`, below the citizen
-floors. Migrating them is the Phase 2 citizen work (§10).
+The citizen and staff auth pages use `Field` / `Input` / `Button` / `Alert` (§8.5). Other citizen
+forms (report form, account security) still use hand-rolled `<input>` / `<button>` styling with
+tokens; migrating them is later Phase 2 work (§10).
 
 - **Density:** citizen controls >= 44px tall; admin dense (`h-8` / `h-9`) but >= 24px targets.
 - **Focus:** global `:focus-visible { outline: 2px solid var(--ring) }` plus the shadcn ring.
@@ -304,7 +300,7 @@ floors. Migrating them is the Phase 2 citizen work (§10).
 
 - **Glassmorphism.** No `backdrop-blur` on cards, toolbars or panels. Known remaining violations:
   the citizen map's `GLASS_PANEL` (`PublicMapClient.tsx`) and the dialog overlay.
-- **Gradients,** except the fixed auth hero panel (§3.4). No gradient fills, text or accents elsewhere.
+- **Gradients,** except the black-to-transparent caption scrim on the auth photo (§8.5). No gradient fills, text or accents elsewhere.
 - **Brand or orange as data.** No brand green/orange on a status, severity, flag, series or map marker.
 - **Priority bands.** No Low / Medium / High derived from `priority_index`, in any colour.
 - Decorative icon tiles; `rounded-2xl` or larger on chrome; zebra tables; colour-only meaning.
@@ -328,7 +324,7 @@ absolute og:image URL; set it once the production domain is decided.
 
 `components/layouts/BrandLogo.tsx`: props `variant` (`primary` | `symbol`), `tone` (`auto` | `light` |
 `dark`), `height` (px; width follows the artwork). `auto` renders both and swaps with CSS `dark:`
-classes, so there is no flash; use `tone="dark"` on always-dark surfaces such as the auth hero.
+classes, so there is no flash; use `tone="dark"` on always-dark surfaces.
 
 ### 8.2 Placement (Figma brand guide)
 
@@ -337,7 +333,7 @@ classes, so there is no flash; use `tone="dark"` on always-dark surfaces such as
 | App header / expanded sidebar | Primary logo 28-32px tall (citizen header 28, admin sidebar 26). |
 | Collapsed sidebar, avatars | Symbol; minimum 24px. |
 | Below 32px | Use the simplified favicon artwork (`app/icon.svg`), not the full symbol. |
-| Auth pages (login / signup / forgot / reset) | Hero uses `tone="dark"` at 40px; a compact 28px logo sits above the form below `lg`. |
+| Auth pages (citizen and staff) | Centered at the top of the card, 40px tall, `tone="auto"` (§8.5). |
 | Minimum width | Primary logo 120px. |
 | Subtitle lockup (min 280px) | Presentations, manuscript and formal documents only; never the app header. |
 | Wordmark | Footers and tight horizontal spaces. |
@@ -365,13 +361,37 @@ title and must not be used as the product name.
 The package guide suggests keeping orange free to mean "High priority". The project rule wins:
 Operational Priority is numeric with no bands, so orange is never a priority colour (§2).
 
+### 8.5 Authentication pages and photograph
+
+Citizen sign in / create account / forgot / reset and Staff sign in share `AuthShell`
+(`components/features/auth/AuthShell.tsx`), adapted from the shadcn `login-04` block: a centered
+card, form on the left, photograph on the right (hidden below `md`, so phones get one column), on a
+`bg-muted` page. Form pieces are in `AuthFields.tsx` (`PasswordInput` with an accessible show/hide
+toggle, `GoogleButton`, `AuthAlert` on the shadcn `Alert`) and the `Field` / `Label` / `Alert`
+primitives in `components/ui`. The portal chip ("Citizen Portal" / "Staff Portal") and a one-line
+cross-link tell the two audiences apart. Staff has no registration, Google or recovery link; the
+administrator-contact guidance stays. Privacy and Terms links are not shown until those pages exist.
+
+The registry output of `shadcn add login-04` was not applied directly: it would overwrite the repo's
+`button`, `card`, `input` and `separator`, write `app/login/page.tsx` (colliding with the
+`(citizen)/login` route) and add an npm package named `cn`. The block source was read with
+`shadcn add login-04 --view`; `label`, `field` and `alert` were added from the official registry
+with the `cn` import pointed at `@/lib/utils`.
+
+Photograph (`public/images/auth-pampanga-fields.jpg`): "Mount Arayat paddy fields, grasslands,
+trees" (Kaledian-Camba road, Barangay Camba, Arayat, Pampanga), by Judgefloro, 2019, CC0 (public
+domain dedication), from Wikimedia Commons file
+`File:193Kaledian_Camba_Arayat,_Pampanga_27.jpg`. No attribution is required. It is a Pampanga
+landscape, not Porac itself; replace it with project-owned Porac photography when available. It is
+resized to 1600px, served through `next/image`, decorative (`alt=""`), and dimmed in dark mode.
+
 ## 9. Accessibility
 
 - **WCAG AA** on every token pair: 4.5:1 body text, 3:1 large text and UI components. `--sun`
   (3.9:1 on white) never carries small text; use `--sun-ink`. Control edges use `--input`, not
   `--border`.
-- **16px citizen input floor** and **44x44px touch targets.** Known gap: `LoginForm` and
-  `SignupForm` still use `h-9` / `text-sm`.
+- **16px citizen input floor** and **44x44px touch targets.** Auth inputs and buttons are `h-11`
+  with 16px text.
 - **Visible focus** everywhere through the global `:focus-visible` rule; do not hand-roll competing
   rings.
 - **`aria-current`** on active navigation. The admin sidebar has it; the citizen header has no active
@@ -391,7 +411,8 @@ Not a roadmap; `docs/project-status.md` stays the only roadmap.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Brand tokens, light/dark theme, fonts, logo, theme toggle, class migration to semantic tokens | Shipped (this document) |
-| 2 | Citizen Dashboard redesign; migrate citizen forms to shadcn Field / Input / Button; fix the 44px / 16px floors | Not started |
+| 2A | Citizen and staff authentication redesign on the shadcn `login-04` layout (§8.5) | Shipped |
+| 2 | Citizen Dashboard redesign; migrate the remaining citizen forms to shadcn Field / Input / Button; fix the 44px / 16px floors | Not started |
 | 3 | Staff shell and queue polish | Not started |
 | 4 | Dark-mode review screen by screen (maps, charts, Leaflet popups), then decide on a `prefers-color-scheme` default | Not started |
 | Assets | Official logo, icon, apple icon and OG cover imported (§8.4) | Shipped |

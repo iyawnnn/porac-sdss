@@ -127,7 +127,7 @@ export async function loginCitizen(
   await page.goto("/login");
   await page.getByLabel("Email").fill(account.email);
   await page.getByPlaceholder("Password").fill(account.password);
-  await submitWithRetry(page, "Sign In with Email", /\/dashboard/);
+  await submitWithRetry(page, "Sign In", /\/dashboard/);
 }
 
 // Manuscript revision Phase 5, step 5b: a ticket needs an Operational
