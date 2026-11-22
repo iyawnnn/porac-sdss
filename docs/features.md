@@ -68,6 +68,8 @@ The names they replaced — `Landslide / Slope Failure`, `Lahar / Debris-Flow Th
 
 ## 2. Citizen features
 
+`/` is the public home page (`app/page.tsx`): a short description with Citizen Sign In, Create Account and a Staff access link; it needs no session and makes no API call. Every auth page links back to it.
+
 Routes live under `app/(citizen)/`. All of these except `/login`, `/signup`, `/forgot-password`, and `/reset-password` require a citizen session (`proxy.ts` redirects to `/login`; the API independently rejects with 401).
 
 ### 2.1 Account

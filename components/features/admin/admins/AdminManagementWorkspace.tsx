@@ -2,6 +2,8 @@
 
 import { useId, useState } from "react";
 import { KeyRound, UserCheck, UserPlus, UserX } from "lucide-react";
+import { PasswordInput } from "@/components/features/auth/AuthFields";
+import { Field, FieldLabel } from "@/components/ui/field";
 import type { AdminAccountRow, AdminAccountType, AdminOffice } from "@/lib/types/admin-admins";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -142,9 +144,10 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
             <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-email">Email</label>
             <Input autoComplete="off" id="admin-email" onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} required type="email" value={draft.email} />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground" htmlFor="admin-password">Temporary password</label>
-            <Input
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-medium text-muted-foreground" htmlFor="admin-password">Temporary password</FieldLabel>
+            <PasswordInput
+              className="h-8 md:text-sm"
               // new-password, not current: this creates another person's
               // credential, so saved logins must never fill it (IAN-29).
               autoComplete="new-password"
@@ -152,10 +155,9 @@ function CreateAdminDialog({ onCreated }: { onCreated: (admin: AdminAccountRow) 
               minLength={8}
               onChange={(e) => setDraft((d) => ({ ...d, password: e.target.value }))}
               required
-              type="password"
               value={draft.password}
             />
-          </div>
+          </Field>
           <StaffAccountFields value={draft} onChange={(fields) => setDraft((d) => ({ ...d, ...fields }))} />
           {error && <p className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
@@ -259,18 +261,18 @@ function ResetPasswordDialog({ admin }: { admin: AdminAccountRow }) {
           <DialogFooter><Button onClick={resetAndClose} type="button">Done</Button></DialogFooter>
         ) : (
           <form autoComplete="off" className="space-y-3" onSubmit={handleSubmit}>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor={`reset-password-${admin.id}`}>New temporary password</label>
-              <Input
+            <Field className="gap-1">
+              <FieldLabel className="text-xs font-medium text-muted-foreground" htmlFor={`reset-password-${admin.id}`}>New temporary password</FieldLabel>
+              <PasswordInput
+                className="h-8 md:text-sm"
                 autoComplete="new-password"
                 id={`reset-password-${admin.id}`}
                 minLength={8}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                type="password"
                 value={password}
               />
-            </div>
+            </Field>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} required type="checkbox" />
               I understand this signs {admin.first_name} {admin.last_name} out everywhere.

@@ -32,7 +32,7 @@ application behavior.
    generous (outdoors, one-handed, under stress).
 6. **Every semantic colour resolves to a token.** No raw Tailwind palette class (`bg-red-100`,
    `text-slate-600`) for anything carrying meaning. Hex literals are allowed only in Leaflet
-   `divIcon` mirrors and the fixed auth hero gradient (§7).
+   `divIcon` mirrors.
 7. **Redundant encoding.** Status and severity names are always spelled out; map pins encode by size
    and ring weight as well as hue.
 
@@ -75,7 +75,9 @@ dark foreground on Night 17.2:1, Sun Orange Dark on Night 6.4:1.
 
 - **Primary** = `--brand-solid` (Porac Green light / Leaf dark); `--primary-foreground` is white /
   Night. `--ring` and `--sidebar-ring` = `--brand`. Related: `--brand-hover`, `--brand-wash` (row
-  wash), `--brand-border`.
+  wash), `--brand-border`. Primary button states: `--primary-hover` (lighter in both themes: new
+  `#235a32` in light, the existing `--brand-hover` in dark) and `--primary-pressed` (darker: `#003915`
+  light, `#299a5b` dark), used as `hover:bg-primary-hover` / `active:bg-primary-pressed`.
 - **Orange is a secondary accent** via `--sun`, `--sun-ink`, `--sun-subtle`. Never a control fill,
   link or button colour (Figma: keep controls green), and never a priority band.
 - **shadcn set**: `--background`, `--foreground`, `--card`, `--popover`, `--secondary`, `--muted`,
@@ -122,10 +124,6 @@ utilities were moved to `bg-primary`, `text-primary-foreground`, `hover:bg-prima
 `text-primary`, `ring-ring`, and hard-coded red/amber/emerald/blue/white/slate classes to the
 danger / warning / `status-resolved` / info tint tokens, `bg-card` and `bg-muted`. Stragglers may
 remain; fix them when touched.
-
-**Fixed dark surface:** the auth hero panels use `bg-gradient-to-br from-[#07291a] via-[#0c4720]
-to-[#145e37]` in both themes because the brand ramp inverts in dark. This is the only sanctioned
-gradient.
 
 ### 3.5 Theme mechanism
 
@@ -267,9 +265,9 @@ app-specific `ImageLightbox`.
 radio-group, switch, accordion, empty, spinner, progress, sonner/toast, drawer, navigation-menu,
 native-select, button-group, combobox.
 
-Many citizen forms still use hand-rolled `<input>` / `<button>` styling with tokens rather than
-shadcn `Button` / `Input`, and several (login, signup) still use `h-9` / `text-sm`, below the citizen
-floors. Migrating them is the Phase 2 citizen work (§10).
+The citizen and staff auth pages use `Field` / `Input` / `Button` / `Alert` (§8.5). Other citizen
+forms (report form, account security) still use hand-rolled `<input>` / `<button>` styling with
+tokens; migrating them is later Phase 2 work (§10).
 
 - **Density:** citizen controls >= 44px tall; admin dense (`h-8` / `h-9`) but >= 24px targets.
 - **Focus:** global `:focus-visible { outline: 2px solid var(--ring) }` plus the shadcn ring.
@@ -304,7 +302,7 @@ floors. Migrating them is the Phase 2 citizen work (§10).
 
 - **Glassmorphism.** No `backdrop-blur` on cards, toolbars or panels. Known remaining violations:
   the citizen map's `GLASS_PANEL` (`PublicMapClient.tsx`) and the dialog overlay.
-- **Gradients,** except the fixed auth hero panel (§3.4). No gradient fills, text or accents elsewhere.
+- **Gradients.** No gradient fills, text or accents anywhere (the auth photo has no scrim or caption).
 - **Brand or orange as data.** No brand green/orange on a status, severity, flag, series or map marker.
 - **Priority bands.** No Low / Medium / High derived from `priority_index`, in any colour.
 - Decorative icon tiles; `rounded-2xl` or larger on chrome; zebra tables; colour-only meaning.
@@ -328,7 +326,7 @@ absolute og:image URL; set it once the production domain is decided.
 
 `components/layouts/BrandLogo.tsx`: props `variant` (`primary` | `symbol`), `tone` (`auto` | `light` |
 `dark`), `height` (px; width follows the artwork). `auto` renders both and swaps with CSS `dark:`
-classes, so there is no flash; use `tone="dark"` on always-dark surfaces such as the auth hero.
+classes, so there is no flash; use `tone="dark"` on always-dark surfaces.
 
 ### 8.2 Placement (Figma brand guide)
 
@@ -337,7 +335,7 @@ classes, so there is no flash; use `tone="dark"` on always-dark surfaces such as
 | App header / expanded sidebar | Primary logo 28-32px tall (citizen header 28, admin sidebar 26). |
 | Collapsed sidebar, avatars | Symbol; minimum 24px. |
 | Below 32px | Use the simplified favicon artwork (`app/icon.svg`), not the full symbol. |
-| Auth pages (login / signup / forgot / reset) | Hero uses `tone="dark"` at 40px; a compact 28px logo sits above the form below `lg`. |
+| Auth pages (citizen and staff) | Centered at the top of the form panel, 44px tall, `tone="auto"` (§8.5). |
 | Minimum width | Primary logo 120px. |
 | Subtitle lockup (min 280px) | Presentations, manuscript and formal documents only; never the app header. |
 | Wordmark | Footers and tight horizontal spaces. |
@@ -365,13 +363,133 @@ title and must not be used as the product name.
 The package guide suggests keeping orange free to mean "High priority". The project rule wins:
 Operational Priority is numeric with no bands, so orange is never a priority colour (§2).
 
+### 8.5 Authentication pages and photograph
+
+Citizen sign in / create account / forgot / reset and Staff sign in share `AuthShell`
+(`components/features/auth/AuthShell.tsx`): a full-viewport, edge-to-edge 50/50 split on a
+`min-h-dvh` grid, with no outer card, border, radius, shadow or margin. The form panel (plain
+`bg-background`) is on the left with the form centered at `max-w-[420px]`; the photograph is on the
+right, full height and `object-cover`, pinned (`sticky top-0 h-dvh`) so it stays in view while a long
+form scrolls. Below `md` the photo is dropped and the form takes the full width. Nothing has a fixed
+height, so create account and recovery states grow and scroll naturally. Form pieces are in
+`AuthFields.tsx` (client: `PasswordInput` with an accessible show/hide toggle, `GoogleButton`,
+`AuthAlert` on the shadcn `Alert`, `AuthButton`) and `auth-ui.tsx` (server-safe constants, `AuthLink`,
+`AuthNote`, `AuthCtaLabel`: the home page is a server component and cannot read plain values exported
+from a client module) and the `Field` / `Label` / `Alert` primitives in `components/ui`. The divider
+label uses `bg-background` to match the form panel. The form column reads logo, heading, one-line
+description, fields, primary button, "Or continue with" divider, Google, then the alternate-page link.
+Google sits below the primary form and is citizen-only.
+
+Spacing is set by three variables on `AuthShell`'s `<main>`: `--auth-gap` (between fields and
+actions, read by `AUTH_GROUP` in `auth-ui.tsx`), `--auth-logo-gap` and `--auth-head-gap`. On
+desktop they are 24 / 28 / 36px with a 44px logo and 8px between a label and its input (the
+"Or continue with" divider sits about 26px from the button and from Google); the `compact` variant
+(`@custom-variant` in `globals.css`: phones, or viewports 720px tall or less) tightens them to
+20 / 20 / 28px so short laptops and phones keep the whole form reachable. The form is `max-w-[420px]`
+and centered on the panel by a `1fr / auto / 1fr` grid, so the optional back link sits top-left in
+its own row and never overlaps the form.
+
+Interactions live in `globals.css` (`.link-underline`, `.auth-cta`). Hover rules apply to fine pointers
+only (no stuck hover after a tap); keyboard focus gets the same treatment plus a `focus-visible` ring;
+`prefers-reduced-motion` removes every transition. No animation dependency.
+
+- **Text links** (`AuthLink`, and the label in Back to Home): nothing at rest. On hover or focus an
+  underline draws in from the left and, when it ends, keeps moving the same way and leaves through the
+  right edge (a `::after` pseudo-element, `scaleX(0)` to `scaleX(1)`, 450ms on
+  `cubic-bezier(0.76, 0, 0.24, 1)`). The direction comes from the origin: `transform-origin` is
+  `right center` at rest and `left center` while active, and only `transform` is transitioned, so the
+  origin flips instantly and never reverses the motion. The text never moves and its color never
+  changes. Without a resting underline, weight (`font-medium`) separates a link from the muted sentence
+  around it, so keep link-bearing sentences in `AuthNote` (a plain `<p>`), not `FieldDescription`, whose
+  own `a:hover` color change would flash.
+- **Primary button** (`AuthButton`, or `AUTH_CTA_BUTTON` on a link-button): Porac Green, in
+  the material of Neffi's Explore Neffi CTA (`src/app/(marketing)/hero-cta-styles.tsx`,
+  `PRIMARY_CTA_REFLECTIONS`): a top inset highlight, a lower inner shade, a delicate diagonal sheen and a
+  radial haze of white light. Two adaptations for a 420 x 40px button: the haze is a wide, soft ellipse
+  centered behind the label (Neffi's sits in the top-right corner, which read as a smudge here), and the
+  sheen sits near the right edge (at Neffi's 58-74% it merged with the haze). Everything is static; the
+  label is one real, plain `<span>` above the decorative layers and never moves, rolls or fades.
+  The states: **hover** shifts the green to `--primary-hover` (about 7 perceptual units from the base,
+  clearly visible) and the haze 0.8 to 1, with the highlight and shadow slightly stronger; **pressed**
+  goes to the darker `--primary-pressed` with the haze dimmed and an inset shadow; **focus-visible**
+  keeps the shared Button's border-and-ring (independent of hover); **disabled and loading** keep the
+  resting material and ignore hover (`pointer-events: none`, and the material rules are guarded with
+  `:not(:disabled)`). Color and shadow transition over 200ms ease-out. The button and label never move
+  or scale. The shared Button's own `hover:bg-primary/80` fade and `active:translate-y-px` are replaced
+  by same-variant classes (`hover:bg-primary-hover`, `active:translate-y-0`), so tailwind-merge drops
+  them rather than the two fighting; the earlier `hover:bg-primary` override that cancelled the hover
+  color is gone. Note the shared Button's `transition-all` utility, not the `.auth-cta` rule, owns the
+  button's transition (utilities outrank the components layer), hence `duration-200 ease-out` in
+  `AUTH_CTA`. Worst-case label contrast over the haze: hover 5.3:1 and pressed 10.1:1 (light), hover
+  8.1:1 and pressed 5.3:1 (dark). Google stays a plain outline button with a subtle background and
+  border change only.
+- **Back to Home** arrow shifts 3px left on hover/focus, only under `motion-safe`.
+- **Loading state** (`AuthButton`, `loading` prop): the button is disabled (so a second click or
+  Enter cannot resubmit; verified one request despite repeated attempts), sets `aria-busy`, keeps its
+  exact size, and shows the official shadcn `Spinner` (`components/ui/spinner.tsx`, lucide
+  `Loader2Icon`) right of the loading label ("Signing in...", "Creating account...", "Sending...",
+  "Resetting..."), centered together with an 8px gap. The spinner is decorative (`aria-hidden`) and an
+  absolutely positioned `sr-only` `role="status"` region announces the label once, so the form's
+  layout is untouched. Loading stays at full opacity instead of the shared disabled 50%, ignores hover
+  and press, and `motion-reduce` stops the rotation (the label carries the meaning). On a failed
+  response or a network failure the button returns to its normal label and the error shows. Forgot
+  and reset password used to have no `catch` around `fetch`, so a network failure left the button
+  loading forever with no message; they now use the same "Could not reach the server" message as the
+  other three forms.
+- **Password visibility toggle** (`PasswordInput`): centered with `inset-y-0 my-auto`, not a translate,
+  and the press shift is neutralized on this button. The shared Button's `active:translate-y-px` writes
+  the same `translate` property as a `-translate-y-1/2` centering and used to drop the toggle about 17px
+  while the mouse was down. Do not center an auto-sized `Button` with a translate.
+
+The underline timing (450ms) and easing follow the specified values: the Neffi source has no
+`cubic-bezier(0.76, 0, 0.24, 1)` link underline.
+
+**Public home and Back to Home.** `/` is a real public page (`app/page.tsx`, built on `AuthShell`):
+what the system is, Citizen Sign In, Create Account and a discreet Staff access link. It makes no API
+call and no session check, so it prerenders and works if the API is down; a signed-in citizen simply
+continues from sign-in. "Back to Home" (top-left of the form panel, in its own grid row so it never
+overlaps the form) is on every auth page and links to `/`; the home page hides it via `hideBackLink`.
+There are no portal badges, no cross-portal links and no photo caption or scrim: staff sign-in stays
+reachable at `/admin/login` and is not advertised on the citizen page (there is no public footer to
+hold a Staff Access link yet; add one there if a public site is built). Staff has no registration,
+Google or recovery link; the administrator-contact guidance stays. Privacy and Terms links are not
+shown until those pages exist. The email and password fields carry no default values: any
+credentials seen pre-filled come from the browser's own autofill, and `autoComplete` tokens are
+kept so password managers work normally.
+
+The registry output of `shadcn add login-04` was not applied directly: it would overwrite the repo's
+`button`, `card`, `input` and `separator`, write `app/login/page.tsx` (colliding with the
+`(citizen)/login` route) and add an npm package named `cn`. The block source was read with
+`shadcn add login-04 --view`; `label`, `field` and `alert` were added from the official registry
+with the `cn` import pointed at `@/lib/utils`.
+
+Photograph (`public/images/auth-porac-jalung.jpg`): a cornfield and paddy at Jalung, Porac,
+Pampanga (`File:810Jalung,_Porac,_Pampanga_06.jpg`, Wikimedia Commons), by Judgefloro, 2019-02-03,
+CC0 (public domain dedication), so no attribution or credit overlay is needed. The bottom (road curb)
+is cropped off and it is resized to 2000px wide. It is rendered by `AuthPhoto.tsx`, the single place
+to change the photo (`src` and `object-position`): `next/image` with `fill`, `object-cover`,
+`sizes="(min-width: 768px) 100vw, 1px"` (the panel is as tall as the viewport, so the photo renders
+wider than the panel and needs a large variant), decorative (`alt=""`), no overlay, dimmed in dark
+mode.
+
+It is a plain farmland view. No licensed photograph of Inararo or of a Porac mountain view could be
+found: Judgefloro's CC0 Porac set is roads, churches and schools. The most distinctive licensed
+candidate is "Lake Pinatubo, Tarlac, Philippines - panoramio.jpg" (Andrew Martin, 2011, **CC BY 3.0**,
+3504x2336; filed under Commons category "Porac, Pampanga"). It needs a visible credit ("Lake Pinatubo
+by Andrew Martin, CC BY 3.0", linking the file page and the license) and the crater lake sits at the
+Zambales-Tarlac-Pampanga tripoint, so it depicts Mount Pinatubo rather than Porac town itself. A
+2024 portrait of the same lake (MikelleBandin, CC BY-SA 4.0) also exists. Project-owned Porac
+photography (Inararo or the Pinatubo foothills) is the better long-term answer; to swap, replace the
+file, update `AuthPhoto.tsx` and this paragraph and, if the new photo needs a credit, add it inside
+the photo panel.
+
 ## 9. Accessibility
 
 - **WCAG AA** on every token pair: 4.5:1 body text, 3:1 large text and UI components. `--sun`
   (3.9:1 on white) never carries small text; use `--sun-ink`. Control edges use `--input`, not
   `--border`.
-- **16px citizen input floor** and **44x44px touch targets.** Known gap: `LoginForm` and
-  `SignupForm` still use `h-9` / `text-sm`.
+- **16px citizen input floor** and **44x44px touch targets.** Auth inputs and buttons are `h-11`
+  with 16px text.
 - **Visible focus** everywhere through the global `:focus-visible` rule; do not hand-roll competing
   rings.
 - **`aria-current`** on active navigation. The admin sidebar has it; the citizen header has no active
@@ -391,7 +509,8 @@ Not a roadmap; `docs/project-status.md` stays the only roadmap.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Brand tokens, light/dark theme, fonts, logo, theme toggle, class migration to semantic tokens | Shipped (this document) |
-| 2 | Citizen Dashboard redesign; migrate citizen forms to shadcn Field / Input / Button; fix the 44px / 16px floors | Not started |
+| 2A | Citizen and staff authentication redesign on the shadcn `login-04` layout (§8.5) | Shipped |
+| 2 | Citizen Dashboard redesign; migrate the remaining citizen forms to shadcn Field / Input / Button; fix the 44px / 16px floors | Not started |
 | 3 | Staff shell and queue polish | Not started |
 | 4 | Dark-mode review screen by screen (maps, charts, Leaflet popups), then decide on a `prefers-color-scheme` default | Not started |
 | Assets | Official logo, icon, apple icon and OG cover imported (§8.4) | Shipped |

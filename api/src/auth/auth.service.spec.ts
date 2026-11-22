@@ -265,20 +265,6 @@ describe('AuthService — existing password flows stay intact', () => {
       'New',
       'C'.repeat(101),
     ],
-    [
-      'an oversized ASCII password',
-      'new@example.com',
-      'p'.repeat(73),
-      'New',
-      'Citizen',
-    ],
-    [
-      'an oversized multibyte password',
-      'new@example.com',
-      '😀'.repeat(19),
-      'New',
-      'Citizen',
-    ],
   ])(
     'rejects %s before querying the database',
     async (_label, email, password, firstName, lastName) => {
@@ -294,6 +280,35 @@ describe('AuthService — existing password flows stay intact', () => {
       await expect(
         service.citizenSignup(email, password, firstName, lastName, '1.2.3.4'),
       ).rejects.toBeInstanceOf(BadRequestException);
+      expect(select).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['p'.repeat(7), 'Password must be at least 8 characters.'],
+    ['p'.repeat(73), 'Password is too long. Please use a shorter password.'],
+    ['😀'.repeat(19), 'Password is too long. Please use a shorter password.'],
+  ])(
+    'returns the relevant password error before querying the database',
+    async (password, message) => {
+      const select = jest.fn();
+      const db = { select } as unknown as PostgresJsDatabase;
+      const service = new AuthService(
+        db,
+        makeSessions(),
+        makeRateLimit(),
+        makeAdminAudit(),
+      );
+
+      await expect(
+        service.citizenSignup(
+          'new@example.com',
+          password,
+          'New',
+          'Citizen',
+          '1.2.3.4',
+        ),
+      ).rejects.toMatchObject({ status: 400, message });
       expect(select).not.toHaveBeenCalled();
     },
   );

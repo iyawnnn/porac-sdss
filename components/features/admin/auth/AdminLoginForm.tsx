@@ -1,23 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { Eye, EyeOff, AlertCircle } from "lucide-react";
-import { BrandLogo } from "@/components/layouts/BrandLogo";
-import { MUNICIPALITY } from "@/lib/municipality-config";
+import { useAuthSubmit } from "@/components/features/auth/useAuthSubmit";
+import { AuthShell } from "@/components/features/auth/AuthShell";
+import { AUTH_GROUP, AUTH_INPUT } from "@/components/features/auth/auth-ui";
+import { AuthAlert, AuthButton, PasswordInput } from "@/components/features/auth/AuthFields";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 export default function AdminLoginForm() {
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const { error, submitting, clearError, submit } = useAuthSubmit();
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-
-    const form = new FormData(e.currentTarget);
-    try {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    return submit(e, async (form) => {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -28,150 +23,52 @@ export default function AdminLoginForm() {
       });
 
       if (res.ok) {
-        // One full load: /admin/login shares the /admin layout, so a client
-        // push kept the signed-out layout and push + refresh rendered the
-        // dashboard twice.
+        // A full load renders the staff layout once with the new session.
         window.location.assign("/admin");
-      } else {
-        const data = await res.json();
-        setError(apiErrorMessage(data, "Login failed"));
-        setSubmitting(false);
+        return;
       }
-    } catch {
-      // fetch() rejects on a network-level failure (DNS, connection refused,
-      // dropped connection) rather than resolving with a non-2xx response —
-      // without this, a transient connection failure left the button stuck
-      // on "Signing in…" forever with no way to retry.
-      setError("Could not reach the server. Please try again.");
-      setSubmitting(false);
-    }
+      return apiErrorMessage(await res.json().catch(() => null), "Login failed");
+    });
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-2">
-      {/* Visual panel */}
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-zinc-900 lg:flex lg:flex-col lg:justify-between">
-        <svg
-          className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.12]"
-          viewBox="0 0 400 800"
-          fill="none"
-          aria-hidden="true"
-        >
-          {[80, 160, 240, 320, 400, 480, 560, 640, 720].map((y, i) => (
-            <path
-              key={y}
-              d={`M -40 ${y} C 80 ${y - 40 + (i % 2) * 20}, 160 ${y + 40 - (i % 2) * 20}, 280 ${y} S 480 ${y - 30}, 560 ${y}`}
-              stroke="white"
-              strokeWidth="1.5"
+    <AuthShell title="Staff Sign In" description="Access the PORAC-SDSS municipal operations portal.">
+      <form onSubmit={handleSubmit} onChange={clearError} noValidate>
+        <FieldGroup className={AUTH_GROUP}>
+          <Field>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="officer@porac.gov.ph"
+              autoComplete="email"
+              required
+              className={AUTH_INPUT}
             />
-          ))}
-        </svg>
+          </Field>
 
-        <div className="relative z-10 flex flex-col items-start gap-3 p-10">
-          <BrandLogo tone="dark" height={40} priority />
-          <div>
-            <p className="text-xs text-white/70">
-              Web-Based Decision Support System | LGU Command Center
-            </p>
-          </div>
-        </div>
+          <Field>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <PasswordInput
+              id="password"
+              name="password"
+              autoComplete="current-password"
+              required
+            />
+          </Field>
 
-        <div className="relative z-10 p-10">
-          <p className="text-xl font-medium leading-snug text-white text-balance">
-            Authorized Personnel Only. Municipal Engineer&apos;s Office (MEO) &amp; MDRRMO Dispatch
-            Portal.
-          </p>
-          <p className="mt-4 text-sm text-white/70">Local Government Unit of {MUNICIPALITY.name}</p>
-        </div>
-      </div>
+          {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
-      {/* Form panel */}
-      <div className="flex flex-col justify-center bg-surface px-6 py-12 sm:px-12 lg:px-20">
-        <div className="mx-auto w-full max-w-sm">
-          <BrandLogo height={28} className="mb-8 lg:hidden" />
-          <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-slate-900/5 px-2.5 py-1 text-[10px] font-bold tracking-[0.06em] text-foreground uppercase">
-            Official Access Portal
-          </span>
+          <AuthButton type="submit" loading={submitting}>
+            {submitting ? "Signing in…" : "Sign In"}
+          </AuthButton>
 
-          <h1 className="mt-4 text-base font-semibold tracking-[-0.01em] text-ink-900">
-            LGU Admin Portal
-          </h1>
-          <p className="mt-1 text-xs text-ink-500">
-            Enter your municipal credentials to access the command center.
-          </p>
-
-          <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-3">
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-1 block text-[11px] font-medium tracking-[0.04em] text-ink-700 uppercase"
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="officer@porac.gov.ph"
-                autoComplete="email"
-                required
-                className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="password"
-                className="mb-1 block text-[11px] font-medium tracking-[0.04em] text-ink-700 uppercase"
-              >
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
-                  autoComplete="current-password"
-                  required
-                  className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 pr-9 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-ink-400 hover:text-ink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" aria-hidden="true" />
-                  ) : (
-                    <Eye className="h-4 w-4" aria-hidden="true" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {error && (
-              <p role="alert" aria-live="polite" className="flex items-center gap-2 text-xs text-danger-ink">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="h-9 w-full rounded-md bg-slate-900 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-700 focus-visible:ring-offset-2"
-            >
-              {submitting ? "Signing in…" : "Sign In"}
-            </button>
-          </form>
-
-          <p className="mt-4 text-center text-xs text-ink-500">
+          <FieldDescription className="text-center">
             Account access restricted. Contact LGU IT Administrator for access requests.
-          </p>
-        </div>
-      </div>
-    </main>
+          </FieldDescription>
+        </FieldGroup>
+      </form>
+    </AuthShell>
   );
 }

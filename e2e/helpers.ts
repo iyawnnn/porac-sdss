@@ -115,7 +115,7 @@ export async function loginAdmin(
   const email = page.getByLabel("Email");
   await settleAdminPage(page, email);
   await email.fill(account.email);
-  await page.getByPlaceholder("Password").fill(account.password);
+  await page.getByLabel("Password", { exact: true }).fill(account.password);
   await submitWithRetry(page, "Sign In", landing.url);
   await expect(landing.ready(page)).toBeVisible();
 }
@@ -126,8 +126,8 @@ export async function loginCitizen(
 ): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Email").fill(account.email);
-  await page.getByPlaceholder("Password").fill(account.password);
-  await submitWithRetry(page, "Sign In with Email", /\/dashboard/);
+  await page.getByLabel("Password", { exact: true }).fill(account.password);
+  await submitWithRetry(page, "Sign In", /\/dashboard/);
 }
 
 // Manuscript revision Phase 5, step 5b: a ticket needs an Operational
