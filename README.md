@@ -1,8 +1,8 @@
-# Porac SDSS (Spatial Decision Support System)
+# Porac SDSS (Web-Based Decision Support System)
 
 ## A. PROJECT OVERVIEW
 
-Project Name: Porac SDSS (Spatial Decision Support System)
+Project Name: Porac SDSS (Web-Based Decision Support System)
 
 Porac SDSS is a municipal infrastructure triage platform for Porac, Pampanga. It features Operational Priority queue ordering (citizen severity, ticket age, barangay demand), office routing by category, and automated photo EXIF GPS and duplicate-image checks.
 

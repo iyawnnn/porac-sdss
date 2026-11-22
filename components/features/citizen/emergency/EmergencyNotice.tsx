@@ -10,7 +10,7 @@ export function EmergencyNotice({ className = "" }: { className?: string }) {
       role="note"
       aria-labelledby="emergency-notice-title"
       data-testid="emergency-notice"
-      className={`flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 ${className}`}
+      className={`flex items-start gap-3 rounded-xl border border-warning-edge bg-warning-tint p-4 text-warning-ink ${className}`}
     >
       <svg
         width="20"
@@ -18,7 +18,7 @@ export function EmergencyNotice({ className = "" }: { className?: string }) {
         viewBox="0 0 24 24"
         fill="none"
         aria-hidden="true"
-        className="mt-0.5 shrink-0 text-amber-700"
+        className="mt-0.5 shrink-0 text-warning-ink"
       >
         <path
           d="M12 3.5 2.75 19.5h18.5L12 3.5Z"
@@ -30,10 +30,10 @@ export function EmergencyNotice({ className = "" }: { className?: string }) {
         <circle cx="12" cy="17" r="1" fill="currentColor" />
       </svg>
       <div className="min-w-0">
-        <p id="emergency-notice-title" className="text-sm font-semibold text-amber-900">
+        <p id="emergency-notice-title" className="text-sm font-semibold text-warning-ink">
           {EMERGENCY_NOTICE_TITLE}
         </p>
-        <p className="mt-1 text-sm leading-5 text-amber-900">{EMERGENCY_NOTICE_BODY}</p>
+        <p className="mt-1 text-sm leading-5 text-warning-ink">{EMERGENCY_NOTICE_BODY}</p>
       </div>
     </div>
   );

@@ -107,7 +107,7 @@ export default function ResolutionFeedback({
             type="button"
             onClick={submitConfirm}
             disabled={busy}
-            className="h-9 rounded-md bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
+            className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
           >
             {busy ? "Confirming…" : "Confirm Fixed"}
           </button>
@@ -141,7 +141,7 @@ export default function ResolutionFeedback({
             <button
               type="submit"
               disabled={busy}
-              className="h-9 rounded-md bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
+              className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
             >
               {busy ? "Submitting…" : "Submit"}
             </button>

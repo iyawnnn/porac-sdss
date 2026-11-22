@@ -17,13 +17,13 @@ import CaseClosureSummary from "@/components/features/citizen/dashboard/CaseClos
 import { ReportImage } from "@/components/features/citizen/dashboard/ReportImage";
 
 const STATUS_STYLE: Record<string, { tint: string; ink: string; dot: string }> = {
-  Reported: { tint: "#F1F3F5", ink: "#434B54", dot: "#98A2AC" },
-  "Under Review": { tint: "#EFF5FC", ink: "#1A4570", dot: "#2B6CB0" },
-  "In Progress": { tint: "#D8E6F7", ink: "#102943", dot: "#22578E" },
-  Resolved: { tint: "#E3F5EE", ink: "#0B5741", dot: "#0F7A5A" },
-  Rejected: { tint: "#FDEAEA", ink: "#8A1D12", dot: "#B42318" },
+  Reported: { tint: "var(--color-status-reported-tint)", ink: "var(--color-status-reported-ink)", dot: "var(--color-status-reported-dot)" },
+  "Under Review": { tint: "var(--color-status-under-review-tint)", ink: "var(--color-status-under-review-ink)", dot: "var(--color-status-under-review-dot)" },
+  "In Progress": { tint: "var(--color-status-in-progress-tint)", ink: "var(--color-status-in-progress-ink)", dot: "var(--color-status-in-progress-dot)" },
+  Resolved: { tint: "var(--color-status-resolved-tint)", ink: "var(--color-status-resolved-ink)", dot: "var(--color-status-resolved-dot)" },
+  Rejected: { tint: "var(--color-status-rejected-tint)", ink: "var(--color-status-rejected-ink)", dot: "var(--color-status-rejected-dot)" },
 };
-const FALLBACK_STATUS_STYLE = { tint: "#F1F3F5", ink: "#434B54", dot: "#98A2AC" };
+const FALLBACK_STATUS_STYLE = { tint: "var(--color-status-reported-tint)", ink: "var(--color-status-reported-ink)", dot: "var(--color-status-reported-dot)" };
 
 function PinIcon({ className = "" }: { className?: string }) {
   return (
@@ -83,11 +83,11 @@ function OfficeIcon({ className = "" }: { className?: string }) {
 function InfoBanner({ tone, title, children }: { tone: "brand" | "amber" | "violet"; title: string; children: React.ReactNode }) {
   const toneClass =
     tone === "amber"
-      ? "bg-amber-50 text-amber-900"
+      ? "bg-warning-tint text-warning-ink"
       : tone === "violet"
         ? "bg-violet-50 text-violet-900"
-        : "bg-brand-50 text-ink-700";
-  const titleClass = tone === "amber" ? "text-amber-700" : tone === "violet" ? "text-violet-700" : "text-brand-700";
+        : "bg-accent text-ink-700";
+  const titleClass = tone === "amber" ? "text-warning-ink" : tone === "violet" ? "text-violet-700" : "text-primary";
   return (
     <div className={`flex items-start gap-2 rounded-lg p-3 ${toneClass}`}>
       <ClockIcon className="mt-0.5 flex-shrink-0" />
@@ -139,7 +139,7 @@ function StatTile({
   return (
     <div className="rounded-lg border border-line-200 bg-surface p-4">
       <div className="flex items-center gap-2">
-        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accent text-primary">
           {icon}
         </span>
         <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-400">{label}</span>
@@ -189,7 +189,7 @@ export default async function MyReportDetailPage({
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <Link href="/reports" className="text-sm text-brand-500 underline">
+      <Link href="/reports" className="text-sm text-primary underline">
         ← Back to my reports
       </Link>
 
@@ -320,10 +320,10 @@ export default async function MyReportDetailPage({
             </div>
 
             {(resolvedUpdate || copy.update) && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg bg-brand-50 p-3">
-                <ClockIcon className="mt-0.5 flex-shrink-0 text-brand-700" />
+              <div className="mt-4 flex items-start gap-2 rounded-lg bg-accent p-3">
+                <ClockIcon className="mt-0.5 flex-shrink-0 text-primary" />
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-brand-700">Latest Update</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-primary">Latest Update</p>
                   <p className="mt-0.5 text-[13px] leading-[18px] text-ink-700">{resolvedUpdate ?? copy.update}</p>
                 </div>
               </div>
@@ -344,7 +344,7 @@ export default async function MyReportDetailPage({
         <div className="rounded-xl border border-line-200 bg-surface p-5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-400">Citizen Record</p>
           <div className="mt-3 flex items-center gap-3 rounded-lg border border-line-200 p-3">
-            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
+            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-primary">
               {initials}
             </span>
             <div className="min-w-0">
@@ -381,7 +381,7 @@ export default async function MyReportDetailPage({
               href={`https://www.google.com/maps?q=${report.lat},${report.lng}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-brand-500 px-4 text-sm font-medium text-white transition-colors duration-[120ms] hover:bg-brand-600"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors duration-[120ms] hover:bg-primary/90"
             >
               <PinIcon className="text-white" />
               Open in Google Maps

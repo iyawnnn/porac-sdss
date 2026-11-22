@@ -79,7 +79,7 @@ export default async function MyReportsPage() {
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-col gap-4 rounded-xl border border-line-200 bg-surface p-6 sm:flex-row sm:items-start sm:justify-between sm:p-8">
         <div>
-          <span className="inline-flex items-center rounded-full bg-brand-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-brand-700">
+          <span className="inline-flex items-center rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-primary">
             Citizen Portal
           </span>
           <h1 className="mt-3 text-[28px] font-semibold leading-[34px] tracking-[-0.02em] text-ink-900">My Reports</h1>
@@ -90,7 +90,7 @@ export default async function MyReportsPage() {
         </div>
         <Link
           href="/report"
-          className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-brand-500 px-5 text-base font-medium text-white transition-colors duration-[120ms] hover:bg-brand-600 hover:shadow-sm"
+          className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-5 text-base font-medium text-primary-foreground transition-colors duration-[120ms] hover:bg-primary/90 hover:shadow-sm"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
@@ -187,7 +187,7 @@ export default async function MyReportsPage() {
                 <div className="mt-5 flex gap-3">
                   <Link
                     href={`/dashboard/reports/${report.id}`}
-                    className="inline-flex h-11 flex-1 items-center justify-center rounded-md bg-brand-500 px-4 text-sm font-medium leading-none text-white transition-colors duration-[120ms] hover:bg-brand-600"
+                    className="inline-flex h-11 flex-1 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium leading-none text-primary-foreground transition-colors duration-[120ms] hover:bg-primary/90"
                   >
                     View Details
                   </Link>
@@ -222,7 +222,7 @@ export default async function MyReportsPage() {
             </div>
             <Link
               href="/report"
-              className="mt-2 inline-flex h-11 items-center rounded-md bg-brand-500 px-4 text-sm font-medium text-white transition-colors duration-[120ms] hover:bg-brand-600"
+              className="mt-2 inline-flex h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors duration-[120ms] hover:bg-primary/90"
             >
               Report Hazard
             </Link>

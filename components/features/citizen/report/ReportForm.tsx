@@ -64,7 +64,7 @@ function InfoIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-6 w-6 shrink-0 text-brand-600"
+      className="h-6 w-6 shrink-0 text-primary"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
@@ -90,7 +90,7 @@ const FIELD_CLASS =
   "w-full h-12 px-4 text-base rounded-lg border border-line-200 bg-surface text-ink-900";
 const LABEL_CLASS = "block text-xs uppercase tracking-wide font-medium text-ink-700 mb-2";
 const BADGE_BASE = "rounded-lg border px-3 py-2 text-sm font-medium";
-const CARD_CLASS = "bg-white rounded-2xl shadow-sm border border-line-200 p-6 sm:p-8";
+const CARD_CLASS = "bg-card rounded-2xl shadow-sm border border-line-200 p-6 sm:p-8";
 
 type ExifStatus = "idle" | "processing" | "verified" | "missing" | "outside";
 type BarangayFeature = Feature<Polygon | MultiPolygon, { name?: string; NAME_4?: string; ADM4_EN?: string }>;
@@ -240,14 +240,14 @@ function ExifBadge({ status }: { status: ExifStatus }) {
   }
   if (status === "missing") {
     return (
-      <div className={`${BADGE_BASE} border-amber-300 bg-amber-50 text-amber-900`}>
+      <div className={`${BADGE_BASE} border-warning-edge bg-warning-tint text-warning-ink`}>
         No GPS Metadata Found in Photo. Please click the map to select the hazard location manually.
       </div>
     );
   }
   if (status === "outside") {
     return (
-      <div className={`${BADGE_BASE} border-red-300 bg-red-50 text-red-900`}>
+      <div className={`${BADGE_BASE} border-red-300 bg-danger-tint text-danger-ink`}>
         Photo GPS location is outside Porac municipality bounds.
       </div>
     );
@@ -541,7 +541,7 @@ export default function ReportForm() {
               </MapContainer>
             </div>
             {!mapEnabled && (
-              <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/70 px-6 text-center text-sm font-medium text-ink-700">
+              <div className="absolute inset-0 z-[500] flex items-center justify-center bg-card/70 px-6 text-center text-sm font-medium text-ink-700">
                 Please upload a photo first to enable map location pinning.
               </div>
             )}
@@ -558,17 +558,17 @@ export default function ReportForm() {
                   : "- upload a geotagged photo or click inside Porac"}
             </p>
             {detectedBarangay && (
-              <p className="inline-flex rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-brand-700">
+              <p className="inline-flex rounded-lg border border-brand-200 bg-accent px-3 py-1.5 text-primary">
                 Detected Barangay: {detectedBarangay}
               </p>
             )}
             {exifPosition && isLocationMismatch(exifMismatchM) && (
-              <p className={`${BADGE_BASE} border-amber-300 bg-amber-50 text-amber-900`}>
+              <p className={`${BADGE_BASE} border-warning-edge bg-warning-tint text-warning-ink`}>
                 Pin placed &gt;{LOCATION_MISMATCH_THRESHOLD_M}m away from photo GPS. This submission will be flagged for review.
               </p>
             )}
             {!detectedBarangay && position && (
-              <p className="text-amber-800">The selected location is outside Porac&apos;s barangay boundaries. Move the pin to a location inside Porac.</p>
+              <p className="text-warning-ink">The selected location is outside Porac&apos;s barangay boundaries. Move the pin to a location inside Porac.</p>
             )}
             {locationError && <p className="text-danger-ink">{locationError}</p>}
           </div>
@@ -596,7 +596,7 @@ export default function ReportForm() {
                 accept="image/*"
                 required
                 onChange={handleFileChange}
-                className="w-full h-12 px-4 text-base rounded-lg border border-line-200 bg-surface text-ink-700 file:h-full file:mr-4 file:border-0 file:bg-brand-50 file:px-4 file:font-medium file:text-brand-700 file:cursor-pointer file:transition-colors file:duration-150 hover:file:bg-brand-100"
+                className="w-full h-12 px-4 text-base rounded-lg border border-line-200 bg-surface text-ink-700 file:h-full file:mr-4 file:border-0 file:bg-accent file:px-4 file:font-medium file:text-primary file:cursor-pointer file:transition-colors file:duration-150 hover:file:bg-brand-100"
               />
             </div>
             <ExifBadge status={exifStatus} />
@@ -641,7 +641,7 @@ export default function ReportForm() {
               {SEVERITIES.map((s) => (
                 <label
                   key={s}
-                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-line-200 px-4 py-3 transition-colors hover:border-brand-300 hover:bg-brand-50 has-checked:border-brand-500 has-checked:bg-brand-50 has-focus-visible:ring-2 has-focus-visible:ring-brand-300"
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-line-200 px-4 py-3 transition-colors hover:border-brand-300 hover:bg-accent has-checked:border-primary has-checked:bg-accent has-focus-visible:ring-2 has-focus-visible:ring-ring"
                 >
                   <input
                     type="radio"
@@ -652,7 +652,7 @@ export default function ReportForm() {
                     onChange={() => setSeverityChoice((current) => chooseSeverity(current, s))}
                     aria-labelledby={`severity-${s.toLowerCase()}-name`}
                     aria-describedby={`severity-${s.toLowerCase()}-description`}
-                    className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-brand-500"
+                    className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-primary"
                   />
                   <span className="min-w-0">
                     <span id={`severity-${s.toLowerCase()}-name`} className="block text-sm font-medium text-ink-900">
@@ -670,7 +670,7 @@ export default function ReportForm() {
           <button
             type="submit"
             disabled={status === "submitting" || processingPhoto}
-            className="w-full h-14 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-base font-bold disabled:opacity-50"
+            className="w-full h-14 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-base font-bold disabled:opacity-50"
           >
             {status === "submitting" ? "Submitting..." : "Submit Report"}
           </button>

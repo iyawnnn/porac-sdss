@@ -21,7 +21,7 @@ export function CategoryBreakdownList({ categories }: { categories: BarangayCate
           <span className="w-36 shrink-0 truncate" title={c.category}>{c.category}</span>
           <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
             <span
-              className="block h-full rounded-full bg-brand-500"
+              className="block h-full rounded-full bg-primary"
               style={{ width: total > 0 ? `${(c.count / total) * 100}%` : "0%" }}
             />
           </span>

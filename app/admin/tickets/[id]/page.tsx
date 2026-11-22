@@ -185,7 +185,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
   return (
     <div className="space-y-4">
       <div>
-        <Link className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 hover:underline" href={backHref}>
+        <Link className="inline-flex items-center gap-1 text-sm text-primary hover:text-primary/80 hover:underline" href={backHref}>
           <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
           Back to ticket queue
         </Link>
@@ -206,7 +206,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           {/* Only a dispute of the current resolution (manuscript revision
               Phase 5, step 5c, decision 11). */}
           {ticket.disputed_at && ticket.disputed_current && (
-            <Badge className="bg-red-50 text-red-700" variant="outline">
+            <Badge className="bg-danger-tint text-danger-ink" variant="outline">
               Disputed {new Date(ticket.disputed_at).toLocaleDateString()}
             </Badge>
           )}
@@ -250,7 +250,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             {mergedFrom.map((id, i) => (
               <span key={id}>
                 {i > 0 && ", "}
-                <Link className="text-brand-600 hover:text-brand-700 hover:underline" href={`/admin/tickets/${id}`}>
+                <Link className="text-primary hover:text-primary/80 hover:underline" href={`/admin/tickets/${id}`}>
                   Ticket #{id}
                 </Link>
               </span>
@@ -318,13 +318,13 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
           )}
 
           {ticket.disputed_at && (
-            <Card className="border-red-200 bg-red-50">
+            <Card className="border-danger-edge bg-danger-tint">
               <CardContent className="p-4">
-                <p className="text-xs font-semibold tracking-wide text-red-700 uppercase">
+                <p className="text-xs font-semibold tracking-wide text-danger-ink uppercase">
                   Citizen reports issue not fixed{!ticket.disputed_current && " (an earlier resolution)"}
                 </p>
-                <p className="mt-1 text-xs text-red-700/80">Disputed {new Date(ticket.disputed_at).toLocaleString()}</p>
-                {ticket.dispute_reason && <p className="mt-2 text-sm text-red-900">{ticket.dispute_reason}</p>}
+                <p className="mt-1 text-xs text-danger-ink/80">Disputed {new Date(ticket.disputed_at).toLocaleString()}</p>
+                {ticket.dispute_reason && <p className="mt-2 text-sm text-danger-ink">{ticket.dispute_reason}</p>}
               </CardContent>
             </Card>
           )}
@@ -342,7 +342,7 @@ async function TicketDetailData({ ticketId, from }: { ticketId: number; from: st
             <CardContent className="p-4">
               <div className="mb-2 flex items-center gap-2">
                 <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Assignment</p>
-                <Badge className={ticket.direct_responsibility ? "bg-line-100 text-ink-700" : "bg-amber-50 text-amber-800 border border-amber-200"} variant="outline">
+                <Badge className={ticket.direct_responsibility ? "bg-line-100 text-ink-700" : "bg-warning-tint text-warning-ink border border-warning-edge"} variant="outline">
                   {ticket.direct_responsibility ? "Direct responsibility" : "Referral — coordinate externally"}
                 </Badge>
               </div>
@@ -765,7 +765,7 @@ function TimelineTab({
       {entries.map((entry, i) => (
         <li className="flex gap-3" key={entry.key}>
           <div className="flex flex-col items-center">
-            <span className="mt-1 size-1.5 shrink-0 rounded-full bg-brand-500" />
+            <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
             {i < entries.length - 1 && <span className="mt-1 w-px flex-1 bg-line-200" />}
           </div>
           <div className="min-w-0 pb-3">

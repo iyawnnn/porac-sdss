@@ -146,7 +146,7 @@ export default function AccountSecurityPanel({ initial }: { initial: SecuritySta
             <button
               type="submit"
               disabled={passwordBusy}
-              className="h-9 rounded-md bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
+              className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
             >
               {passwordBusy ? "Changing…" : "Change password"}
             </button>
@@ -172,7 +172,7 @@ export default function AccountSecurityPanel({ initial }: { initial: SecuritySta
             <button
               type="submit"
               disabled={passwordBusy}
-              className="h-9 rounded-md bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
+              className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
             >
               {passwordBusy ? "Setting…" : "Set password"}
             </button>

@@ -5,6 +5,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import {
   assertSeedTarget,
+  DEV_DB_OVERRIDE_ENV,
   NON_PRODUCTION_FLAG,
 } from '../../../scripts/lib/seed-target';
 import { openSeedDatabase } from '../../../scripts/lib/seed-connection';
@@ -22,14 +23,51 @@ describe('seed host safety (no database connections)', () => {
     'ep-steep-mouse.example',
     'ep-steep-mouse-123-pooler.example',
     'EP-STEEP-MOUSE-123.example',
-  ])('never allows production host %s, even with confirmation', (host) => {
-    for (const args of [[], [NON_PRODUCTION_FLAG]]) {
-      expect(() => openSeedDatabase(target(host), args)).toThrow(
-        /production host ep-steep-mouse/,
-      );
-    }
-    expect(postgres).not.toHaveBeenCalled();
-    expect(drizzle).not.toHaveBeenCalled();
+  ])(
+    'refuses production-labelled host %s by default, even with confirmation',
+    (host) => {
+      for (const args of [[], [NON_PRODUCTION_FLAG]]) {
+        expect(() => openSeedDatabase(target(host), args)).toThrow(
+          /host ep-steep-mouse/,
+        );
+      }
+      expect(postgres).not.toHaveBeenCalled();
+      expect(drizzle).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['ep-steep-mouse.example', 'ep-steep-mouse-123-pooler.example'])(
+    'allows %s only with the exact dev-database override',
+    (host) => {
+      const url = target(host);
+      const override = (value: string | undefined) => ({
+        [DEV_DB_OVERRIDE_ENV]: value,
+      });
+      expect(() =>
+        assertSeedTarget(url, [], override('ep-steep-mouse')),
+      ).not.toThrow();
+      for (const wrong of [
+        undefined,
+        '',
+        '1',
+        'true',
+        'ep-noisy-leaf',
+        'EP-STEEP-MOUSE',
+        'ep-steep-mouse-123',
+      ]) {
+        expect(() =>
+          assertSeedTarget(url, [NON_PRODUCTION_FLAG], override(wrong)),
+        ).toThrow(/host ep-steep-mouse/);
+      }
+    },
+  );
+  it('the override does not widen other targets', () => {
+    const env = { [DEV_DB_OVERRIDE_ENV]: 'ep-steep-mouse' };
+    expect(() =>
+      assertSeedTarget(target('ep-other-copy.example'), [], env),
+    ).toThrow(/not allow-listed/);
+    expect(() =>
+      assertSeedTarget(target('localhost,ep-steep-mouse.example'), [], env),
+    ).toThrow(/^Seed refused:/);
   });
   it.each([
     'ep-noisy-leaf.example',

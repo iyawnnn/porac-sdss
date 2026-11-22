@@ -100,7 +100,7 @@ export function AdminAccountSecurityPanel({ session }: { session: AdminSession |
               />
             </div>
             {message && (
-              <p aria-live="polite" className={`flex items-center gap-1.5 text-xs ${message.kind === "success" ? "text-emerald-600" : "text-destructive"}`} role="alert">
+              <p aria-live="polite" className={`flex items-center gap-1.5 text-xs ${message.kind === "success" ? "text-status-resolved-ink" : "text-destructive"}`} role="alert">
                 {message.kind === "success" ? <CheckCircle2 className="size-3.5 shrink-0" /> : <AlertCircle className="size-3.5 shrink-0" />}
                 {message.text}
               </p>

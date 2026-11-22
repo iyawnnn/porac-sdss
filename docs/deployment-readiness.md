@@ -53,6 +53,7 @@ Production-specific concerns, beyond simply setting the values:
 | `DATABASE_URL` | The API uses the **direct/unpooled** endpoint, not a pooled one. Advisory locks in the merge transaction and long-lived connections do not behave correctly through a transaction pooler. |
 | `CLOUDINARY_URL` | Contains the API secret. Rotate the development credential before production — the same account should not serve both. |
 | `RESEND_API_KEY` + `EMAIL_FROM` | **Both or neither.** Enforced by a Zod `superRefine` in `api/src/config/env.ts` — setting `RESEND_API_KEY` without `EMAIL_FROM` fails at boot-time env validation with a message naming both variables, before the service factory ever runs. (`ResendEmailService`'s own constructor still checks both too, as a redundant second layer, but the env-validation failure fires first in the normal boot path.) See §5. |
+| `NEXT_PUBLIC_SITE_URL` | Optional, frontend only. Public origin used as `metadataBase` so the Open Graph image URL is absolute. Defaults to `http://localhost:3000`; set it once the production domain is decided. |
 | `WEB_ORIGIN` | Used to build absolute URLs in password-reset emails, OAuth redirects, and notification links. Wrong value means users receive links pointing at the wrong host. Not a CORS setting. |
 | `API_ORIGIN` / `INTERNAL_API_URL` | Frontend → API origins. Both default to `http://127.0.0.1:3001` and **must** be changed for any non-local deployment. |
 | `NODE_ENV=production` | Gates the `secure` flag on session cookies. Without it, cookies are issued without `Secure` over HTTPS. |

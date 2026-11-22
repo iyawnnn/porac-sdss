@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, AlertCircle, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, AlertCircle } from "lucide-react";
+import { BrandLogo } from "@/components/layouts/BrandLogo";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
@@ -66,14 +67,11 @@ export default function AdminLoginForm() {
           ))}
         </svg>
 
-        <div className="relative z-10 flex items-center gap-3 p-10">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 text-white">
-            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-          </span>
+        <div className="relative z-10 flex flex-col items-start gap-3 p-10">
+          <BrandLogo tone="dark" height={40} priority />
           <div>
-            <p className="font-mono text-sm font-semibold tracking-wide text-white">PORAC SDSS</p>
             <p className="text-xs text-white/70">
-              Spatial Decision Support System | LGU Command Center
+              Web-Based Decision Support System | LGU Command Center
             </p>
           </div>
         </div>
@@ -90,7 +88,8 @@ export default function AdminLoginForm() {
       {/* Form panel */}
       <div className="flex flex-col justify-center bg-surface px-6 py-12 sm:px-12 lg:px-20">
         <div className="mx-auto w-full max-w-sm">
-          <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-slate-900/5 px-2.5 py-1 text-[10px] font-bold tracking-[0.06em] text-slate-700 uppercase">
+          <BrandLogo height={28} className="mb-8 lg:hidden" />
+          <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-slate-900/5 px-2.5 py-1 text-[10px] font-bold tracking-[0.06em] text-foreground uppercase">
             Official Access Portal
           </span>
 
@@ -116,7 +115,7 @@ export default function AdminLoginForm() {
                 placeholder="officer@porac.gov.ph"
                 autoComplete="email"
                 required
-                className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
             </div>
 
@@ -135,13 +134,13 @@ export default function AdminLoginForm() {
                   placeholder="Enter your password"
                   autoComplete="current-password"
                   required
-                  className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 pr-9 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                  className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 pr-9 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-ink-400 hover:text-ink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                  className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-ink-400 hover:text-ink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" aria-hidden="true" />

@@ -31,7 +31,7 @@ export function CitizenFeedbackCard({ feedback }: { feedback: TicketCitizenFeedb
                       Confirmed fixed
                     </Badge>
                   ) : (
-                    <Badge className="bg-red-50 text-red-700" variant="outline">
+                    <Badge className="bg-danger-tint text-danger-ink" variant="outline">
                       Disputed
                     </Badge>
                   )}

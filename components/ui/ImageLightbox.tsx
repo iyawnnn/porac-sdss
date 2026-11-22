@@ -62,7 +62,7 @@ export function ImageLightbox({ src, alt }: { src: string; alt: string }) {
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Close image preview"
-            className="absolute right-5 top-5 rounded-full bg-white/90 px-3 py-1.5 text-sm font-medium text-ink-900 hover:bg-white"
+            className="absolute right-5 top-5 rounded-full bg-card/90 px-3 py-1.5 text-sm font-medium text-ink-900 hover:bg-card"
           >
             Close
           </button>

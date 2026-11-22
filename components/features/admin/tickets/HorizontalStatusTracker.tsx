@@ -17,7 +17,7 @@ const STEPS = ["Reported", "Under Review", "In Progress", "Resolved"] as const;
 const REJECTED_STYLE = TICKET_STATUS_STYLE.Rejected;
 // "Done" reuses the Resolved status's own ink color, not a danger/warning
 // token — feedback colours and status are separate meaning-channels
-// (DESIGN.md §1) and must never share a hue by coincidence.
+// (docs/design-system.md) and must never share a hue by coincidence.
 const DONE_STYLE = TICKET_STATUS_STYLE.Resolved;
 
 type StepState = "done" | "active" | "upcoming" | "rejected";
@@ -45,8 +45,8 @@ function StepNode({ state }: { state: StepState }) {
     return (
       <div className="relative flex size-8 items-center justify-center">
         <span className="absolute inset-0 animate-ping rounded-full bg-brand-400 opacity-40 motion-reduce:hidden" />
-        <div className="relative flex size-8 items-center justify-center rounded-full bg-brand-500 ring-4 ring-brand-100">
-          <span className="size-2 rounded-full bg-white" />
+        <div className="relative flex size-8 items-center justify-center rounded-full bg-primary ring-4 ring-brand-100">
+          <span className="size-2 rounded-full bg-card" />
         </div>
       </div>
     );
@@ -269,12 +269,12 @@ function ResolveDialog({
           <div className="space-y-2">
             {RESOLUTION_OUTCOMES.map((option) => (
               <label
-                className="flex cursor-pointer items-start gap-2 rounded-md border border-line-200 p-2.5 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50"
+                className="flex cursor-pointer items-start gap-2 rounded-md border border-line-200 p-2.5 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-accent"
                 key={option.value}
               >
                 <input
                   checked={outcome === option.value}
-                  className="mt-0.5 accent-brand-600"
+                  className="mt-0.5 accent-primary"
                   name="resolve-outcome"
                   onChange={() => {
                     setOutcome(option.value);

@@ -152,10 +152,10 @@ test("citizen shell remains light and independent of the neutral admin shell", a
   await sharedLoginCitizen(page, E2E_CITIZEN_ACCOUNT);
 
   const canvas = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(canvas).toBe("rgb(247, 249, 251)");
+  expect(canvas).toBe("rgb(241, 245, 243)");
   await page.getByRole("button", { name: /notifications/i }).click();
   await expect(page.getByText("Notifications", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByText("Notifications", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Porac SDSS")).toBeVisible();
+  await expect(page.getByRole("img", { name: "PORAC-SDSS" }).first()).toBeVisible();
 });

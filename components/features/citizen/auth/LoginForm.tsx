@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, AlertCircle, CheckCircle2, Radar } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
+import { BrandLogo } from "@/components/layouts/BrandLogo";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { oauthErrorMessage } from "./oauthErrors";
 import { authNoticeMessage } from "./authNotices";
@@ -54,7 +55,7 @@ export default function LoginForm() {
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
       {/* Visual panel */}
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-brand-900 via-brand-700 to-brand-600 lg:flex lg:flex-col lg:justify-between">
+      <div className="relative hidden overflow-hidden bg-gradient-to-br from-[#07291a] via-[#0c4720] to-[#145e37] lg:flex lg:flex-col lg:justify-between">
         <svg
           className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.12]"
           viewBox="0 0 400 800"
@@ -71,13 +72,10 @@ export default function LoginForm() {
           ))}
         </svg>
 
-        <div className="relative z-10 flex items-center gap-3 p-10">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 text-white">
-            <Radar className="h-5 w-5" aria-hidden="true" />
-          </span>
+        <div className="relative z-10 flex flex-col items-start gap-3 p-10">
+          <BrandLogo tone="dark" height={40} priority />
           <div>
-            <p className="font-mono text-sm font-semibold tracking-wide text-white">PORAC SDSS</p>
-            <p className="text-xs text-white/70">Spatial Decision Support System</p>
+            <p className="text-xs text-white/70">Web-Based Decision Support System</p>
           </div>
         </div>
 
@@ -92,6 +90,7 @@ export default function LoginForm() {
       {/* Form panel */}
       <div className="flex flex-col justify-center bg-surface px-6 py-12 sm:px-12 lg:px-20">
         <div className="mx-auto w-full max-w-sm">
+          <BrandLogo height={28} className="mb-8 lg:hidden" />
           <h1 className="text-base font-semibold tracking-[-0.01em] text-ink-900">
             Log in to your Account
           </h1>
@@ -122,7 +121,7 @@ export default function LoginForm() {
           <div className="mt-4 space-y-2">
             <a
               href="/api/auth/google"
-              className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-line-200 text-xs font-medium text-ink-700 hover:bg-line-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+              className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-line-200 text-xs font-medium text-ink-700 hover:bg-line-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <GoogleIcon className="h-3.5 w-3.5" />
               Continue with Google
@@ -152,7 +151,7 @@ export default function LoginForm() {
                 placeholder="name@example.com"
                 autoComplete="email"
                 required
-                className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
             </div>
 
@@ -166,7 +165,7 @@ export default function LoginForm() {
                 </label>
                 <Link
                   href="/forgot-password"
-                  className="text-[11px] font-medium text-brand-500 hover:text-brand-600"
+                  className="text-[11px] font-medium text-primary hover:text-primary/80"
                 >
                   Forgot password?
                 </Link>
@@ -179,13 +178,13 @@ export default function LoginForm() {
                   placeholder="Enter your password"
                   autoComplete="current-password"
                   required
-                  className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 pr-9 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                  className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 pr-9 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-ink-400 hover:text-ink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                  className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-ink-400 hover:text-ink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -200,7 +199,7 @@ export default function LoginForm() {
               <input
                 type="checkbox"
                 name="rememberMe"
-                className="h-3.5 w-3.5 rounded-sm border-line-200 accent-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                className="h-3.5 w-3.5 rounded-sm border-line-200 accent-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
               Remember me
             </label>
@@ -215,7 +214,7 @@ export default function LoginForm() {
             <button
               type="submit"
               disabled={submitting}
-              className="h-9 w-full rounded-md bg-brand-500 text-sm font-medium text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+              className="h-9 w-full rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               {submitting ? "Signing in…" : "Sign In with Email"}
             </button>
@@ -223,7 +222,7 @@ export default function LoginForm() {
 
           <p className="mt-4 text-center text-xs text-ink-500">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="font-medium text-brand-500 hover:text-brand-600">
+            <Link href="/signup" className="font-medium text-primary hover:text-primary/80">
               Sign up
             </Link>
           </p>

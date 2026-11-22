@@ -21,7 +21,7 @@ const CITY_CENTER: [number, number] = [MUNICIPALITY.centerLat, MUNICIPALITY.cent
 
 // Same floating glass treatment as the admin map's controls/panels — kept as
 // one-off arbitrary utilities rather than @theme tokens, see MapClient.tsx.
-const GLASS_PANEL = "rounded-xl border border-slate-200/60 bg-white/90 shadow-xl backdrop-blur-md";
+const GLASS_PANEL = "rounded-xl border border-border bg-card/90 shadow-xl backdrop-blur-md";
 
 // Manuscript revision Phase 1, step 6c: citizens are shown no system score,
 // so every pin and cluster is neutral and the Urgency legend is gone.

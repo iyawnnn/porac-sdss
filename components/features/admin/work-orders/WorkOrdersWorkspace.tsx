@@ -320,7 +320,7 @@ function WorkOrderDesktopRow({ workOrder, onUpdated }: { workOrder: WorkOrderLis
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           <span>Work order #{workOrder.id}</span>
           <span aria-hidden="true">·</span>
-          <Link className="text-brand-600 hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
+          <Link className="text-primary hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
         </p>
         <WorkOrderFinalState replacementHref={(id) => `/admin/tickets/${workOrder.ticket_id}#work-order-${id}`} workOrder={workOrder} />
       </TableCell>
@@ -346,7 +346,7 @@ function WorkOrderCard({ workOrder, onUpdated }: { workOrder: WorkOrderListRow; 
           <p className="flex flex-wrap items-center gap-1 font-mono text-xs text-muted-foreground">
             <span>#{workOrder.id}</span>
             <span aria-hidden="true">·</span>
-            <Link className="text-brand-600 hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
+            <Link className="text-primary hover:underline" href={`/admin/tickets/${workOrder.ticket_id}`}>Ticket #{workOrder.ticket_id}</Link>
           </p>
           <WorkOrderFinalState replacementHref={(id) => `/admin/tickets/${workOrder.ticket_id}#work-order-${id}`} workOrder={workOrder} />
         </div>

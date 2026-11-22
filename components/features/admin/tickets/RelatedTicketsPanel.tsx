@@ -44,7 +44,7 @@ export function RelatedTicketsPanel({
               <li className="py-2.5 first:pt-0 last:pb-0" data-testid={`related-ticket-${candidate.ticketId}`} key={candidate.ticketId}>
                 <div className="flex items-start justify-between gap-2">
                   {href ? (
-                    <Link className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline" href={href}>
+                    <Link className="text-sm font-medium text-primary hover:text-primary/80 hover:underline" href={href}>
                       {label}
                     </Link>
                   ) : (

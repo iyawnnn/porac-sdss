@@ -2,7 +2,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Token layer v2  see DESIGN.md 2-4 for full rationale. DESIGN.md is the
+@custom-variant dark (&:is(.dark *));
+
+/* Token layer v2  see docs/design-system.md for full rationale. It is the
    authoritative spec; the old v1 rationale comments this file used to carry
    are superseded. Hex is canonical.
 
@@ -13,22 +15,27 @@
 @theme {
   --breakpoint-dashboard: 75rem;
   --breakpoint-wide: 85rem;
-  /* Brand  chrome only, never data (DESIGN.md 4.3) */
-  --color-brand-50: #eff5fc;
-  --color-brand-100: #d8e6f7;
-  --color-brand-300: #8fb6de;
-  --color-brand-400: #5b9be0; /* admin dark-surface accent  same hue, lighter tint */
-  --color-brand-500: #2b6cb0;
-  --color-brand-600: #22578e;
-  --color-brand-700: #1a4570;
-  --color-brand-900: #102943;
+  /* Brand ramp, chrome only, never data. Legacy name kept for the few
+     remaining utilities; new code uses the semantic tokens (primary, accent,
+     ring). Dark values live in the .dark block. */
+  --color-brand-50: #eaf3ee;
+  --color-brand-100: #d5e7dc;
+  --color-brand-200: #bcd5c5;
+  --color-brand-300: #8dbfa3;
+  --color-brand-400: #3daa6a;
+  --color-brand-500: #1b7a47;
+  --color-brand-600: #145e37;
+  --color-brand-700: #0c4720;
+  --color-brand-800: #0a3a1a;
+  --color-brand-900: #07291a;
 
   /* Danger / warning / info: semantic feedback colours (error text, warning
      rows, neutral info chips) - never chrome. Renamed from the former
      urgency-* tokens in manuscript revision Phase 1, step 7b, when the badges
-     those names described were retired (names only; values unchanged). Hue-separated from brand orange (--primary #c2410c /
-     --ring #f26b1d) so a warning and a brand-orange element never collide by
-     hue (DESIGN.md 4.4, docs/design-system.md 3.2). */
+     those names described were retired (names only; values unchanged).
+     Kept separate from the brand green and the Sun Orange accent so a
+     warning and a brand element never collide by hue
+     (docs/design-system.md 3.3). */
   --color-info: #5b7290;
   --color-info-tint: #dce6f0;
   --color-info-ink: #3c4b5c;
@@ -83,13 +90,13 @@
   --color-office-meo: oklch(0.58 0.13 190);
   --color-office-mdrrmo: oklch(0.58 0.14 305);
 
-  /* Integrity / moderation flags  violet, off every other ramp (DESIGN.md 4.6) */
+  /* Integrity / moderation flags  violet, off every other ramp (docs/design-system.md 3.3) */
   --color-flag: #7b2fa8;
   --color-flag-tint: #f3e8fb;
   --color-flag-ink: #5b2178;
   --color-flag-edge: #ddbdf0;
 
-  /* Map accents  terrain/waterway/lahar/infra-safety (DESIGN.md 4.7).
+  /* Map accents  terrain/waterway/lahar/infra-safety (docs/design-system.md 3.3).
      Map-only, never UI chrome, identical in both shells since they describe
      map data, not chrome. Not verified/claimed as official Porac LGU colors. */
   --color-terrain: #5f7f63;
@@ -98,28 +105,28 @@
   --color-lahar: #9a6a3a;
   --color-infra-safety: #d99a22;
 
-  /* Neutrals (DESIGN.md 4.1)  citizen/light default */
-  --color-canvas: #f7f9fb;
+  /* Neutrals: green-tinted from the approved Mist/Surface/Border swatches */
+  --color-canvas: #f1f5f3;
   --color-surface: #ffffff;
-  --color-surface-elevated: #fbfcfd;
-  --color-line-100: #edf0f3;
-  --color-line-200: #e1e6eb;
-  --color-ink-400: #808c99;
-  --color-ink-500: #5a6672;
-  --color-ink-700: #2e3841;
-  --color-ink-900: #10151a;
+  --color-surface-elevated: #fbfcfb;
+  --color-line-100: #e8eeea;
+  --color-line-200: #d9e2dc;
+  --color-ink-400: #627167;
+  --color-ink-500: #55635b;
+  --color-ink-700: #242425;
+  --color-ink-900: #14211a;
 
   /* Ticket Queue surface (docs/design-system.md 5.8). The queue is the one
      admin surface that does NOT use the dashboard gray-frame card idiom:
      its table lives in a plain white bordered card, so it needs a band tint
      one step off #ffffff that --muted (#f3f4f6) is too heavy for. Used by
      the queue table header strip and its footer strip only. */
-  --color-surface-subtle: #fafafa;
+  --color-surface-subtle: #f6f9f7;
 
   /* Track for inline score meters. Deliberately not --border (#e5e7eb): a
      meter beside a mono score at 13px with an e5 track reads as a rule rather
      than an empty gauge. */
-  --color-meter-track: #eef0f2;
+  --color-meter-track: #e6ece8;
 }
 
 /* Font variables come from next/font (see app/layout.tsx) as runtime CSS
@@ -131,11 +138,11 @@
    Francisco if Inter somehow fails to load  no SF Pro font file is bundled
    or committed; system-ui/-apple-system are OS-provided, not downloaded. */
 @theme inline {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  --font-heading: var(--font-montserrat), var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -179,7 +186,7 @@
 html {
   /* Lets the browser interpolate Inter's opsz axis from rendered font-size
      instead of pinning one optical size everywhere  the verified
-     "Display" substitute (DESIGN.md 3.1/3.2). No-op, not a regression, in
+     "Display" substitute (docs/design-system.md 4). No-op, not a regression, in
      browsers that don't support it. */
   font-optical-sizing: auto;
 }
@@ -200,101 +207,203 @@ body {
    data-color tokens in the @theme block above (danger/warning/info, status, lifecycle,
    severity, flag, map accents) are semantic palettes and are intentionally
    untouched by this phase  see docs/design-system.md 3.2. */
-/* PORAC-SDSS brand repoint (2026-08) — admin shell + dashboard scope only.
-   Source: PORAC-SDSS Brand Guidelines (orange #FF7A00 / charcoal #111827 /
-   gray #6B7280 / light gray #F3F4F6 / white). #FF7A00 itself only reaches
-   2.6:1 against white — below the 3:1 UI-component floor DESIGN system 8
-   requires — so it is used for the ring/accent role only (never text/fill).
-   --primary/--sidebar-primary use --brand-solid, a deepened same-hue shade
-   (hue 29°, same as #FF7A00) that clears 4.5:1 for white button/label text.
-   The legacy --color-brand ramp (blue, citizen auth/report pages) and the
-   --color-ink, --color-line, and --color-canvas neutrals are deliberately
-   untouched here — out of scope for this pass, see docs/design-system.md 9.
-   NB: do not write a token glob with a trailing asterisk-slash in this
-   comment; that sequence terminates the CSS comment and breaks the build. */
+/* PORAC-SDSS brand tokens. Source of truth: the approved Figma brand file
+   (docs/design-system.md 2-3). Logo swatches stay untouched; where a swatch
+   misses contrast for a UI role (input borders, small orange text) a derived
+   shade is used and recorded in docs/design-system.md.
+   Light: Porac Green #0C4720 / Sun Orange #D05E32 / Ink #242425.
+   Dark:  Leaf Green #3DAA6A / Sun Orange Dark #EE7444 / Night #0B1410.
+   Orange is a secondary accent (--sun*), never a control fill, so it stays
+   free to mean "attention" inside the app. */
 :root {
-  --brand: #ff7a00;
-  --brand-solid: #a85100;
-  --brand-hover: #854000;
-  --brand-subtle: #fff4eb;
-  /* One step lighter than --brand-subtle. --brand-subtle is the FILL for
-     chips, badges and the bulk-action bar; --brand-wash is the row-level
-     wash behind a hovered or selected table row, which sits underneath
-     those chips and would otherwise tie with them. Keep them distinct. */
-  --brand-wash: #fffaf5;
-  --brand-border: #ffd9ad;
+  color-scheme: light;
+  --brand: #0c4720;
+  --brand-solid: #0c4720;
+  --brand-hover: #083318;
+  --brand-subtle: #e3eee7;
+  /* One step lighter than --brand-subtle: the row wash behind a hovered or
+     selected table row, which sits under chips filled with --brand-subtle. */
+  --brand-wash: #f1f7f3;
+  --brand-border: #bcd5c5;
+  --sun: #d05e32; /* graphic / large text only: 3.9:1 on white */
+  --sun-ink: #b8470f; /* small text: 5.3:1 on white */
+  --sun-subtle: #fbebe4;
 
   --background: #ffffff;
-  --foreground: #111827;
+  --foreground: #14211a;
   --card: #ffffff;
-  --card-foreground: #111827;
+  --card-foreground: #14211a;
   --popover: #ffffff;
-  --popover-foreground: #111827;
+  --popover-foreground: #14211a;
   --primary: var(--brand-solid);
   --primary-foreground: #ffffff;
-  --secondary: #f3f4f6;
-  --secondary-foreground: #111827;
-  --muted: #f3f4f6;
-  --muted-foreground: #6b7280;
-  --accent: #f3f4f6;
-  --accent-foreground: #111827;
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: #e5e7eb;
-  --input: #d1d5db;
+  --secondary: #f1f5f3;
+  --secondary-foreground: #14211a;
+  --muted: #f1f5f3;
+  --muted-foreground: #55635b;
+  --accent: var(--brand-subtle);
+  --accent-foreground: #14211a;
+  --destructive: var(--color-danger);
+  --border: #d9e2dc;
+  --input: #7e8f84; /* 3.4:1 on white; --border is decorative only */
   --ring: var(--brand);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --chart-1: #0c4720;
+  --chart-2: #d05e32;
+  --chart-3: #5b7290;
+  --chart-4: #8c9a91;
+  --chart-5: #c2cec6;
   --radius: 0.5rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #111827;
+  --sidebar-foreground: #14211a;
   --sidebar-primary: var(--brand-solid);
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: var(--brand-subtle);
   --sidebar-accent-foreground: var(--brand-solid);
-  --sidebar-border: #e5e7eb;
+  --sidebar-border: #d9e2dc;
   --sidebar-ring: var(--brand);
 
-  /* Dashboard trend chart — deliberately neutral. Brand orange is chrome,
-     never data (docs/design-system.md §2.2), and the trend series carries no
-     semantic meaning that any existing data ramp already owns, so it renders
-     in the neutral scale with a charcoal accent on the peak bar rather than
-     joining the lifecycle/severity/office series palettes. Replaces the
-     legacy --color-brand-500 (blue #2b6cb0) these charts read before. */
-  /* KPI week-over-week deltas. Colored by the arithmetic SIGN: a rise is
-     green, a fall is red, on every card that carries one.
-
-     Recorded because it was a deliberate reversal, not an oversight: an
-     earlier revision colored these by judgement instead (a rise in Active
-     Tickets or Pending Work Orders rendered red, because a growing hazard
-     backlog is bad news). That was changed on request to the conventional
-     up-is-green reading. The consequence is live and intended — a growing
-     backlog now reads green on those two cards.
-
-     Deviation on record (docs/design-system.md 2.1, one meaning per color
-     channel): these share a hue family with --color-status-resolved-* and
-     --color-status-rejected-*. Accepted because the two never share a form
-     factor — a status is a tinted pill with a dot, a delta is bold inline
-     text that always carries a +/- glyph and an arrow, so neither is
-     color-only. If a third green ever wants onto this dashboard, revisit
-     rather than adding to the pile. */
+  /* KPI week-over-week deltas, colored by arithmetic SIGN (a rise is green,
+     a fall red). A deliberate reversal of an earlier judgement-based scheme:
+     a growing backlog reads green on the two backlog cards, by request.
+     Deviation on record (docs/design-system.md, one meaning per color
+     channel): shares a hue family with the resolved/rejected status tokens.
+     Accepted because a status is a tinted pill with a dot while a delta is
+     bold inline text that always carries a +/- glyph and an arrow. */
   --delta-up: #0f7a5a;
   --delta-down: #b42318;
-  --delta-flat: #6b7280;
+  --delta-flat: #55635b;
 
-  --chart-bar: #e5e7eb;
-  --chart-bar-hover: #d1d5db;
-  --chart-bar-peak: #111827;
-  --chart-grid: #eef0f2;
-  --chart-axis-text: #9ca3af;
-  --chart-reference: #c9ced4;
+  /* Dashboard trend chart: neutral by design, brand is chrome, never data. */
+  --chart-bar: #d9e2dc;
+  --chart-bar-hover: #c2cec6;
+  --chart-bar-peak: #14211a;
+  --chart-grid: #e6ece8;
+  --chart-axis-text: #5f6e65;
+  --chart-reference: #b7c4bb;
 }
 
-/* Accessibility floor (DESIGN.md 11)  no focus styling existed before this.
-   Repointed to --ring (Phase 0 brand orange) in place of the retiring
-   --color-brand-500 blue. */
+/* Dark theme: toggled with the .dark class on <html> (ThemeToggle plus the
+   pre-paint script in app/layout.tsx). Redefines the semantic tokens and the
+   data palettes so every token-driven surface follows. Map-only accents
+   (terrain/waterway/lahar/infra-safety) describe map data and stay the same. */
+.dark {
+  color-scheme: dark;
+  --color-brand-50: #14261c;
+  --color-brand-100: #1c3326;
+  --color-brand-200: #24402f;
+  --color-brand-300: #2e7a50;
+  --color-brand-400: #3daa6a;
+  --color-brand-500: #3daa6a;
+  --color-brand-600: #5cc088;
+  --color-brand-700: #7fd0a0;
+  --color-brand-800: #a5e0bd;
+  --color-brand-900: #07291a;
+
+  --color-info: #8fa6c2;
+  --color-info-tint: #1b2633;
+  --color-info-ink: #b8c9db;
+  --color-info-edge: #2f4157;
+  --color-warning: #d9b22e;
+  --color-warning-tint: #2b2410;
+  --color-warning-ink: #ebd26b;
+  --color-warning-edge: #4d4217;
+  --color-danger: #f27a70;
+  --color-danger-tint: #2e1512;
+  --color-danger-ink: #f5a8a0;
+  --color-danger-edge: #5a2620;
+
+  --color-status-reported-tint: #1a241e;
+  --color-status-reported-ink: #c2cec6;
+  --color-status-reported-dot: #8c9a91;
+  --color-status-under-review-tint: #152234;
+  --color-status-under-review-ink: #a9c6e8;
+  --color-status-under-review-dot: #5b9be0;
+  --color-status-in-progress-tint: #1b2d47;
+  --color-status-in-progress-ink: #c5daf3;
+  --color-status-in-progress-dot: #4f8ccb;
+  --color-status-resolved-tint: #10281f;
+  --color-status-resolved-ink: #7fd6b2;
+  --color-status-resolved-dot: #34b98a;
+  --color-status-rejected-tint: #2e1512;
+  --color-status-rejected-ink: #f5a8a0;
+  --color-status-rejected-dot: #e5574b;
+  --color-lifecycle-reported: #6fa3dd;
+  --color-lifecycle-under-review: #d9923f;
+  --color-lifecycle-in-progress: #9a88cf;
+  --color-lifecycle-resolved: #34b98a;
+  --color-lifecycle-rejected: #e0666a;
+  --color-severity-critical: oklch(0.68 0.2 27);
+  --color-severity-high: oklch(0.74 0.15 55);
+  --color-severity-medium: oklch(0.76 0.12 85);
+  --color-severity-low: oklch(0.7 0.09 150);
+  --color-office-meo: oklch(0.7 0.12 190);
+  --color-office-mdrrmo: oklch(0.7 0.13 305);
+  --color-flag: #c58be8;
+  --color-flag-tint: #26142f;
+  --color-flag-ink: #e0bdf3;
+  --color-flag-edge: #4a2a5e;
+
+  --color-canvas: #0b1410;
+  --color-surface: #101c16;
+  --color-surface-elevated: #142119;
+  --color-surface-subtle: #0e1812;
+  --color-line-100: #1a2921;
+  --color-line-200: #24352b;
+  --color-ink-400: #8a9c90;
+  --color-ink-500: #a9b9ae;
+  --color-ink-700: #dce5df;
+  --color-ink-900: #f2f6f3;
+  --color-meter-track: #1f2e25;
+
+  --brand: #3daa6a;
+  --brand-solid: #3daa6a;
+  --brand-hover: #5cc088;
+  --brand-subtle: #14261c;
+  --brand-wash: #101f17;
+  --brand-border: #2a4a38;
+  --sun: #ee7444;
+  --sun-ink: #ee7444; /* 6.4:1 on Night */
+  --sun-subtle: #2a1710;
+
+  --background: #0b1410;
+  --foreground: #f2f6f3;
+  --card: #101c16;
+  --card-foreground: #f2f6f3;
+  --popover: #101c16;
+  --popover-foreground: #f2f6f3;
+  --primary-foreground: #0b1410;
+  --secondary: #17251d;
+  --secondary-foreground: #f2f6f3;
+  --muted: #17251d;
+  --muted-foreground: #9db0a4;
+  --accent: #1c2d23;
+  --accent-foreground: #f2f6f3;
+  --border: #24352b;
+  --input: #6b8174; /* 4.2:1 on the card surface */
+  --chart-1: #3daa6a;
+  --chart-2: #ee7444;
+  --chart-3: #8fa6c2;
+  --chart-4: #8c9a91;
+  --chart-5: #c2cec6;
+  --sidebar: #0d1812;
+  --sidebar-foreground: #f2f6f3;
+  --sidebar-primary-foreground: #0b1410;
+  --sidebar-accent: #1c2d23;
+  --sidebar-border: #24352b;
+
+  --delta-up: #34b98a;
+  --delta-down: #f27a70;
+  --delta-flat: #9db0a4;
+  --chart-bar: #24352b;
+  --chart-bar-hover: #31463a;
+  --chart-bar-peak: #f2f6f3;
+  --chart-grid: #1b2a21;
+  --chart-axis-text: #8a9c90;
+  --chart-reference: #3a4f42;
+}
+
+/* Accessibility floor (docs/design-system.md 9)  no focus styling existed before this.
+   Uses --ring (brand green in light, Leaf Green in dark). */
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
@@ -347,6 +456,7 @@ body {
 /* Muted-gray basemap treatment (replaces the old CARTO light_all look) applied via
    TileLayer's className prop, which Leaflet puts only on the raster tile <img>s. */
 .map-tile-muted { filter: grayscale(100%) saturate(20%) brightness(1.06) contrast(0.9); }
+.dark .map-tile-muted { filter: invert(1) hue-rotate(180deg) grayscale(100%) saturate(20%) brightness(0.85) contrast(0.9); }
 
 @layer base {
   * {
