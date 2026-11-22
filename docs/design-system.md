@@ -333,7 +333,7 @@ classes, so there is no flash; use `tone="dark"` on always-dark surfaces.
 | App header / expanded sidebar | Primary logo 28-32px tall (citizen header 28, admin sidebar 26). |
 | Collapsed sidebar, avatars | Symbol; minimum 24px. |
 | Below 32px | Use the simplified favicon artwork (`app/icon.svg`), not the full symbol. |
-| Auth pages (citizen and staff) | Centered at the top of the form panel, 36px tall, `tone="auto"` (§8.5). |
+| Auth pages (citizen and staff) | Centered at the top of the form panel, 44px tall, `tone="auto"` (§8.5). |
 | Minimum width | Primary logo 120px. |
 | Subtitle lockup (min 280px) | Presentations, manuscript and formal documents only; never the app header. |
 | Wordmark | Footers and tight horizontal spaces. |
@@ -366,7 +366,7 @@ Operational Priority is numeric with no bands, so orange is never a priority col
 Citizen sign in / create account / forgot / reset and Staff sign in share `AuthShell`
 (`components/features/auth/AuthShell.tsx`): a full-viewport, edge-to-edge 50/50 split on a
 `min-h-dvh` grid, with no outer card, border, radius, shadow or margin. The form panel (plain
-`bg-background`) is on the left with the form centered at `max-w-[400px]`; the photograph is on the
+`bg-background`) is on the left with the form centered at `max-w-[420px]`; the photograph is on the
 right, full height and `object-cover`, pinned (`sticky top-0 h-dvh`) so it stays in view while a long
 form scrolls. Below `md` the photo is dropped and the form takes the full width. Nothing has a fixed
 height, so create account and recovery states grow and scroll naturally. Form pieces are in
@@ -374,8 +374,27 @@ height, so create account and recovery states grow and scroll naturally. Form pi
 the shadcn `Alert`) and the `Field` / `Label` / `Alert` primitives in `components/ui`. The divider
 label uses `bg-background` to match the form panel. The form column reads logo, heading, one-line
 description, fields, primary button, "Or continue with" divider, Google, then the alternate-page link.
-Google sits below the primary form and is citizen-only. There is no Back to Home link: `/` redirects
-to `/login`, so it would go nowhere; add one when a public landing page exists.
+Google sits below the primary form and is citizen-only.
+
+Spacing is set by three variables on `AuthShell`'s `<main>`: `--auth-gap` (between fields and
+actions, read by `AUTH_GROUP` in `AuthFields.tsx`), `--auth-logo-gap` and `--auth-head-gap`. On
+desktop they are 24 / 28 / 36px with a 44px logo and 8px between a label and its input (the
+"Or continue with" divider sits about 26px from the button and from Google); the `compact` variant
+(`@custom-variant` in `globals.css`: phones, or viewports 720px tall or less) tightens them to
+20 / 20 / 28px so short laptops and phones keep the whole form reachable. The form is `max-w-[420px]`
+and centered on the panel by a `1fr / auto / 1fr` grid, so the optional back link sits top-left in
+its own row and never overlaps the form.
+
+Text links use `AuthLink` (the `.link-underline` class in `globals.css`): a faint resting underline
+that draws to full strength from the left over 180ms on hover and on keyboard focus, plus a
+`focus-visible` ring. It is CSS only, and `prefers-reduced-motion` removes the transition. The Back
+to Home arrow shifts 2px left on hover/focus, only under `motion-safe`.
+
+**Back to Home is built but hidden.** `PUBLIC_HOME_HREF` in `AuthShell.tsx` is `null`: `/` redirects
+to `/login` and every other citizen page needs an account (`proxy.ts`), so there is no public page
+to link to, and a link would loop back to the page you are on. Set the constant to the public landing
+route once one exists and the link appears top-left on all five auth pages (it was checked rendered
+at desktop, short-laptop and phone sizes before being disabled).
 There are no portal badges, no cross-portal links and no photo caption or scrim: staff sign-in stays
 reachable at `/admin/login` and is not advertised on the citizen page (there is no public footer to
 hold a Staff Access link yet; add one there if a public site is built). Staff has no registration,

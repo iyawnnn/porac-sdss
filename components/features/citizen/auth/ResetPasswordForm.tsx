@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_BUTTON, AuthAlert, PasswordInput } from "@/components/features/auth/AuthFields";
+import { AUTH_BUTTON, AUTH_GROUP, AuthAlert, AuthLink, PasswordInput } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 
@@ -73,20 +73,20 @@ export default function ResetPasswordForm() {
       )}
 
       {status === "invalid" && (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-(--auth-gap)">
           <AuthAlert tone="error">This reset link is invalid or has expired.</AuthAlert>
           <Button asChild className={AUTH_BUTTON}>
             <Link href="/forgot-password">Request a new link</Link>
           </Button>
           <FieldDescription className="text-center">
-            <Link href="/login">Back to Sign In</Link>
+            <AuthLink href="/login">Back to Sign In</AuthLink>
           </FieldDescription>
         </div>
       )}
 
       {status === "valid" && (
         <form onSubmit={handleSubmit} noValidate>
-          <FieldGroup>
+          <FieldGroup className={AUTH_GROUP}>
             <Field>
               <FieldLabel htmlFor="newPassword">New password</FieldLabel>
               <PasswordInput
@@ -107,7 +107,7 @@ export default function ResetPasswordForm() {
             </Button>
 
             <FieldDescription className="text-center">
-              <Link href="/login">Back to Sign In</Link>
+              <AuthLink href="/login">Back to Sign In</AuthLink>
             </FieldDescription>
           </FieldGroup>
         </form>

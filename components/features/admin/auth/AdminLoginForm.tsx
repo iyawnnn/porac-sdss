@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_BUTTON, AUTH_INPUT, AuthAlert, PasswordInput } from "@/components/features/auth/AuthFields";
+import { AUTH_BUTTON, AUTH_GROUP, AUTH_INPUT, AuthAlert, PasswordInput } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -51,7 +51,7 @@ export default function AdminLoginForm() {
   return (
     <AuthShell title="Staff Sign In" description="Access the PORAC-SDSS municipal operations portal.">
       <form onSubmit={handleSubmit} noValidate>
-        <FieldGroup>
+        <FieldGroup className={AUTH_GROUP}>
           <Field>
             <FieldLabel htmlFor="email">Email</FieldLabel>
             <Input

@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_BUTTON, AUTH_INPUT, AuthAlert, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
+import { AUTH_BUTTON, AUTH_GROUP, AUTH_INPUT, AuthAlert, AuthLink, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -56,7 +55,7 @@ export default function SignupForm() {
   return (
     <AuthShell title="Create Account" description="Create an account to report concerns and follow their progress.">
       <form onSubmit={handleSubmit} noValidate>
-        <FieldGroup>
+        <FieldGroup className={AUTH_GROUP}>
           {oauthError && <AuthAlert tone="error">{oauthError}</AuthAlert>}
 
           <div className="grid grid-cols-2 gap-3">
@@ -124,7 +123,7 @@ export default function SignupForm() {
           <GoogleButton />
 
           <FieldDescription className="text-center">
-            Already have an account? <Link href="/login">Sign In</Link>
+            Already have an account? <AuthLink href="/login">Sign In</AuthLink>
           </FieldDescription>
         </FieldGroup>
       </form>

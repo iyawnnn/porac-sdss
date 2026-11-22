@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_BUTTON, AUTH_INPUT, AuthAlert } from "@/components/features/auth/AuthFields";
+import { AUTH_BUTTON, AUTH_GROUP, AUTH_INPUT, AuthAlert, AuthLink } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -44,17 +43,17 @@ export default function ForgotPasswordForm() {
       description="Enter your email and, if you have a password-based account, we'll send you a link to reset it."
     >
       {submitted ? (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-(--auth-gap)">
           <AuthAlert tone="success">
             If an account exists for that email, we&apos;ve sent a link to reset your password.
           </AuthAlert>
           <FieldDescription className="text-center">
-            <Link href="/login">Back to Sign In</Link>
+            <AuthLink href="/login">Back to Sign In</AuthLink>
           </FieldDescription>
         </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate>
-          <FieldGroup>
+          <FieldGroup className={AUTH_GROUP}>
             <Field>
               <FieldLabel htmlFor="email">Email</FieldLabel>
               <Input
@@ -75,7 +74,7 @@ export default function ForgotPasswordForm() {
             </Button>
 
             <FieldDescription className="text-center">
-              <Link href="/login">Back to Sign In</Link>
+              <AuthLink href="/login">Back to Sign In</AuthLink>
             </FieldDescription>
           </FieldGroup>
         </form>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,23 @@ import { cn } from "@/lib/utils";
 // zooming on focus). Applied to every auth input and button via these constants.
 export const AUTH_INPUT = "h-10 text-base md:text-base";
 export const AUTH_BUTTON = "h-10 w-full text-base";
+// Vertical rhythm between the fields and actions of a form. The value comes from
+// the --auth-gap variable that AuthShell sets (roomier on desktop, tighter on phones).
+export const AUTH_GROUP = "gap-(--auth-gap)";
+
+// Text link with the shared animated underline (.link-underline in globals.css) and a
+// visible keyboard focus ring. `no-underline!` beats FieldDescription's own link underline.
+export function AuthLink({ className, ...props }: React.ComponentProps<typeof Link>) {
+  return (
+    <Link
+      {...props}
+      className={cn(
+        "link-underline rounded-sm no-underline! outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        className,
+      )}
+    />
+  );
+}
 
 export function PasswordInput({ className, ...props }: Omit<React.ComponentProps<"input">, "type">) {
   const [visible, setVisible] = useState(false);

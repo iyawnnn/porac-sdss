@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_BUTTON, AUTH_INPUT, AuthAlert, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
+import { AUTH_BUTTON, AUTH_GROUP, AUTH_INPUT, AuthAlert, AuthLink, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -56,7 +55,7 @@ export default function LoginForm() {
   return (
     <AuthShell title="Welcome back" description="Sign in to report local concerns and track their progress.">
       <form onSubmit={handleSubmit} noValidate>
-        <FieldGroup>
+        <FieldGroup className={AUTH_GROUP}>
           {notice && <AuthAlert tone="success">{notice}</AuthAlert>}
           {oauthError && <AuthAlert tone="error">{oauthError}</AuthAlert>}
 
@@ -76,9 +75,9 @@ export default function LoginForm() {
           <Field>
             <div className="flex items-center justify-between gap-2">
               <FieldLabel htmlFor="password">Password</FieldLabel>
-              <Link href="/forgot-password" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+              <AuthLink href="/forgot-password" className="text-sm text-muted-foreground hover:text-foreground">
                 Forgot password?
-              </Link>
+              </AuthLink>
             </div>
             <PasswordInput
               id="password"
@@ -100,7 +99,7 @@ export default function LoginForm() {
           <GoogleButton />
 
           <FieldDescription className="text-center">
-            Don&apos;t have an account? <Link href="/signup">Create Account</Link>
+            Don&apos;t have an account? <AuthLink href="/signup">Create Account</AuthLink>
           </FieldDescription>
         </FieldGroup>
       </form>

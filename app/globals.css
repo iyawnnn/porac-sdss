@@ -3,6 +3,15 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+/* Phones and short laptop viewports: the auth pages tighten their spacing. */
+@custom-variant compact {
+  @media (max-width: 767px) {
+    @slot;
+  }
+  @media (max-height: 720px) {
+    @slot;
+  }
+}
 
 /* Token layer v2  see docs/design-system.md for full rationale. It is the
    authoritative spec; the old v1 rationale comments this file used to carry
@@ -457,6 +466,30 @@ body {
    TileLayer's className prop, which Leaflet puts only on the raster tile <img>s. */
 .map-tile-muted { filter: grayscale(100%) saturate(20%) brightness(1.06) contrast(0.9); }
 .dark .map-tile-muted { filter: invert(1) hue-rotate(180deg) grayscale(100%) saturate(20%) brightness(0.85) contrast(0.9); }
+
+/* Text links on the auth pages: a faint resting underline that draws to full strength
+   from the left on hover or keyboard focus. The parent-anchor selector lets a link with an
+   icon (Back to Home) underline its label when the whole link is hovered. */
+@layer components {
+  .link-underline {
+    background-image:
+      linear-gradient(currentColor, currentColor),
+      linear-gradient(color-mix(in srgb, currentColor 35%, transparent), color-mix(in srgb, currentColor 35%, transparent));
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    background-size: 0% 1px, 100% 1px;
+    transition: background-size 180ms ease-out;
+  }
+  .link-underline:is(:hover, :focus-visible),
+  :is(a, button):is(:hover, :focus-visible) > .link-underline {
+    background-size: 100% 1px, 100% 1px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .link-underline {
+      transition: none;
+    }
+  }
+}
 
 @layer base {
   * {
