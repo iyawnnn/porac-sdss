@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import type { WorkOrderStatus } from "@/lib/types/admin-work-orders";
 
 const STATUS_CONFIG: Record<WorkOrderStatus, { label: string; className: string }> = {
-  pending: { label: "Pending", className: "bg-muted text-foreground border-slate-200" },
+  pending: { label: "Pending", className: "bg-muted text-foreground border-border" },
   in_progress: { label: "In Progress", className: "bg-info-tint text-blue-700 border-blue-200" },
   completed: { label: "Completed", className: "bg-status-resolved-tint text-emerald-700 border-emerald-200" },
   cancelled: { label: "Cancelled", className: "bg-danger-tint text-danger-ink border-danger-edge" },

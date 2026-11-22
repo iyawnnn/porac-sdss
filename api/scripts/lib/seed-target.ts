@@ -1,10 +1,15 @@
 export const NON_PRODUCTION_FLAG = '--i-know-this-is-not-production';
+// The ep-steep-mouse database is the project's development/E2E database and holds
+// only synthetic data (docs/testing.md). Seeding it needs this explicit opt-in,
+// set to the exact endpoint label, so a stray or default run is still refused.
+export const DEV_DB_OVERRIDE_ENV = 'PORAC_ALLOW_SEED_ON_DEV_DB';
 
 // Pure: never reads an env file, opens a connection, or includes the URL in errors.
 // Require a single explicit host: no PGHOST fallback, sockets or multi-host URLs.
 export function assertSeedTarget(
   databaseUrl: string | undefined,
   args: readonly string[] = [],
+  env: Readonly<Record<string, string | undefined>> = process.env,
 ): void {
   let url: URL;
   try {
@@ -25,8 +30,12 @@ export function assertSeedTarget(
   }
   const label = host.split('.')[0];
   if (/^ep-steep-mouse(?:-|$)/.test(label)) {
+    if (env[DEV_DB_OVERRIDE_ENV] === 'ep-steep-mouse') return;
     throw new Error(
-      'Seed refused: production host ep-steep-mouse is never allowed.',
+      'Seed refused: host ep-steep-mouse (the production-labelled development database) ' +
+        'requires ' +
+        DEV_DB_OVERRIDE_ENV +
+        '=ep-steep-mouse.',
     );
   }
   if (

@@ -541,7 +541,7 @@ export default function ReportForm() {
               </MapContainer>
             </div>
             {!mapEnabled && (
-              <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/70 px-6 text-center text-sm font-medium text-ink-700">
+              <div className="absolute inset-0 z-[500] flex items-center justify-center bg-card/70 px-6 text-center text-sm font-medium text-ink-700">
                 Please upload a photo first to enable map location pinning.
               </div>
             )}
