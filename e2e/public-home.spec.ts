@@ -25,17 +25,25 @@ test("Back to Home on every auth page returns to the public home page", async ({
 });
 
 // The primary button has one real label that never moves: hovering and pressing must not
-// shift it, and there is no duplicated (rolling) copy.
-test("the primary button label stays put on hover and press", async ({ page }) => {
+// shift it, and there is no duplicated (rolling) copy. Hover and press do recolor it, so the
+// interactivity is visible without relying on the reflection.
+test("the primary button changes color but never moves on hover and press", async ({ page }) => {
   await page.goto("/login");
   const button = page.getByRole("button", { name: "Sign In", exact: true });
   await expect(button).toHaveCount(1);
   await expect(page.locator("button[type=submit] [aria-hidden=true]")).toHaveCount(0);
+  const rest = await button.evaluate((e) => getComputedStyle(e).backgroundColor);
   const before = await button.boundingBox();
   await button.hover();
+  await expect.poll(() => button.evaluate((e) => getComputedStyle(e).backgroundColor)).not.toBe(rest);
+  const hover = await button.evaluate((e) => getComputedStyle(e).backgroundColor);
   await page.mouse.down();
+  await expect.poll(() => button.evaluate((e) => getComputedStyle(e).backgroundColor)).not.toBe(hover);
   expect(await button.boundingBox()).toEqual(before);
+  // Release away from the button so no sign-in is submitted.
+  await page.mouse.move(2, 2);
   await page.mouse.up();
+  await expect.poll(() => button.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(rest);
 });
 
 // The show/hide toggle sits inside the field; it used to drop ~17px while pressed.

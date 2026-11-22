@@ -75,7 +75,9 @@ dark foreground on Night 17.2:1, Sun Orange Dark on Night 6.4:1.
 
 - **Primary** = `--brand-solid` (Porac Green light / Leaf dark); `--primary-foreground` is white /
   Night. `--ring` and `--sidebar-ring` = `--brand`. Related: `--brand-hover`, `--brand-wash` (row
-  wash), `--brand-border`.
+  wash), `--brand-border`. Primary button states: `--primary-hover` (lighter in both themes: new
+  `#235a32` in light, the existing `--brand-hover` in dark) and `--primary-pressed` (darker: `#003915`
+  light, `#299a5b` dark), used as `hover:bg-primary-hover` / `active:bg-primary-pressed`.
 - **Orange is a secondary accent** via `--sun`, `--sun-ink`, `--sun-subtle`. Never a control fill,
   link or button colour (Figma: keep controls green), and never a priority band.
 - **shadcn set**: `--background`, `--foreground`, `--card`, `--popover`, `--secondary`, `--muted`,
@@ -400,18 +402,27 @@ only (no stuck hover after a tap); keyboard focus gets the same treatment plus a
   changes. Without a resting underline, weight (`font-medium`) separates a link from the muted sentence
   around it, so keep link-bearing sentences in `AuthNote` (a plain `<p>`), not `FieldDescription`, whose
   own `a:hover` color change would flash.
-- **Primary button** (`AuthButton`, or `AUTH_CTA_BUTTON` on a link-button): Porac Green unchanged, in
+- **Primary button** (`AuthButton`, or `AUTH_CTA_BUTTON` on a link-button): Porac Green, in
   the material of Neffi's Explore Neffi CTA (`src/app/(marketing)/hero-cta-styles.tsx`,
   `PRIMARY_CTA_REFLECTIONS`): a top inset highlight, a lower inner shade, a delicate diagonal sheen and a
   radial haze of white light. Two adaptations for a 420 x 40px button: the haze is a wide, soft ellipse
   centered behind the label (Neffi's sits in the top-right corner, which read as a smudge here), and the
   sheen sits near the right edge (at Neffi's 58-74% it merged with the haze). Everything is static; the
-  label is one real, plain `<span>` above the decorative layers and never moves, rolls or fades. Hover
-  and focus only deepen the material (haze 0.8 to 1 opacity, highlight and shadow slightly stronger, 250ms);
-  the button never moves, scales or recolors (the shared Button's hover fade and press shift are
-  overridden). Disabled or loading buttons keep the resting material; loading sets `aria-busy` and
-  swaps the label ("Signing in..."). Label contrast over the haze at its brightest is 6.7:1 (light) and
-  7.2:1 (dark). Google stays a plain outline button with a subtle background and border change only.
+  label is one real, plain `<span>` above the decorative layers and never moves, rolls or fades.
+  The states: **hover** shifts the green to `--primary-hover` (about 7 perceptual units from the base,
+  clearly visible) and the haze 0.8 to 1, with the highlight and shadow slightly stronger; **pressed**
+  goes to the darker `--primary-pressed` with the haze dimmed and an inset shadow; **focus-visible**
+  keeps the shared Button's border-and-ring (independent of hover); **disabled and loading** keep the
+  resting material and ignore hover (`pointer-events: none`, and the material rules are guarded with
+  `:not(:disabled)`). Color and shadow transition over 200ms ease-out. The button and label never move
+  or scale. The shared Button's own `hover:bg-primary/80` fade and `active:translate-y-px` are replaced
+  by same-variant classes (`hover:bg-primary-hover`, `active:translate-y-0`), so tailwind-merge drops
+  them rather than the two fighting; the earlier `hover:bg-primary` override that cancelled the hover
+  color is gone. Note the shared Button's `transition-all` utility, not the `.auth-cta` rule, owns the
+  button's transition (utilities outrank the components layer), hence `duration-200 ease-out` in
+  `AUTH_CTA`. Worst-case label contrast over the haze: hover 5.3:1 and pressed 10.1:1 (light), hover
+  8.1:1 and pressed 5.3:1 (dark). Google stays a plain outline button with a subtle background and
+  border change only.
 - **Back to Home** arrow shifts 3px left on hover/focus, only under `motion-safe`.
 - **Password visibility toggle** (`PasswordInput`): centered with `inset-y-0 my-auto`, not a translate,
   and the press shift is neutralized on this button. The shared Button's `active:translate-y-px` writes

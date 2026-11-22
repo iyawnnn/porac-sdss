@@ -32,9 +32,13 @@ export function AuthNote({ children }: { children: React.ReactNode }) {
   return <p className="text-center text-sm text-muted-foreground">{children}</p>;
 }
 
-// Primary action styling (.auth-cta in globals.css). The overrides keep the shared Button's
-// hover fade and press shift from moving or recoloring the button.
-export const AUTH_CTA = "auth-cta hover:bg-primary active:not-aria-[haspopup]:translate-y-0";
+// Primary action styling (.auth-cta in globals.css). Same-variant classes, so tailwind-merge
+// replaces the shared Button's own `hover:bg-primary/80` fade and `active:translate-y-px` press
+// shift instead of fighting them: a clear hover shade and a darker pressed shade from the
+// --primary-hover / --primary-pressed tokens, no movement, 200ms ease-out. The shared Button
+// is unchanged for every other screen.
+export const AUTH_CTA =
+  "auth-cta hover:bg-primary-hover active:bg-primary-pressed active:not-aria-[haspopup]:translate-y-0 duration-200 ease-out";
 export const AUTH_CTA_BUTTON = cn(AUTH_BUTTON, AUTH_CTA);
 
 // The one real, static label, kept above the decorative light layers.
