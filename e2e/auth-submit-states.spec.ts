@@ -7,6 +7,7 @@ const formAlert = (page: import("@playwright/test").Page) => page.locator("[data
 // attempted and nothing counts against a rate limit.
 
 test("sign-in shows a spinner while pending, sends one request, and restores the button on error", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   let requests = 0;
   await page.route("**/api/citizens/login", async (route) => {
     requests++;
@@ -15,7 +16,7 @@ test("sign-in shows a spinner while pending, sends one request, and restores the
   });
   await page.goto("/login");
   await page.getByLabel("Email").fill("someone@example.test");
-  await page.getByPlaceholder("Password").fill("wrong-password");
+  await page.getByLabel("Password", { exact: true }).fill("wrong-password");
 
   const idle = page.getByRole("button", { name: "Sign In", exact: true });
   const idleBox = await idle.boundingBox();
@@ -32,13 +33,17 @@ test("sign-in shows a spinner while pending, sends one request, and restores the
   await expect(busy.locator("[data-slot=spinner]")).toHaveAttribute("aria-hidden", "true");
   // The spinner follows the label (to its right), on the same line.
   const spinnerBox = await busy.locator("[data-slot=spinner]").boundingBox();
-  const labelBox = await busy.locator("span.relative").boundingBox();
+  const label = busy.locator("span.relative");
+  const labelBox = await label.boundingBox();
   expect(spinnerBox!.x + spinnerBox!.width).toBeGreaterThan(labelBox!.x + labelBox!.width - 1);
   expect(spinnerBox!.x).toBeGreaterThan(labelBox!.x);
+  expect(Math.abs(labelBox!.x + labelBox!.width / 2 - (busyBox!.x + busyBox!.width / 2))).toBeLessThan(1);
+  await expect(label).toHaveCSS("column-gap", "8px");
+  await expect(busy.locator("[data-slot=spinner]")).toHaveCSS("animation-name", "none");
   await expect(page.locator("main [role=status].sr-only")).toHaveText("Signing in…");
 
   // Enter in a field and a forced click while pending must not resubmit.
-  await page.getByPlaceholder("Password").press("Enter");
+  await page.getByLabel("Password", { exact: true }).press("Enter");
   await busy.click({ force: true, noWaitAfter: true }).catch(() => {});
 
   await expect(formAlert(page)).toContainText("Invalid email or password");
@@ -67,7 +72,7 @@ test("a network failure restores the reset-password button and shows an error", 
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ valid: true }) }));
   await page.route("**/api/citizens/reset-password", (route) => route.abort("connectionrefused"));
   await page.goto("/reset-password?token=e2e-token");
-  await page.getByPlaceholder("At least 8 characters").fill("a-long-enough-password");
+  await page.getByLabel("New password", { exact: true }).fill("a-long-enough-password");
   await page.getByRole("button", { name: "Reset password" }).click();
   await expect(formAlert(page)).toContainText("Could not reach the server");
   await expect(page.getByRole("button", { name: "Reset password" })).toBeEnabled();

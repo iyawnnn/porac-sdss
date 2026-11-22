@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useAuthSubmit } from "@/components/features/auth/useAuthSubmit";
+import { PasswordInput } from "@/components/features/auth/AuthFields";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import type { SecurityStatus } from "@/lib/types/citizens-account";
@@ -37,36 +40,32 @@ export default function AccountSecurityPanel({ initial }: { initial: SecuritySta
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [passwordBusy, setPasswordBusy] = useState(false);
-  const [passwordError, setPasswordError] = useState("");
+  const { error: passwordError, submitting: passwordBusy, clearError, submit } = useAuthSubmit({ keepPendingOnSuccess: false });
 
   const [unlinkBusy, setUnlinkBusy] = useState<Provider | null>(null);
 
-  async function handlePasswordSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setPasswordBusy(true);
-    setPasswordError("");
+  function handlePasswordSubmit(e: React.FormEvent<HTMLFormElement>) {
+    return submit(e, async () => {
+      const res = await fetch("/api/citizens/account/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          status.hasPassword ? { currentPassword, newPassword } : { newPassword },
+        ),
+      });
 
-    const res = await fetch("/api/citizens/account/password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        status.hasPassword ? { currentPassword, newPassword } : { newPassword },
-      ),
-    });
-
-    if (res.ok) {
-      setStatus((s) => ({ ...s, hasPassword: true }));
-      setCurrentPassword("");
-      setNewPassword("");
-      setMessage({ kind: "success", text: status.hasPassword ? "Password changed." : "Password set." });
-      router.replace("/account");
-      router.refresh();
-    } else {
+      if (res.ok) {
+        setStatus((s) => ({ ...s, hasPassword: true }));
+        setCurrentPassword("");
+        setNewPassword("");
+        setMessage({ kind: "success", text: status.hasPassword ? "Password changed." : "Password set." });
+        router.replace("/account");
+        router.refresh();
+        return;
+      }
       const data = await res.json().catch(() => ({}));
-      setPasswordError(data.message ?? "Couldn't update your password.");
-    }
-    setPasswordBusy(false);
+      return data.message ?? "Couldn't update your password.";
+    });
   }
 
   async function handleUnlink(provider: Provider) {
@@ -113,36 +112,36 @@ export default function AccountSecurityPanel({ initial }: { initial: SecuritySta
         <h2 className="text-[18px] font-semibold leading-[26px] text-ink-900">Password</h2>
 
         {status.hasPassword ? (
-          <form onSubmit={handlePasswordSubmit} noValidate className="mt-4 space-y-3">
+          <form onSubmit={handlePasswordSubmit} onChange={clearError} noValidate className="mt-4 space-y-3">
             <p className="text-sm text-ink-500">Password configured.</p>
-            <div>
-              <label htmlFor="currentPassword" className="mb-1 block text-[11px] font-medium uppercase tracking-[0.04em] text-ink-700">
+            <Field className="gap-1">
+              <FieldLabel htmlFor="currentPassword" className="text-[11px] font-medium uppercase tracking-[0.04em] text-ink-700">
                 Current password
-              </label>
-              <input
+              </FieldLabel>
+              <PasswordInput
+                autoComplete="current-password"
                 id="currentPassword"
-                type="password"
                 required
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900"
+                className="h-9 rounded-md border-line-200 bg-surface pl-3 text-sm text-ink-900 md:text-sm dark:bg-surface"
               />
-            </div>
-            <div>
-              <label htmlFor="newPassword" className="mb-1 block text-[11px] font-medium uppercase tracking-[0.04em] text-ink-700">
+            </Field>
+            <Field className="gap-1">
+              <FieldLabel htmlFor="newPassword" className="text-[11px] font-medium uppercase tracking-[0.04em] text-ink-700">
                 New password
-              </label>
-              <input
+              </FieldLabel>
+              <PasswordInput
+                autoComplete="new-password"
                 id="newPassword"
-                type="password"
                 required
                 minLength={8}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900"
+                className="h-9 rounded-md border-line-200 bg-surface pl-3 text-sm text-ink-900 md:text-sm dark:bg-surface"
               />
-            </div>
-            {passwordError && <p className="text-xs text-danger-ink">{passwordError}</p>}
+            </Field>
+            {passwordError && <p role="alert" className="text-xs text-danger-ink">{passwordError}</p>}
             <button
               type="submit"
               disabled={passwordBusy}
@@ -152,23 +151,23 @@ export default function AccountSecurityPanel({ initial }: { initial: SecuritySta
             </button>
           </form>
         ) : reauthedProvider ? (
-          <form onSubmit={handlePasswordSubmit} noValidate className="mt-4 space-y-3">
+          <form onSubmit={handlePasswordSubmit} onChange={clearError} noValidate className="mt-4 space-y-3">
             <p className="text-sm text-ink-500">Verified — set a password for your account.</p>
-            <div>
-              <label htmlFor="newPassword" className="mb-1 block text-[11px] font-medium uppercase tracking-[0.04em] text-ink-700">
+            <Field className="gap-1">
+              <FieldLabel htmlFor="newPassword" className="text-[11px] font-medium uppercase tracking-[0.04em] text-ink-700">
                 New password
-              </label>
-              <input
+              </FieldLabel>
+              <PasswordInput
+                autoComplete="new-password"
                 id="newPassword"
-                type="password"
                 required
                 minLength={8}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="h-9 w-full rounded-md border border-line-200 bg-surface px-3 text-sm text-ink-900"
+                className="h-9 rounded-md border-line-200 bg-surface pl-3 text-sm text-ink-900 md:text-sm dark:bg-surface"
               />
-            </div>
-            {passwordError && <p className="text-xs text-danger-ink">{passwordError}</p>}
+            </Field>
+            {passwordError && <p role="alert" className="text-xs text-danger-ink">{passwordError}</p>}
             <button
               type="submit"
               disabled={passwordBusy}

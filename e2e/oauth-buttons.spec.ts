@@ -26,13 +26,13 @@ test("admin login page has no OAuth buttons — admin auth stays local-password 
 test("sign-in forms show the API's reason, not the status name", async ({ page }) => {
   await page.goto("/admin/login");
   await page.getByLabel("Email").fill("e2e-nobody@porac.gov.ph");
-  await page.getByPlaceholder("Password").fill("not-the-password");
+  await page.getByLabel("Password", { exact: true }).fill("not-the-password");
   await page.getByRole("button", { name: "Sign In" }).click();
   await expect(page.getByText("Invalid email or password")).toBeVisible();
 
   await page.goto("/login");
   await page.getByLabel("Email").fill("e2e-nobody@porac.ph");
-  await page.getByPlaceholder("Password").fill("not-the-password");
+  await page.getByLabel("Password", { exact: true }).fill("not-the-password");
   await page.getByRole("button", { name: "Sign In" }).click();
   await expect(page.getByText("Invalid email or password")).toBeVisible();
 });

@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAuthSubmit } from "@/components/features/auth/useAuthSubmit";
 import { AuthShell } from "@/components/features/auth/AuthShell";
 import { AUTH_GROUP, AUTH_INPUT, AuthLink, AuthNote } from "@/components/features/auth/auth-ui";
-import { AuthAlert, AuthButton, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
+import { AuthAlert, AuthButton, GoogleButton, PasswordInput, PasswordRequirements } from "@/components/features/auth/AuthFields";
+import { Field, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { oauthErrorMessage } from "./oauthErrors";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
@@ -14,16 +15,11 @@ export default function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const oauthError = oauthErrorMessage(searchParams.get("error"));
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [password, setPassword] = useState("");
+  const { error, submitting, clearError, submit } = useAuthSubmit();
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-
-    const form = new FormData(e.currentTarget);
-    try {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    return submit(e, async (form) => {
       const res = await fetch("/api/citizens/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -38,23 +34,15 @@ export default function SignupForm() {
       if (res.ok) {
         router.push("/dashboard");
         router.refresh();
-      } else {
-        const data = await res.json();
-        setError(apiErrorMessage(data, "Sign up failed"));
-        setSubmitting(false);
+        return;
       }
-    } catch {
-      // Same network-failure gap as AdminLoginForm/LoginForm — fetch()
-      // rejecting (rather than resolving non-2xx) used to leave the button
-      // stuck on "Signing up…" forever with no error shown.
-      setError("Could not reach the server. Please try again.");
-      setSubmitting(false);
-    }
+      return apiErrorMessage(await res.json().catch(() => null), "Sign up failed");
+    });
   }
 
   return (
     <AuthShell title="Create Account" description="Create an account to report concerns and follow their progress.">
-      <form onSubmit={handleSubmit} noValidate>
+      <form onSubmit={handleSubmit} onChange={clearError} noValidate>
         <FieldGroup className={AUTH_GROUP}>
           {oauthError && <AuthAlert tone="error">{oauthError}</AuthAlert>}
 
@@ -103,13 +91,13 @@ export default function SignupForm() {
             <PasswordInput
               id="password"
               name="password"
-              placeholder="At least 8 characters"
               autoComplete="new-password"
               required
               minLength={8}
+              onChange={(e) => setPassword(e.target.value)}
               aria-describedby="password-hint"
             />
-            <FieldDescription id="password-hint">Use at least 8 characters.</FieldDescription>
+            <PasswordRequirements id="password-hint" password={password} maxBytes={72} />
           </Field>
 
           {error && <AuthAlert tone="error">{error}</AuthAlert>}

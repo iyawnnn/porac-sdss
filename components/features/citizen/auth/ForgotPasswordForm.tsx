@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuthSubmit } from "@/components/features/auth/useAuthSubmit";
 import { AuthShell } from "@/components/features/auth/AuthShell";
 import { AUTH_GROUP, AUTH_INPUT, AuthLink, AuthNote } from "@/components/features/auth/auth-ui";
 import { AuthAlert, AuthButton } from "@/components/features/auth/AuthFields";
@@ -8,39 +9,24 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
 export default function ForgotPasswordForm() {
-  const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const { error, submitting, clearError, submit } = useAuthSubmit();
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-
-    const form = new FormData(e.currentTarget);
-    try {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    return submit(e, async (form) => {
       const res = await fetch("/api/citizens/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: form.get("email") }),
       });
 
-      // The backend always returns 200 regardless of whether the email
-      // exists — the only other outcome is a rate-limit rejection, which is
-      // safe to surface distinctly (it doesn't reveal anything about a
-      // specific email).
       if (res.ok) {
         setSubmitted(true);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.message ?? "Something went wrong. Please try again.");
+        return;
       }
-    } catch {
-      // A network-level failure rejects fetch() instead of returning a response; without
-      // this the button stayed in its loading state forever with no error shown.
-      setError("Could not reach the server. Please try again.");
-    }
-    setSubmitting(false);
+      const data = await res.json().catch(() => ({}));
+      return data.message ?? "Something went wrong. Please try again.";
+    });
   }
 
   return (
@@ -58,7 +44,7 @@ export default function ForgotPasswordForm() {
           </AuthNote>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} onChange={clearError} noValidate>
           <FieldGroup className={AUTH_GROUP}>
             <Field>
               <FieldLabel htmlFor="email">Email</FieldLabel>

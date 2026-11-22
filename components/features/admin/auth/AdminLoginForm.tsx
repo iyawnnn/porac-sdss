@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useAuthSubmit } from "@/components/features/auth/useAuthSubmit";
 import { AuthShell } from "@/components/features/auth/AuthShell";
 import { AUTH_GROUP, AUTH_INPUT } from "@/components/features/auth/auth-ui";
 import { AuthAlert, AuthButton, PasswordInput } from "@/components/features/auth/AuthFields";
@@ -9,16 +9,10 @@ import { Input } from "@/components/ui/input";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 export default function AdminLoginForm() {
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const { error, submitting, clearError, submit } = useAuthSubmit();
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-
-    const form = new FormData(e.currentTarget);
-    try {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    return submit(e, async (form) => {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -29,28 +23,17 @@ export default function AdminLoginForm() {
       });
 
       if (res.ok) {
-        // One full load: /admin/login shares the /admin layout, so a client
-        // push kept the signed-out layout and push + refresh rendered the
-        // dashboard twice.
+        // A full load renders the staff layout once with the new session.
         window.location.assign("/admin");
-      } else {
-        const data = await res.json();
-        setError(apiErrorMessage(data, "Login failed"));
-        setSubmitting(false);
+        return;
       }
-    } catch {
-      // fetch() rejects on a network-level failure (DNS, connection refused,
-      // dropped connection) rather than resolving with a non-2xx response —
-      // without this, a transient connection failure left the button stuck
-      // on "Signing in…" forever with no way to retry.
-      setError("Could not reach the server. Please try again.");
-      setSubmitting(false);
-    }
+      return apiErrorMessage(await res.json().catch(() => null), "Login failed");
+    });
   }
 
   return (
     <AuthShell title="Staff Sign In" description="Access the PORAC-SDSS municipal operations portal.">
-      <form onSubmit={handleSubmit} noValidate>
+      <form onSubmit={handleSubmit} onChange={clearError} noValidate>
         <FieldGroup className={AUTH_GROUP}>
           <Field>
             <FieldLabel htmlFor="email">Email</FieldLabel>
@@ -70,7 +53,6 @@ export default function AdminLoginForm() {
             <PasswordInput
               id="password"
               name="password"
-              placeholder="Enter your password"
               autoComplete="current-password"
               required
             />

@@ -49,14 +49,14 @@ test("the primary button changes color but never moves on hover and press", asyn
 // The show/hide toggle sits inside the field; it used to drop ~17px while pressed.
 test("the password visibility toggle does not move when pressed", async ({ page }) => {
   await page.goto("/login");
-  await page.getByPlaceholder("Password").fill("a-password-value");
+  await page.getByLabel("Password", { exact: true }).fill("a-password-value");
   const toggle = page.getByRole("button", { name: "Show password" });
   const before = await toggle.boundingBox();
   await toggle.hover();
   await page.mouse.down();
   expect(await toggle.boundingBox()).toEqual(before);
   await page.mouse.up();
-  await expect(page.getByPlaceholder("Password")).toHaveAttribute("type", "text");
+  await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "text");
   await expect(page.getByRole("button", { name: "Hide password" })).toHaveAttribute("aria-pressed", "true");
   expect(await page.getByRole("button", { name: "Hide password" }).boundingBox()).toEqual(before);
 });

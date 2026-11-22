@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useAuthSubmit } from "@/components/features/auth/useAuthSubmit";
 import { AuthShell } from "@/components/features/auth/AuthShell";
 import { AUTH_CTA_BUTTON, AUTH_GROUP, AuthCtaLabel, AuthLink, AuthNote } from "@/components/features/auth/auth-ui";
-import { AuthAlert, AuthButton, PasswordInput } from "@/components/features/auth/AuthFields";
+import { AuthAlert, AuthButton, PasswordInput, PasswordRequirements } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 
@@ -25,8 +26,7 @@ export default function ResetPasswordForm() {
 
   const [status, setStatus] = useState<Status>(() => (token ? "checking" : "invalid"));
   const [newPassword, setNewPassword] = useState("");
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const { error, submitting, clearError, submit } = useAuthSubmit();
 
   useEffect(() => {
     if (!token) return;
@@ -44,32 +44,22 @@ export default function ResetPasswordForm() {
     };
   }, [token]);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-
-    try {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    return submit(e, async (form) => {
       const res = await fetch("/api/citizens/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, newPassword }),
+        body: JSON.stringify({ token, newPassword: form.get("newPassword") }),
       });
 
       if (res.ok) {
         router.push("/login?notice=password_reset");
-      } else {
-        const data = await res.json().catch(() => ({}));
-        const code = typeof data.message === "string" ? data.message : "";
-        setError(RESET_ERROR_MESSAGES[code] ?? "Something went wrong. Please try again.");
-        setSubmitting(false);
+        return;
       }
-    } catch {
-      // A network-level failure rejects fetch() instead of returning a response; without
-      // this the button stayed in its loading state forever with no error shown.
-      setError("Could not reach the server. Please try again.");
-      setSubmitting(false);
-    }
+      const data = await res.json().catch(() => ({}));
+      const code = typeof data.message === "string" ? data.message : "";
+      return RESET_ERROR_MESSAGES[code] ?? "Something went wrong. Please try again.";
+    });
   }
 
   return (
@@ -95,19 +85,20 @@ export default function ResetPasswordForm() {
       )}
 
       {status === "valid" && (
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} onChange={clearError} noValidate>
           <FieldGroup className={AUTH_GROUP}>
             <Field>
               <FieldLabel htmlFor="newPassword">New password</FieldLabel>
               <PasswordInput
                 id="newPassword"
-                placeholder="At least 8 characters"
+                name="newPassword"
                 autoComplete="new-password"
                 required
                 minLength={8}
-                value={newPassword}
+                aria-describedby="new-password-hint"
                 onChange={(e) => setNewPassword(e.target.value)}
               />
+              <PasswordRequirements id="new-password-hint" password={newPassword} />
             </Field>
 
             {error && <AuthAlert tone="error">{error}</AuthAlert>}
