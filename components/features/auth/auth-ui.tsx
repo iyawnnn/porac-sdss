@@ -32,17 +32,12 @@ export function AuthNote({ children }: { children: React.ReactNode }) {
   return <p className="text-center text-sm text-muted-foreground">{children}</p>;
 }
 
-// Primary action styling (.auth-cta / .auth-roll in globals.css). The overrides keep the
-// shared Button's hover fade and press shift from moving or recoloring the button.
+// Primary action styling (.auth-cta in globals.css). The overrides keep the shared Button's
+// hover fade and press shift from moving or recoloring the button.
 export const AUTH_CTA = "auth-cta hover:bg-primary active:not-aria-[haspopup]:translate-y-0";
 export const AUTH_CTA_BUTTON = cn(AUTH_BUTTON, AUTH_CTA);
 
-// Label that rolls up on hover: the real text, plus a decorative copy hidden from assistive tech.
+// The one real, static label, kept above the decorative light layers.
 export function AuthCtaLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="auth-roll">
-      <span>{children}</span>
-      <span aria-hidden="true">{children}</span>
-    </span>
-  );
+  return <span className="relative">{children}</span>;
 }

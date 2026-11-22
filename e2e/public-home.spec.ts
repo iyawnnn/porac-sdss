@@ -24,10 +24,31 @@ test("Back to Home on every auth page returns to the public home page", async ({
   }
 });
 
-// The decorative duplicate of the button label must not be announced: the accessible
-// name is the label alone, not the label twice.
-test("primary buttons expose a single accessible label", async ({ page }) => {
+// The primary button has one real label that never moves: hovering and pressing must not
+// shift it, and there is no duplicated (rolling) copy.
+test("the primary button label stays put on hover and press", async ({ page }) => {
   await page.goto("/login");
-  await expect(page.getByRole("button", { name: "Sign In", exact: true })).toHaveCount(1);
-  await expect(page.locator("button[type=submit] [aria-hidden=true]")).toHaveText("Sign In");
+  const button = page.getByRole("button", { name: "Sign In", exact: true });
+  await expect(button).toHaveCount(1);
+  await expect(page.locator("button[type=submit] [aria-hidden=true]")).toHaveCount(0);
+  const before = await button.boundingBox();
+  await button.hover();
+  await page.mouse.down();
+  expect(await button.boundingBox()).toEqual(before);
+  await page.mouse.up();
+});
+
+// The show/hide toggle sits inside the field; it used to drop ~17px while pressed.
+test("the password visibility toggle does not move when pressed", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByPlaceholder("Password").fill("a-password-value");
+  const toggle = page.getByRole("button", { name: "Show password" });
+  const before = await toggle.boundingBox();
+  await toggle.hover();
+  await page.mouse.down();
+  expect(await toggle.boundingBox()).toEqual(before);
+  await page.mouse.up();
+  await expect(page.getByPlaceholder("Password")).toHaveAttribute("type", "text");
+  await expect(page.getByRole("button", { name: "Hide password" })).toHaveAttribute("aria-pressed", "true");
+  expect(await page.getByRole("button", { name: "Hide password" }).boundingBox()).toEqual(before);
 });

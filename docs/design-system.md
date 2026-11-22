@@ -387,29 +387,39 @@ desktop they are 24 / 28 / 36px with a 44px logo and 8px between a label and its
 and centered on the panel by a `1fr / auto / 1fr` grid, so the optional back link sits top-left in
 its own row and never overlaps the form.
 
-Interactions live in `globals.css` (`.link-underline`, `.auth-cta`, `.auth-roll`). Hover rules apply
-to fine pointers only (no stuck hover after a tap); keyboard focus gets the same treatment plus a
-`focus-visible` ring; `prefers-reduced-motion` removes every transition, the label roll and the sheen
-sweep. No animation dependency.
+Interactions live in `globals.css` (`.link-underline`, `.auth-cta`). Hover rules apply to fine pointers
+only (no stuck hover after a tap); keyboard focus gets the same treatment plus a `focus-visible` ring;
+`prefers-reduced-motion` removes every transition. No animation dependency.
 
 - **Text links** (`AuthLink`, and the label in Back to Home): nothing at rest. On hover or focus an
-  underline draws in from the left (a `::after` pseudo-element, `scaleX(0)` to `scaleX(1)`,
-  `transform-origin: left center`, 450ms on `cubic-bezier(0.76, 0, 0.24, 1)`) and retracts when it
-  ends. The text never moves and its color never changes. Without a resting underline, weight
-  (`font-medium`) separates a link from the muted sentence around it, so keep link-bearing sentences in
-  `AuthNote` (a plain `<p>`), not `FieldDescription`, whose own `a:hover` color change would flash.
-- **Primary button** (`AuthButton`, or `AUTH_CTA_BUTTON` on a link-button): Porac Green unchanged, with
-  Neffi's CTA material (top highlight, lower shade, restrained shadow) plus a diagonal sheen that sweeps
-  once on hover or focus, and the label rolling up over a duplicated copy, 560ms on the same easing. The
-  copy is `aria-hidden`, so the accessible name is the label once. The button never moves, scales or
-  recolors (the shared Button's hover fade and press shift are overridden). Disabled or loading buttons
-  do not animate; loading sets `aria-busy` and swaps the label ("Signing in..."). Neffi's corner glow is
-  left out because it smudges a 40px button. Google stays a plain outline button with a subtle
-  background and border change only.
+  underline draws in from the left and, when it ends, keeps moving the same way and leaves through the
+  right edge (a `::after` pseudo-element, `scaleX(0)` to `scaleX(1)`, 450ms on
+  `cubic-bezier(0.76, 0, 0.24, 1)`). The direction comes from the origin: `transform-origin` is
+  `right center` at rest and `left center` while active, and only `transform` is transitioned, so the
+  origin flips instantly and never reverses the motion. The text never moves and its color never
+  changes. Without a resting underline, weight (`font-medium`) separates a link from the muted sentence
+  around it, so keep link-bearing sentences in `AuthNote` (a plain `<p>`), not `FieldDescription`, whose
+  own `a:hover` color change would flash.
+- **Primary button** (`AuthButton`, or `AUTH_CTA_BUTTON` on a link-button): Porac Green unchanged, in
+  the material of Neffi's Explore Neffi CTA (`src/app/(marketing)/hero-cta-styles.tsx`,
+  `PRIMARY_CTA_REFLECTIONS`): a top inset highlight, a lower inner shade, a delicate diagonal sheen and a
+  radial haze of white light. Two adaptations for a 420 x 40px button: the haze is a wide, soft ellipse
+  centered behind the label (Neffi's sits in the top-right corner, which read as a smudge here), and the
+  sheen sits near the right edge (at Neffi's 58-74% it merged with the haze). Everything is static; the
+  label is one real, plain `<span>` above the decorative layers and never moves, rolls or fades. Hover
+  and focus only deepen the material (haze 0.8 to 1 opacity, highlight and shadow slightly stronger, 250ms);
+  the button never moves, scales or recolors (the shared Button's hover fade and press shift are
+  overridden). Disabled or loading buttons keep the resting material; loading sets `aria-busy` and
+  swaps the label ("Signing in..."). Label contrast over the haze at its brightest is 6.7:1 (light) and
+  7.2:1 (dark). Google stays a plain outline button with a subtle background and border change only.
 - **Back to Home** arrow shifts 3px left on hover/focus, only under `motion-safe`.
+- **Password visibility toggle** (`PasswordInput`): centered with `inset-y-0 my-auto`, not a translate,
+  and the press shift is neutralized on this button. The shared Button's `active:translate-y-px` writes
+  the same `translate` property as a `-translate-y-1/2` centering and used to drop the toggle about 17px
+  while the mouse was down. Do not center an auto-sized `Button` with a translate.
 
-The Neffi project (`C:\CodeProjects\neffi`) supplied the CTA material (`neffi-cta`); its source has no
-`cubic-bezier(0.76, 0, 0.24, 1)` underline or label roll, so those two follow the specified timings.
+The underline timing (450ms) and easing follow the specified values: the Neffi source has no
+`cubic-bezier(0.76, 0, 0.24, 1)` link underline.
 
 **Public home and Back to Home.** `/` is a real public page (`app/page.tsx`, built on `AuthShell`):
 what the system is, Citizen Sign In, Create Account and a discreet Staff access link. It makes no API

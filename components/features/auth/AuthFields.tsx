@@ -22,6 +22,10 @@ export function AuthButton({
   );
 }
 
+// The toggle is centered with auto margins, not a translate: the shared Button shifts 1px on
+// press through the same `translate` property, which used to replace a -translate-y-1/2
+// centering and drop the icon about 17px while the mouse was down. The press shift is
+// neutralized here too, so the control never moves.
 export function PasswordInput({ className, ...props }: Omit<React.ComponentProps<"input">, "type">) {
   const [visible, setVisible] = useState(false);
   const Icon = visible ? EyeOff : Eye;
@@ -36,7 +40,7 @@ export function PasswordInput({ className, ...props }: Omit<React.ComponentProps
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? "Hide password" : "Show password"}
         aria-pressed={visible}
-        className="absolute top-1/2 right-1 size-8 -translate-y-1/2 text-muted-foreground"
+        className="absolute inset-y-0 right-1 my-auto size-8 text-muted-foreground active:not-aria-[haspopup]:translate-y-0"
       >
         <Icon aria-hidden="true" />
       </Button>

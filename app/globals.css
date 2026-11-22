@@ -467,14 +467,16 @@ body {
 .map-tile-muted { filter: grayscale(100%) saturate(20%) brightness(1.06) contrast(0.9); }
 .dark .map-tile-muted { filter: invert(1) hue-rotate(180deg) grayscale(100%) saturate(20%) brightness(0.85) contrast(0.9); }
 
-/* Auth page interactions. Easing and timing: 450ms for link underlines, 560ms for the
-   primary button's label roll and sheen, both on cubic-bezier(0.76, 0, 0.24, 1). Hover rules
-   apply only to fine pointers so touch screens do not get a stuck hover; keyboard focus
-   always gets the same treatment. prefers-reduced-motion removes every transition. */
+/* Auth page interactions. Hover rules apply to fine pointers only (no stuck hover after a
+   tap); keyboard focus always gets the same treatment. prefers-reduced-motion removes every
+   transition. */
 @layer components {
   /* Text links: nothing at rest; on hover or keyboard focus an underline draws in from the
-     left and retracts when it ends. The text itself never moves or changes color. The parent
-     selector lets a link with an icon (Back to Home) underline just its label. */
+     left and, when it ends, keeps moving the same way and leaves through the right edge, 450ms on
+     cubic-bezier(0.76, 0, 0.24, 1). The trick is the origin: it is right-anchored at rest and
+     left-anchored while active, and only `transform` is transitioned, so the origin flips
+     instantly and the scale does the animating. The text itself never moves or changes color.
+     The parent selector lets a link with an icon (Back to Home) underline just its label. */
   .link-underline {
     position: relative;
   }
@@ -488,114 +490,87 @@ body {
     background: currentColor;
     pointer-events: none;
     transform: scaleX(0);
-    transform-origin: left center;
+    transform-origin: right center;
     transition: transform 450ms cubic-bezier(0.76, 0, 0.24, 1);
   }
   .link-underline:focus-visible::after,
   :is(a, button):focus-visible > .link-underline::after {
     transform: scaleX(1);
+    transform-origin: left center;
   }
   @media (hover: hover) and (pointer: fine) {
     .link-underline:hover::after,
     :is(a, button):hover > .link-underline::after {
       transform: scaleX(1);
+      transform-origin: left center;
     }
   }
 
-  /* Primary action button (from Neffi's neffi-cta material, in Porac green): a top
-     highlight, a soft lower shade and a diagonal sheen that sweeps once across on hover or
-     focus. Neffi's corner glow is left out: it smudges a button this short. The button
-     itself never moves or scales. */
+  /* Primary action button, in Neffi's CTA material (hero-cta-styles.tsx) on Porac Green: a top
+     inset highlight, a lower inner shade, a delicate diagonal sheen (kept near the right edge, where it does not merge
+     with the haze on a wide button), and a soft radial haze of white light. Neffi puts the haze in the top-right corner; on a 40px button that read as a
+     smudge, so here it sits centered behind the label as a faint reflection. All of it is static:
+     nothing moves. Hover and focus only deepen the material a touch (haze a little stronger,
+     highlight a little brighter) and the button never moves, scales or recolors. The label is
+     plain text above the decorative layers (z-index -1 inside an isolated stacking context). */
   .auth-cta {
     position: relative;
     isolation: isolate;
     overflow: hidden;
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.22),
-      inset 0 -10px 14px -12px rgb(0 0 0 / 0.35),
+      inset 0 1px 0 rgb(255 255 255 / 0.3),
+      inset 0 -12px 16px -12px rgb(0 0 0 / 0.35),
       0 1px 2px rgb(0 0 0 / 0.14);
-    transition: box-shadow 560ms cubic-bezier(0.76, 0, 0.24, 1);
+    transition: box-shadow 250ms ease-out;
   }
-  .auth-cta::before {
+  .auth-cta::before,
+  .auth-cta::after {
     content: "";
     position: absolute;
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: linear-gradient(115deg, transparent 38%, rgb(255 255 255 / 0.18) 50%, transparent 62%);
-    background-position: 100% 0;
-    background-size: 260% 100%;
-    transition: background-position 560ms cubic-bezier(0.76, 0, 0.24, 1);
   }
-  .auth-cta:focus-visible:not(:disabled),
-  .auth-cta:active:not(:disabled) {
+  .auth-cta::before {
+    background: linear-gradient(115deg, transparent 74%, rgb(255 255 255 / 0.09) 82%, transparent 90%);
+  }
+  .auth-cta::after {
+    background: radial-gradient(ellipse 52% 135% at 50% 50%, rgb(255 255 255 / 0.17), transparent 82%);
+    opacity: 0.8;
+    transition: opacity 250ms ease-out;
+  }
+  .auth-cta:focus-visible:not(:disabled) {
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.28),
-      inset 0 -10px 14px -12px rgb(0 0 0 / 0.4),
-      0 6px 14px -6px color-mix(in srgb, var(--primary) 60%, transparent);
+      inset 0 1px 0 rgb(255 255 255 / 0.36),
+      inset 0 -12px 16px -12px rgb(0 0 0 / 0.4),
+      0 1px 3px rgb(0 0 0 / 0.18);
+  }
+  .auth-cta:focus-visible:not(:disabled)::after {
+    opacity: 1;
   }
   .auth-cta:active:not(:disabled) {
-    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.25), inset 0 -10px 14px -12px rgb(0 0 0 / 0.25), 0 0 0 rgb(0 0 0 / 0);
-  }
-  .auth-cta:focus-visible:not(:disabled)::before {
-    background-position: 0 0;
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.25), inset 0 -12px 16px -12px rgb(0 0 0 / 0.25), 0 0 0 rgb(0 0 0 / 0);
   }
   @media (hover: hover) and (pointer: fine) {
     .auth-cta:hover:not(:disabled) {
       box-shadow:
-        inset 0 1px 0 rgb(255 255 255 / 0.28),
-        inset 0 -10px 14px -12px rgb(0 0 0 / 0.4),
-        0 6px 14px -6px color-mix(in srgb, var(--primary) 60%, transparent);
+        inset 0 1px 0 rgb(255 255 255 / 0.36),
+        inset 0 -12px 16px -12px rgb(0 0 0 / 0.4),
+        0 1px 3px rgb(0 0 0 / 0.18);
     }
-    .auth-cta:hover:not(:disabled)::before {
-      background-position: 0 0;
+    .auth-cta:hover:not(:disabled)::after {
+      opacity: 1;
     }
-  }
-
-  /* Label roll: the visible label slides up and out while an identical, aria-hidden copy
-     slides up into its place. The grid keeps both on one line so the button never resizes. */
-  .auth-roll {
-    display: inline-grid;
-    overflow: hidden;
-  }
-  .auth-roll > span {
-    grid-area: 1 / 1;
-    transition: transform 560ms cubic-bezier(0.76, 0, 0.24, 1);
-  }
-  .auth-roll > [aria-hidden="true"] {
-    transform: translateY(100%);
-  }
-  .auth-cta:focus-visible:not(:disabled) .auth-roll > span:first-child {
-    transform: translateY(-100%);
-  }
-  .auth-cta:focus-visible:not(:disabled) .auth-roll > [aria-hidden="true"] {
-    transform: translateY(0);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .auth-cta:hover:not(:disabled) .auth-roll > span:first-child {
-      transform: translateY(-100%);
-    }
-    .auth-cta:hover:not(:disabled) .auth-roll > [aria-hidden="true"] {
-      transform: translateY(0);
+    .auth-cta:active:not(:disabled) {
+      box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.25), inset 0 -12px 16px -12px rgb(0 0 0 / 0.25), 0 0 0 rgb(0 0 0 / 0);
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .link-underline::after,
     .auth-cta,
-    .auth-cta::before,
-    .auth-roll > span {
+    .auth-cta::after {
       transition: none;
-    }
-    /* No roll and no sheen sweep: the label stays put and the duplicate is removed. */
-    .auth-roll > [aria-hidden="true"] {
-      display: none;
-    }
-    .auth-cta:is(:hover, :focus-visible):not(:disabled) .auth-roll > span:first-child {
-      transform: none;
-    }
-    .auth-cta:is(:hover, :focus-visible):not(:disabled)::before {
-      background-position: 100% 0;
     }
   }
 }
