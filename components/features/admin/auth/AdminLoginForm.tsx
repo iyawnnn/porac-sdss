@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_INPUT, AuthAlert, PasswordInput } from "@/components/features/auth/AuthFields";
+import { AUTH_BUTTON, AUTH_INPUT, AuthAlert, PasswordInput } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -50,20 +49,7 @@ export default function AdminLoginForm() {
   }
 
   return (
-    <AuthShell
-      portal="staff"
-      title="Staff Sign In"
-      description="Access the PORAC-SDSS municipal operations portal."
-      audience="For authorized Focal, MEO, MDRRMO and MIS personnel."
-      footer={
-        <>
-          Reporting a concern?{" "}
-          <Link href="/login" className="font-medium text-primary underline-offset-4 hover:underline">
-            Go to Citizen Sign In
-          </Link>
-        </>
-      }
-    >
+    <AuthShell title="Staff Sign In" description="Access the PORAC-SDSS municipal operations portal.">
       <form onSubmit={handleSubmit} noValidate>
         <FieldGroup>
           <Field>
@@ -92,7 +78,7 @@ export default function AdminLoginForm() {
 
           {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
-          <Button type="submit" size="lg" disabled={submitting} className="h-11 w-full text-base">
+          <Button type="submit" disabled={submitting} className={AUTH_BUTTON}>
             {submitting ? "Signing in…" : "Sign In"}
           </Button>
 

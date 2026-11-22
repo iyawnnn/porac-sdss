@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_INPUT, AuthAlert } from "@/components/features/auth/AuthFields";
+import { AUTH_BUTTON, AUTH_INPUT, AuthAlert } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -40,44 +40,46 @@ export default function ForgotPasswordForm() {
 
   return (
     <AuthShell
-      portal="citizen"
       title="Reset your password"
       description="Enter your email and, if you have a password-based account, we'll send you a link to reset it."
     >
-      <div className="flex flex-col gap-5">
-        {submitted ? (
+      {submitted ? (
+        <div className="flex flex-col gap-6">
           <AuthAlert tone="success">
             If an account exists for that email, we&apos;ve sent a link to reset your password.
           </AuthAlert>
-        ) : (
-          <form onSubmit={handleSubmit} noValidate>
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  autoComplete="email"
-                  required
-                  className={AUTH_INPUT}
-                />
-              </Field>
+          <FieldDescription className="text-center">
+            <Link href="/login">Back to Sign In</Link>
+          </FieldDescription>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} noValidate>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="name@example.com"
+                autoComplete="email"
+                required
+                className={AUTH_INPUT}
+              />
+            </Field>
 
-              {error && <AuthAlert tone="error">{error}</AuthAlert>}
+            {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
-              <Button type="submit" size="lg" disabled={submitting} className="h-11 w-full text-base">
-                {submitting ? "Sending…" : "Send reset link"}
-              </Button>
-            </FieldGroup>
-          </form>
-        )}
+            <Button type="submit" disabled={submitting} className={AUTH_BUTTON}>
+              {submitting ? "Sending…" : "Send reset link"}
+            </Button>
 
-        <FieldDescription className="text-center">
-          <Link href="/login">Back to Sign In</Link>
-        </FieldDescription>
-      </div>
+            <FieldDescription className="text-center">
+              <Link href="/login">Back to Sign In</Link>
+            </FieldDescription>
+          </FieldGroup>
+        </form>
+      )}
     </AuthShell>
   );
 }

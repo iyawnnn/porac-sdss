@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_INPUT, AuthAlert, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
+import { AUTH_BUTTON, AUTH_INPUT, AuthAlert, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -54,86 +54,80 @@ export default function SignupForm() {
   }
 
   return (
-    <AuthShell
-      portal="citizen"
-      title="Create Account"
-      description="Create an account to report concerns and follow their progress."
-    >
-      <div className="flex flex-col gap-5">
-        {oauthError && <AuthAlert tone="error">{oauthError}</AuthAlert>}
+    <AuthShell title="Create Account" description="Create an account to report concerns and follow their progress.">
+      <form onSubmit={handleSubmit} noValidate>
+        <FieldGroup>
+          {oauthError && <AuthAlert tone="error">{oauthError}</AuthAlert>}
 
-        <GoogleButton />
-
-        <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">Or continue with email</FieldSeparator>
-
-        <form onSubmit={handleSubmit} noValidate>
-          <FieldGroup>
-            <div className="grid grid-cols-2 gap-3">
-              <Field>
-                <FieldLabel htmlFor="firstName">First name</FieldLabel>
-                <Input
-                  id="firstName"
-                  name="firstName"
-                  type="text"
-                  placeholder="Juan"
-                  autoComplete="given-name"
-                  required
-                  className={AUTH_INPUT}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="lastName">Last name</FieldLabel>
-                <Input
-                  id="lastName"
-                  name="lastName"
-                  type="text"
-                  placeholder="Dela Cruz"
-                  autoComplete="family-name"
-                  required
-                  className={AUTH_INPUT}
-                />
-              </Field>
-            </div>
-
+          <div className="grid grid-cols-2 gap-3">
             <Field>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <FieldLabel htmlFor="firstName">First name</FieldLabel>
               <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="name@example.com"
-                autoComplete="email"
+                id="firstName"
+                name="firstName"
+                type="text"
+                placeholder="Juan"
+                autoComplete="given-name"
                 required
                 className={AUTH_INPUT}
               />
             </Field>
-
             <Field>
-              <FieldLabel htmlFor="password">Password</FieldLabel>
-              <PasswordInput
-                id="password"
-                name="password"
-                placeholder="At least 8 characters"
-                autoComplete="new-password"
+              <FieldLabel htmlFor="lastName">Last name</FieldLabel>
+              <Input
+                id="lastName"
+                name="lastName"
+                type="text"
+                placeholder="Dela Cruz"
+                autoComplete="family-name"
                 required
-                minLength={8}
-                aria-describedby="password-hint"
+                className={AUTH_INPUT}
               />
-              <FieldDescription id="password-hint">Use at least 8 characters.</FieldDescription>
             </Field>
+          </div>
 
-            {error && <AuthAlert tone="error">{error}</AuthAlert>}
+          <Field>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="name@example.com"
+              autoComplete="email"
+              required
+              className={AUTH_INPUT}
+            />
+          </Field>
 
-            <Button type="submit" size="lg" disabled={submitting} className="h-11 w-full text-base">
-              {submitting ? "Creating account…" : "Create Account"}
-            </Button>
+          <Field>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <PasswordInput
+              id="password"
+              name="password"
+              placeholder="At least 8 characters"
+              autoComplete="new-password"
+              required
+              minLength={8}
+              aria-describedby="password-hint"
+            />
+            <FieldDescription id="password-hint">Use at least 8 characters.</FieldDescription>
+          </Field>
 
-            <FieldDescription className="text-center">
-              Already have an account? <Link href="/login">Sign In</Link>
-            </FieldDescription>
-          </FieldGroup>
-        </form>
-      </div>
+          {error && <AuthAlert tone="error">{error}</AuthAlert>}
+
+          <Button type="submit" disabled={submitting} className={AUTH_BUTTON}>
+            {submitting ? "Creating account…" : "Create Account"}
+          </Button>
+
+          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">Or continue with</FieldSeparator>
+
+          <GoogleButton />
+
+          <FieldDescription className="text-center">
+            Already have an account? <Link href="/login">Sign In</Link>
+          </FieldDescription>
+        </FieldGroup>
+      </form>
     </AuthShell>
   );
 }

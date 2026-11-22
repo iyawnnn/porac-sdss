@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AuthAlert, PasswordInput } from "@/components/features/auth/AuthFields";
+import { AUTH_BUTTON, AuthAlert, PasswordInput } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 
@@ -65,56 +65,53 @@ export default function ResetPasswordForm() {
   }
 
   return (
-    <AuthShell
-      portal="citizen"
-      title="Choose a new password"
-      description="Pick a new password for your citizen account."
-    >
-      <div className="flex flex-col gap-5">
-        {status === "checking" && (
-          <p role="status" className="text-center text-sm text-muted-foreground">
-            Checking your reset link…
-          </p>
-        )}
+    <AuthShell title="Choose a new password" description="Pick a new password for your citizen account.">
+      {status === "checking" && (
+        <p role="status" className="text-center text-sm text-muted-foreground">
+          Checking your reset link…
+        </p>
+      )}
 
-        {status === "invalid" && (
-          <>
-            <AuthAlert tone="error">This reset link is invalid or has expired.</AuthAlert>
-            <Button asChild size="lg" className="h-11 w-full text-base">
-              <Link href="/forgot-password">Request a new link</Link>
+      {status === "invalid" && (
+        <div className="flex flex-col gap-6">
+          <AuthAlert tone="error">This reset link is invalid or has expired.</AuthAlert>
+          <Button asChild className={AUTH_BUTTON}>
+            <Link href="/forgot-password">Request a new link</Link>
+          </Button>
+          <FieldDescription className="text-center">
+            <Link href="/login">Back to Sign In</Link>
+          </FieldDescription>
+        </div>
+      )}
+
+      {status === "valid" && (
+        <form onSubmit={handleSubmit} noValidate>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="newPassword">New password</FieldLabel>
+              <PasswordInput
+                id="newPassword"
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+                required
+                minLength={8}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </Field>
+
+            {error && <AuthAlert tone="error">{error}</AuthAlert>}
+
+            <Button type="submit" disabled={submitting} className={AUTH_BUTTON}>
+              {submitting ? "Resetting…" : "Reset password"}
             </Button>
-          </>
-        )}
 
-        {status === "valid" && (
-          <form onSubmit={handleSubmit} noValidate>
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="newPassword">New password</FieldLabel>
-                <PasswordInput
-                  id="newPassword"
-                  placeholder="At least 8 characters"
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-              </Field>
-
-              {error && <AuthAlert tone="error">{error}</AuthAlert>}
-
-              <Button type="submit" size="lg" disabled={submitting} className="h-11 w-full text-base">
-                {submitting ? "Resetting…" : "Reset password"}
-              </Button>
-            </FieldGroup>
-          </form>
-        )}
-
-        <FieldDescription className="text-center">
-          <Link href="/login">Back to Sign In</Link>
-        </FieldDescription>
-      </div>
+            <FieldDescription className="text-center">
+              <Link href="/login">Back to Sign In</Link>
+            </FieldDescription>
+          </FieldGroup>
+        </form>
+      )}
     </AuthShell>
   );
 }

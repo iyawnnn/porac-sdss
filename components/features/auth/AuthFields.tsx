@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-// 44px controls and 16px text keep the forms comfortable on a phone (and stop iOS
-// zooming on focus). Applied to every auth input via this one constant.
-export const AUTH_INPUT = "h-11 text-base md:text-base";
+// 40px controls and 16px text keep the forms comfortable on a phone (and stop iOS
+// zooming on focus). Applied to every auth input and button via these constants.
+export const AUTH_INPUT = "h-10 text-base md:text-base";
+export const AUTH_BUTTON = "h-10 w-full text-base";
 
 export function PasswordInput({ className, ...props }: Omit<React.ComponentProps<"input">, "type">) {
   const [visible, setVisible] = useState(false);
@@ -25,7 +26,7 @@ export function PasswordInput({ className, ...props }: Omit<React.ComponentProps
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? "Hide password" : "Show password"}
         aria-pressed={visible}
-        className="absolute top-1/2 right-1 size-9 -translate-y-1/2 text-muted-foreground"
+        className="absolute top-1/2 right-1 size-8 -translate-y-1/2 text-muted-foreground"
       >
         <Icon aria-hidden="true" />
       </Button>
@@ -54,7 +55,7 @@ export function AuthAlert({ tone, children }: { tone: "error" | "success"; child
 
 export function GoogleButton() {
   return (
-    <Button asChild variant="outline" className="h-11 w-full text-base">
+    <Button asChild variant="outline" className={AUTH_BUTTON}>
       <a href="/api/auth/google">
         <GoogleIcon />
         Continue with Google

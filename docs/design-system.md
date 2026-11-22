@@ -300,7 +300,7 @@ tokens; migrating them is later Phase 2 work (§10).
 
 - **Glassmorphism.** No `backdrop-blur` on cards, toolbars or panels. Known remaining violations:
   the citizen map's `GLASS_PANEL` (`PublicMapClient.tsx`) and the dialog overlay.
-- **Gradients,** except the black-to-transparent caption scrim on the auth photo (§8.5). No gradient fills, text or accents elsewhere.
+- **Gradients.** No gradient fills, text or accents anywhere (the auth photo has no scrim or caption).
 - **Brand or orange as data.** No brand green/orange on a status, severity, flag, series or map marker.
 - **Priority bands.** No Low / Medium / High derived from `priority_index`, in any colour.
 - Decorative icon tiles; `rounded-2xl` or larger on chrome; zebra tables; colour-only meaning.
@@ -333,7 +333,7 @@ classes, so there is no flash; use `tone="dark"` on always-dark surfaces.
 | App header / expanded sidebar | Primary logo 28-32px tall (citizen header 28, admin sidebar 26). |
 | Collapsed sidebar, avatars | Symbol; minimum 24px. |
 | Below 32px | Use the simplified favicon artwork (`app/icon.svg`), not the full symbol. |
-| Auth pages (citizen and staff) | Centered at the top of the card, 40px tall, `tone="auto"` (§8.5). |
+| Auth pages (citizen and staff) | Centered at the top of the card, 36px tall, `tone="auto"` (§8.5). |
 | Minimum width | Primary logo 120px. |
 | Subtitle lockup (min 280px) | Presentations, manuscript and formal documents only; never the app header. |
 | Wordmark | Footers and tight horizontal spaces. |
@@ -368,9 +368,16 @@ Citizen sign in / create account / forgot / reset and Staff sign in share `AuthS
 card, form on the left, photograph on the right (hidden below `md`, so phones get one column), on a
 `bg-muted` page. Form pieces are in `AuthFields.tsx` (`PasswordInput` with an accessible show/hide
 toggle, `GoogleButton`, `AuthAlert` on the shadcn `Alert`) and the `Field` / `Label` / `Alert`
-primitives in `components/ui`. The portal chip ("Citizen Portal" / "Staff Portal") and a one-line
-cross-link tell the two audiences apart. Staff has no registration, Google or recovery link; the
-administrator-contact guidance stays. Privacy and Terms links are not shown until those pages exist.
+primitives in `components/ui`. Proportions follow `login-04` (`max-w-sm`, `md:max-w-4xl`, `p-6 md:p-8`);
+the form column reads logo, heading, one-line description, fields, primary button, "Or continue with"
+divider, Google, then the alternate-page link. Google sits below the primary form and is citizen-only.
+There are no portal badges, no cross-portal links and no photo caption or scrim: staff sign-in stays
+reachable at `/admin/login` and is not advertised on the citizen page (there is no public footer to
+hold a Staff Access link yet; add one there if a public site is built). Staff has no registration,
+Google or recovery link; the administrator-contact guidance stays. Privacy and Terms links are not
+shown until those pages exist. The email and password fields carry no default values: any
+credentials seen pre-filled come from the browser's own autofill, and `autoComplete` tokens are
+kept so password managers work normally.
 
 The registry output of `shadcn add login-04` was not applied directly: it would overwrite the repo's
 `button`, `card`, `input` and `separator`, write `app/login/page.tsx` (colliding with the
@@ -378,12 +385,13 @@ The registry output of `shadcn add login-04` was not applied directly: it would 
 `shadcn add login-04 --view`; `label`, `field` and `alert` were added from the official registry
 with the `cn` import pointed at `@/lib/utils`.
 
-Photograph (`public/images/auth-pampanga-fields.jpg`): "Mount Arayat paddy fields, grasslands,
-trees" (Kaledian-Camba road, Barangay Camba, Arayat, Pampanga), by Judgefloro, 2019, CC0 (public
-domain dedication), from Wikimedia Commons file
-`File:193Kaledian_Camba_Arayat,_Pampanga_27.jpg`. No attribution is required. It is a Pampanga
-landscape, not Porac itself; replace it with project-owned Porac photography when available. It is
-resized to 1600px, served through `next/image`, decorative (`alt=""`), and dimmed in dark mode.
+Photograph (`public/images/auth-porac-jalung.jpg`): a cornfield and paddy at Jalung, Porac,
+Pampanga (`File:810Jalung,_Porac,_Pampanga_06.jpg`, Wikimedia Commons), by Judgefloro, 2019-02-03,
+CC0 (public domain dedication), so no attribution is required. The bottom (road curb) is cropped
+off and it is resized to 2000px wide. It is served through `next/image` with
+`sizes="(min-width: 768px) 1080px, 1px"` (the panel is `object-cover`, so the file renders larger than
+the panel), decorative (`alt=""`) and dimmed in dark mode. It replaces the earlier Arayat photograph.
+Replace it with project-owned Porac photography when available.
 
 ## 9. Accessibility
 

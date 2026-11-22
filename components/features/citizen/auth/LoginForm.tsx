@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_INPUT, AuthAlert, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
+import { AUTH_BUTTON, AUTH_INPUT, AuthAlert, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -54,73 +54,56 @@ export default function LoginForm() {
   }
 
   return (
-    <AuthShell
-      portal="citizen"
-      title="Citizen Sign In"
-      description="Sign in to report local concerns and track their progress."
-      footer={
-        <>
-          Municipal staff?{" "}
-          <Link href="/admin/login" className="font-medium text-primary underline-offset-4 hover:underline">
-            Go to Staff Sign In
-          </Link>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-5">
-        {notice && <AuthAlert tone="success">{notice}</AuthAlert>}
-        {oauthError && <AuthAlert tone="error">{oauthError}</AuthAlert>}
+    <AuthShell title="Welcome back" description="Sign in to report local concerns and track their progress.">
+      <form onSubmit={handleSubmit} noValidate>
+        <FieldGroup>
+          {notice && <AuthAlert tone="success">{notice}</AuthAlert>}
+          {oauthError && <AuthAlert tone="error">{oauthError}</AuthAlert>}
 
-        <GoogleButton />
+          <Field>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="name@example.com"
+              autoComplete="email"
+              required
+              className={AUTH_INPUT}
+            />
+          </Field>
 
-        <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">Or continue with email</FieldSeparator>
+          <Field>
+            <div className="flex items-center justify-between gap-2">
+              <FieldLabel htmlFor="password">Password</FieldLabel>
+              <Link href="/forgot-password" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+            <PasswordInput
+              id="password"
+              name="password"
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              required
+            />
+          </Field>
 
-        <form onSubmit={handleSubmit} noValidate>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="name@example.com"
-                autoComplete="email"
-                required
-                className={AUTH_INPUT}
-              />
-            </Field>
+          {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
-            <Field>
-              <div className="flex items-center justify-between gap-2">
-                <FieldLabel htmlFor="password">Password</FieldLabel>
-                <Link
-                  href="/forgot-password"
-                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <PasswordInput
-                id="password"
-                name="password"
-                placeholder="Enter your password"
-                autoComplete="current-password"
-                required
-              />
-            </Field>
+          <Button type="submit" disabled={submitting} className={AUTH_BUTTON}>
+            {submitting ? "Signing in…" : "Sign In"}
+          </Button>
 
-            {error && <AuthAlert tone="error">{error}</AuthAlert>}
+          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">Or continue with</FieldSeparator>
 
-            <Button type="submit" size="lg" disabled={submitting} className="h-11 w-full text-base">
-              {submitting ? "Signing in…" : "Sign In"}
-            </Button>
+          <GoogleButton />
 
-            <FieldDescription className="text-center">
-              Don&apos;t have an account? <Link href="/signup">Create Account</Link>
-            </FieldDescription>
-          </FieldGroup>
-        </form>
-      </div>
+          <FieldDescription className="text-center">
+            Don&apos;t have an account? <Link href="/signup">Create Account</Link>
+          </FieldDescription>
+        </FieldGroup>
+      </form>
     </AuthShell>
   );
 }
