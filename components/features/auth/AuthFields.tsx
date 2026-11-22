@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, CheckCircle2, Circle, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, XCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field";
@@ -73,35 +73,15 @@ export function PasswordInput({ className, ...props }: Omit<React.ComponentProps
   );
 }
 
-export function PasswordRequirements({
-  id,
-  password,
-  maxBytes,
-}: {
-  id: string;
-  password: string;
-  maxBytes?: number;
-}) {
+export function PasswordRequirement({ id, password }: { id: string; password: string }) {
+  const met = password.length >= 8;
+  const Icon = met ? CheckCircle2 : XCircle;
   return (
-    <FieldDescription id={id} className="flex flex-col gap-1">
-      <PasswordRequirement met={password.length >= 8}>At least 8 characters</PasswordRequirement>
-      {maxBytes !== undefined && (
-        <PasswordRequirement met={password !== "" && new TextEncoder().encode(password).length <= maxBytes}>
-          Up to {maxBytes} UTF-8 bytes
-        </PasswordRequirement>
-      )}
-    </FieldDescription>
-  );
-}
-
-function PasswordRequirement({ met, children }: { met: boolean; children: React.ReactNode }) {
-  const Icon = met ? CheckCircle2 : Circle;
-  return (
-    <span className="flex items-start gap-2">
-      <Icon aria-hidden="true" className={cn("mt-0.5 size-4 shrink-0", met && "text-status-resolved-ink")} />
-      <span>{children}</span>
+    <FieldDescription id={id} className={cn("flex items-start gap-2", met ? "text-status-resolved-ink" : "text-danger-ink")}>
+      <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+      <span>At least 8 characters.</span>
       <span className="sr-only"> — {met ? "Met" : "Not met"}</span>
-    </span>
+    </FieldDescription>
   );
 }
 

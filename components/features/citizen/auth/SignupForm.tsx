@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthSubmit } from "@/components/features/auth/useAuthSubmit";
 import { AuthShell } from "@/components/features/auth/AuthShell";
 import { AUTH_GROUP, AUTH_INPUT, AuthLink, AuthNote } from "@/components/features/auth/auth-ui";
-import { AuthAlert, AuthButton, GoogleButton, PasswordInput, PasswordRequirements } from "@/components/features/auth/AuthFields";
+import { AuthAlert, AuthButton, GoogleButton, PasswordInput, PasswordRequirement } from "@/components/features/auth/AuthFields";
 import { Field, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { oauthErrorMessage } from "./oauthErrors";
@@ -97,7 +97,7 @@ export default function SignupForm() {
               onChange={(e) => setPassword(e.target.value)}
               aria-describedby="password-hint"
             />
-            <PasswordRequirements id="password-hint" password={password} maxBytes={72} />
+            <PasswordRequirement id="password-hint" password={password} />
           </Field>
 
           {error && <AuthAlert tone="error">{error}</AuthAlert>}

@@ -22,6 +22,7 @@ import {
   isValidEmail,
   isValidPassword,
   NAME_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
 } from '../common/utils/account-validation';
 
 @Injectable()
@@ -236,7 +237,9 @@ export class AuthService {
     }
     if (!isValidPassword(password)) {
       throw new BadRequestException(
-        'Password must be at least 8 characters and no more than 72 bytes.',
+        password.length < PASSWORD_MIN_LENGTH
+          ? 'Password must be at least 8 characters.'
+          : 'Password is too long. Please use a shorter password.',
       );
     }
 

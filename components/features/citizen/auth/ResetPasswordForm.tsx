@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useAuthSubmit } from "@/components/features/auth/useAuthSubmit";
 import { AuthShell } from "@/components/features/auth/AuthShell";
 import { AUTH_CTA_BUTTON, AUTH_GROUP, AuthCtaLabel, AuthLink, AuthNote } from "@/components/features/auth/auth-ui";
-import { AuthAlert, AuthButton, PasswordInput, PasswordRequirements } from "@/components/features/auth/AuthFields";
+import { AuthAlert, AuthButton, PasswordInput, PasswordRequirement } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 
@@ -98,7 +98,7 @@ export default function ResetPasswordForm() {
                 aria-describedby="new-password-hint"
                 onChange={(e) => setNewPassword(e.target.value)}
               />
-              <PasswordRequirements id="new-password-hint" password={newPassword} />
+              <PasswordRequirement id="new-password-hint" password={newPassword} />
             </Field>
 
             {error && <AuthAlert tone="error">{error}</AuthAlert>}

@@ -47,7 +47,7 @@ for (const theme of ["light", "dark"]) {
         await expect(password).toHaveAttribute("type", "password");
         await expect(password).toHaveAttribute("autocomplete", "current-password");
         await expect(password).toHaveValue("");
-        await expect(page.getByText("At least 8 characters", { exact: true })).toHaveCount(0);
+        await expect(page.getByText("At least 8 characters.", { exact: true })).toHaveCount(0);
         await page.getByLabel("Email").fill("someone@example.test");
         await password.fill("wrong-password");
         await page.getByRole("button", { name: "Show password" }).click();
@@ -99,22 +99,26 @@ for (const theme of ["light", "dark"]) {
         await expect(password).toHaveAttribute("autocomplete", "new-password");
         await expect(password).toHaveValue("");
         const description = page.locator("[data-slot=field-description]");
-        const minimum = description.getByText("At least 8 characters", { exact: true }).locator("..");
-        const maximum = description.getByText("Up to 72 UTF-8 bytes", { exact: true }).locator("..");
-        await expect(minimum).toContainText("Not met");
-        if (signup) await expect(maximum).toContainText("Not met");
-        else await expect(maximum).toHaveCount(0);
+        await expect(description.getByText("At least 8 characters.", { exact: true })).toBeVisible();
+        await expect(description).not.toContainText("bytes");
+        await expect(description.locator("svg.lucide-circle-x")).toBeVisible();
+        await expect(description).toHaveClass(/\btext-danger-ink\b/);
+        await expect(password).toHaveAccessibleDescription(/At least 8 characters\.\s*— Not met/);
+        const border = await password.evaluate((input) => getComputedStyle(input).borderColor);
 
         await password.fill("1234567");
-        await expect(minimum).toContainText("Not met");
+        await expect(description.locator("svg.lucide-circle-x")).toBeVisible();
         await password.fill("12345678");
-        await expect(minimum).toContainText(/ — Met$/);
-        if (signup) {
-          await password.fill("é".repeat(36));
-          await expect(maximum).toContainText(/ — Met$/);
-          await password.fill("é".repeat(37));
-          await expect(maximum).toContainText("Not met");
-        }
+        await expect(description.locator("svg.lucide-circle-check")).toBeVisible();
+        await expect(description).toHaveClass(/\btext-status-resolved-ink\b/);
+        await expect(password).toHaveAccessibleDescription(/At least 8 characters\.\s*— Met/);
+        await password.press("Backspace");
+        await expect(description.locator("svg.lucide-circle-x")).toBeVisible();
+        await expect(description).toHaveClass(/\btext-danger-ink\b/);
+        await expect(password).not.toHaveAttribute("aria-invalid", "true");
+        await password.blur();
+        await expect(password).toHaveCSS("border-color", border);
+        await password.fill("12345678");
         await page.getByRole("button", { name: "Show password" }).click();
         await expect(password).toHaveAttribute("type", "text");
         await page.getByRole("button", { name: "Hide password" }).click();
@@ -122,11 +126,20 @@ for (const theme of ["light", "dark"]) {
         expect(await page.locator("html").evaluate((el) => el.scrollWidth)).toBe(390);
 
         if (signup) {
-          await page.route("**/api/citizens/signup", (route) => route.fulfill({ json: {} }));
           await page.route("**/dashboard**", (route) => route.fulfill({ contentType: "text/html", body: "Account created" }));
           await page.getByLabel("First name").fill("Test");
           await page.getByLabel("Last name").fill("Citizen");
           await page.getByLabel("Email").fill("someone@example.test");
+          const tooLong = "Password is too long. Please use a shorter password.";
+          await page.route(
+            "**/api/citizens/signup",
+            (route) => route.fulfill({ status: 400, json: { message: tooLong } }),
+            { times: 1 },
+          );
+          await password.fill("é".repeat(37));
+          await page.getByRole("button", { name: "Create Account" }).click();
+          await expect(page.locator("[data-slot=alert][role=alert]")).toHaveText(tooLong);
+          await page.route("**/api/citizens/signup", (route) => route.fulfill({ json: {} }));
           await password.fill("12345678");
           await page.getByRole("button", { name: "Create Account" }).click();
           await expect(page).toHaveURL(/\/dashboard$/);
