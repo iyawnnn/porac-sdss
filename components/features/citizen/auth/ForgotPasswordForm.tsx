@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_BUTTON, AUTH_GROUP, AUTH_INPUT, AuthAlert, AuthLink } from "@/components/features/auth/AuthFields";
-import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { AUTH_GROUP, AUTH_INPUT, AuthLink, AuthNote } from "@/components/features/auth/auth-ui";
+import { AuthAlert, AuthButton } from "@/components/features/auth/AuthFields";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
 export default function ForgotPasswordForm() {
@@ -47,9 +47,9 @@ export default function ForgotPasswordForm() {
           <AuthAlert tone="success">
             If an account exists for that email, we&apos;ve sent a link to reset your password.
           </AuthAlert>
-          <FieldDescription className="text-center">
+          <AuthNote>
             <AuthLink href="/login">Back to Sign In</AuthLink>
-          </FieldDescription>
+          </AuthNote>
         </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate>
@@ -69,13 +69,13 @@ export default function ForgotPasswordForm() {
 
             {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
-            <Button type="submit" disabled={submitting} className={AUTH_BUTTON}>
+            <AuthButton type="submit" loading={submitting}>
               {submitting ? "Sending…" : "Send reset link"}
-            </Button>
+            </AuthButton>
 
-            <FieldDescription className="text-center">
+            <AuthNote>
               <AuthLink href="/login">Back to Sign In</AuthLink>
-            </FieldDescription>
+            </AuthNote>
           </FieldGroup>
         </form>
       )}

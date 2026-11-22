@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_BUTTON, AUTH_GROUP, AuthAlert, AuthLink, PasswordInput } from "@/components/features/auth/AuthFields";
+import { AUTH_CTA_BUTTON, AUTH_GROUP, AuthCtaLabel, AuthLink, AuthNote } from "@/components/features/auth/auth-ui";
+import { AuthAlert, AuthButton, PasswordInput } from "@/components/features/auth/AuthFields";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 
 const RESET_ERROR_MESSAGES: Record<string, string> = {
   invalid_token: "This reset link is invalid. Please request a new one.",
@@ -75,12 +76,14 @@ export default function ResetPasswordForm() {
       {status === "invalid" && (
         <div className="flex flex-col gap-(--auth-gap)">
           <AuthAlert tone="error">This reset link is invalid or has expired.</AuthAlert>
-          <Button asChild className={AUTH_BUTTON}>
-            <Link href="/forgot-password">Request a new link</Link>
+          <Button asChild className={AUTH_CTA_BUTTON}>
+            <Link href="/forgot-password">
+              <AuthCtaLabel>Request a new link</AuthCtaLabel>
+            </Link>
           </Button>
-          <FieldDescription className="text-center">
+          <AuthNote>
             <AuthLink href="/login">Back to Sign In</AuthLink>
-          </FieldDescription>
+          </AuthNote>
         </div>
       )}
 
@@ -102,13 +105,13 @@ export default function ResetPasswordForm() {
 
             {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
-            <Button type="submit" disabled={submitting} className={AUTH_BUTTON}>
+            <AuthButton type="submit" loading={submitting}>
               {submitting ? "Resetting…" : "Reset password"}
-            </Button>
+            </AuthButton>
 
-            <FieldDescription className="text-center">
+            <AuthNote>
               <AuthLink href="/login">Back to Sign In</AuthLink>
-            </FieldDescription>
+            </AuthNote>
           </FieldGroup>
         </form>
       )}

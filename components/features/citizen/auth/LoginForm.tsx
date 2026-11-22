@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_BUTTON, AUTH_GROUP, AUTH_INPUT, AuthAlert, AuthLink, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
-import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
+import { AUTH_GROUP, AUTH_INPUT, AuthLink, AuthNote } from "@/components/features/auth/auth-ui";
+import { AuthAlert, AuthButton, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
+import { Field, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { oauthErrorMessage } from "./oauthErrors";
 import { authNoticeMessage } from "./authNotices";
@@ -75,7 +75,7 @@ export default function LoginForm() {
           <Field>
             <div className="flex items-center justify-between gap-2">
               <FieldLabel htmlFor="password">Password</FieldLabel>
-              <AuthLink href="/forgot-password" className="text-sm text-muted-foreground hover:text-foreground">
+              <AuthLink href="/forgot-password" className="text-sm">
                 Forgot password?
               </AuthLink>
             </div>
@@ -90,17 +90,17 @@ export default function LoginForm() {
 
           {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
-          <Button type="submit" disabled={submitting} className={AUTH_BUTTON}>
+          <AuthButton type="submit" loading={submitting}>
             {submitting ? "Signing in…" : "Sign In"}
-          </Button>
+          </AuthButton>
 
           <FieldSeparator className="*:data-[slot=field-separator-content]:bg-background">Or continue with</FieldSeparator>
 
           <GoogleButton />
 
-          <FieldDescription className="text-center">
+          <AuthNote>
             Don&apos;t have an account? <AuthLink href="/signup">Create Account</AuthLink>
-          </FieldDescription>
+          </AuthNote>
         </FieldGroup>
       </form>
     </AuthShell>

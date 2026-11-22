@@ -370,14 +370,16 @@ Citizen sign in / create account / forgot / reset and Staff sign in share `AuthS
 right, full height and `object-cover`, pinned (`sticky top-0 h-dvh`) so it stays in view while a long
 form scrolls. Below `md` the photo is dropped and the form takes the full width. Nothing has a fixed
 height, so create account and recovery states grow and scroll naturally. Form pieces are in
-`AuthFields.tsx` (`PasswordInput` with an accessible show/hide toggle, `GoogleButton`, `AuthAlert` on
-the shadcn `Alert`) and the `Field` / `Label` / `Alert` primitives in `components/ui`. The divider
+`AuthFields.tsx` (client: `PasswordInput` with an accessible show/hide toggle, `GoogleButton`,
+`AuthAlert` on the shadcn `Alert`, `AuthButton`) and `auth-ui.tsx` (server-safe constants, `AuthLink`,
+`AuthNote`, `AuthCtaLabel`: the home page is a server component and cannot read plain values exported
+from a client module) and the `Field` / `Label` / `Alert` primitives in `components/ui`. The divider
 label uses `bg-background` to match the form panel. The form column reads logo, heading, one-line
 description, fields, primary button, "Or continue with" divider, Google, then the alternate-page link.
 Google sits below the primary form and is citizen-only.
 
 Spacing is set by three variables on `AuthShell`'s `<main>`: `--auth-gap` (between fields and
-actions, read by `AUTH_GROUP` in `AuthFields.tsx`), `--auth-logo-gap` and `--auth-head-gap`. On
+actions, read by `AUTH_GROUP` in `auth-ui.tsx`), `--auth-logo-gap` and `--auth-head-gap`. On
 desktop they are 24 / 28 / 36px with a 44px logo and 8px between a label and its input (the
 "Or continue with" divider sits about 26px from the button and from Google); the `compact` variant
 (`@custom-variant` in `globals.css`: phones, or viewports 720px tall or less) tightens them to
@@ -385,16 +387,35 @@ desktop they are 24 / 28 / 36px with a 44px logo and 8px between a label and its
 and centered on the panel by a `1fr / auto / 1fr` grid, so the optional back link sits top-left in
 its own row and never overlaps the form.
 
-Text links use `AuthLink` (the `.link-underline` class in `globals.css`): a faint resting underline
-that draws to full strength from the left over 180ms on hover and on keyboard focus, plus a
-`focus-visible` ring. It is CSS only, and `prefers-reduced-motion` removes the transition. The Back
-to Home arrow shifts 2px left on hover/focus, only under `motion-safe`.
+Interactions live in `globals.css` (`.link-underline`, `.auth-cta`, `.auth-roll`). Hover rules apply
+to fine pointers only (no stuck hover after a tap); keyboard focus gets the same treatment plus a
+`focus-visible` ring; `prefers-reduced-motion` removes every transition, the label roll and the sheen
+sweep. No animation dependency.
 
-**Back to Home is built but hidden.** `PUBLIC_HOME_HREF` in `AuthShell.tsx` is `null`: `/` redirects
-to `/login` and every other citizen page needs an account (`proxy.ts`), so there is no public page
-to link to, and a link would loop back to the page you are on. Set the constant to the public landing
-route once one exists and the link appears top-left on all five auth pages (it was checked rendered
-at desktop, short-laptop and phone sizes before being disabled).
+- **Text links** (`AuthLink`, and the label in Back to Home): nothing at rest. On hover or focus an
+  underline draws in from the left (a `::after` pseudo-element, `scaleX(0)` to `scaleX(1)`,
+  `transform-origin: left center`, 450ms on `cubic-bezier(0.76, 0, 0.24, 1)`) and retracts when it
+  ends. The text never moves and its color never changes. Without a resting underline, weight
+  (`font-medium`) separates a link from the muted sentence around it, so keep link-bearing sentences in
+  `AuthNote` (a plain `<p>`), not `FieldDescription`, whose own `a:hover` color change would flash.
+- **Primary button** (`AuthButton`, or `AUTH_CTA_BUTTON` on a link-button): Porac Green unchanged, with
+  Neffi's CTA material (top highlight, lower shade, restrained shadow) plus a diagonal sheen that sweeps
+  once on hover or focus, and the label rolling up over a duplicated copy, 560ms on the same easing. The
+  copy is `aria-hidden`, so the accessible name is the label once. The button never moves, scales or
+  recolors (the shared Button's hover fade and press shift are overridden). Disabled or loading buttons
+  do not animate; loading sets `aria-busy` and swaps the label ("Signing in..."). Neffi's corner glow is
+  left out because it smudges a 40px button. Google stays a plain outline button with a subtle
+  background and border change only.
+- **Back to Home** arrow shifts 3px left on hover/focus, only under `motion-safe`.
+
+The Neffi project (`C:\CodeProjects\neffi`) supplied the CTA material (`neffi-cta`); its source has no
+`cubic-bezier(0.76, 0, 0.24, 1)` underline or label roll, so those two follow the specified timings.
+
+**Public home and Back to Home.** `/` is a real public page (`app/page.tsx`, built on `AuthShell`):
+what the system is, Citizen Sign In, Create Account and a discreet Staff access link. It makes no API
+call and no session check, so it prerenders and works if the API is down; a signed-in citizen simply
+continues from sign-in. "Back to Home" (top-left of the form panel, in its own grid row so it never
+overlaps the form) is on every auth page and links to `/`; the home page hides it via `hideBackLink`.
 There are no portal badges, no cross-portal links and no photo caption or scrim: staff sign-in stays
 reachable at `/admin/login` and is not advertised on the citizen page (there is no public footer to
 hold a Staff Access link yet; add one there if a public site is built). Staff has no registration,

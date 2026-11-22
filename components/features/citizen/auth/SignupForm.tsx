@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "@/components/features/auth/AuthShell";
-import { AUTH_BUTTON, AUTH_GROUP, AUTH_INPUT, AuthAlert, AuthLink, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
-import { Button } from "@/components/ui/button";
+import { AUTH_GROUP, AUTH_INPUT, AuthLink, AuthNote } from "@/components/features/auth/auth-ui";
+import { AuthAlert, AuthButton, GoogleButton, PasswordInput } from "@/components/features/auth/AuthFields";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { oauthErrorMessage } from "./oauthErrors";
@@ -114,17 +114,17 @@ export default function SignupForm() {
 
           {error && <AuthAlert tone="error">{error}</AuthAlert>}
 
-          <Button type="submit" disabled={submitting} className={AUTH_BUTTON}>
+          <AuthButton type="submit" loading={submitting}>
             {submitting ? "Creating account…" : "Create Account"}
-          </Button>
+          </AuthButton>
 
           <FieldSeparator className="*:data-[slot=field-separator-content]:bg-background">Or continue with</FieldSeparator>
 
           <GoogleButton />
 
-          <FieldDescription className="text-center">
+          <AuthNote>
             Already have an account? <AuthLink href="/login">Sign In</AuthLink>
-          </FieldDescription>
+          </AuthNote>
         </FieldGroup>
       </form>
     </AuthShell>

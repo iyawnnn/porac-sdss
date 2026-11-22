@@ -1,32 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { AUTH_BUTTON, AUTH_CTA_BUTTON, AUTH_INPUT, AuthCtaLabel } from "@/components/features/auth/auth-ui";
 
-// 40px controls and 16px text keep the forms comfortable on a phone (and stop iOS
-// zooming on focus). Applied to every auth input and button via these constants.
-export const AUTH_INPUT = "h-10 text-base md:text-base";
-export const AUTH_BUTTON = "h-10 w-full text-base";
-// Vertical rhythm between the fields and actions of a form. The value comes from
-// the --auth-gap variable that AuthShell sets (roomier on desktop, tighter on phones).
-export const AUTH_GROUP = "gap-(--auth-gap)";
-
-// Text link with the shared animated underline (.link-underline in globals.css) and a
-// visible keyboard focus ring. `no-underline!` beats FieldDescription's own link underline.
-export function AuthLink({ className, ...props }: React.ComponentProps<typeof Link>) {
+export function AuthButton({
+  className,
+  children,
+  loading,
+  disabled,
+  ...props
+}: React.ComponentProps<typeof Button> & { loading?: boolean }) {
   return (
-    <Link
-      {...props}
-      className={cn(
-        "link-underline rounded-sm no-underline! outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        className,
-      )}
-    />
+    <Button {...props} disabled={disabled || loading} aria-busy={loading || undefined} className={cn(AUTH_CTA_BUTTON, className)}>
+      <AuthCtaLabel>{children}</AuthCtaLabel>
+    </Button>
   );
 }
 
@@ -73,7 +65,7 @@ export function AuthAlert({ tone, children }: { tone: "error" | "success"; child
 
 export function GoogleButton() {
   return (
-    <Button asChild variant="outline" className={AUTH_BUTTON}>
+    <Button asChild variant="outline" className={cn(AUTH_BUTTON, "transition-colors duration-200 hover:border-foreground/30")}>
       <a href="/api/auth/google">
         <GoogleIcon />
         Continue with Google
