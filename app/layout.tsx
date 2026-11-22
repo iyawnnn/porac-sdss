@@ -27,6 +27,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Absolute base for the og:image URL (app/opengraph-image.png). Set NEXT_PUBLIC_SITE_URL
+  // once the production domain is decided; hosting is still open (docs/deployment-readiness.md).
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: { default: "PORAC-SDSS", template: "%s | PORAC-SDSS" },
   description: "Municipal infrastructure and hazard reporting",
   openGraph: {
@@ -35,6 +38,7 @@ export const metadata: Metadata = {
     siteName: "PORAC-SDSS",
     type: "website",
   },
+  twitter: { card: "summary_large_image", title: "PORAC-SDSS", description: "Municipal infrastructure and hazard reporting" },
 };
 
 export default function RootLayout({

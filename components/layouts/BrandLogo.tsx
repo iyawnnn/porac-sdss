@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 // surfaces that stay dark in both themes (the auth hero panel).
 // The subtitle lockup is for formal documents only, never the app shell.
 const ASSETS = {
-  primary: { light: "/brand/logo-light.svg", dark: "/brand/logo-dark.svg", ratio: 1312 / 321 },
-  symbol: { light: "/brand/symbol-light.svg", dark: "/brand/symbol-dark.svg", ratio: 251 / 321 },
+  primary: { light: "/brand/logo-light.svg", dark: "/brand/logo-dark.svg", ratio: 1306.7 / 320.33 },
+  symbol: { light: "/brand/symbol-light.svg", dark: "/brand/symbol-dark.svg", ratio: 250.8 / 320.33 },
 } as const;
 
 type BrandLogoProps = {

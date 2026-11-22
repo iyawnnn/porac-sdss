@@ -319,9 +319,12 @@ floors. Migrating them is the Phase 2 citizen work (§10).
 
 ### 8.1 Files and component
 
-Artwork in `public/brand/`: `logo-light.svg`, `logo-dark.svg` (primary horizontal, viewBox
-`0 0 1312 321`), `symbol-light.svg`, `symbol-dark.svg` (viewBox `0 0 251 321`). `app/icon.svg` is the
-symbol with an internal `prefers-color-scheme` swap; `app/favicon.ico` is 32px.
+Artwork in `public/brand/`: `logo-light.svg`, `logo-dark.svg` (primary horizontal, no subtitle) and
+`symbol-light.svg`, `symbol-dark.svg`. Icons use the Next file conventions: `app/icon.svg` and
+`app/favicon.ico` (simplified symbol on a green tile, no wave lines, readable at 16-32px),
+`app/apple-icon.png` (180x180, full symbol) and `app/opengraph-image.png` (1200x630 cover).
+`NEXT_PUBLIC_SITE_URL` (optional, default `http://localhost:3000`) is the `metadataBase` for the
+absolute og:image URL; set it once the production domain is decided.
 
 `components/layouts/BrandLogo.tsx`: props `variant` (`primary` | `symbol`), `tone` (`auto` | `light` |
 `dark`), `height` (px; width follows the artwork). `auto` renders both and swaps with CSS `dark:`
@@ -333,7 +336,7 @@ classes, so there is no flash; use `tone="dark"` on always-dark surfaces such as
 |---|---|
 | App header / expanded sidebar | Primary logo 28-32px tall (citizen header 28, admin sidebar 26). |
 | Collapsed sidebar, avatars | Symbol; minimum 24px. |
-| Below 32px | A simplified no-wave favicon is specified in Figma, not yet exported. |
+| Below 32px | Use the simplified favicon artwork (`app/icon.svg`), not the full symbol. |
 | Auth pages (login / signup / forgot / reset) | Hero uses `tone="dark"` at 40px; a compact 28px logo sits above the form below `lg`. |
 | Minimum width | Primary logo 120px. |
 | Subtitle lockup (min 280px) | Presentations, manuscript and formal documents only; never the app header. |
@@ -346,23 +349,21 @@ Clear space equals the cap height of the wordmark.
 No recolouring outside the shipped variants, gradients, shadows, outlines, stretching, retyping, or
 shields / seals / gears. No logo on photos without a solid backing.
 
-### 8.4 Asset status (provisional)
+### 8.4 Asset provenance
 
-The Figma MCP Starter-plan call limit was hit after 5 of 20 variant exports (Primary Light / Black /
-White, Subtitle Dark, Wordmark Light). The shipped `logo-*` / `symbol-*` SVGs are built from the exact
-Pin / Sun / `PORAC-` / `SDSS` vector paths of the approved Primary Light export, with the Dark
-variant's approved fills (Pin `#3DAA6A`, Sun `#EE7444`, `PORAC-` `#F2F6F3`, `SDSS` `#EE7444`, from the
-approved Subtitle Lockup Dark export); the symbol is Pin + Sun cropped to the 251x321 frame.
+The shipped files come from the owner-supplied brand package (`porac-sdss-brand-package.zip`, kept
+outside the repo). Its README states the SVGs are the approved vectors, traced from the reference
+logo with outlined Montserrat text, and that they are **not native Figma exports**; the designer's
+original source was not available. They match the vectors placed in the Figma file `PORAC-SDSS`.
+The wordmark-only, one-color (black / white) and subtitle-lockup variants stay in the ZIP and are
+not imported, because the app does not use them yet; import a variant only when a screen needs it.
 
-**Replace with the official Figma exports when available:** Primary Dark, Symbol Light/Dark,
-simplified favicon (<32px), Wordmark Dark, Subtitle Light, mono Black / White / Mono Green, and the
-1200x630 OG cover (frame `02 · OG Cover 1200x630`).
+The subtitle on the lockup reads "Web-Based Decision Support System", which is the revised
+manuscript title and the only official one. "Spatial Decision Support System" is the superseded
+title and must not be used as the product name.
 
-Open Graph `title` / `description` / `siteName` are set in `app/layout.tsx`. The **OG image is
-pending**, as are `app/apple-icon.png` and a proper icon tile.
-
-Open owner decision: Figma's subtitle reads "Web-Based Decision Support System" while the app's hero
-copy says "Spatial Decision Support System". Not changed here.
+The package guide suggests keeping orange free to mean "High priority". The project rule wins:
+Operational Priority is numeric with no bands, so orange is never a priority colour (§2).
 
 ## 9. Accessibility
 
@@ -393,7 +394,7 @@ Not a roadmap; `docs/project-status.md` stays the only roadmap.
 | 2 | Citizen Dashboard redesign; migrate citizen forms to shadcn Field / Input / Button; fix the 44px / 16px floors | Not started |
 | 3 | Staff shell and queue polish | Not started |
 | 4 | Dark-mode review screen by screen (maps, charts, Leaflet popups), then decide on a `prefers-color-scheme` default | Not started |
-| Assets | Replace provisional logo SVGs with official exports (§8.4); OG image; apple icon | Pending |
+| Assets | Official logo, icon, apple icon and OG cover imported (§8.4) | Shipped |
 
 ## 11. Implementation risks
 

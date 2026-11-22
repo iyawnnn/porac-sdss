@@ -42,7 +42,7 @@ export default function ForgotPasswordForm() {
         <div className="relative z-10 flex flex-col items-start gap-3 p-10">
           <BrandLogo tone="dark" height={40} priority />
           <div>
-            <p className="text-xs text-white/70">Spatial Decision Support System</p>
+            <p className="text-xs text-white/70">Web-Based Decision Support System</p>
           </div>
         </div>
         <div className="relative z-10 p-10">

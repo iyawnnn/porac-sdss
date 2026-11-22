@@ -71,7 +71,7 @@ export default function AdminLoginForm() {
           <BrandLogo tone="dark" height={40} priority />
           <div>
             <p className="text-xs text-white/70">
-              Spatial Decision Support System | LGU Command Center
+              Web-Based Decision Support System | LGU Command Center
             </p>
           </div>
         </div>
