@@ -427,7 +427,7 @@ only (no stuck hover after a tap); keyboard focus gets the same treatment plus a
 - **Loading state** (`AuthButton`, `loading` prop): the button is disabled (so a second click or
   Enter cannot resubmit; verified one request despite repeated attempts), sets `aria-busy`, keeps its
   exact size, and shows the official shadcn `Spinner` (`components/ui/spinner.tsx`, lucide
-  `Loader2Icon`) left of the loading label ("Signing in...", "Creating account...", "Sending...",
+  `Loader2Icon`) right of the loading label ("Signing in...", "Creating account...", "Sending...",
   "Resetting..."), centered together with an 8px gap. The spinner is decorative (`aria-hidden`) and an
   absolutely positioned `sr-only` `role="status"` region announces the label once, so the form's
   layout is untouched. Loading stays at full opacity instead of the shared disabled 50%, ignores hover

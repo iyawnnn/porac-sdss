@@ -30,6 +30,11 @@ test("sign-in shows a spinner while pending, sends one request, and restores the
   const busyBox = await busy.boundingBox();
   expect([busyBox?.width, busyBox?.height]).toEqual([idleBox?.width, idleBox?.height]);
   await expect(busy.locator("[data-slot=spinner]")).toHaveAttribute("aria-hidden", "true");
+  // The spinner follows the label (to its right), on the same line.
+  const spinnerBox = await busy.locator("[data-slot=spinner]").boundingBox();
+  const labelBox = await busy.locator("span.relative").boundingBox();
+  expect(spinnerBox!.x + spinnerBox!.width).toBeGreaterThan(labelBox!.x + labelBox!.width - 1);
+  expect(spinnerBox!.x).toBeGreaterThan(labelBox!.x);
   await expect(page.locator("main [role=status].sr-only")).toHaveText("Signing in…");
 
   // Enter in a field and a forced click while pending must not resubmit.

@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { AUTH_BUTTON, AUTH_CTA_BUTTON, AUTH_INPUT, AuthCtaLabel } from "@/components/features/auth/auth-ui";
 
 // While `loading`: the button is disabled (so a second click or Enter cannot resubmit), carries
-// aria-busy, and shows a spinner left of the loading label, centered together. The button keeps
+// aria-busy, and shows a spinner right of the loading label, centered together. The button keeps
 // its height and full width, so nothing shifts when the state changes. The spinner is decorative
 // (aria-hidden); the polite live region below announces the loading label once. It is
 // absolutely positioned (sr-only), so it adds nothing to the form's layout.
@@ -30,8 +30,8 @@ export function AuthButton({
         className={cn(AUTH_CTA_BUTTON, loading && "disabled:opacity-100", className)}
       >
         <AuthCtaLabel>
-          {loading && <Spinner aria-hidden="true" className="motion-reduce:animate-none" />}
           {children}
+          {loading && <Spinner aria-hidden="true" className="motion-reduce:animate-none" />}
         </AuthCtaLabel>
       </Button>
       <span role="status" className="sr-only">
