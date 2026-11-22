@@ -18,21 +18,27 @@ export default function ForgotPasswordForm() {
     setError("");
 
     const form = new FormData(e.currentTarget);
-    const res = await fetch("/api/citizens/forgot-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: form.get("email") }),
-    });
+    try {
+      const res = await fetch("/api/citizens/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.get("email") }),
+      });
 
-    // The backend always returns 200 regardless of whether the email
-    // exists — the only other outcome is a rate-limit rejection, which is
-    // safe to surface distinctly (it doesn't reveal anything about a
-    // specific email).
-    if (res.ok) {
-      setSubmitted(true);
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setError(data.message ?? "Something went wrong. Please try again.");
+      // The backend always returns 200 regardless of whether the email
+      // exists — the only other outcome is a rate-limit rejection, which is
+      // safe to surface distinctly (it doesn't reveal anything about a
+      // specific email).
+      if (res.ok) {
+        setSubmitted(true);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.message ?? "Something went wrong. Please try again.");
+      }
+    } catch {
+      // A network-level failure rejects fetch() instead of returning a response; without
+      // this the button stayed in its loading state forever with no error shown.
+      setError("Could not reach the server. Please try again.");
     }
     setSubmitting(false);
   }

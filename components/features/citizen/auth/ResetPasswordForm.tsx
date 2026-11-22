@@ -49,18 +49,25 @@ export default function ResetPasswordForm() {
     setSubmitting(true);
     setError("");
 
-    const res = await fetch("/api/citizens/reset-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, newPassword }),
-    });
+    try {
+      const res = await fetch("/api/citizens/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, newPassword }),
+      });
 
-    if (res.ok) {
-      router.push("/login?notice=password_reset");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      const code = typeof data.message === "string" ? data.message : "";
-      setError(RESET_ERROR_MESSAGES[code] ?? "Something went wrong. Please try again.");
+      if (res.ok) {
+        router.push("/login?notice=password_reset");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        const code = typeof data.message === "string" ? data.message : "";
+        setError(RESET_ERROR_MESSAGES[code] ?? "Something went wrong. Please try again.");
+        setSubmitting(false);
+      }
+    } catch {
+      // A network-level failure rejects fetch() instead of returning a response; without
+      // this the button stayed in its loading state forever with no error shown.
+      setError("Could not reach the server. Please try again.");
       setSubmitting(false);
     }
   }

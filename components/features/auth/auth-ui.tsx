@@ -41,7 +41,8 @@ export const AUTH_CTA =
   "auth-cta hover:bg-primary-hover active:bg-primary-pressed active:not-aria-[haspopup]:translate-y-0 duration-200 ease-out";
 export const AUTH_CTA_BUTTON = cn(AUTH_BUTTON, AUTH_CTA);
 
-// The one real, static label, kept above the decorative light layers.
+// The one real, static label, kept above the decorative light layers. A flex row so an icon
+// (the loading spinner) sits beside the text and the pair stays centered.
 export function AuthCtaLabel({ children }: { children: React.ReactNode }) {
-  return <span className="relative">{children}</span>;
+  return <span className="relative inline-flex items-center gap-2">{children}</span>;
 }

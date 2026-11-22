@@ -424,6 +424,18 @@ only (no stuck hover after a tap); keyboard focus gets the same treatment plus a
   8.1:1 and pressed 5.3:1 (dark). Google stays a plain outline button with a subtle background and
   border change only.
 - **Back to Home** arrow shifts 3px left on hover/focus, only under `motion-safe`.
+- **Loading state** (`AuthButton`, `loading` prop): the button is disabled (so a second click or
+  Enter cannot resubmit; verified one request despite repeated attempts), sets `aria-busy`, keeps its
+  exact size, and shows the official shadcn `Spinner` (`components/ui/spinner.tsx`, lucide
+  `Loader2Icon`) left of the loading label ("Signing in...", "Creating account...", "Sending...",
+  "Resetting..."), centered together with an 8px gap. The spinner is decorative (`aria-hidden`) and an
+  absolutely positioned `sr-only` `role="status"` region announces the label once, so the form's
+  layout is untouched. Loading stays at full opacity instead of the shared disabled 50%, ignores hover
+  and press, and `motion-reduce` stops the rotation (the label carries the meaning). On a failed
+  response or a network failure the button returns to its normal label and the error shows. Forgot
+  and reset password used to have no `catch` around `fetch`, so a network failure left the button
+  loading forever with no message; they now use the same "Could not reach the server" message as the
+  other three forms.
 - **Password visibility toggle** (`PasswordInput`): centered with `inset-y-0 my-auto`, not a translate,
   and the press shift is neutralized on this button. The shared Button's `active:translate-y-px` writes
   the same `translate` property as a `-translate-y-1/2` centering and used to drop the toggle about 17px

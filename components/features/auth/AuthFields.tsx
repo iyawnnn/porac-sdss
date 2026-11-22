@@ -5,9 +5,15 @@ import { AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { AUTH_BUTTON, AUTH_CTA_BUTTON, AUTH_INPUT, AuthCtaLabel } from "@/components/features/auth/auth-ui";
 
+// While `loading`: the button is disabled (so a second click or Enter cannot resubmit), carries
+// aria-busy, and shows a spinner left of the loading label, centered together. The button keeps
+// its height and full width, so nothing shifts when the state changes. The spinner is decorative
+// (aria-hidden); the polite live region below announces the loading label once. It is
+// absolutely positioned (sr-only), so it adds nothing to the form's layout.
 export function AuthButton({
   className,
   children,
@@ -16,9 +22,22 @@ export function AuthButton({
   ...props
 }: React.ComponentProps<typeof Button> & { loading?: boolean }) {
   return (
-    <Button {...props} disabled={disabled || loading} aria-busy={loading || undefined} className={cn(AUTH_CTA_BUTTON, className)}>
-      <AuthCtaLabel>{children}</AuthCtaLabel>
-    </Button>
+    <>
+      <Button
+        {...props}
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
+        className={cn(AUTH_CTA_BUTTON, loading && "disabled:opacity-100", className)}
+      >
+        <AuthCtaLabel>
+          {loading && <Spinner aria-hidden="true" className="motion-reduce:animate-none" />}
+          {children}
+        </AuthCtaLabel>
+      </Button>
+      <span role="status" className="sr-only">
+        {loading ? children : ""}
+      </span>
+    </>
   );
 }
 
