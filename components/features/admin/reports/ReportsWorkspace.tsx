@@ -308,12 +308,12 @@ export function ReportsWorkspace({
             <AdminErrorCard message={summaryError} title="Couldn't refresh summary" />
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <SummaryTile icon={TicketIcon} label="Total Tickets" tint="bg-slate-100 text-slate-600" value={totalTickets} />
-              <SummaryTile icon={Gauge} label="Active Tickets" tint="bg-blue-50 text-blue-600" value={summary.kpis.active_count} />
-              <SummaryTile icon={Hourglass} label="Pending Work Orders" tint="bg-amber-50 text-amber-600" value={perf.pendingWorkOrders} />
+              <SummaryTile icon={TicketIcon} label="Total Tickets" tint="bg-muted text-muted-foreground" value={totalTickets} />
+              <SummaryTile icon={Gauge} label="Active Tickets" tint="bg-info-tint text-info-ink" value={summary.kpis.active_count} />
+              <SummaryTile icon={Hourglass} label="Pending Work Orders" tint="bg-warning-tint text-warning" value={perf.pendingWorkOrders} />
               <SummaryTile icon={Wrench} label="In-Progress Work Orders" tint="bg-indigo-50 text-indigo-600" value={perf.inProgressWorkOrders} />
-              <SummaryTile icon={AlertTriangle} label="Overdue Work Orders" tint="bg-red-50 text-red-600" value={perf.overdueWorkOrders} />
-              <SummaryTile icon={CheckCircle2} label="Completed This Week" tint="bg-emerald-50 text-emerald-600" value={perf.completedWorkOrdersThisWeek} />
+              <SummaryTile icon={AlertTriangle} label="Overdue Work Orders" tint="bg-danger-tint text-red-600" value={perf.overdueWorkOrders} />
+              <SummaryTile icon={CheckCircle2} label="Completed This Week" tint="bg-status-resolved-tint text-status-resolved-ink" value={perf.completedWorkOrdersThisWeek} />
               <SummaryTile icon={Flag} label="Pending Flagged Reports" tint="bg-orange-50 text-orange-600" value={perf.flaggedReportsPending} />
             </div>
           )}

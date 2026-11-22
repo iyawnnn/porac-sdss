@@ -43,7 +43,7 @@ export function CitizenErrorState({
           type="button"
           disabled={isPending}
           onClick={() => startTransition(() => unstable_retry())}
-          className="inline-flex h-11 items-center rounded-md bg-brand-500 px-5 text-sm font-medium text-white transition-colors duration-[120ms] hover:bg-brand-600 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-11 items-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors duration-[120ms] hover:bg-primary/90 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? "Retrying…" : "Try Again"}
         </button>

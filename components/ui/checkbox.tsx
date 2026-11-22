@@ -8,9 +8,7 @@ import { cn } from "@/lib/utils"
 
 // 15px rather than shadcn's default 16px: the ticket queue's select column is
 // 34px wide and the checkbox has to optically center against 34px-tall rows in
-// compact density. Checked state uses --primary (--brand-solid #a85100), not
-// --brand (#ff7a00) -- a filled control carries a glyph, so it needs the
-// AA-safe shade (docs/design-system.md 4.3).
+// compact density. Checked state uses --primary (--brand-solid).
 function Checkbox({
   className,
   ...props

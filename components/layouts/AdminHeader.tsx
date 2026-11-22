@@ -6,6 +6,7 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/co
 import { Separator } from "@/components/ui/separator";
 import { AdminSidebarTrigger } from "@/components/layouts/AdminSidebarTrigger";
 import { AdminUserMenu } from "@/components/layouts/AdminUserMenu";
+import { ThemeToggle } from "@/components/layouts/ThemeToggle";
 import { NotificationBell } from "@/components/layouts/NotificationBell";
 
 function pageLabel(pathname: string, search: string): string {
@@ -35,6 +36,7 @@ export function AdminHeader({ session }: { session: AdminSession }) {
       <div className="flex items-center gap-3"><AdminSidebarTrigger place="navbar" /></div>
       <Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbPage className="text-sm font-semibold tracking-tight text-foreground">{pageLabel(pathname, search)}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
       <div className="flex items-center gap-3">
+        <ThemeToggle />
         <NotificationBell />
         <Separator className="h-4 data-[orientation=vertical]:self-center" orientation="vertical" />
         <AdminUserMenu session={session} />

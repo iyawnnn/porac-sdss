@@ -64,7 +64,7 @@ test("citizen header navigates public map, my reports, report form, and logs out
   page.on("response", response => { if (response.status() >= 500) failures.push(`${response.status()} ${response.url()}`); });
 
   await loginCitizen(page);
-  await expect(page.getByText("Porac SDSS")).toBeVisible();
+  await expect(page.locator("header").getByRole("img", { name: "PORAC-SDSS" })).toBeVisible();
   await expect(page.locator("header").getByText(E2E_CITIZEN_ACCOUNT.email, { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "My Reports" })).toBeVisible();
   const image = page.locator('img[src^="/uploads/reports/"]').first();

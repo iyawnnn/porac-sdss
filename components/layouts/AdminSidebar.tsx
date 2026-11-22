@@ -6,6 +6,7 @@ import { Bell, Building2, ClipboardList, FileBarChart2, Inbox, LayoutDashboard, 
 import { cn } from "@/lib/utils";
 import type { AdminSession } from "@/lib/auth/session";
 import { accountLabel, isFocalPersonnel, isSystemAdmin } from "@/lib/utils/adminScope";
+import { BrandLogo } from "@/components/layouts/BrandLogo";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail, useSidebar } from "@/components/ui/sidebar";
 import { AdminSearch } from "@/components/layouts/AdminSearch";
 import { AdminSidebarTrigger } from "@/components/layouts/AdminSidebarTrigger";
@@ -140,10 +141,7 @@ export default function AdminSidebar({ session }: { session: AdminSession }) {
     <Sidebar className={cn("*:data-[slot=sidebar-inner]:bg-background", "transition-[left,right,top,width]")} collapsible="offcanvas" variant="sidebar">
       <SidebarHeader className="h-(--app-header-height,3rem) flex-row items-center justify-between gap-2 border-b border-sidebar-border px-3">
         <Link className="flex min-w-0 items-center gap-2 rounded-md py-1 outline-hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring" href="/admin">
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <LayoutDashboard className="size-3.5" />
-          </span>
-          <span className="truncate text-sm font-semibold text-sidebar-foreground">Porac SDSS</span>
+          <BrandLogo height={26} priority />
         </Link>
         <AdminSidebarTrigger place="sidebar" />
       </SidebarHeader>

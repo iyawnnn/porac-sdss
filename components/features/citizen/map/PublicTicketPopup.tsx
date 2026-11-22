@@ -5,12 +5,12 @@ import type { PublicTicketGeoRow } from "@/lib/types/citizens-public-map";
 import { publicUpdateForStatus } from "@/lib/utils/ui/public-update";
 
 const STATUS_STYLE: Record<string, { tint: string; ink: string }> = {
-  Reported: { tint: "#F1F3F5", ink: "#434B54" },
-  "Under Review": { tint: "#EFF5FC", ink: "#1A4570" },
-  "In Progress": { tint: "#D8E6F7", ink: "#102943" },
-  Resolved: { tint: "#E3F5EE", ink: "#0B5741" },
+  Reported: { tint: "var(--color-status-reported-tint)", ink: "var(--color-status-reported-ink)" },
+  "Under Review": { tint: "var(--color-status-under-review-tint)", ink: "var(--color-status-under-review-ink)" },
+  "In Progress": { tint: "var(--color-status-in-progress-tint)", ink: "var(--color-status-in-progress-ink)" },
+  Resolved: { tint: "var(--color-status-resolved-tint)", ink: "var(--color-status-resolved-ink)" },
 };
-const FALLBACK_STATUS_STYLE = { tint: "#F1F3F5", ink: "#434B54" };
+const FALLBACK_STATUS_STYLE = { tint: "var(--color-status-reported-tint)", ink: "var(--color-status-reported-ink)" };
 
 // Same long-date format as the citizen report detail page.
 const DATE_FMT: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" };
@@ -61,7 +61,7 @@ export function PublicTicketPopup({ ticket }: { ticket: PublicTicketGeoRow }) {
       {ticket.own_report_id != null && (
         <Link
           href={`/dashboard/reports/${ticket.own_report_id}`}
-          className="block w-full rounded-md bg-brand-500 px-3 py-2 text-center text-sm font-medium text-white hover:bg-brand-600"
+          className="block w-full rounded-md bg-primary px-3 py-2 text-center text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           View my report
         </Link>

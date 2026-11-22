@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { CitizenSession } from "@/lib/auth/citizenSession";
 import CitizenLogoutButton from "@/components/features/citizen/auth/CitizenLogoutButton";
+import { BrandLogo } from "@/components/layouts/BrandLogo";
+import { ThemeToggle } from "@/components/layouts/ThemeToggle";
 import { CitizenNotificationBell } from "@/components/features/citizen/notifications/CitizenNotificationBell";
 
 const NAV_LINKS = [
@@ -16,15 +18,15 @@ export default function CitizenHeader({ session }: { session: CitizenSession }) 
     <header className="border-b border-line-200 bg-surface">
       <div className="mx-auto flex min-h-14 max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:py-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
-          <Link href="/dashboard" className="font-mono text-sm font-semibold tracking-tight text-ink-900">
-            Porac SDSS
+          <Link href="/dashboard" className="rounded-md outline-offset-4">
+            <BrandLogo height={28} priority />
           </Link>
           <nav className="flex flex-wrap items-center gap-1">
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="rounded-md px-3 py-1.5 text-sm text-ink-700 hover:bg-brand-50 hover:text-brand-700"
+                className="rounded-md px-3 py-1.5 text-sm text-ink-700 hover:bg-accent hover:text-primary/80"
               >
                 {link.label}
               </Link>
@@ -35,6 +37,7 @@ export default function CitizenHeader({ session }: { session: CitizenSession }) 
           <span className="max-w-[18rem] truncate rounded-full bg-line-100 px-2 py-1 text-xs font-medium text-ink-500">
             {session.email}
           </span>
+          <ThemeToggle />
           <CitizenNotificationBell />
           <CitizenLogoutButton />
         </div>

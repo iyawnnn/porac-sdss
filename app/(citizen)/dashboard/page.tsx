@@ -29,7 +29,7 @@ export default async function DashboardPage() {
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-col gap-4 rounded-xl border border-line-200 bg-surface p-6 sm:flex-row sm:items-start sm:justify-between sm:p-8">
         <div>
-          <span className="inline-flex items-center rounded-full bg-brand-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-brand-700">
+          <span className="inline-flex items-center rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-primary">
             Citizen Portal
           </span>
           <h1 className="mt-3 text-[28px] font-semibold leading-[34px] tracking-[-0.02em] text-ink-900">
@@ -41,7 +41,7 @@ export default async function DashboardPage() {
         </div>
         <Link
           href="/report"
-          className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-brand-500 px-5 text-base font-medium text-white transition-colors duration-[120ms] hover:bg-brand-600 hover:shadow-sm"
+          className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-5 text-base font-medium text-primary-foreground transition-colors duration-[120ms] hover:bg-primary/90 hover:shadow-sm"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
@@ -84,7 +84,7 @@ export default async function DashboardPage() {
         <div className="flex flex-col gap-4 rounded-xl border border-line-200 bg-surface p-6 lg:col-span-2">
           <div className="flex items-center justify-between">
             <h2 className="text-[18px] font-semibold leading-[26px] text-ink-900">Recent Activity</h2>
-            <Link href="/reports" className="text-sm font-medium text-brand-700 hover:text-brand-800">
+            <Link href="/reports" className="text-sm font-medium text-primary hover:text-primary/80">
               View all
             </Link>
           </div>
@@ -95,7 +95,7 @@ export default async function DashboardPage() {
               <p className="text-sm text-ink-500">Reports you submit will show up here with their current status.</p>
               <Link
                 href="/report"
-                className="mt-1 inline-flex h-10 items-center rounded-md bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600"
+                className="mt-1 inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
                 Report Hazard
               </Link>
@@ -133,7 +133,7 @@ export default async function DashboardPage() {
         <div className="flex flex-col gap-4 rounded-xl border border-line-200 bg-surface p-6 lg:col-span-3">
           <div className="flex items-center justify-between">
             <h2 className="text-[18px] font-semibold leading-[26px] text-ink-900">Public Report Map</h2>
-            <Link href="/map" className="text-sm font-medium text-brand-700 hover:text-brand-800">
+            <Link href="/map" className="text-sm font-medium text-primary hover:text-primary/80">
               View full map
             </Link>
           </div>

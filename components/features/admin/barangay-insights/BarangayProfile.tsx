@@ -87,9 +87,9 @@ export function BarangayProfile({
 
       {/* The High Urgency Tickets tile was removed in manuscript revision Phase 1, step 6a. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiTile icon={TicketIcon} label="Total Tickets" tint="bg-slate-100 text-slate-600" value={profile.kpis.total_tickets} />
-        <KpiTile icon={TrendingUp} label="Active Tickets" tint="bg-blue-50 text-blue-600" value={profile.kpis.active_tickets} />
-        <KpiTile icon={CheckCircle2} label="Resolved Tickets" tint="bg-emerald-50 text-emerald-600" value={profile.kpis.resolved_tickets} />
+        <KpiTile icon={TicketIcon} label="Total Tickets" tint="bg-muted text-muted-foreground" value={profile.kpis.total_tickets} />
+        <KpiTile icon={TrendingUp} label="Active Tickets" tint="bg-info-tint text-info-ink" value={profile.kpis.active_tickets} />
+        <KpiTile icon={CheckCircle2} label="Resolved Tickets" tint="bg-status-resolved-tint text-status-resolved-ink" value={profile.kpis.resolved_tickets} />
         <KpiTile icon={TicketIcon} label="Rejected Tickets" tint="bg-muted text-muted-foreground" value={profile.kpis.rejected_tickets} />
       </div>
 
@@ -133,7 +133,7 @@ export function BarangayProfile({
             <CardTitle>Recent Tickets</CardTitle>
             <CardDescription>Most recent 10 tickets for this barangay.</CardDescription>
           </div>
-          <Link className="text-sm text-brand-600 hover:underline" href={ticketsHref}>View all in Ticket Queue</Link>
+          <Link className="text-sm text-primary hover:underline" href={ticketsHref}>View all in Ticket Queue</Link>
         </CardHeader>
         <CardContent className="p-0">
           {profile.recentTickets.length === 0 ? (

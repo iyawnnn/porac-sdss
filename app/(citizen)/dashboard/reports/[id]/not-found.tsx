@@ -25,7 +25,7 @@ export default function ReportNotFound() {
       </div>
       <Link
         href="/reports"
-        className="mt-1 inline-flex h-11 items-center rounded-md bg-brand-500 px-5 text-sm font-medium text-white transition-colors duration-[120ms] hover:bg-brand-600"
+        className="mt-1 inline-flex h-11 items-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors duration-[120ms] hover:bg-primary/90"
       >
         Back to My Reports
       </Link>

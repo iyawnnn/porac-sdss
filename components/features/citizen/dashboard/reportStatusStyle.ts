@@ -1,9 +1,9 @@
 export const REPORT_STATUS_STYLE: Record<string, { tint: string; ink: string; dot: string }> = {
-  Reported: { tint: "#F1F3F5", ink: "#434B54", dot: "#98A2AC" },
-  "Under Review": { tint: "#EFF5FC", ink: "#1A4570", dot: "#2B6CB0" },
-  "In Progress": { tint: "#D8E6F7", ink: "#102943", dot: "#22578E" },
-  Resolved: { tint: "#E3F5EE", ink: "#0B5741", dot: "#0F7A5A" },
-  Rejected: { tint: "#FDEAEA", ink: "#8A1D12", dot: "#B42318" },
+  Reported: { tint: "var(--color-status-reported-tint)", ink: "var(--color-status-reported-ink)", dot: "var(--color-status-reported-dot)" },
+  "Under Review": { tint: "var(--color-status-under-review-tint)", ink: "var(--color-status-under-review-ink)", dot: "var(--color-status-under-review-dot)" },
+  "In Progress": { tint: "var(--color-status-in-progress-tint)", ink: "var(--color-status-in-progress-ink)", dot: "var(--color-status-in-progress-dot)" },
+  Resolved: { tint: "var(--color-status-resolved-tint)", ink: "var(--color-status-resolved-ink)", dot: "var(--color-status-resolved-dot)" },
+  Rejected: { tint: "var(--color-status-rejected-tint)", ink: "var(--color-status-rejected-ink)", dot: "var(--color-status-rejected-dot)" },
 };
 
-export const REPORT_STATUS_FALLBACK = { tint: "#F1F3F5", ink: "#434B54", dot: "#98A2AC" };
+export const REPORT_STATUS_FALLBACK = { tint: "var(--color-status-reported-tint)", ink: "var(--color-status-reported-ink)", dot: "var(--color-status-reported-dot)" };

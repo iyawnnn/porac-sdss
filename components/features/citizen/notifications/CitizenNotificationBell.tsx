@@ -38,7 +38,7 @@ export function CitizenNotificationBell() {
       >
         <BellIcon />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-semibold text-white">
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-white">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -48,7 +48,7 @@ export function CitizenNotificationBell() {
           <span className="px-0 py-0 text-xs font-medium text-ink-500">Notifications</span>
           {unreadCount > 0 && (
             <button
-              className="cursor-pointer text-xs font-medium text-brand-700 hover:underline"
+              className="cursor-pointer text-xs font-medium text-primary hover:underline"
               onClick={() => void markAllRead()}
               type="button"
             >
@@ -67,12 +67,12 @@ export function CitizenNotificationBell() {
         ) : (
           items.map((notification) => (
             <DropdownMenuItem
-              className="flex-col items-start gap-0.5 whitespace-normal focus:bg-brand-50 focus:text-ink-900"
+              className="flex-col items-start gap-0.5 whitespace-normal focus:bg-accent focus:text-ink-900"
               key={notification.id}
               onClick={() => handleSelect(notification)}
             >
               <span className="flex w-full items-center gap-1.5">
-                {!notification.readAt && <span className="size-1.5 shrink-0 rounded-full bg-brand-600" />}
+                {!notification.readAt && <span className="size-1.5 shrink-0 rounded-full bg-primary" />}
                 <span className="truncate font-medium text-ink-900">{notification.title || CITIZEN_NOTIFICATION_TYPES[notification.type as keyof typeof CITIZEN_NOTIFICATION_TYPES] || "Report update"}</span>
               </span>
               <span className="line-clamp-2 text-xs text-ink-500">{notification.message}</span>

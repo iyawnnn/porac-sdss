@@ -12,7 +12,7 @@ function toDateInputValue(dueDate: string | null): string {
 
 const DUE_STATE_CLASS: Record<string, string> = {
   overdue: "text-destructive font-medium",
-  due_today: "text-amber-600 font-medium",
+  due_today: "text-warning font-medium",
 };
 
 export function WorkOrderDueDateEditor({
@@ -92,7 +92,7 @@ export function WorkOrderDueDateEditor({
         </Button>
       )}
       {dueState === "overdue" && <span className="text-xs font-medium text-destructive">Overdue</span>}
-      {dueState === "due_today" && <span className="text-xs font-medium text-amber-600">Due today</span>}
+      {dueState === "due_today" && <span className="text-xs font-medium text-warning">Due today</span>}
     </div>
   );
 }

@@ -1,17 +1,23 @@
 import type { Metadata } from "next";
-import { Inter, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono, Montserrat } from "next/font/google";
+import { themeInitScript } from "@/lib/theme";
 import "./globals.css";
 
-// "Inter Display" is not a real Google Font (verified against next/font/google's
-// catalog — only "Inter" and "Inter Tight" exist). Inter's variable font ships a
-// real opsz axis (14-32) instead, requested here and paired with
-// `font-optical-sizing: auto` in globals.css — the verified substitute for a
-// separate display cut, with no unverified font file downloaded or committed.
-const interSans = Inter({
-  variable: "--font-geist-sans",
+// Inter's variable font ships a real opsz axis (14-32); paired with
+// `font-optical-sizing: auto` in globals.css it stands in for a display cut.
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-  axes: ["opsz"], // optical sizing — the variable font's real opsz axis (14-32)
-  display: "swap", // explicit, not relied on as next/font's implicit default
+  axes: ["opsz"],
+  display: "swap",
+});
+
+// Brand headings (Figma brand guide: Montserrat Bold/ExtraBold). Variable font,
+// one file, so heading weights stay flexible without extra requests.
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -21,8 +27,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "porac-sdss-nextjs",
+  title: { default: "PORAC-SDSS", template: "%s | PORAC-SDSS" },
   description: "Municipal infrastructure and hazard reporting",
+  openGraph: {
+    title: "PORAC-SDSS",
+    description: "Municipal infrastructure and hazard reporting",
+    siteName: "PORAC-SDSS",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -33,8 +45,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${interSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={`${inter.variable} ${montserrat.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
