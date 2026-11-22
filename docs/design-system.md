@@ -368,8 +368,12 @@ Citizen sign in / create account / forgot / reset and Staff sign in share `AuthS
 card, form on the left, photograph on the right (hidden below `md`, so phones get one column), on a
 `bg-muted` page. Form pieces are in `AuthFields.tsx` (`PasswordInput` with an accessible show/hide
 toggle, `GoogleButton`, `AuthAlert` on the shadcn `Alert`) and the `Field` / `Label` / `Alert`
-primitives in `components/ui`. Proportions follow `login-04` (`max-w-sm`, `md:max-w-4xl`, `p-6 md:p-8`);
-the form column reads logo, heading, one-line description, fields, primary button, "Or continue with"
+primitives in `components/ui`. The card is `max-w-sm` on phones and up to 1200px from `md`, two equal
+columns with the form held to a readable `max-w-sm` and centered in its column (`p-6 md:p-8 lg:p-12`).
+From `lg` it has a viewport-aware minimum height (`clamp(560px, 100svh - 10rem, 720px)`) so it stays
+substantial on large screens without forcing a scroll on a 680px-tall laptop; longer forms (create
+account) grow past it. A quiet "Back to Home" link (left arrow, links to `/`) sits above the card,
+aligned to its left edge, on every size. The form column reads logo, heading, one-line description, fields, primary button, "Or continue with"
 divider, Google, then the alternate-page link. Google sits below the primary form and is citizen-only.
 There are no portal badges, no cross-portal links and no photo caption or scrim: staff sign-in stays
 reachable at `/admin/login` and is not advertised on the citizen page (there is no public footer to
@@ -387,11 +391,20 @@ with the `cn` import pointed at `@/lib/utils`.
 
 Photograph (`public/images/auth-porac-jalung.jpg`): a cornfield and paddy at Jalung, Porac,
 Pampanga (`File:810Jalung,_Porac,_Pampanga_06.jpg`, Wikimedia Commons), by Judgefloro, 2019-02-03,
-CC0 (public domain dedication), so no attribution is required. The bottom (road curb) is cropped
-off and it is resized to 2000px wide. It is served through `next/image` with
-`sizes="(min-width: 768px) 1080px, 1px"` (the panel is `object-cover`, so the file renders larger than
-the panel), decorative (`alt=""`) and dimmed in dark mode. It replaces the earlier Arayat photograph.
-Replace it with project-owned Porac photography when available.
+CC0 (public domain dedication), so no attribution or credit overlay is needed. The bottom (road curb)
+is cropped off and it is resized to 2000px wide. It is served through `next/image` with
+`sizes="(min-width: 768px) 1200px, 1px"` (the panel is `object-cover`, so the file renders larger than
+the panel), decorative (`alt=""`) and dimmed in dark mode.
+
+It is a plain farmland view. No licensed photograph of Inararo or of a Porac mountain view could be
+found: Judgefloro's CC0 Porac set is roads, churches and schools. The most distinctive licensed
+candidate is "Lake Pinatubo, Tarlac, Philippines - panoramio.jpg" (Andrew Martin, 2011, **CC BY 3.0**,
+3504x2336; filed under Commons category "Porac, Pampanga"). It needs a visible credit ("Lake Pinatubo
+by Andrew Martin, CC BY 3.0", linking the file page and the license) and the crater lake sits at the
+Zambales-Tarlac-Pampanga tripoint, so it depicts Mount Pinatubo rather than Porac town itself. A
+2024 portrait of the same lake (MikelleBandin, CC BY-SA 4.0) also exists. Project-owned Porac
+photography (Inararo or the Pinatubo foothills) is the better long-term answer; to swap, replace the
+file, update this paragraph and, if the new photo needs a credit, add it inside the photo panel.
 
 ## 9. Accessibility
 
