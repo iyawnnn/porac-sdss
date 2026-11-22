@@ -10,10 +10,12 @@ export default function PublicMapClientLoader({
   barangays,
   tickets,
   heightClassName,
+  preview,
 }: {
   barangays: FeatureCollection;
   tickets: PublicTicketGeoRow[];
   heightClassName?: string;
+  preview?: boolean;
 }) {
-  return <PublicMapClient barangays={barangays} tickets={tickets} heightClassName={heightClassName} />;
+  return <PublicMapClient barangays={barangays} tickets={tickets} heightClassName={heightClassName} preview={preview} />;
 }

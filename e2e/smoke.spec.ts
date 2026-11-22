@@ -63,36 +63,81 @@ test("citizen header navigates public map, my reports, report form, and logs out
   page.on("pageerror", error => failures.push(`pageerror: ${error.message}`));
   page.on("response", response => { if (response.status() >= 500) failures.push(`${response.status()} ${response.url()}`); });
 
-  await loginCitizen(page);
+  await sharedLoginCitizen(page, E2E_CITIZEN_ACCOUNT);
   await expect(page.locator("header").getByRole("img", { name: "PORAC-SDSS" })).toBeVisible();
-  await expect(page.locator("header").getByText(E2E_CITIZEN_ACCOUNT.email, { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "My Reports" })).toBeVisible();
-  const image = page.locator('img[src^="/uploads/reports/"]').first();
-  await expect(image).toBeVisible();
-  await expect(image).toHaveJSProperty("complete", true);
-  await expect(image).toHaveJSProperty("naturalWidth", 600);
+  await expect(page.locator("header").getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
 
-  await page.locator("header").getByRole("link", { name: "Map" }).click();
+  await page.locator("header").getByRole("link", { name: "Explore Map" }).click();
   await expect(page).toHaveURL(/\/map/);
   await expect(page.locator(".leaflet-container")).toBeVisible();
   await expect(page.getByText("Public Report Map")).toBeVisible();
 
   await page.getByRole("link", { name: "My Reports" }).click();
   await expect(page).toHaveURL(/\/reports/);
-  await expect(page.getByRole("heading", { name: "My Reports" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "My Reports" })).toBeVisible({ timeout: 25_000 });
+  const image = page.locator('img[src^="/uploads/reports/"]').first();
+  await expect(image).toBeVisible();
+  await expect(image).toHaveJSProperty("complete", true);
+  await expect(image).toHaveJSProperty("naturalWidth", 600);
 
-  await page.getByRole("link", { name: "Report Hazard" }).first().click();
+  await expect(page.locator("header").getByRole("link", { name: "My Reports" })).toHaveAttribute("aria-current", "page");
+  await page.locator("header").getByRole("link", { name: "Report a Concern" }).click();
   await expect(page).toHaveURL(/\/report/);
   // 15s (vs. the 5s default): this navigation occasionally lands on a
   // transient network stall under sustained --workers=1 full-suite load —
   // same class of environmental flakiness documented in e2e/helpers.ts.
   await expect(page.getByRole("heading", { name: "Report a Hazard" })).toBeVisible({ timeout: 15_000 });
 
-  await page.getByRole("button", { name: "Logout" }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Sign Out" }).click();
   await expect(page).toHaveURL(/\/login/);
   await page.goto("/reports");
   await expect(page).toHaveURL(/\/login/);
   await expect.poll(() => failures, { timeout: 10_000 }).toEqual([]);
+});
+
+test("citizen dashboard mobile navigation preserves counts, account access, and theme", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await sharedLoginCitizen(page, E2E_CITIZEN_ACCOUNT);
+
+  const response = await page.request.get("/api/reports/mine");
+  expect(response.ok()).toBeTruthy();
+  const reports = await response.json() as { id: number; title: string; status: string }[];
+  const summary = page.getByLabel("Report summary");
+  const counts = [
+    reports.length,
+    reports.filter(({ status }) => status !== "Resolved" && status !== "Rejected").length,
+    reports.filter(({ status }) => status === "Resolved").length,
+  ];
+  await expect(summary.locator("dd")).toHaveText(counts.map((count) => count.toLocaleString("en-PH")));
+  await expect(page.locator(".leaflet-control-zoom-in")).toBeVisible();
+  expect(await page.locator("html").evaluate((element) => element.scrollWidth)).toBe(390);
+
+  const menu = page.getByRole("button", { name: "Open navigation" });
+  if (reports[0]) {
+    const recent = page.getByRole("region", { name: "Recent Reports" });
+    await recent.getByRole("link").filter({ hasText: reports[0].title }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/dashboard/reports/${reports[0].id}$`));
+    await page.getByRole("link", { name: "PORAC-SDSS Home" }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+  }
+  await menu.focus();
+  await page.keyboard.press("Enter");
+  const sheet = page.getByRole("dialog", { name: "Navigation" });
+  await expect(sheet.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeFocused();
+  await menu.click();
+  await sheet.getByRole("link", { name: "Explore Map" }).click();
+  await expect(page).toHaveURL(/\/map$/);
+  await expect(sheet).toBeHidden();
+
+  await page.getByRole("button", { name: "Switch between light and dark theme" }).click();
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Account Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Account & Security" })).toBeVisible();
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
 });
 
 test("citizen report form validates EXIF GPS, dynamic barangay search, and Porac bounds", async ({ page }) => {

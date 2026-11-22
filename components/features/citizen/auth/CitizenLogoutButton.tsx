@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 export default function CitizenLogoutButton() {
   const router = useRouter();
@@ -12,12 +13,8 @@ export default function CitizenLogoutButton() {
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleLogout}
-      className="h-9 rounded-md border border-line-200 px-3 text-sm font-medium text-ink-700 hover:bg-line-100"
-    >
-      Logout
-    </button>
+    <DropdownMenuItem className="min-h-11" onSelect={() => void handleLogout()}>
+      Sign Out
+    </DropdownMenuItem>
   );
 }

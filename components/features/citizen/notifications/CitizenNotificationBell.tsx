@@ -34,16 +34,16 @@ export function CitizenNotificationBell() {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : "Notifications"}
-        className="relative flex h-9 w-9 items-center justify-center rounded-md border border-line-200 text-ink-700 hover:bg-line-100"
+        className="relative flex size-11 items-center justify-center rounded-lg text-foreground hover:bg-muted data-open:bg-muted"
       >
         <BellIcon />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-white">
+          <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80 border border-line-200 bg-surface text-ink-900 shadow-md ring-0">
+      <DropdownMenuContent align="end" className="max-h-(--radix-dropdown-menu-content-available-height) w-80 max-w-[calc(100vw-2rem)] overflow-y-auto border border-line-200 bg-surface text-ink-900 shadow-md ring-0">
         <div className="flex items-center justify-between px-1.5 py-1">
           <span className="px-0 py-0 text-xs font-medium text-ink-500">Notifications</span>
           {unreadCount > 0 && (

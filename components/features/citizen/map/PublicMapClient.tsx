@@ -14,6 +14,7 @@ import { neutralMarkerIcon } from "@/lib/gis/markerIcon";
 import { clusterIcon } from "@/lib/gis/clusterIcon";
 import type { PublicTicketGeoRow } from "@/lib/types/citizens-public-map";
 import { PublicTicketPopup } from "./PublicTicketPopup";
+import { cn } from "@/lib/utils";
 
 configureLeafletMarkerIcons();
 
@@ -41,11 +42,13 @@ function ZoomControlBottomRight() {
 export default function PublicMapClient({
   barangays,
   tickets,
-  heightClassName = "h-[calc(100vh-3.5rem)]",
+  heightClassName = "h-[calc(100dvh-4rem-1px)] lg:h-[calc(100dvh-71px)]",
+  preview = false,
 }: {
   barangays: FeatureCollection;
   tickets: PublicTicketGeoRow[];
   heightClassName?: string;
+  preview?: boolean;
 }) {
   const [municipalBoundary, setMunicipalBoundary] = useState<FeatureCollection | null>(null);
 
@@ -56,13 +59,13 @@ export default function PublicMapClient({
   }, []);
 
   return (
-    <div className={`${heightClassName} w-full relative`}>
-      <div className={`absolute left-3 top-3 z-[1000] px-3 py-2 text-sm text-ink-700 ${GLASS_PANEL}`}>
-        <p className="font-medium text-ink-900">Public Report Map</p>
+    <div className={`${heightClassName} relative isolate w-full`}>
+      <div className={`absolute inset-s-3 top-3 z-[1000] max-w-[calc(100%-1.5rem)] px-3 py-2 text-sm text-ink-700 ${GLASS_PANEL}`}>
+        {!preview && <p className="font-medium text-ink-900">Public Report Map</p>}
         <p>{tickets.length} active public reports · privacy-limited details</p>
         <p className="text-xs text-ink-500">This is not a hazard or risk map.</p>
       </div>
-      <MapContainer center={CITY_CENTER} zoom={MUNICIPALITY.defaultZoom} className="h-full w-full">
+      <MapContainer center={CITY_CENTER} zoom={MUNICIPALITY.defaultZoom} className={cn("h-full w-full", preview && "bg-muted!")}>
         <ZoomControlBottomRight />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

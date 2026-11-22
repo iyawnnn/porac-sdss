@@ -1,15 +1,20 @@
+﻿import { Skeleton } from "@/components/ui/skeleton";
+
 export default function DashboardLoading() {
   return (
-    <main aria-busy="true" aria-label="Loading dashboard" className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mb-6 h-40 animate-pulse rounded-xl border border-line-200 bg-surface" />
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-24 animate-pulse rounded-lg border border-line-200 bg-surface" />
-        ))}
+    <main aria-busy="true" aria-label="Loading dashboard" className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-7 sm:px-6 sm:py-9 lg:px-8">
+      <div aria-hidden="true" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-10 w-64 motion-reduce:animate-none" />
+          <Skeleton className="h-5 w-72 max-w-full motion-reduce:animate-none" />
+        </div>
+        <Skeleton className="h-11 w-40 motion-reduce:animate-none" />
       </div>
-      <div className="grid gap-6 lg:grid-cols-5">
-        <div className="h-96 animate-pulse rounded-xl border border-line-200 bg-surface lg:col-span-2" />
-        <div className="h-96 animate-pulse rounded-xl border border-line-200 bg-surface lg:col-span-3" />
+      <Skeleton className="h-18 motion-reduce:animate-none" />
+      <Skeleton className="h-32 sm:h-24 motion-reduce:animate-none" />
+      <div aria-hidden="true" className="grid items-start gap-6 lg:grid-cols-[minmax(0,4fr)_minmax(0,5fr)]">
+        <Skeleton className="h-80 motion-reduce:animate-none" />
+        <Skeleton className="h-87 sm:h-99 motion-reduce:animate-none" />
       </div>
     </main>
   );

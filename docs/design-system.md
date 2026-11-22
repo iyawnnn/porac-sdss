@@ -492,8 +492,8 @@ the photo panel.
   with 16px text.
 - **Visible focus** everywhere through the global `:focus-visible` rule; do not hand-roll competing
   rings.
-- **`aria-current`** on active navigation. The admin sidebar has it; the citizen header has no active
-  state.
+- **`aria-current`** on active navigation in the admin sidebar and Citizen header, including the
+  mobile navigation sheet.
 - **Redundant encoding.** Status and severity are spelled out; map pins use size and ring weight.
 - **`prefers-reduced-motion`** respected globally.
 - **Warm-hue collision.** `--sun`, `warning` and the map's `lahar` / `infra-safety` accents sit in a
@@ -510,7 +510,8 @@ Not a roadmap; `docs/project-status.md` stays the only roadmap.
 |---|---|---|
 | 1 | Brand tokens, light/dark theme, fonts, logo, theme toggle, class migration to semantic tokens | Shipped (this document) |
 | 2A | Citizen and staff authentication redesign on the shadcn `login-04` layout (§8.5) | Shipped |
-| 2 | Citizen Dashboard redesign; migrate the remaining citizen forms to shadcn Field / Input / Button; fix the 44px / 16px floors | Not started |
+| 2B | Citizen Dashboard and shared navigation | Implemented |
+| Later | Remaining citizen forms and touch-target/input sizing | Not started |
 | 3 | Staff shell and queue polish | Not started |
 | 4 | Dark-mode review screen by screen (maps, charts, Leaflet popups), then decide on a `prefers-color-scheme` default | Not started |
 | Assets | Official logo, icon, apple icon and OG cover imported (§8.4) | Shipped |

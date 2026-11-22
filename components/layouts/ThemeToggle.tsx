@@ -3,8 +3,9 @@
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { THEME_STORAGE_KEY } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string } = {}) {
   function toggle() {
     const dark = document.documentElement.classList.toggle("dark");
     try {
@@ -16,7 +17,7 @@ export function ThemeToggle() {
 
   // Both icons render and CSS picks one, so server and client markup match.
   return (
-    <Button variant="ghost" size="icon" onClick={toggle} aria-label="Switch between light and dark theme">
+    <Button variant="ghost" size="icon" className={cn("active:not-aria-[haspopup]:translate-y-0", className)} onClick={toggle} aria-label="Switch between light and dark theme">
       <Sun className="hidden dark:block" aria-hidden="true" />
       <Moon className="dark:hidden" aria-hidden="true" />
     </Button>

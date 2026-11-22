@@ -192,7 +192,7 @@ test("dashboard and report detail fit a 360px viewport", async ({ page }) => {
   const fitsViewport = () =>
     page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { name: "Recent Activity" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent Reports" })).toBeVisible();
   expect(await fitsViewport()).toBe(true);
   await openReport(page, fixtures().acknowledgedReportId);
   expect(await fitsViewport()).toBe(true);
