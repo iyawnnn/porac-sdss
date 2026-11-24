@@ -11,6 +11,7 @@ import {
   Param,
   ParseFilePipe,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -27,6 +28,7 @@ import { CurrentCitizen } from '../common/decorators/current-citizen.decorator';
 import type { CitizenSession } from '../auth/session.service';
 import { reportSchema } from '../contracts/schemas';
 import { ReportsService } from './reports.service';
+import { parseMyReportsQuery } from './my-reports-query';
 
 // The one 404 message for every reference that does not resolve to the
 // citizen's own report.
@@ -82,6 +84,16 @@ export class ReportsController {
   @Get('reports/mine')
   mine(@CurrentCitizen() citizen: CitizenSession) {
     return this.reports.getMyReports(citizen.citizenId);
+  }
+
+  // UI Phase 2C: searched, filtered, sorted and paginated in SQL (see getMyReportsPage). Declared
+  // before reports/mine/:id so "page" is never parsed as a report id.
+  @Get('reports/mine/page')
+  minePage(
+    @CurrentCitizen() citizen: CitizenSession,
+    @Query() query: Record<string, string | undefined>,
+  ) {
+    return this.reports.getMyReportsPage(citizen.citizenId, parseMyReportsQuery(query));
   }
 
   // Owner-only tracking-reference lookup (manuscript revision Phase 6, step

@@ -274,10 +274,26 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
   }
 
   const getMyReports = methodBody('getMyReports');
+  const getMyReportsPage = methodBody('getMyReportsPage');
   const getMyReportDetail = methodBody('getMyReportDetail');
 
   it('getMyReports scopes to the requesting citizen only', () => {
     expect(getMyReports).toMatch(/WHERE r\.citizen_id = \$\{citizenId\}/);
+  });
+
+  // UI Phase 2C: the paginated list reads the same citizen-scoped base before any filter.
+  it('getMyReportsPage scopes to the requesting citizen only', () => {
+    expect(getMyReportsPage).toMatch(/WHERE r\.citizen_id = \$\{citizenId\}/);
+  });
+
+  it('getMyReportsPage reads only the status name from status_history (no staff or reason columns)', () => {
+    expect(getMyReportsPage).toContain('SELECT DISTINCT sh.status FROM status_history sh');
+    expect(getMyReportsPage).not.toMatch(/admin_name|from_status|\breason\b|resolution_/);
+  });
+
+  it('getMyReportsPage orders deterministically (created_at, then id) for paging', () => {
+    expect(getMyReportsPage).toContain('created_at DESC, id DESC');
+    expect(getMyReportsPage).toContain('created_at ASC, id ASC');
   });
 
   it('getMyReportDetail scopes to the requesting citizen only (ownership + existence in one clause)', () => {
@@ -305,6 +321,10 @@ describe('citizen report-tracking ownership and data exposure (getMyReports/getM
 
   it.each(CITIZEN_UNSAFE_COLUMNS)('getMyReports never selects %s', (column) => {
     expect(getMyReports).not.toContain(column);
+  });
+
+  it.each(CITIZEN_UNSAFE_COLUMNS)('getMyReportsPage never selects %s', (column) => {
+    expect(getMyReportsPage).not.toContain(column);
   });
 
   it.each(CITIZEN_UNSAFE_COLUMNS)(

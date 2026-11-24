@@ -107,7 +107,7 @@ describe('merged-away tickets are left out of lists, counts and recalculation', 
 
   it("citizen report pages follow the report's own ticket, which a merge moves to the survivor", () => {
     const reports = read('reports', 'reports.service.ts');
-    for (const method of ['async getMyReports(', 'async getMyReportDetail(']) {
+    for (const method of ['async getMyReports(', 'async getMyReportsPage(', 'async getMyReportDetail(']) {
       const body = between(reports, method, '\n  async ');
       expect(body).toContain('JOIN tickets t ON t.id = r.ticket_id');
     }
