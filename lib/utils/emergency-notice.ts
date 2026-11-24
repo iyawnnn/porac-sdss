@@ -1,7 +1,7 @@
 // The citizen emergency notice (manuscript revision Phase 6, step 6a): the
 // manuscript requires a clear statement that PORAC-SDSS does not replace
 // emergency hotlines, QRT channels or emergency dispatch, shown on the report
-// form and the citizen dashboard. The wording is the group's final text — no
+// form (the dashboard copy was removed in UI Phase 2B.2 at the owner's request). The wording is the group's final text — no
 // hotline numbers, by decision; never add any here without an official
 // source.
 export const EMERGENCY_NOTICE_TITLE = "For non-emergency concerns only";

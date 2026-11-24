@@ -7,7 +7,8 @@ export default async function CitizenLayout({ children }: { children: React.Reac
   if (!session) return <>{children}</>;
 
   return (
-    <div className="min-h-full bg-canvas">
+    // citizen-shell switches the signed-in citizen app to neutral surfaces (globals.css).
+    <div className="citizen-shell min-h-full bg-canvas">
       <CitizenHeader session={session} />
       {children}
     </div>

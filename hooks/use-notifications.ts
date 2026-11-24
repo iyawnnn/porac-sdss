@@ -20,8 +20,11 @@ export function useNotifications<T extends NotificationLike>(basePath: string) {
   const [items, setItems] = React.useState<T[]>([]);
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
+  // Only a failed list load counts; a stale unread count alone is not worth an error state.
+  const [error, setError] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
+    let failed = true;
     try {
       const [listRes, countRes] = await Promise.all([
         fetch(`${basePath}?limit=10`),
@@ -31,11 +34,13 @@ export function useNotifications<T extends NotificationLike>(basePath: string) {
         const data = (await listRes.json()) as NotificationListResponse<T>;
         setItems(data.items);
       }
+      failed = !listRes.ok;
       if (countRes.ok) {
         const data = (await countRes.json()) as { count: number };
         setUnreadCount(data.count);
       }
     } finally {
+      setError(failed);
       setLoading(false);
     }
   }, [basePath]);
@@ -69,5 +74,5 @@ export function useNotifications<T extends NotificationLike>(basePath: string) {
     broadcastNotificationsUpdated();
   }, [basePath]);
 
-  return { items, unreadCount, loading, markRead, markAllRead, refresh };
+  return { items, unreadCount, loading, error, markRead, markAllRead, refresh };
 }
