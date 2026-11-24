@@ -154,24 +154,10 @@ test.describe("Citizen report page (step 6b)", () => {
     await expectNothingInternal(page);
   });
 
-  test("the reference search finds your own report and says the same 'not found' for anyone else's or a missing one", async ({ page }) => {
+  // UI Phase 2C removed the lookup box from My Reports (citizens browse their own reports there); the
+  // owner-only lookup API stays, and another citizen's reference must read exactly like a missing one.
+  test("the tracking-reference lookup API finds only your own report and answers the same for anyone else's or a missing one", async ({ page }) => {
     const f = fixtures();
-    await page.goto("/reports");
-    const search = page.getByRole("search", { name: "Find a report by tracking reference" });
-    const input = search.getByLabel("Find a report by tracking reference");
-
-    await input.fill(f.ownTrackingReference.toLowerCase());
-    await search.getByRole("button", { name: "Find report" }).click();
-    await expect(page).toHaveURL(new RegExp(`/dashboard/reports/${f.referredReportId}$`));
-
-    await page.goto("/reports");
-    for (const ref of [f.merged.survivorTrackingReference, "PRC-2099-999999"]) {
-      await input.fill(ref);
-      await search.getByRole("button", { name: "Find report" }).click();
-      await expect(search.getByText("No report found with that reference.")).toBeVisible();
-      await expect(page).toHaveURL(/\/reports$/);
-    }
-
     // The API itself: another citizen's reference and a missing one get the
     // identical answer.
     const notMine = await page.request.get(`/api/reports/mine/by-reference/${f.merged.survivorTrackingReference}`);
