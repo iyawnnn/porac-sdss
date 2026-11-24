@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Geist_Mono, Montserrat } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import { themeInitScript } from "@/lib/theme";
 import "./globals.css";
 
@@ -9,14 +9,6 @@ const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   axes: ["opsz"],
-  display: "swap",
-});
-
-// Brand headings (Figma brand guide: Montserrat Bold/ExtraBold). Variable font,
-// one file, so heading weights stay flexible without extra requests.
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin"],
   display: "swap",
 });
 
@@ -50,7 +42,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${montserrat.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />

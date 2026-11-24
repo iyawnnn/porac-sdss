@@ -5,7 +5,10 @@ import { cn } from "@/lib/utils";
 // with the theme in CSS, so there is no logo flash on load. Use "dark" on
 // surfaces that stay dark in both themes (the auth hero panel).
 // The subtitle lockup is for formal documents only, never the app shell.
+// `lockup` is the app-shell variant: the approved colours and vectors with a
+// larger wordmark set beside the pin. `primary` stays for formal and auth use.
 const ASSETS = {
+  lockup: { light: "/brand/lockup-light.svg", dark: "/brand/lockup-dark.svg", ratio: 1986.8 / 320.33 },
   primary: { light: "/brand/logo-light.svg", dark: "/brand/logo-dark.svg", ratio: 1306.7 / 320.33 },
   symbol: { light: "/brand/symbol-light.svg", dark: "/brand/symbol-dark.svg", ratio: 250.8 / 320.33 },
 } as const;
