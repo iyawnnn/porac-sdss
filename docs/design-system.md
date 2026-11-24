@@ -125,6 +125,16 @@ utilities were moved to `bg-primary`, `text-primary-foreground`, `hover:bg-prima
 danger / warning / `status-resolved` / info tint tokens, `bg-card` and `bg-muted`. Stragglers may
 remain; fix them when touched.
 
+### 3.5a Citizen app surfaces
+
+While the signed-in citizen shell is mounted (`.citizen-shell` in `app/(citizen)/layout.tsx`),
+`:root:has(.citizen-shell)` swaps the surface tokens (`--background`, `--card`, `--popover`, `--muted`,
+`--secondary`, `--accent`, `--border`, `--foreground`, `--muted-foreground`, `--color-canvas`,
+`--color-surface`, and since 2C the older `--color-line-*`, `--color-ink-*`, `--color-surface-*` and `--brand-subtle`) to neutral zinc values in both themes, so Porac Green reads as brand and action
+rather than tinting every surface. Scoping on the root covers Radix portals; admin and auth pages
+never mount the class and keep the default tokens. Brand, status, data, `--input` and `--ring` are
+not overridden.
+
 ### 3.5 Theme mechanism
 
 - No `next-themes`. `lib/theme.ts` exports `THEME_STORAGE_KEY` (`porac-theme`) and `themeInitScript`,
@@ -146,11 +156,18 @@ Fonts load in `app/layout.tsx` via `next/font/google`:
 | Family | Variable | Use |
 |---|---|---|
 | **Inter** (variable, `opsz` axis) | `--font-inter` -> `--font-sans` | Body, forms, UI, tables. `font-optical-sizing: auto`. |
-| **Montserrat** (variable) | `--font-montserrat` -> `--font-heading` | Headings: shadcn `CardTitle` / `DialogTitle` / `SheetTitle` and admin page `h1`s via `font-heading`. Figma specifies Montserrat Bold/ExtraBold. |
+| Inter (same file) | `--font-heading` -> `--font-sans` | Headings: shadcn `CardTitle` / `DialogTitle` / `SheetTitle` and page `h1`s via `font-heading`. Montserrat was retired in Phase 2B.1; the token stays so heading roles can diverge later. |
 | **Geist Mono** | `--font-geist-mono` -> `--font-mono` | Machine values: IDs, coordinates, scores, timestamps. (Figma also allows JetBrains Mono.) Human-authored text is never mono. |
 
 The logo wordmark is outlined vector; never retype it. Use `tabular-nums` wherever numbers align in
 columns (table cells, KPI values, scores, IDs).
+
+`components/ui/text.tsx` (`Text`) is the role-based helper, after Polar Orbit's Text: `variant`
+(`display` / `heading` / `title` / `subtitle` / `body` / `body-sm` / `label` / `caption`) sets the look,
+`as` sets the element, so visual role and heading level stay independent. Flags: `color`
+(`default` / `muted` / `brand` / `danger` / `inherit`), `mono`, `tabular`, `truncate`. Format numbers
+at the call site with `toLocaleString("en-PH")`. Adopt it in new or redesigned surfaces; there is no
+mass migration.
 
 ### Scale
 
@@ -158,9 +175,9 @@ Admin is the compact column, citizen the generous one.
 
 | Role | Admin | Citizen | Weight | Family |
 |---|---|---|---|---|
-| Page title | 16 / 24 (`text-base`) as shipped | 28 / 36 target | 600 | Montserrat |
-| Section heading | 16 / 24 | 18 / 26 | 600 | Montserrat |
-| Card heading | 14-16 | 16 / 24 | 500-600 | Montserrat |
+| Page title | 16 / 24 (`text-base`) as shipped | 28 / 36 target | 600 | Inter |
+| Section heading | 16 / 24 | 18 / 26 | 600 | Inter |
+| Card heading | 14-16 | 16 / 24 | 500-600 | Inter |
 | Body | 14 / 20 | **16 / 24 (floor)** | 400 | Inter |
 | Label | 12 / 16 | 14 / 20 | 500 | Inter |
 | Table header | 10 / 16, +0.09em, uppercase | n/a | 700 | Inter |
@@ -317,14 +334,18 @@ tokens; migrating them is later Phase 2 work (§10).
 
 ### 8.1 Files and component
 
-Artwork in `public/brand/`: `logo-light.svg`, `logo-dark.svg` (primary horizontal, no subtitle) and
-`symbol-light.svg`, `symbol-dark.svg`. Icons use the Next file conventions: `app/icon.svg` and
+Artwork in `public/brand/`: `logo-light.svg`, `logo-dark.svg` (primary horizontal, no subtitle),
+`symbol-light.svg`, `symbol-dark.svg`, and `lockup-light.svg` / `lockup-dark.svg`: the app-shell
+lockup (Phase 2B.1). It reuses the approved symbol and wordmark vectors and colours unchanged, with
+the wordmark scaled 1.6x (cap height about 62% of the pin), an 84-unit gap, the wordmark centred on
+the pin's disc (y 530) rather than its full height (546), and a tight viewBox. The primary logo stays
+for auth and formal use. Icons use the Next file conventions: `app/icon.svg` and
 `app/favicon.ico` (simplified symbol on a green tile, no wave lines, readable at 16-32px),
 `app/apple-icon.png` (180x180, full symbol) and `app/opengraph-image.png` (1200x630 cover).
 `NEXT_PUBLIC_SITE_URL` (optional, default `http://localhost:3000`) is the `metadataBase` for the
 absolute og:image URL; set it once the production domain is decided.
 
-`components/layouts/BrandLogo.tsx`: props `variant` (`primary` | `symbol`), `tone` (`auto` | `light` |
+`components/layouts/BrandLogo.tsx`: props `variant` (`lockup` | `primary` | `symbol`), `tone` (`auto` | `light` |
 `dark`), `height` (px; width follows the artwork). `auto` renders both and swaps with CSS `dark:`
 classes, so there is no flash; use `tone="dark"` on always-dark surfaces.
 
@@ -332,7 +353,7 @@ classes, so there is no flash; use `tone="dark"` on always-dark surfaces.
 
 | Context | Rule |
 |---|---|
-| App header / expanded sidebar | Primary logo 28-32px tall (citizen header 28, admin sidebar 26). |
+| App header / expanded sidebar | Citizen header and mobile menu: `lockup`, 26px. Admin sidebar: primary logo, 26px. |
 | Collapsed sidebar, avatars | Symbol; minimum 24px. |
 | Below 32px | Use the simplified favicon artwork (`app/icon.svg`), not the full symbol. |
 | Auth pages (citizen and staff) | Centered at the top of the form panel, 44px tall, `tone="auto"` (§8.5). |
@@ -511,6 +532,9 @@ Not a roadmap; `docs/project-status.md` stays the only roadmap.
 | 1 | Brand tokens, light/dark theme, fonts, logo, theme toggle, class migration to semantic tokens | Shipped (this document) |
 | 2A | Citizen and staff authentication redesign on the shadcn `login-04` layout (§8.5) | Shipped |
 | 2B | Citizen Dashboard and shared navigation | Implemented |
+| 2B.1 | Inter-only typography and `Text`; navbar lockup; single-row Citizen header (no underlines, neutral hover/active), profile menu, notification inbox (popover on desktop, full-screen sheet below 768px) and full-screen mobile menu holding account, appearance and sign-out below 1024px | Awaiting visual approval |
+| 2B.2 | Citizen Dashboard: greeting and Report Hazard; a full-width hero public report map (~560-680px on desktop) that opens framed on the real extent of every barangay, padded clear of its controls, and refits on container resize until the citizen moves it. One control per corner: barangay finder top-left (one pill with an inner clear button; selecting is idempotent, only clear deselects and flies back to the same overview; the selected polygon is outlined in primary with a faint fill; reduced motion jumps), compact info panel top-right, legend bottom-left (opens upward, capped to the available height, one Scroll Area), zoom bottom-right. Pins are one SVG teardrop per category (admin icons and colours; states change shadow and edge only); clusters are neutral charcoal badges that never borrow a category colour. Below: three aligned row-based panels with 64px rows and 48px footers: My Reports (total / active / resolved; View all reports), Recent Reports (up to three newest submissions) and Top Reported Categories (top three from active public reports, ties alphabetical; Explore map). Below 640px the dashboard moves the map title, count and disclaimer outside the map (the info popover is shared via AboutMapPopover); below 768px marker details and the legend open in bottom sheets (Scroll Area, safe-area padding, the selected pin stays marked) and map controls are 44px. The map frame shows a skeleton while Leaflet loads. On the dashboard the mouse wheel scrolls the page until the map is clicked or focused, then zooms it until the pointer leaves (the full /map page keeps normal wheel zoom). Popups and sheets state the approximate location once in the privacy line instead of a Location row. Empty sections use the shadcn Empty component. Category colours identify category only, never severity or risk. Each section streams with layout-matched skeletons and its own retry. Neutral citizen surfaces (§3.5a). Emergency notice on the report form only | Awaiting visual approval |
+| 2C | Whole citizen app: neutral line/ink tokens in the citizen shell (§3.5a); shared `components/features/citizen/reports/report-ui.tsx` (status pill, category icon, count summary); My Reports as photo report cards with a four-step order-tracking progress tracker (`ProgressTracker`: checks for passed stages, a ring in the status colour for the current one, dashed for skipped; a rejection marks the stage it left from with a red ✕ and "Not accepted" and fades the rest; state also in text), no filters (a summary line of totals instead); report detail with one summary card (header, larger tracker with stage dates, latest update) above the content and a sticky Location column; citizen map pins are rounded-square category badges with a short pointer and ground shadow, shared by the public map and the report preview map; report detail with the timeline first and a sticky Location panel; Report Hazard as three numbered steps (photo, location, details) with a photo preview and an inline spinner on submit; Account as label-left settings sections with the auth password field and requirement | Awaiting visual approval |
 | Later | Remaining citizen forms and touch-target/input sizing | Not started |
 | 3 | Staff shell and queue polish | Not started |
 | 4 | Dark-mode review screen by screen (maps, charts, Leaflet popups), then decide on a `prefers-color-scheme` default | Not started |
