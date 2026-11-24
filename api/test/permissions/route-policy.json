@@ -1557,6 +1557,20 @@
         "focal": "401",
         "systemAdmin": "401"
       },
+    {
+      "key": "GET /reports/mine/page",
+      "controller": "ReportsController",
+      "handler": "minePage",
+      "guards": ["CitizenSessionGuard"],
+      "execution": "probe",
+      "expected": {
+        "anonymous": "401",
+        "citizen": "ADMIT",
+        "meo": "401",
+        "mdrrmo": "401",
+        "focal": "401",
+        "systemAdmin": "401"
+      },
       "conditions": ["citizen-ownership"]
     },
     {
