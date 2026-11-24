@@ -16,7 +16,9 @@ import {
   confirmCritical,
   needsCriticalConfirmation,
 } from "@/lib/utils/severity-selection";
+import { CircleAlert, CircleCheck, ImagePlus, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { EmergencyNotice } from "@/components/features/citizen/emergency/EmergencyNotice";
 import { officeLabel } from "@/lib/utils/citizen-report-copy";
 import {
@@ -29,55 +31,10 @@ import {
 } from "@/components/ui/dialog";
 import { MUNICIPALITY } from "@/lib/municipality-config";
 import { createDefaultMarkerIcon } from "@/lib/gis/leaflet-icons";
-import { bindBarangayHoverTooltip, styleBarangayFeature, styleMunicipalBoundary } from "@/lib/gis/map-styles";
+import { getBarangayFeatureName } from "@/lib/gis/map-styles";
 import { apiErrorMessage } from "@/lib/utils/api-error-message";
 
 const icon = createDefaultMarkerIcon();
-
-function LocationPinIcon() {
-  return (
-    <svg viewBox="0 0 512 512" className="h-5 w-5 shrink-0" aria-hidden="true">
-      <defs>
-        <clipPath id="location-pin-left-half">
-          <rect x="0" y="0" width="256" height="512" />
-        </clipPath>
-        <clipPath id="location-pin-right-half">
-          <rect x="256" y="0" width="256" height="512" />
-        </clipPath>
-      </defs>
-      <path
-        d="M256 512C256 512 416 306.8 416 176C416 78.8 344.8 0 256 0C167.2 0 96 78.8 96 176C96 306.8 256 512 256 512Z"
-        fill="#FF0F4C"
-        clipPath="url(#location-pin-left-half)"
-      />
-      <path
-        d="M256 512C256 512 416 306.8 416 176C416 78.8 344.8 0 256 0C167.2 0 96 78.8 96 176C96 306.8 256 512 256 512Z"
-        fill="#E2002E"
-        clipPath="url(#location-pin-right-half)"
-      />
-      <circle cx="256" cy="176" r="88" fill="white" />
-    </svg>
-  );
-}
-
-function InfoIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-6 w-6 shrink-0 text-primary"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="11" x2="12" y2="16" />
-      <circle cx="12" cy="7.5" r="0.75" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
 
 const CITY_CENTER: [number, number] = [MUNICIPALITY.centerLat, MUNICIPALITY.centerLng];
 const PORAC_BOUNDS: L.LatLngBoundsExpression = [
@@ -87,10 +44,38 @@ const PORAC_BOUNDS: L.LatLngBoundsExpression = [
 const PORAC_BOUNDS_OBJ = L.latLngBounds(PORAC_BOUNDS);
 
 const FIELD_CLASS =
-  "w-full h-12 px-4 text-base rounded-lg border border-line-200 bg-surface text-ink-900";
-const LABEL_CLASS = "block text-xs uppercase tracking-wide font-medium text-ink-700 mb-2";
+  "w-full h-11 px-3.5 text-base rounded-lg border border-input bg-background text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60";
+const LABEL_CLASS = "mb-1.5 block text-sm font-medium text-foreground";
 const BADGE_BASE = "rounded-lg border px-3 py-2 text-sm font-medium";
-const CARD_CLASS = "bg-card rounded-2xl shadow-sm border border-line-200 p-6 sm:p-8";
+const CARD_CLASS = "rounded-xl border border-border bg-card";
+
+function StepHeading({ step, title, description }: { step: number; title: string; description: string }) {
+  return (
+    <div className="flex gap-3 border-b border-border px-5 py-4">
+      <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-semibold text-background tabular-nums">
+        {step}
+      </span>
+      <div>
+        <h2 className="text-base leading-6 font-semibold text-foreground">{title}</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+// Object URL for the chosen photo, revoked when it changes or the form unmounts.
+function usePreviewUrl(file: File | null) {
+  const url = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+  return url;
+}
+
+// Same muted, theme-aware boundaries as the public map (.citizen-map in globals.css).
+const MUNICIPALITY_STYLE: L.PathOptions = { className: "pm-municipality", weight: 2, fill: false, interactive: false };
+const BARANGAY_STYLE: L.PathOptions = { className: "pm-barangay", weight: 1, color: "#000", fillColor: "#000", fillOpacity: 0 };
+function bindBarangayTooltip(feature: Feature, layer: L.Layer) {
+  (layer as L.Path).bindTooltip(`Brgy. ${getBarangayFeatureName(feature)}`, { sticky: true, direction: "top", className: "barangay-boundary-tooltip" });
+}
 
 type ExifStatus = "idle" | "processing" | "verified" | "missing" | "outside";
 type BarangayFeature = Feature<Polygon | MultiPolygon, { name?: string; NAME_4?: string; ADM4_EN?: string }>;
@@ -233,7 +218,7 @@ function ExifBadge({ status }: { status: ExifStatus }) {
   }
   if (status === "verified") {
     return (
-      <div className={`${BADGE_BASE} border-status-resolved bg-status-resolved-bg text-status-resolved-ink`}>
+      <div className={`${BADGE_BASE} border-status-resolved-dot/30 bg-status-resolved-tint text-status-resolved-ink`}>
         GPS Metadata Verified (EXIF Found)
       </div>
     );
@@ -273,6 +258,7 @@ export default function ReportForm() {
   const [severityChoice, setSeverityChoice] = useState(NO_SEVERITY);
   const formRef = useRef<HTMLFormElement>(null);
   const mapEnabled = Boolean(file) && !processingPhoto;
+  const previewUrl = usePreviewUrl(file);
 
   useEffect(() => {
     fetch("/assets/gis/porac_barangays.json")
@@ -463,228 +449,233 @@ export default function ReportForm() {
   }
 
   return (
-    <main className="max-w-350 mx-auto px-4 sm:px-6 py-10 sm:py-14">
-      <header className="mb-8 text-left">
-        <h1 className="text-[1.75rem] sm:text-3xl leading-tight font-bold text-ink-900">
-          Report a Hazard
-        </h1>
-        <p className="mt-1.5 text-sm text-ink-500">
-          Help keep Porac safe. Report hazards in your area.
+    <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <header>
+        <h1 className="text-2xl/8 font-semibold tracking-tight text-foreground">Report a Hazard</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Add a photo, pin where it is, and describe it. Municipal personnel review every report.
         </p>
       </header>
 
-      <EmergencyNotice className="mb-8" />
+      <EmergencyNotice />
 
-      <form
-        ref={formRef}
-        onSubmit={handleSubmit}
-        className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-8 items-stretch"
-      >
-        {/* Left Card - Hazard Location */}
-        <section className={`${CARD_CLASS} lg:col-span-3 space-y-4`}>
-          <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900">
-              <LocationPinIcon /> Hazard Location
-            </h2>
-            <p className="mt-1 text-sm text-ink-500">
-              Search for a barangay and pin the exact location.
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="location-search" className={LABEL_CLASS}>
-              Barangay Search
-            </label>
-            <select
-              id="location-search"
-              className={FIELD_CLASS}
-              onChange={handleSearchChange}
-              disabled={!mapEnabled}
-              defaultValue=""
-            >
-              <option value="">Search Porac barangays</option>
-              {searchOptions.map((option, index) => (
-                <option key={option.label} value={index}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* isolate keeps Leaflet's panes and controls (z-index 400-1000) and
-              the photo-first overlay inside the map box, below the Critical
-              severity dialog (z-50). */}
-          <div className={`relative isolate h-125 sm:h-140 w-full my-1 rounded-xl overflow-hidden border border-line-200 ${!mapEnabled ? "bg-line-100" : ""}`}>
-            <div className={!mapEnabled ? "h-full w-full opacity-45 grayscale pointer-events-none" : "h-full w-full"}>
-              <MapContainer
-                center={CITY_CENTER}
-                zoom={MUNICIPALITY.defaultZoom}
-                minZoom={11}
-                maxBounds={PORAC_BOUNDS}
-                maxBoundsViscosity={1}
-                className="h-full w-full"
+      {/* Steps follow the real order: the photo unlocks the map, then the details. On desktop the
+          photo and map stack on the left while the details stay in view on the right. */}
+      <form ref={formRef} onSubmit={handleSubmit} className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <section className={CARD_CLASS}>
+            <StepHeading step={1} title="Photo" description="A clear photo of the hazard. Its GPS data, if any, places the pin for you." />
+            <div className="flex flex-col gap-3 p-5">
+              <label
+                htmlFor="photo"
+                className="group flex cursor-pointer items-center gap-4 rounded-lg border border-dashed border-input p-3 transition-colors duration-150 hover:border-foreground/40 hover:bg-muted/50 has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/20"
               >
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution="&copy; OpenStreetMap contributors"
-                />
-                {municipalBoundary && <GeoJSON data={municipalBoundary} style={styleMunicipalBoundary} />}
-                {barangayGeoJson && (
-                  <GeoJSON
-                    data={barangayGeoJson}
-                    style={styleBarangayFeature}
-                    onEachFeature={bindBarangayHoverTooltip}
-                  />
-                )}
-                <MapController target={searchTarget} position={position} />
-                <LocationMarker enabled={mapEnabled} position={position} setPosition={setPosition} />
-              </MapContainer>
-            </div>
-            {!mapEnabled && (
-              <div className="absolute inset-0 z-[500] flex items-center justify-center bg-card/70 px-6 text-center text-sm font-medium text-ink-700">
-                Please upload a photo first to enable map location pinning.
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2 rounded-lg border border-line-200 bg-line-50 px-4 py-3 text-sm text-ink-500">
-            <p className="flex flex-wrap items-center gap-1.5">
-              <InfoIcon />
-              <span className="font-mono tabular-nums text-ink-700">{pinText}</span>{" "}
-              {locationSource === "exif"
-                ? "- set from photo GPS, drag pin to fine-tune"
-                : locationSource === "manual"
-                  ? "- set manually"
-                  : "- upload a geotagged photo or click inside Porac"}
-            </p>
-            {detectedBarangay && (
-              <p className="inline-flex rounded-lg border border-brand-200 bg-accent px-3 py-1.5 text-primary">
-                Detected Barangay: {detectedBarangay}
-              </p>
-            )}
-            {exifPosition && isLocationMismatch(exifMismatchM) && (
-              <p className={`${BADGE_BASE} border-warning-edge bg-warning-tint text-warning-ink`}>
-                Pin placed &gt;{LOCATION_MISMATCH_THRESHOLD_M}m away from photo GPS. This submission will be flagged for review.
-              </p>
-            )}
-            {!detectedBarangay && position && (
-              <p className="text-warning-ink">The selected location is outside Porac&apos;s barangay boundaries. Move the pin to a location inside Porac.</p>
-            )}
-            {locationError && <p className="text-danger-ink">{locationError}</p>}
-          </div>
-        </section>
-
-        {/* Right Card - Hazard Details */}
-        <section className={`${CARD_CLASS} lg:col-span-2 flex flex-col gap-5`}>
-          <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900">
-              <span aria-hidden="true">📝</span> Hazard Details
-            </h2>
-            <p className="mt-1 text-sm text-ink-500">
-              Provide details about the hazard you want to report.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="photo" className={LABEL_CLASS}>
-                Step 1 - Photo
+                <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-muted-foreground">
+                  {previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- a local object URL preview, not an optimizable asset
+                    <img src={previewUrl} alt="" className="size-full object-cover" />
+                  ) : (
+                    <ImagePlus aria-hidden="true" className="size-6" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-foreground">{file ? file.name : "Choose a photo"}</span>
+                  <span className="mt-0.5 block text-sm text-muted-foreground">
+                    {processingPhoto ? "Preparing photo…" : file ? "Choose again to replace it." : "JPG or PNG from your camera or gallery."}
+                  </span>
+                </span>
+                {processingPhoto && <Spinner aria-label="Preparing photo" className="me-1 text-muted-foreground" />}
+                <input id="photo" type="file" accept="image/*" required onChange={handleFileChange} className="sr-only" />
               </label>
-              <input
-                id="photo"
-                type="file"
-                accept="image/*"
-                required
-                onChange={handleFileChange}
-                className="w-full h-12 px-4 text-base rounded-lg border border-line-200 bg-surface text-ink-700 file:h-full file:mr-4 file:border-0 file:bg-accent file:px-4 file:font-medium file:text-primary file:cursor-pointer file:transition-colors file:duration-150 hover:file:bg-brand-100"
+              <ExifBadge status={exifStatus} />
+            </div>
+          </section>
+
+          <section className={CARD_CLASS}>
+            <StepHeading step={2} title="Location" description="Pin the exact spot inside Porac, or pick a barangay to jump there." />
+            <div className="flex flex-col gap-4 p-5">
+              <div>
+                <label htmlFor="location-search" className={LABEL_CLASS}>
+                  Barangay Search
+                </label>
+                <select id="location-search" className={FIELD_CLASS} onChange={handleSearchChange} disabled={!mapEnabled} defaultValue="">
+                  <option value="">Search Porac barangays</option>
+                  {searchOptions.map((option, index) => (
+                    <option key={option.label} value={index}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* isolate keeps Leaflet's panes and controls (z-index 400-1000) and
+                  the photo-first overlay inside the map box, below the Critical
+                  severity dialog (z-50). */}
+              <div className={`citizen-map relative isolate h-96 w-full overflow-hidden rounded-lg border border-border sm:h-[28rem] ${!mapEnabled ? "bg-muted" : ""}`}>
+                <div className={!mapEnabled ? "h-full w-full opacity-45 grayscale pointer-events-none" : "h-full w-full"}>
+                  <MapContainer
+                    center={CITY_CENTER}
+                    zoom={MUNICIPALITY.defaultZoom}
+                    minZoom={11}
+                    maxBounds={PORAC_BOUNDS}
+                    maxBoundsViscosity={1}
+                    className="h-full w-full"
+                  >
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution="&copy; OpenStreetMap contributors"
+                      className="map-tile-muted"
+                    />
+                    {municipalBoundary && <GeoJSON data={municipalBoundary} style={() => MUNICIPALITY_STYLE} />}
+                    {barangayGeoJson && (
+                      <GeoJSON data={barangayGeoJson} style={() => BARANGAY_STYLE} onEachFeature={bindBarangayTooltip} />
+                    )}
+                    <MapController target={searchTarget} position={position} />
+                    <LocationMarker enabled={mapEnabled} position={position} setPosition={setPosition} />
+                  </MapContainer>
+                </div>
+                {!mapEnabled && (
+                  <div className="absolute inset-0 z-[500] flex items-center justify-center bg-card/70 px-6 text-center text-sm font-medium text-foreground">
+                    Please upload a photo first to enable map location pinning.
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2 text-sm">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                  <MapPin aria-hidden="true" className="size-4 shrink-0" />
+                  <span className="font-mono text-xs text-foreground tabular-nums">{pinText}</span>
+                  <span>
+                    {locationSource === "exif"
+                      ? "Set from photo GPS. Drag the pin to fine-tune."
+                      : locationSource === "manual"
+                        ? "Set manually."
+                        : "Upload a geotagged photo or click inside Porac."}
+                  </span>
+                </p>
+                {detectedBarangay && (
+                  <p className="inline-flex w-fit items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 font-medium text-foreground">
+                    Detected Barangay: {detectedBarangay}
+                  </p>
+                )}
+                {exifPosition && isLocationMismatch(exifMismatchM) && (
+                  <p className={`${BADGE_BASE} border-warning-edge bg-warning-tint text-warning-ink`}>
+                    Pin placed &gt;{LOCATION_MISMATCH_THRESHOLD_M}m away from photo GPS. This submission will be flagged for review.
+                  </p>
+                )}
+                {!detectedBarangay && position && (
+                  <p className="text-warning-ink">The selected location is outside Porac&apos;s barangay boundaries. Move the pin to a location inside Porac.</p>
+                )}
+                {locationError && <p className="text-danger-ink">{locationError}</p>}
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section className={`${CARD_CLASS} lg:sticky lg:top-6`}>
+          <StepHeading step={3} title="Details" description="What is it, and how serious is it?" />
+          <div className="flex flex-col gap-5 p-5">
+            <div>
+              <label htmlFor="title" className={LABEL_CLASS}>
+                Title
+              </label>
+              <input id="title" name="title" required maxLength={200} placeholder="e.g. Deep pothole near the market" className={FIELD_CLASS} />
+            </div>
+
+            <div>
+              <label htmlFor="category" className={LABEL_CLASS}>
+                Category
+              </label>
+              <select id="category" name="category" required className={FIELD_CLASS}>
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="description" className={LABEL_CLASS}>
+                Description <span className="font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                rows={3}
+                maxLength={2000}
+                placeholder="Anything that helps personnel find or understand it"
+                className={`${FIELD_CLASS} h-auto min-h-24 resize-y py-2.5`}
               />
             </div>
-            <ExifBadge status={exifStatus} />
-          </div>
 
-          <div>
-            <label htmlFor="title" className={LABEL_CLASS}>
-              Title
-            </label>
-            <input id="title" name="title" required maxLength={200} className={FIELD_CLASS} />
-          </div>
+            <fieldset className="min-w-0">
+              <legend className={LABEL_CLASS}>Severity</legend>
+              <div className="flex flex-col gap-2">
+                {SEVERITIES.map((s) => (
+                  <label
+                    key={s}
+                    className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3.5 py-2.5 transition-colors duration-150 hover:bg-muted/50 has-checked:border-primary has-checked:bg-primary/5 has-focus-visible:ring-3 has-focus-visible:ring-ring/20"
+                  >
+                    <input
+                      type="radio"
+                      name="citizen_severity"
+                      value={s}
+                      required
+                      checked={severityChoice.severity === s}
+                      onChange={() => setSeverityChoice((current) => chooseSeverity(current, s))}
+                      aria-labelledby={`severity-${s.toLowerCase()}-name`}
+                      aria-describedby={`severity-${s.toLowerCase()}-description`}
+                      className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-primary"
+                    />
+                    <span className="min-w-0">
+                      <span id={`severity-${s.toLowerCase()}-name`} className="block text-sm font-medium text-foreground">
+                        {s}
+                      </span>
+                      <span id={`severity-${s.toLowerCase()}-description`} className="mt-0.5 block text-sm text-muted-foreground">
+                        {SEVERITY_DESCRIPTIONS[s]}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
-          <div className="flex flex-1 flex-col">
-            <label htmlFor="description" className={LABEL_CLASS}>
-              Description (optional)
-            </label>
-            <textarea
-              id="description"
-              name="description"
-              rows={3}
-              maxLength={2000}
-              className="w-full min-h-30 flex-1 resize-none px-4 py-3 text-base rounded-lg border border-line-200 bg-surface text-ink-900"
-            />
-          </div>
+            <Button
+              type="submit"
+              disabled={status === "submitting" || processingPhoto}
+              aria-busy={status === "submitting"}
+              className="h-12 w-full gap-2 text-base hover:bg-primary-hover active:bg-primary-pressed active:not-aria-[haspopup]:translate-y-0"
+            >
+              {status === "submitting" ? "Submitting" : "Submit Report"}
+              {status === "submitting" && <Spinner aria-label="Submitting report" />}
+            </Button>
 
-          <div>
-            <label htmlFor="category" className={LABEL_CLASS}>
-              Category
-            </label>
-            <select id="category" name="category" required className={FIELD_CLASS}>
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <fieldset className="min-w-0">
-            <legend className={LABEL_CLASS}>Severity</legend>
-            <div className="flex flex-col gap-2">
-              {SEVERITIES.map((s) => (
-                <label
-                  key={s}
-                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-line-200 px-4 py-3 transition-colors hover:border-brand-300 hover:bg-accent has-checked:border-primary has-checked:bg-accent has-focus-visible:ring-2 has-focus-visible:ring-ring"
+            <div role={status === "error" ? "alert" : undefined} aria-live="polite">
+              {message && (
+                <div
+                  className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-sm ${
+                    status === "error"
+                      ? "border-danger-edge bg-danger-tint text-danger-ink"
+                      : "border-status-resolved-dot/30 bg-status-resolved-tint text-status-resolved-ink"
+                  }`}
                 >
-                  <input
-                    type="radio"
-                    name="citizen_severity"
-                    value={s}
-                    required
-                    checked={severityChoice.severity === s}
-                    onChange={() => setSeverityChoice((current) => chooseSeverity(current, s))}
-                    aria-labelledby={`severity-${s.toLowerCase()}-name`}
-                    aria-describedby={`severity-${s.toLowerCase()}-description`}
-                    className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-primary"
-                  />
-                  <span className="min-w-0">
-                    <span id={`severity-${s.toLowerCase()}-name`} className="block text-sm font-medium text-ink-900">
-                      {s}
-                    </span>
-                    <span id={`severity-${s.toLowerCase()}-description`} className="mt-0.5 block text-sm text-ink-500">
-                      {SEVERITY_DESCRIPTIONS[s]}
-                    </span>
-                  </span>
-                </label>
-              ))}
+                  {status === "error" ? (
+                    <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                  ) : (
+                    <CircleCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p>{message}</p>
+                    {status === "success" && (
+                      <a href="/reports" className="mt-1.5 inline-block font-medium underline underline-offset-4">
+                        View my reports
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          </fieldset>
-
-          <button
-            type="submit"
-            disabled={status === "submitting" || processingPhoto}
-            className="w-full h-14 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-base font-bold disabled:opacity-50"
-          >
-            {status === "submitting" ? "Submitting..." : "Submit Report"}
-          </button>
-
-          <div role={status === "error" ? "alert" : undefined} aria-live="polite">
-            {message && (
-              <p
-                className={`text-sm flex items-start gap-1.5 ${
-                  status === "error" ? "text-danger-ink" : "text-status-resolved-ink"
-                }`}
-              >
-                <span>{message}</span>
-              </p>
-            )}
           </div>
         </section>
       </form>
