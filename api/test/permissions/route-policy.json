@@ -1557,6 +1557,8 @@
         "focal": "401",
         "systemAdmin": "401"
       },
+      "conditions": ["citizen-ownership"]
+    },
     {
       "key": "GET /reports/mine/page",
       "controller": "ReportsController",
