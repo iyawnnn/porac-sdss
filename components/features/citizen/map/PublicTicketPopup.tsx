@@ -1,16 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import type { PublicTicketGeoRow } from "@/lib/types/citizens-public-map";
 import { publicUpdateForStatus } from "@/lib/utils/ui/public-update";
-
-const STATUS_STYLE: Record<string, { tint: string; ink: string }> = {
-  Reported: { tint: "var(--color-status-reported-tint)", ink: "var(--color-status-reported-ink)" },
-  "Under Review": { tint: "var(--color-status-under-review-tint)", ink: "var(--color-status-under-review-ink)" },
-  "In Progress": { tint: "var(--color-status-in-progress-tint)", ink: "var(--color-status-in-progress-ink)" },
-  Resolved: { tint: "var(--color-status-resolved-tint)", ink: "var(--color-status-resolved-ink)" },
-};
-const FALLBACK_STATUS_STYLE = { tint: "var(--color-status-reported-tint)", ink: "var(--color-status-reported-ink)" };
+import { getCategoryMarkerSpec, glyphColor } from "@/lib/gis/categoryMarker";
+import { REPORT_STATUS_FALLBACK, REPORT_STATUS_STYLE } from "@/components/features/citizen/dashboard/reportStatusStyle";
+import { Button } from "@/components/ui/button";
 
 // Same long-date format as the citizen report detail page.
 const DATE_FMT: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" };
@@ -27,44 +23,51 @@ function formatDate(value: string): string {
 // office; the API sends none of them. A citizen's own report keeps its full
 // detail behind "View my report".
 export function PublicTicketPopup({ ticket }: { ticket: PublicTicketGeoRow }) {
-  const pill = STATUS_STYLE[ticket.status] ?? FALLBACK_STATUS_STYLE;
+  const status = REPORT_STATUS_STYLE[ticket.status] ?? REPORT_STATUS_FALLBACK;
+  const { icon: Icon, color } = getCategoryMarkerSpec(ticket.category);
+  const details = [
+    ["Barangay", ticket.barangay_name],
+    ["Reported", formatDate(ticket.reported_at)],
+  ];
 
   return (
-    <div className="w-56 space-y-2 text-sm">
-      <span
-        className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-        style={{ background: pill.tint, color: pill.ink }}
-      >
-        {ticket.status}
-      </span>
-
-      <p className="font-medium text-ink-900">{ticket.category}</p>
-
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-        <dt className="text-ink-500">Barangay</dt>
-        <dd className="text-ink-900">{ticket.barangay_name}</dd>
-        <dt className="text-ink-500">Location</dt>
-        <dd className="text-ink-900">Approximate</dd>
-        <dt className="text-ink-500">Reported</dt>
-        <dd className="text-ink-900">{formatDate(ticket.reported_at)}</dd>
-      </dl>
-
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-400">Public update</p>
-        <p className="text-xs text-ink-700">{publicUpdateForStatus(ticket.status)}</p>
+    <div className="flex flex-col gap-3 font-sans text-sm text-popover-foreground">
+      {/* pe-6 keeps the heading clear of Leaflet's close button. */}
+      <div className="flex gap-2.5 pe-6">
+        <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-lg" style={{ background: color }}>
+          <Icon color={glyphColor(color)} size={16} strokeWidth={2.25} />
+        </span>
+        <div className="min-w-0">
+          <p className="leading-5 font-semibold">{ticket.category}</p>
+          <span className="mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: status.tint, color: status.ink }}>
+            <span aria-hidden="true" className="size-1.5 rounded-full" style={{ background: status.dot }} />
+            {ticket.status}
+          </span>
+        </div>
       </div>
 
-      <p className="text-[11px] leading-4 text-ink-400">
-        Public view: reporter identity, photos, exact pins and internal records are not shown.
+      <dl className="divide-y divide-border rounded-lg border border-border text-xs">
+        {details.map(([label, value]) => (
+          <div key={label} className="flex justify-between gap-3 px-2.5 py-1.5">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="text-right font-medium">{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="rounded-lg bg-muted px-2.5 py-2">
+        <p className="text-[11px] font-medium text-muted-foreground">Public update</p>
+        <p className="mt-0.5 text-xs leading-4">{publicUpdateForStatus(ticket.status)}</p>
+      </div>
+
+      <p className="text-[11px] leading-4 text-muted-foreground">
+        Approximate location: exact pins, reporter identity, photos and internal records are not shown.
       </p>
 
       {ticket.own_report_id != null && (
-        <Link
-          href={`/dashboard/reports/${ticket.own_report_id}`}
-          className="block w-full rounded-md bg-primary px-3 py-2 text-center text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          View my report
-        </Link>
+        <Button asChild className="h-9 w-full gap-1.5 hover:bg-primary-hover active:bg-primary-pressed active:not-aria-[haspopup]:translate-y-0">
+          <Link href={`/dashboard/reports/${ticket.own_report_id}`}>View my report<ArrowRight aria-hidden="true" /></Link>
+        </Button>
       )}
     </div>
   );
