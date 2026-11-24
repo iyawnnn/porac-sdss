@@ -65,9 +65,9 @@ test("citizen header navigates public map, my reports, report form, and logs out
 
   await sharedLoginCitizen(page, E2E_CITIZEN_ACCOUNT);
   await expect(page.locator("header").getByRole("img", { name: "PORAC-SDSS" })).toBeVisible();
-  await expect(page.locator("header").getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.locator("header").getByRole("link", { name: "Dashboard", exact: true })).toHaveAttribute("aria-current", "page");
 
-  await page.locator("header").getByRole("link", { name: "Explore Map" }).click();
+  await page.locator("header").getByRole("link", { name: "Map", exact: true }).click();
   await expect(page).toHaveURL(/\/map/);
   await expect(page.locator(".leaflet-container")).toBeVisible();
   await expect(page.getByText("Public Report Map")).toBeVisible();
@@ -81,7 +81,7 @@ test("citizen header navigates public map, my reports, report form, and logs out
   await expect(image).toHaveJSProperty("naturalWidth", 600);
 
   await expect(page.locator("header").getByRole("link", { name: "My Reports" })).toHaveAttribute("aria-current", "page");
-  await page.locator("header").getByRole("link", { name: "Report a Concern" }).click();
+  await page.locator("header").getByRole("link", { name: "Report Hazard" }).click();
   await expect(page).toHaveURL(/\/report/);
   // 15s (vs. the 5s default): this navigation occasionally lands on a
   // transient network stall under sustained --workers=1 full-suite load —
@@ -109,14 +109,14 @@ test("citizen dashboard mobile navigation preserves counts, account access, and 
     reports.filter(({ status }) => status !== "Resolved" && status !== "Rejected").length,
     reports.filter(({ status }) => status === "Resolved").length,
   ];
-  await expect(summary.locator("dd")).toHaveText(counts.map((count) => count.toLocaleString("en-PH")));
+  await expect(summary.locator('dd[data-slot="kpi-value"]')).toHaveText(counts.map((count) => count.toLocaleString("en-PH")));
   await expect(page.locator(".leaflet-control-zoom-in")).toBeVisible();
   expect(await page.locator("html").evaluate((element) => element.scrollWidth)).toBe(390);
 
   const menu = page.getByRole("button", { name: "Open navigation" });
   if (reports[0]) {
-    const recent = page.getByRole("region", { name: "Recent Reports" });
-    await recent.getByRole("link").filter({ hasText: reports[0].title }).first().click();
+    const latest = page.getByRole("region", { name: "Recent Reports" });
+    await latest.getByRole("link").filter({ hasText: reports[0].title }).first().click();
     await expect(page).toHaveURL(new RegExp(`/dashboard/reports/${reports[0].id}$`));
     await page.getByRole("link", { name: "PORAC-SDSS Home" }).click();
     await expect(page).toHaveURL(/\/dashboard$/);
@@ -124,18 +124,19 @@ test("citizen dashboard mobile navigation preserves counts, account access, and 
   await menu.focus();
   await page.keyboard.press("Enter");
   const sheet = page.getByRole("dialog", { name: "Navigation" });
-  await expect(sheet.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(sheet.getByRole("link", { name: "Dashboard", exact: true })).toHaveAttribute("aria-current", "page");
   await page.keyboard.press("Escape");
   await expect(menu).toBeFocused();
   await menu.click();
-  await sheet.getByRole("link", { name: "Explore Map" }).click();
+  await sheet.getByRole("link", { name: "Map", exact: true }).click();
   await expect(page).toHaveURL(/\/map$/);
   await expect(sheet).toBeHidden();
 
-  await page.getByRole("button", { name: "Switch between light and dark theme" }).click();
+  // Below lg, theme and account controls live in the full-screen menu.
+  await menu.click();
+  await sheet.getByRole("button", { name: "Dark" }).click();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
-  await page.getByRole("button", { name: "Account menu" }).click();
-  await page.getByRole("menuitem", { name: "Account Settings" }).click();
+  await sheet.getByRole("link", { name: "Account Settings" }).click();
   await expect(page.getByRole("heading", { name: "Account & Security" })).toBeVisible();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
 });

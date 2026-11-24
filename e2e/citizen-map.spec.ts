@@ -155,11 +155,11 @@ test("public map sends and shows only privacy-limited details", async ({ page })
     throw new Error("No public-map popup opened after 10 marker/cluster clicks outside the title panel.");
   }
   await expect(popup).toBeVisible();
-  await expect(popup.getByText("Approximate", { exact: true })).toBeVisible();
-  // The field labels (the status pill can also read "Reported").
-  await expect(popup.locator("dt")).toHaveText(["Barangay", "Location", "Reported"]);
+  // Every public location is approximate, so it is stated once in the privacy line rather than as a row
+  // (UI Phase 2B.2). The field labels (the status pill can also read "Reported").
+  await expect(popup.locator("dt")).toHaveText(["Barangay", "Reported"]);
   await expect(popup.getByText("Public update", { exact: true })).toBeVisible();
-  await expect(popup.getByText(/exact pins and internal records are not shown/)).toBeVisible();
+  await expect(popup.getByText(/^Approximate location: exact pins, .*internal records are not shown\.$/)).toBeVisible();
   // Dropped in step 6a: no last update, no handling office, no ticket number
   // (the dt list above is already exact; these name the removed ones).
   await expect(popup.getByText("Last update", { exact: true })).toHaveCount(0);
