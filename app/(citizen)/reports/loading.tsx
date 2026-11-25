@@ -1,30 +1,19 @@
-function CardSkeleton() {
-  return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-line-200 bg-surface">
-      <div className="h-48 w-full animate-pulse bg-line-100" />
-      <div className="flex flex-col gap-3 p-5">
-        <div className="h-5 w-2/3 animate-pulse rounded bg-line-100" />
-        <div className="h-4 w-1/3 animate-pulse rounded bg-line-100" />
-        <div className="h-16 w-full animate-pulse rounded bg-line-100" />
-        <div className="h-11 w-full animate-pulse rounded-md bg-line-100" />
-      </div>
-    </div>
-  );
-}
+import { ReportCardSkeleton } from "@/components/features/citizen/reports/ReportCard";
+import { Skeleton } from "@/components/ui/skeleton";
 
+// Mirrors page.tsx: heading and summary line, then report cards in the same two-column grid.
 export default function MyReportsLoading() {
   return (
-    <main aria-busy="true" aria-label="Loading your reports" className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mb-6 h-40 animate-pulse rounded-xl border border-line-200 bg-surface" />
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-24 animate-pulse rounded-lg border border-line-200 bg-surface" />
-        ))}
+    <main aria-busy="true" aria-label="Loading your reports" className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <div aria-hidden="true" className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-8 w-40 motion-reduce:animate-none" />
+          <Skeleton className="h-5 w-64 max-w-full motion-reduce:animate-none" />
+        </div>
+        <Skeleton className="h-11 w-40 motion-reduce:animate-none" />
       </div>
-      <div className="grid gap-6 sm:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <CardSkeleton key={i} />
-        ))}
+      <div className="grid gap-4 md:grid-cols-2">
+        {Array.from({ length: 4 }, (_, i) => <ReportCardSkeleton key={i} />)}
       </div>
     </main>
   );

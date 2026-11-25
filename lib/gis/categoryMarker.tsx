@@ -1,83 +1,22 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import L from "leaflet";
-import {
-  Construction,
-  Droplet,
-  Droplets,
-  LightbulbOff,
-  Mountain,
-  Sprout,
-  Trash,
-  Trash2,
-  TreePine,
-  Waves,
-  Wrench,
-  CircleDot,
-  Disc,
-  type LucideIcon,
-} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { getCategoryMarkerSpec, glyphColor } from "./category-spec";
 
-// Admin-map-only category markers â€” deliberately separate from
-// lib/gis/markerIcon.ts (neutralMarkerIcon/priorityMarkerIcon), which the
-// citizen, Ticket Detail and Focal maps use. Category -> icon/color is built directly
-// from lib/types/admin-ticket-constants.ts's TICKET_CATEGORIES strings
-// (single source of truth), not a duplicated list.
-export interface CategoryMarkerSpec {
-  icon: LucideIcon;
-  color: string;
-}
+export { CATEGORY_MARKER_SPEC, getCategoryMarkerSpec, glyphColor, type CategoryMarkerSpec } from "./category-spec";
 
-export const CATEGORY_MARKER_SPEC: Record<string, CategoryMarkerSpec> = {
-  // Manuscript-aligned category strings (Phase 3 follow-up).
-  // Names and the drainage/manhole split from manuscript revision Phase 2,
-  // step 2a; the renamed ones keep their old icon and colour.
-  "Pothole / Road Surface Damage": { icon: CircleDot, color: "#ea580c" },
-  "Damaged Manhole Cover": { icon: Disc, color: "#4338ca" },
-  "Clogged Drainage / Damaged Culvert": { icon: Droplets, color: "#0891b2" },
-  "Localized Flooding": { icon: Waves, color: "#2563eb" },
-  "Rain-Induced Slope Failure/Landslide": { icon: Mountain, color: "#78350f" },
-  "Lahar or Volcanic Debris-Flow Threat": { icon: Waves, color: "#9a3412" },
-  "Fallen Tree or Storm-Related Road Obstruction": { icon: TreePine, color: "#16a34a" },
-  "Illegal Dumping Affecting Drainage or Road": { icon: Trash2, color: "#7c3aed" },
-  "Overgrown Vegetation Obstructing Road or Signage": { icon: Sprout, color: "#65a30d" },
-  "Leaking Pipe / Water Supply Concern": { icon: Droplet, color: "#0d9488" },
-  "Other Minor Infrastructure Hazard": { icon: Wrench, color: "#64748b" },
-  // Unchanged names, shared by both the legacy and new category sets.
-  "Uneven Sidewalk": { icon: Construction, color: "#b45309" },
-  "Streetlight Out": { icon: LightbulbOff, color: "#eab308" },
-
-  // Legacy category strings — kept so historical tickets keep their
-  // original marker instead of falling back to the generic "Other" icon.
-  Flooding: { icon: Waves, color: "#2563eb" },
-  "Clogged Drain": { icon: Droplets, color: "#0891b2" },
-  "Fallen Tree": { icon: TreePine, color: "#16a34a" },
-  Pothole: { icon: CircleDot, color: "#ea580c" },
-  "Leaking Pipe": { icon: Droplet, color: "#0d9488" },
-  "Uncollected Garbage": { icon: Trash, color: "#78716c" },
-  "Illegal Dumping": { icon: Trash2, color: "#7c3aed" },
-  "Overgrown Vegetation": { icon: Sprout, color: "#65a30d" },
-  Other: { icon: Wrench, color: "#64748b" },
-  // Retired in manuscript revision Phase 2, step 2a (see LEGACY_CATEGORIES in
-  // api/src/contracts/schemas.ts).
-  "Drainage / Culvert / Manhole Issue": { icon: Droplets, color: "#0891b2" },
-  "Landslide / Slope Failure": { icon: Mountain, color: "#78350f" },
-  "Lahar / Debris-Flow Threat": { icon: Waves, color: "#9a3412" },
-  "Fallen Tree / Storm-Related Obstruction": { icon: TreePine, color: "#16a34a" },
-};
-const DEFAULT_CATEGORY_SPEC: CategoryMarkerSpec = CATEGORY_MARKER_SPEC.Other;
-
-export function getCategoryMarkerSpec(category: string): CategoryMarkerSpec {
-  return CATEGORY_MARKER_SPEC[category] ?? DEFAULT_CATEGORY_SPEC;
-}
-
+// Category markers. The admin map uses categoryMarkerIcon/categoryClusterIcon; the citizen
+// public map uses publicCategoryMarkerIcon/publicClusterIcon (bottom of this file), which share
+// the icons and colours but carry no Operational Priority. lib/gis/markerIcon.ts keeps the
+// neutral pins for the Ticket Detail and Focal maps.
 // Category owns the fill/icon. Operational Priority stays numeric in the
 // accessible label, popup and continuous heatmap instead of a marker band.
 const iconSvgCache = new Map<string, string>();
-function iconSvgMarkup(Icon: LucideIcon, size: number): string {
-  const key = `${Icon.displayName ?? Icon.name}-${size}`;
+function iconSvgMarkup(Icon: LucideIcon, size: number, color = "#ffffff"): string {
+  const key = `${Icon.displayName ?? Icon.name}-${size}-${color}`;
   const cached = iconSvgCache.get(key);
   if (cached) return cached;
-  const svg = renderToStaticMarkup(<Icon color="#ffffff" size={size} strokeWidth={2.25} />);
+  const svg = renderToStaticMarkup(<Icon color={color} size={size} strokeWidth={2.25} />);
   iconSvgCache.set(key, svg);
   return svg;
 }
@@ -122,6 +61,46 @@ export function categoryClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
   return L.divIcon({
     className: "",
     html: `<div style="width:${size}px;height:${size}px;border-radius:9999px;background:#1e293b;display:flex;align-items:center;justify-content:center;border:${ringWidth}px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,0.35);color:#fff;font-weight:600;font-size:13px;">${count}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+/* ── Citizen public map (UI Phase 2B.2) ──────────────────────────────────────
+   Same category icons and colours as the admin map, but no Operational
+   Priority anywhere: the accessible label names the category only. Colour is
+   category identity, never severity or risk, and always paired with the icon. */
+
+const publicIconCache = new Map<string, L.DivIcon>();
+// A rounded-square badge with a short pointer and a soft ground shadow: the category glyph reads
+// clearly at small sizes and every state shares one outline. The anchor is the pointer's tip.
+const PIN_PATH = "M11 2h12a8 8 0 0 1 8 8v12a8 8 0 0 1-8 8h-3.2L17 34.5 14.2 30H11a8 8 0 0 1-8-8V10a8 8 0 0 1 8-8Z";
+
+export function publicCategoryMarkerIcon(category: string, active = false): L.DivIcon {
+  const key = `${category}|${active}`;
+  const cached = publicIconCache.get(key);
+  if (cached) return cached;
+  const { color, icon: Glyph } = getCategoryMarkerSpec(category);
+  const label = `${category} report`.replace(/"/g, "&quot;");
+  const icon = L.divIcon({
+    className: active ? "public-pin is-active" : "public-pin",
+    html: `<div class="public-pin-body" role="img" aria-label="${label}"><svg class="public-pin-shape" width="34" height="40" viewBox="0 0 34 40" aria-hidden="true"><ellipse class="public-pin-ground" cx="17" cy="37" rx="5" ry="1.6"/><path d="${PIN_PATH}" fill="${color}"/><rect x="6.5" y="5.5" width="21" height="21" rx="6" fill="#fff" fill-opacity="0.16"/></svg><span class="public-pin-glyph">${iconSvgMarkup(Glyph, 15, glyphColor(color))}</span></div>`,
+    iconSize: [34, 40],
+    iconAnchor: [17, 37],
+    // The popup tip stops just above the badge rather than overlapping it.
+    popupAnchor: [0, -38],
+  });
+  publicIconCache.set(key, icon);
+  return icon;
+}
+
+// Clusters stay neutral, so a mixed group never borrows one category's colour. Sizes step gently with count.
+export function publicClusterIcon(cluster: L.MarkerCluster): L.DivIcon {
+  const count = cluster.getChildCount();
+  const size = count < 10 ? 30 : count < 100 ? 34 : 38;
+  return L.divIcon({
+    className: "public-cluster",
+    html: `<div class="public-cluster-badge" role="img" aria-label="${count} reports nearby. Zoom in to see them." style="width:${size}px;height:${size}px">${count}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });

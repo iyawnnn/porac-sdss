@@ -22,6 +22,17 @@ export interface MyReportRow {
   is_merged: boolean;
 }
 
+// GET /reports/mine/page (UI Phase 2C): one page of the citizen's own reports. `counts` is per
+// ticket status across all of their reports; `total` is the count after search and filters.
+export interface MyReportsPage {
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: Partial<Record<string, number>>;
+  // reached_statuses: every status the ticket has entered (from its status history), for the tracker.
+  items: (MyReportRow & { reached_statuses: string[] })[];
+}
+
 // The citizen's own one-time, locked answer on a resolved ticket.
 export interface MyResolutionFeedback {
   feedback_type: "CONFIRMED" | "DISPUTED";

@@ -1,15 +1,22 @@
+import { COMMUNITY_SPAN, MapSkeleton, PanelSkeleton } from "@/components/features/citizen/dashboard/DashboardSections";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Same order and section skeletons as page.tsx, so nothing moves when content streams in.
 export default function DashboardLoading() {
   return (
-    <main aria-busy="true" aria-label="Loading dashboard" className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mb-6 h-40 animate-pulse rounded-xl border border-line-200 bg-surface" />
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-24 animate-pulse rounded-lg border border-line-200 bg-surface" />
-        ))}
+    <main aria-busy="true" aria-label="Loading dashboard" className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <div aria-hidden="true" className="mb-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-8 w-64 max-w-full motion-reduce:animate-none" />
+          <Skeleton className="h-5 w-96 max-w-full motion-reduce:animate-none" />
+        </div>
+        <Skeleton className="h-11 w-40 motion-reduce:animate-none" />
       </div>
-      <div className="grid gap-6 lg:grid-cols-5">
-        <div className="h-96 animate-pulse rounded-xl border border-line-200 bg-surface lg:col-span-2" />
-        <div className="h-96 animate-pulse rounded-xl border border-line-200 bg-surface lg:col-span-3" />
+      <MapSkeleton />
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <PanelSkeleton />
+        <PanelSkeleton />
+        <PanelSkeleton className={COMMUNITY_SPAN} />
       </div>
     </main>
   );

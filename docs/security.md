@@ -317,7 +317,7 @@ Reassign (including category-driven office changes), Refer, return to review and
 
 Notification writes use a savepoint inside the action transaction. An insert failure rolls back the notification batch and logs a generic warning, allowing the action and its load-bearing audit to commit. Resolved/rejection emails remain post-commit; no new email path, no relaxed guard, rate limit or audit contract. Tests use mocked email methods or a disposable PGlite database, never a provider.
 
-`GET /reports/mine` and every per-report route check ownership and existence in a **single clause** (`WHERE r.id = ... AND r.citizen_id = ...`), so a wrong id and someone else's id are indistinguishable to the caller — no probing an id space for existence.
+`GET /reports/mine/page` (UI Phase 2C: search, status filter, sort and pagination, `api/src/reports/my-reports-query.ts`) reads the same `r.citizen_id`-scoped base before any filter, and its source-scan tests in `reports.service.spec.ts` hold it to the same ownership and no-internal-columns rules as `getMyReports`. `GET /reports/mine` and every per-report route check ownership and existence in a **single clause** (`WHERE r.id = ... AND r.citizen_id = ...`), so a wrong id and someone else's id are indistinguishable to the caller — no probing an id space for existence.
 
 ### 7.2b Citizen report page and tracking-reference lookup
 

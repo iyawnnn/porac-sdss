@@ -26,6 +26,7 @@ import {
   notifyFeedbackReceived,
 } from '../notifications/citizen-notices';
 import type { ResolutionFeedbackType } from '../db/schema';
+import { ACTIVE_STATUSES, ilikeContains, type MyReportsQuery } from './my-reports-query';
 import {
   citizenOutcome,
   citizenReferralAgency,
@@ -138,6 +139,16 @@ export function citizenSubmitResponse(input: {
     assignedOffice: input.assignedOffice,
     needsReview: input.flags.length > 0,
   };
+}
+
+export interface MyReportsPage {
+  total: number;
+  page: number;
+  pageSize: number;
+  // Report count per ticket status across all of the citizen's reports (unfiltered).
+  counts: Record<string, number>;
+  // reached_statuses: the statuses the ticket has entered (status_history), for the progress tracker.
+  items: (MyReportRow & { reached_statuses: string[] })[];
 }
 
 export interface MyReportRow {
@@ -609,6 +620,52 @@ export class ReportsService {
       WHERE r.citizen_id = ${citizenId}
       ORDER BY r.created_at DESC
     `;
+  }
+
+  // UI Phase 2C: one page of the citizen's own reports, searched (title or tracking reference),
+  // filtered and sorted in SQL before LIMIT/OFFSET. `counts` covers all of the citizen's reports
+  // (unfiltered) so the summary stays accurate on every page; `total` is the filtered count.
+  // Ties on created_at break by id, so pages never repeat or skip a report. One statement keeps
+  // total, counts and items on the same snapshot.
+  async getMyReportsPage(citizenId: number, query: MyReportsQuery): Promise<MyReportsPage> {
+    const sql = this.pg;
+    const search = query.q
+      ? sql`AND (title ILIKE ${ilikeContains(query.q)} OR tracking_reference ILIKE ${ilikeContains(query.q)})`
+      : sql``;
+    const status =
+      query.status === 'all' ? sql``
+      : query.status === 'active' ? sql`AND status IN ${sql([...ACTIVE_STATUSES])}`
+      : sql`AND status = ${query.status}`;
+    const order = query.sort === 'oldest' ? sql`created_at ASC, id ASC` : sql`created_at DESC, id DESC`;
+    const [row] = await sql<{ total: number; counts: Record<string, number>; items: MyReportsPage['items'] }[]>`
+      WITH mine AS (
+        SELECT
+          r.id, r.ticket_id, r.tracking_reference, r.title, t.category, r.citizen_severity, r.image_url,
+          t.status, b.name AS barangay_name, r.created_at,
+          t.assigned_office, t.member_count, r.moderation_status
+        FROM reports r
+        JOIN tickets t ON t.id = r.ticket_id
+        JOIN barangays b ON b.id = t.barangay_id
+        WHERE r.citizen_id = ${citizenId}
+      ),
+      filtered AS (
+        SELECT * FROM mine WHERE TRUE ${search} ${status}
+      ),
+      paged AS (
+        SELECT f.*, f.id != (SELECT MIN(id) FROM reports WHERE ticket_id = f.ticket_id) AS is_merged,
+          -- The workflow statuses this ticket has actually entered, for the card progress tracker.
+          -- The status name only; no other status_history column leaves SQL.
+          ARRAY(SELECT DISTINCT sh.status FROM status_history sh WHERE sh.ticket_id = f.ticket_id) AS reached_statuses
+        FROM filtered f
+        ORDER BY ${order}
+        LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize}
+      )
+      SELECT
+        (SELECT count(*)::int FROM filtered) AS total,
+        COALESCE((SELECT jsonb_object_agg(status, n) FROM (SELECT status, count(*)::int AS n FROM mine GROUP BY status) s), '{}'::jsonb) AS counts,
+        COALESCE((SELECT jsonb_agg(p ORDER BY ${order}) FROM paged p), '[]'::jsonb) AS items
+    `;
+    return { total: row.total, page: query.page, pageSize: query.pageSize, counts: row.counts, items: row.items };
   }
 
   // `AND r.citizen_id = ${citizenId}` is the authorization check. A

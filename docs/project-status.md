@@ -13,6 +13,10 @@ Baseline: main b2318c1 after owner merge of PR #161. Phase 8e is an approved **d
 | 8d-3 | Migration consolidation merged in PR #160 | Five harnesses / 141 groups, 34 full-chain; 307-test copy pass in 20m 23s |
 | CI follow-up | PR #161 merged; both jobs green at 7d55f60 | [Run 43015735511](https://github.com/iyawnnn/porac-sdss/actions/runs/43015735511), including full migration umbrella and 1,984 API tests |
 | 8e | Documentation alignment in progress | Product/cleanup work remains unapproved |
+| UI Phase 2B | Citizen Dashboard and shared navigation implemented for review | [Design system](design-system.md) |
+| UI Phase 2B.1 | Typography foundation (Inter only, `Text`), navbar lockup, Citizen header, notification inbox and full-screen mobile menu awaiting visual approval; Citizen Dashboard redesign follows | [Design system](design-system.md) |
+| UI Phase 2C | Citizen experience redesign awaiting visual approval: paginated My Reports, report detail reorganised around the timeline, three-step Report Hazard form, Account settings layout, neutral line/ink tokens across citizen pages | [Design system](design-system.md) |
+| UI Phase 2B.2 | Citizen Dashboard redesign (hero public report map with corner controls, barangay fly-to, category pins and neutral cluster badges, shared with /map; My Reports, Recent Reports and Top Reported Categories panels; per-section streaming, skeletons and retry; neutral citizen surfaces; emergency notice now only on the report form) awaiting visual approval. Resolved in UI Phase 2C: `GET /reports/mine/page` (search, status filter, sort and pagination in SQL, plus per-status counts) now serves My Reports and the dashboard; for the 2,388-row synthetic citizen a page is about 4 KB instead of 976 KB. `GET /reports/mine` is kept unchanged for existing consumers. Scrolling lag was a separate cause, fixed in this phase: the dashboard map took page wheel events and zoomed instead of letting the page scroll  | [Design system](design-system.md) |
 
 Last complete local gate: 84 API suites / 1,984 tests / one snapshot, 45 root tests and 19 PGlite harnesses / 305 groups. Broad API type-check retains 16 accepted diagnostics; API lint retains 550 errors + seven warnings. Do not call those checks wholly clean. CI is authoritative for its own run totals. The chain-child-only Wasm workaround passed complete local and CI verification; [its upstream cause/removal criteria](migration-test-coverage.md) remain relevant.
 
@@ -34,6 +38,8 @@ Last complete local gate: 84 API suites / 1,984 tests / one snapshot, 45 root te
 ## 3. Current queue and boundaries
 
 Complete this docs-only PR and both CI checks, then owner review/merge/pull. No new Playwright run is required for docs alone. [Known limitations](known-limitations.md) covers every parked review item, with evidence and uncertainty; it is not a second roadmap or authorization to fix them.
+
+- Citizen dashboard performance follow-up: `GET /reports/mine` returns the entire citizen-owned history, ordered by submission time. The dashboard uses it for exact totals and the three newest reports. A future summary endpoint could return both without transferring the full history.
 
 No new permissions, scoring changes, mirror removal or audit rewriting. Production hygiene requires separately reviewed candidates, owner backup and explicit approval; never delete audit-referenced records. Groupmate notification, backup-branch retention/removal and final read-only production checks are owner tasks. Agents do not send external messages on the owner's behalf.
 

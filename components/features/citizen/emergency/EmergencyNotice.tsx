@@ -1,9 +1,9 @@
 import { EMERGENCY_NOTICE_BODY, EMERGENCY_NOTICE_TITLE } from "@/lib/utils/emergency-notice";
 
-// Shown at the top of the citizen report form and the citizen dashboard
-// (manuscript revision Phase 6, step 6a). Always visible: no dismiss
-// control, the same layout at every width. No hooks, so it renders in both
-// the server dashboard page and the client report form.
+// Shown at the top of the citizen report form (manuscript revision Phase 6,
+// step 6a), before anything can be submitted. Always visible: no dismiss
+// control, the same layout at every width. UI Phase 2B.2 removed the
+// dashboard copy at the owner's request; the report form keeps the full text.
 export function EmergencyNotice({ className = "" }: { className?: string }) {
   return (
     <div
