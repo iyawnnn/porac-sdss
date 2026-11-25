@@ -274,9 +274,9 @@ async function main() {
           });
         cells++;
       }
-    assert.equal(cells, 588);
+    assert.equal(cells, 594);
     ok(
-      '98 independent route rows x six identities = 588 HTTP admission/inline-auth cells, no guard overrides',
+      '99 independent route rows x six identities = 594 HTTP admission/inline-auth cells, no guard overrides',
     );
 
     const context = {
@@ -898,6 +898,13 @@ async function boundaries(c) {
   status(missingRef, 404, 'Missing reference');
   status(wrongRef, 404, 'Foreign reference');
   assert.deepEqual(wrongRef.body, missingRef.body);
+  const ownPage = await allowed('GET', '/reports/mine/page?q=' + ownRef, citizen);
+  assert.equal(ownPage.body.total, 1);
+  assert.deepEqual(ownPage.body.items.map(({ id }) => id), [own.reports[0].id]);
+  noPrivateFields(ownPage.body);
+  const otherPage = await allowed('GET', '/reports/mine/page?q=' + otherRef, citizen);
+  assert.equal(otherPage.body.total, 0);
+  assert.deepEqual(otherPage.body.items, []);
   for (const action of ['confirm-resolution', 'dispute'])
     await denied(
       'POST',
@@ -927,7 +934,7 @@ async function boundaries(c) {
   );
   done.add('citizen-ownership');
   ok(
-    'citizen own/other/missing detail/reference/feedback boundaries and independent real two-citizen feedback',
+    'citizen own/other/missing detail/reference/paginated search/feedback boundaries and independent real two-citizen feedback',
   );
 
   await fixture('MDRRMO', 'Reported', 1, otherCitizen);
